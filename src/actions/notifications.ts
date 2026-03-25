@@ -23,7 +23,7 @@ async function getOrgContext() {
     .single();
 
   if (!data) return null;
-  return { orgId: data.id, clerkUserId: userId };
+  return { orgId: (data as { id: string }).id, clerkUserId: userId };
 }
 
 export type PendingCounts = {

@@ -32,7 +32,7 @@ async function getOrgIds(): Promise<{ internalOrgId: string; clerkOrgId: string 
     .single();
 
   if (!data) return null;
-  return { internalOrgId: data.id, clerkOrgId };
+  return { internalOrgId: (data as { id: string }).id, clerkOrgId };
 }
 
 /** Convenience wrapper — returns just the internal Supabase org UUID. */
@@ -117,23 +117,25 @@ export async function addEmployee(
 
   if (orgError || !org) return { success: false, error: "Organization not found" };
 
+  const typedOrg = org as { id: string; max_employees: number };
+
   const { count } = await supabase
     .from("employees")
     .select("*", { count: "exact", head: true })
-    .eq("org_id", org.id)
+    .eq("org_id", typedOrg.id)
     .eq("status", "active");
 
-  if ((count ?? 0) >= org.max_employees) {
+  if ((count ?? 0) >= typedOrg.max_employees) {
     return {
       success: false,
-      error: `Employee limit reached (${org.max_employees}). Upgrade your plan to add more.`,
+      error: `Employee limit reached (${typedOrg.max_employees}). Upgrade your plan to add more.`,
     };
   }
 
   const { data, error } = await supabase
     .from("employees")
     .insert({
-      org_id: org.id,
+      org_id: typedOrg.id,
       first_name: validated.data.firstName,
       last_name: validated.data.lastName,
       email: validated.data.email,
@@ -158,7 +160,7 @@ export async function addEmployee(
   }
 
   revalidatePath("/dashboard/employees");
-  return { success: true, data: { id: data.id } };
+  return { success: true, data: { id: (data as { id: string }).id } };
 }
 
 export async function updateEmployee(

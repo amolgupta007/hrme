@@ -43,7 +43,7 @@ async function getOrgId(): Promise<string | null> {
     .select("id")
     .eq("clerk_org_id", clerkOrgId)
     .single();
-  return data?.id ?? null;
+  return (data as { id: string } | null)?.id ?? null;
 }
 
 // ---- Actions ----
@@ -83,7 +83,7 @@ export async function getMyProfile(): Promise<ActionResult<EmployeeProfile>> {
         await supabase
           .from("employees")
           .update({ clerk_user_id: user.id })
-          .eq("id", data.id);
+          .eq("id", (data as { id: string }).id);
       }
     }
   }

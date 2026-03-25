@@ -26,7 +26,7 @@ export async function getDashboardStats() {
 
   if (!org) return null;
 
-  const orgId = org.id;
+  const orgId = (org as { id: string }).id;
 
   const [
     { count: totalEmployees },

@@ -28,7 +28,7 @@ async function getOrgContext(): Promise<{ orgId: string; clerkUserId: string } |
     .single();
 
   if (!data) return null;
-  return { orgId: data.id, clerkUserId: userId };
+  return { orgId: (data as { id: string }).id, clerkUserId: userId };
 }
 
 // ---- Default policies ----
@@ -227,7 +227,7 @@ export async function requestLeave(
 
   revalidatePath("/dashboard/leaves");
   revalidatePath("/dashboard");
-  return { success: true, data: { id: data.id } };
+  return { success: true, data: { id: (data as { id: string }).id } };
 }
 
 export async function approveLeave(

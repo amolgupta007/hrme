@@ -22,7 +22,7 @@ async function getOrgId(): Promise<string | null> {
     .select("id")
     .eq("clerk_org_id", clerkOrgId)
     .single();
-  return data?.id ?? null;
+  return (data as { id: string } | null)?.id ?? null;
 }
 
 const departmentSchema = z.object({
@@ -68,7 +68,7 @@ export async function addDepartment(
   }
   revalidatePath("/dashboard/settings");
   revalidatePath("/dashboard/employees");
-  return { success: true, data: { id: data.id } };
+  return { success: true, data: { id: (data as { id: string }).id } };
 }
 
 export async function updateDepartment(

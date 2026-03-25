@@ -1,51 +1,41 @@
-export default function SettingsPage() {
+import { listDepartments } from "@/actions/departments";
+import { getOrgProfile, listSettingsPolicies } from "@/actions/settings";
+import { DepartmentsSection } from "@/components/settings/departments-section";
+import { OrgProfileSection } from "@/components/settings/org-profile-section";
+import { LeavePoliciesSection } from "@/components/settings/leave-policies-section";
+import { BillingSection } from "@/components/settings/billing-section";
+
+export default async function SettingsPage() {
+  const [departmentsResult, profileResult, policiesResult] = await Promise.all([
+    listDepartments(),
+    getOrgProfile(),
+    listSettingsPolicies(),
+  ]);
+
+  const departments = departmentsResult.success ? departmentsResult.data : [];
+  const policies = policiesResult.success ? policiesResult.data : [];
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
         <p className="mt-1 text-muted-foreground">
-          Manage your organization, billing, leave policies, and integrations.
+          Manage your organization, billing, leave policies, and departments.
         </p>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        {[
-          {
-            title: "Organization",
-            description: "Company name, logo, and basic info",
-          },
-          {
-            title: "Billing & Plan",
-            description: "Manage subscription and payment methods",
-          },
-          {
-            title: "Leave Policies",
-            description: "Configure leave types, accrual, and carry-forward rules",
-          },
-          {
-            title: "Departments",
-            description: "Add and manage team departments",
-          },
-          {
-            title: "Roles & Permissions",
-            description: "Control who can access what",
-          },
-          {
-            title: "Notifications",
-            description: "Email alerts and reminder preferences",
-          },
-        ].map((section) => (
-          <div
-            key={section.title}
-            className="rounded-xl border border-border bg-card p-6 transition-all hover:border-primary/30 hover:shadow-sm cursor-pointer"
-          >
-            <h3 className="font-semibold">{section.title}</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {section.description}
-            </p>
-          </div>
-        ))}
+        {profileResult.success && (
+          <OrgProfileSection profile={profileResult.data} />
+        )}
+        {profileResult.success && (
+          <BillingSection profile={profileResult.data} />
+        )}
       </div>
+
+      <LeavePoliciesSection policies={policies} />
+
+      <DepartmentsSection departments={departments} />
     </div>
   );
 }

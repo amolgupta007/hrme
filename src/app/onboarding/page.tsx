@@ -2,7 +2,10 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useOrganizationList } from "@clerk/nextjs";
 import { Building2, Users, ArrowRight } from "lucide-react";
+import { toast } from "sonner";
+import { syncOrgToSupabase } from "@/actions/organizations";
 
 const companySizes = [
   { label: "1–10", value: "1-10" },
@@ -24,6 +27,7 @@ const industries = [
 
 export default function OnboardingPage() {
   const router = useRouter();
+  const { createOrganization, setActive } = useOrganizationList();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
@@ -33,13 +37,33 @@ export default function OnboardingPage() {
   });
 
   const handleSubmit = async () => {
+    if (!createOrganization || !setActive) {
+      toast.error("Organization features not available. Please refresh.");
+      return;
+    }
+
     setLoading(true);
     try {
-      // TODO: Call server action to create org in Supabase
-      // await createOrganization(form);
-      router.push("/dashboard");
-    } catch (error) {
-      console.error("Onboarding error:", error);
+      // 1. Create org in Clerk
+      const org = await createOrganization({ name: form.companyName });
+
+      // 2. Set as active org so auth().orgId is available in server actions
+      await setActive({ organization: org.id });
+
+      // 3. Sync to Supabase
+      const result = await syncOrgToSupabase({
+        clerkOrgId: org.id,
+        name: form.companyName,
+      });
+
+      if (!result.success) {
+        toast.error(result.error);
+        return;
+      }
+
+      window.location.href = "/dashboard";
+    } catch (error: any) {
+      toast.error(error?.message ?? "Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }

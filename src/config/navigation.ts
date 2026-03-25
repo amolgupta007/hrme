@@ -12,6 +12,11 @@ export const sidebarNav: NavItem[] = [
     icon: "Users",
   },
   {
+    title: "Directory",
+    href: "/dashboard/directory",
+    icon: "Network",
+  },
+  {
     title: "Leaves",
     href: "/dashboard/leaves",
     icon: "CalendarDays",

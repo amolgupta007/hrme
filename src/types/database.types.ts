@@ -59,6 +59,15 @@ export interface Database {
           employment_type: "full_time" | "part_time" | "contract" | "intern";
           status: "active" | "inactive" | "on_leave" | "terminated";
           reporting_manager_id: string | null;
+          personal_email: string | null;
+          gender: string | null;
+          pronouns: string | null;
+          marital_status: string | null;
+          country: string | null;
+          pan_number: string | null;
+          aadhar_number: string | null;
+          communication_address: Json | null;
+          permanent_address: Json | null;
           metadata: Json;
           created_at: string;
           updated_at: string;
@@ -123,6 +132,8 @@ export interface Database {
           reviewed_by: string | null;
           reviewed_at: string | null;
           review_note: string | null;
+          ticket_number: string | null;
+          exceeds_balance: boolean;
           created_at: string;
           updated_at: string;
         };

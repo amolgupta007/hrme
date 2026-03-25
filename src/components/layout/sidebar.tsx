@@ -13,11 +13,14 @@ import {
   Wallet,
   Settings,
   ChevronLeft,
+  UserCircle,
+  Network,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { sidebarNav, APP_NAME } from "@/config/navigation";
 import { useState } from "react";
+import type { PendingCounts } from "@/actions/notifications";
 
 const iconMap: Record<string, LucideIcon> = {
   LayoutDashboard,
@@ -28,9 +31,16 @@ const iconMap: Record<string, LucideIcon> = {
   GraduationCap,
   Wallet,
   Settings,
+  Network,
 };
 
-export function Sidebar() {
+// Map nav href to badge key
+const BADGE_MAP: Record<string, keyof PendingCounts> = {
+  "/dashboard/leaves": "leaves",
+  "/dashboard/documents": "documents",
+};
+
+export function Sidebar({ badges }: { badges: PendingCounts }) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
 
@@ -73,6 +83,9 @@ export function Sidebar() {
               (item.href !== "/dashboard" &&
                 pathname.startsWith(item.href));
 
+            const badgeKey = BADGE_MAP[item.href];
+            const badgeCount = badgeKey ? badges[badgeKey] : 0;
+
             return (
               <li key={item.href}>
                 <Link
@@ -85,11 +98,18 @@ export function Sidebar() {
                   )}
                   title={collapsed ? item.title : undefined}
                 >
-                  <Icon className="h-[18px] w-[18px] shrink-0" />
+                  <span className="relative shrink-0">
+                    <Icon className="h-[18px] w-[18px]" />
+                    {badgeCount > 0 && collapsed && (
+                      <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-destructive text-[9px] font-bold text-destructive-foreground">
+                        {badgeCount > 9 ? "9+" : badgeCount}
+                      </span>
+                    )}
+                  </span>
                   {!collapsed && <span>{item.title}</span>}
-                  {!collapsed && item.badge && (
-                    <span className="ml-auto rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
-                      {item.badge}
+                  {!collapsed && badgeCount > 0 && (
+                    <span className="ml-auto rounded-full bg-destructive px-2 py-0.5 text-xs font-semibold text-destructive-foreground">
+                      {badgeCount > 99 ? "99+" : badgeCount}
                     </span>
                   )}
                 </Link>
@@ -109,7 +129,15 @@ export function Sidebar() {
                 avatarBox: "h-8 w-8",
               },
             }}
-          />
+          >
+            <UserButton.MenuItems>
+              <UserButton.Link
+                label="My Profile"
+                labelIcon={<UserCircle className="h-4 w-4" />}
+                href="/dashboard/profile"
+              />
+            </UserButton.MenuItems>
+          </UserButton>
           {!collapsed && (
             <span className="text-sm text-sidebar-foreground/70 truncate">
               Account

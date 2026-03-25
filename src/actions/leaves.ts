@@ -106,7 +106,7 @@ export async function listLeavePolicies(): Promise<ActionResult<PolicyWithUsage[
     usedByPolicy[req.policy_id] = (usedByPolicy[req.policy_id] ?? 0) + Number(req.days);
   }
 
-  const result = (policies ?? []).map((p) => ({
+  const result = (policies ?? []).map((p: LeavePolicy) => ({
     ...p,
     used_days: usedByPolicy[p.id] ?? 0,
     remaining_days: Math.max(0, p.days_per_year - (usedByPolicy[p.id] ?? 0)),

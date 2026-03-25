@@ -31,13 +31,14 @@ export function useEmployee(): EmployeeContext {
         const supabase = createClient();
 
         // Fetch organization
-        const { data: orgData, error: orgError } = await supabase
+        const { data: rawOrg, error: orgError } = await supabase
           .from("organizations")
           .select("*")
           .eq("clerk_org_id", clerkOrg.id)
           .single();
 
-        if (orgError || !orgData) throw orgError ?? new Error("Org not found");
+        if (orgError || !rawOrg) throw orgError ?? new Error("Org not found");
+        const orgData = rawOrg as Organization;
         setOrganization(orgData);
 
         // Fetch employee profile

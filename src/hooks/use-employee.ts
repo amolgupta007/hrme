@@ -37,7 +37,7 @@ export function useEmployee(): EmployeeContext {
           .eq("clerk_org_id", clerkOrg.id)
           .single();
 
-        if (orgError) throw orgError;
+        if (orgError || !orgData) throw orgError ?? new Error("Org not found");
         setOrganization(orgData);
 
         // Fetch employee profile

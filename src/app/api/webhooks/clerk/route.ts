@@ -89,8 +89,8 @@ export async function POST(req: Request) {
           event.data;
         const primaryEmail = email_addresses?.[0]?.email_address;
 
-        console.log(
-          `User created: ${first_name} ${last_name} (${primaryEmail})`
+        console.warn(
+          `User created via webhook: ${first_name} ${last_name} (${primaryEmail})`
         );
         break;
       }
@@ -109,7 +109,7 @@ export async function POST(req: Request) {
       }
 
       default:
-        console.log(`Unhandled webhook event: ${eventType}`);
+        console.warn(`Unhandled webhook event: ${eventType}`);
     }
   } catch (error) {
     console.error(`Error processing webhook ${eventType}:`, error);

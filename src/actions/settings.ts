@@ -28,7 +28,7 @@ async function getOrgContext(): Promise<{ orgId: string } | null> {
     .single();
 
   if (!data) return null;
-  return { orgId: data.id };
+  return { orgId: (data as { id: string }).id };
 }
 
 // ---- Organization Profile ----

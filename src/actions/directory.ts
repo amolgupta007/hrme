@@ -19,7 +19,7 @@ async function getOrgId(): Promise<string | null> {
     .select("id")
     .eq("clerk_org_id", clerkOrgId)
     .single();
-  return data?.id ?? null;
+  return (data as { id: string } | null)?.id ?? null;
 }
 
 export type DirectoryEmployee = {

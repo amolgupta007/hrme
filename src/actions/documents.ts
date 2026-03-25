@@ -27,7 +27,7 @@ async function getOrgContext(): Promise<{ orgId: string; clerkUserId: string } |
     .single();
 
   if (!data) return null;
-  return { orgId: data.id, clerkUserId: userId };
+  return { orgId: (data as { id: string }).id, clerkUserId: userId };
 }
 
 // ---- Types ----
@@ -129,6 +129,8 @@ export async function uploadDocument(formData: FormData): Promise<ActionResult<v
     };
   }
 
+  const uploaderId = (uploader as { id: string }).id;
+
   // Build storage path: orgId/uuid-filename
   const ext = file.name.split(".").pop() ?? "";
   const uniqueName = `${crypto.randomUUID()}${ext ? `.${ext}` : ""}`;
@@ -148,7 +150,7 @@ export async function uploadDocument(formData: FormData): Promise<ActionResult<v
     file_url: storagePath,
     file_size: file.size,
     mime_type: file.type || "application/octet-stream",
-    uploaded_by: uploader.id,
+    uploaded_by: uploaderId,
     is_company_wide: isCompanyWide,
     employee_id: isCompanyWide ? null : employeeId,
     requires_acknowledgment: requiresAck,
@@ -179,8 +181,10 @@ export async function deleteDocument(id: string): Promise<ActionResult<void>> {
 
   if (fetchError || !doc) return { success: false, error: "Document not found" };
 
+  const typedDoc = doc as { file_url: string };
+
   // Delete from storage
-  await supabase.storage.from("documents").remove([doc.file_url]);
+  await supabase.storage.from("documents").remove([typedDoc.file_url]);
 
   const { error } = await supabase
     .from("documents")

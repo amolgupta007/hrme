@@ -46,7 +46,7 @@ async function ensureDefaultPolicies(orgId: string) {
     .select("name")
     .eq("org_id", orgId);
 
-  const existingNames = new Set((existing ?? []).map((p) => p.name));
+  const existingNames = new Set((existing ?? []).map((p: { name: string }) => p.name));
   const toInsert = DEFAULT_POLICIES.filter((p) => !existingNames.has(p.name));
 
   if (toInsert.length > 0) {

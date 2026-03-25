@@ -48,8 +48,8 @@ export function EmployeeForm({ open, onOpenChange, employee, departments, employ
         departmentId: employee.department_id ?? "",
         designation: employee.designation ?? "",
         dateOfJoining: employee.date_of_joining,
-        employmentType: employee.employment_type,
-        role: employee.role === "owner" ? "admin" : employee.role,
+        employmentType: employee.employment_type as typeof EMPTY_FORM.employmentType,
+        role: (employee.role === "owner" ? "admin" : employee.role) as typeof EMPTY_FORM.role,
         reportingManagerId: employee.reporting_manager_id ?? "",
       });
     } else {

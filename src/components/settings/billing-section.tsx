@@ -22,13 +22,13 @@ const PLAN_INFO = {
   },
   growth: {
     label: "Growth",
-    price: "₹5 / employee / month",
+    price: "₹500 / employee / month",
     color: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
     features: ["Up to 200 employees", "Reviews & Training", "Compliance tracking"],
   },
   business: {
     label: "Business",
-    price: "₹8 / employee / month",
+    price: "₹800 / employee / month",
     color: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300",
     features: ["Up to 500 employees", "Payroll & Analytics", "API access & Priority support"],
   },

@@ -449,8 +449,8 @@ npm run stripe:listen # Forward Stripe webhooks to localhost
 | Tier | Price | Max Employees | Features |
 |------|-------|---------------|----------|
 | Starter | Free | 10 | Directory, Leave, Basic docs |
-| Growth | $5/employee/month | 200 | + Reviews, Training, Compliance |
-| Business | $8/employee/month | 500 | + Payroll, Analytics, API, Priority support |
+| Growth | ₹500/employee/month | 200 | + Reviews, Training, Compliance |
+| Business | ₹800/employee/month | 500 | + Payroll, Analytics, API, Priority support |
 
 Configured in `src/lib/stripe.ts` as the `PLANS` object.
 

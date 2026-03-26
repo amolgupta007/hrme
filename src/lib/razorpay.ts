@@ -21,10 +21,10 @@ export const PLANS = {
   },
   growth: {
     name: "Growth",
-    description: "₹5/employee/month",
+    description: "₹500/employee/month",
     planId: process.env.RAZORPAY_GROWTH_PLAN_ID!,
     maxEmployees: 200,
-    price: "₹5 / employee / month",
+    price: "₹500 / employee / month",
     features: [
       "Everything in Starter",
       "Performance reviews",
@@ -35,10 +35,10 @@ export const PLANS = {
   },
   business: {
     name: "Business",
-    description: "₹8/employee/month",
+    description: "₹800/employee/month",
     planId: process.env.RAZORPAY_BUSINESS_PLAN_ID!,
     maxEmployees: 500,
-    price: "₹8 / employee / month",
+    price: "₹800 / employee / month",
     features: [
       "Everything in Growth",
       "Payroll & compensation",

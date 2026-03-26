@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 
 const features = [
   {
@@ -39,7 +40,8 @@ export default function HomePage() {
       {/* Nav */}
       <nav className="sticky top-0 z-50 border-b border-border/60 bg-background/80 backdrop-blur-lg">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
-          <Link href="/" className="text-xl font-bold tracking-tight">
+          <Link href="/" className="flex items-center gap-2 text-xl font-bold tracking-tight">
+            <Image src="/Jamba.png" alt="JambaHR" width={32} height={32} className="rounded-md" />
             <span className="text-primary">Jamba</span>HR
           </Link>
           <div className="flex items-center gap-4">

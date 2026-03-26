@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { UserButton } from "@clerk/nextjs";
 import {
@@ -64,8 +65,13 @@ export function Sidebar({ badges, role }: { badges: PendingCounts; role: UserRol
     >
       {/* Logo */}
       <div className="flex h-16 items-center justify-between border-b border-sidebar-border px-4">
-        {!collapsed && (
-          <Link href="/dashboard" className="text-lg font-bold tracking-tight">
+        {collapsed ? (
+          <Link href="/dashboard">
+            <Image src="/Jamba.png" alt="JambaHR" width={32} height={32} className="rounded-md" />
+          </Link>
+        ) : (
+          <Link href="/dashboard" className="flex items-center gap-2 text-lg font-bold tracking-tight">
+            <Image src="/Jamba.png" alt="JambaHR" width={32} height={32} className="rounded-md" />
             <span className="text-primary">Jamba</span>
             <span className="text-sidebar-foreground">HR</span>
           </Link>

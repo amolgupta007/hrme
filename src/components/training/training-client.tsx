@@ -5,7 +5,7 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
   GraduationCap, Plus, MoreHorizontal, Edit2, Trash2, UserPlus,
   Users, ExternalLink, Award, AlertTriangle, CheckCircle2, Clock,
-  ChevronDown, ChevronRight,
+  ChevronDown, ChevronRight, Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn, formatDate } from "@/lib/utils";
@@ -140,7 +140,7 @@ function MyEnrollmentCard({
           )}
           {enrollment.status !== "completed" && (
             <Button size="sm" className="h-7 text-xs" onClick={() => onUpdate(enrollment)}>
-              Update Progress
+              {enrollment.status === "assigned" ? "Start" : "Update / Complete"}
             </Button>
           )}
         </div>
@@ -445,6 +445,31 @@ function ComplianceView({ courses }: { courses: Course[] }) {
           {courses.length === 0 && (
             <p className="px-4 py-6 text-sm text-muted-foreground text-center">No courses yet.</p>
           )}
+        </div>
+      </div>
+
+      {/* Coming Soon: LMS Integration */}
+      <div className="rounded-xl border border-dashed border-primary/30 bg-primary/5 p-5">
+        <div className="flex items-start gap-3">
+          <div className="rounded-lg bg-primary/10 p-2 shrink-0">
+            <Zap className="h-5 w-5 text-primary" />
+          </div>
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-semibold">LMS Auto-Sync</p>
+              <span className="rounded-full bg-primary/20 text-primary text-xs px-2 py-0.5 font-medium">
+                Coming Soon
+              </span>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Automatic completion tracking via LMS webhooks — no more manual updates. When an employee finishes a course on platforms like{" "}
+              <span className="font-medium text-foreground">Coursera, LinkedIn Learning, TalentLMS, Docebo, or Google Classroom</span>,
+              their progress and completion status will sync directly to HRFlow in real time.
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Until then, employees self-report progress and confirm completion with an attestation. Certificate URLs serve as proof for mandatory courses.
+            </p>
+          </div>
         </div>
       </div>
     </div>

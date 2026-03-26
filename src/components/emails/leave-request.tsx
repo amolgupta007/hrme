@@ -26,7 +26,7 @@ export function LeaveRequestEmail({
   endDate = "Mar 22, 2026",
   days = 3,
   reason = "Family vacation",
-  approvalUrl = "https://app.hrflow.com/dashboard/leaves",
+  approvalUrl = "https://jambahr.com/dashboard/leaves",
 }: LeaveRequestEmailProps) {
   return (
     <Html>

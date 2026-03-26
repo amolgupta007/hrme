@@ -58,7 +58,7 @@ export function LeaveRequestEmail({
 
           <Hr style={hrStyle} />
           <Text style={footerStyle}>
-            This is an automated notification from HRFlow.
+            This is an automated notification from JambaHR.
           </Text>
         </Container>
       </Body>

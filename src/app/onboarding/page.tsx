@@ -191,7 +191,7 @@ export default function OnboardingPage() {
                   disabled={!form.companySize || loading}
                   className="flex h-11 flex-1 items-center justify-center gap-2 rounded-lg bg-primary text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {loading ? "Setting up..." : "Launch HRFlow"}
+                  {loading ? "Setting up..." : "Launch JambaHR"}
                   {!loading && <ArrowRight className="h-4 w-4" />}
                 </button>
               </div>

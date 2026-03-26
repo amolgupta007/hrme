@@ -464,7 +464,7 @@ function ComplianceView({ courses }: { courses: Course[] }) {
             <p className="text-sm text-muted-foreground">
               Automatic completion tracking via LMS webhooks — no more manual updates. When an employee finishes a course on platforms like{" "}
               <span className="font-medium text-foreground">Coursera, LinkedIn Learning, TalentLMS, Docebo, or Google Classroom</span>,
-              their progress and completion status will sync directly to HRFlow in real time.
+              their progress and completion status will sync directly to JambaHR in real time.
             </p>
             <p className="text-xs text-muted-foreground mt-1">
               Until then, employees self-report progress and confirm completion with an attestation. Certificate URLs serve as proof for mandatory courses.

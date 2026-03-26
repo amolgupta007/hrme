@@ -21,6 +21,10 @@ export const metadata: Metadata = {
     "SMB HR",
     "payroll",
   ],
+  icons: {
+    icon: "/Jamba.png",
+    apple: "/Jamba.png",
+  },
 };
 
 export default function RootLayout({

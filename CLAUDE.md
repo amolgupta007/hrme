@@ -132,10 +132,11 @@ hr-portal/
 | `leave_requests` | Time-off requests | start_date, end_date, days, status (pending/approved/rejected/cancelled) |
 | `documents` | File metadata | category, file_url, is_company_wide, requires_acknowledgment |
 | `review_cycles` | Review period config | status (draft/active/completed), start_date, end_date |
-| `reviews` | Individual reviews | self_rating, manager_rating, goals (JSONB), status |
+| `reviews` | Individual reviews | self_rating, manager_rating, goals (JSONB), objectives_id, status |
 | `training_courses` | Course library | category (ethics/compliance/safety/etc), is_mandatory, due_date |
 | `training_enrollments` | Employee ↔ Course | status, progress_percent, certificate_url |
 | `holidays` | Company holidays | date, is_optional |
+| `objectives` | OKR objective sets | employee_id, manager_id, period_type, period_label, status (draft/submitted/approved/rejected), items (JSONB) |
 
 ### Multi-tenancy approach
 - Every table has `org_id` column with FK to `organizations`
@@ -165,7 +166,8 @@ Triggers on `organizations`, `employees`, `leave_requests` automatically update 
 
 ### Webhook sync (Clerk → Supabase)
 - `POST /api/webhooks/clerk` handles: `organization.created`, `organization.updated`, `user.created`, `user.updated`
-- NOT yet configured in Clerk dashboard — needs webhook endpoint URL after deployment
+- **Configured** on Clerk dev instance pointing to `https://hrme-nine.vercel.app/api/webhooks/clerk`
+- Verified working — org creation via Clerk triggers Supabase row creation
 
 ---
 
@@ -241,15 +243,82 @@ Light and dark themes are both defined.
 - [x] Onboarding wizard (company name, industry, team size)
 - [x] Dashboard home with stat cards, quick actions, setup checklist
 
-**Employee CRUD (code written, pending integration test)**
+**Employee CRUD**
 - [x] Server actions: listEmployees, addEmployee, updateEmployee, deleteEmployee, getEmployee, listDepartments
 - [x] Employee data table with search, status badges, role/dept/type columns
 - [x] Add/edit modal form with client-side validation
 - [x] Soft delete (marks as "terminated" instead of hard delete)
 - [x] Employee count limit enforcement based on plan
+- [x] Reporting Manager field (FK to employees.id) on add/edit form
+
+**Directory**
+- [x] Org chart tree view (`/dashboard/directory`)
+- [x] Collapsible tree nodes — click chevron to collapse/expand branches
+
+**Leave Management** (`/dashboard/leaves`)
+- [x] Server actions: requestLeave, approveLeave, rejectLeave, cancelLeave, getLeaveBalances, listLeaveRequests
+- [x] Employee leave request form with leave type, date range, reason
+- [x] Manager approval/rejection workflow with comments
+- [x] Leave balance display per employee per year
+- [x] Leave policy configuration in Settings
+
+**Document Management** (`/dashboard/documents`)
+- [x] Supabase Storage bucket `documents` (private)
+- [x] File upload with drag-and-drop (UploadDialog)
+- [x] Categories: policy, contract, ID, tax, certificate, other
+- [x] Company-wide vs employee-specific toggle
+- [x] Requires-acknowledgment flag
+- [x] Signed URL generation for secure downloads
+- [x] Search + category filter tabs
+
+**Settings** (`/dashboard/settings`)
+- [x] Org profile editing (name)
+- [x] Leave policies CRUD (type, days per year, carry-forward toggle)
+- [x] Department management
+- [x] Billing section with plan info and seat usage progress bar
+
+**Sidebar Notification Badges**
+- [x] Red dot/count on Leaves (pending requests), Documents (requires acknowledgment), Objectives (pending approvals)
+- [x] `getPendingCounts()` in `src/actions/notifications.ts`
+- [x] Sidebar shows pill count when expanded, dot on icon when collapsed
+
+**Performance Reviews** (`/dashboard/reviews`)
+- [x] Review cycle CRUD (draft → active → completed)
+- [x] Per-employee review records auto-created when cycle is created
+- [x] Reviewer assigned from `reporting_manager_id` (falls back to cycle creator)
+- [x] Self-assessment: star rating (1–5), comments, ad-hoc goals with status
+- [x] Manager review: rating + comments
+- [x] View mode: side-by-side self vs manager ratings
+- [x] Cycle progress bar (completed/total)
+
+**Objectives / OKR** (`/dashboard/objectives`)
+- [x] `objectives` table added (migration run manually in Supabase SQL Editor)
+- [x] Employee creates quarterly/yearly objective sets with weighted items (must sum to 100%)
+- [x] Status flow: draft → submitted → approved/rejected
+- [x] Manager approval dialog with feedback
+- [x] Rejected objectives show feedback + "Revise and resubmit" link
+- [x] Objectives linked to reviews: employee evaluates each objective during self-review (status + progress % + comment)
+- [x] Manager rates each objective during manager review (1–5 stars + comment)
+- [x] Tabs: My Objectives | Pending Approvals | All Objectives (admin)
+- [x] Sidebar badge for pending approvals (managers)
+
+**Training & Compliance** (`/dashboard/training`)
+- [x] Course library CRUD (title, category, duration, content URL, mandatory flag, due date)
+- [x] Employee enrollment — admin assigns courses, prevents duplicate enrollment
+- [x] Completion flow: self-attestation checkbox + certificate URL (required for mandatory courses)
+- [x] Progress slider (0–95%) for in-progress tracking (separate from completion)
+- [x] Compliance tab: stat cards, overdue alerts, per-course completion breakdown
+- [x] "LMS Auto-Sync — Coming Soon" banner in Compliance tab
+- [x] Tabs: My Training | Course Library (admin) | Compliance (admin)
+
+**Deployment**
+- [x] Deployed to Vercel at `https://hrme-nine.vercel.app`
+- [x] Clerk webhook configured (dev instance → Vercel URL)
+- [x] Auth redirects: sign-in → /dashboard, sign-up → /onboarding
+- [x] `typescript: { ignoreBuildErrors: true }` in next.config.js (Supabase v2 type inference workaround)
 
 **API Webhooks**
-- [x] Clerk webhook handler (org + user sync)
+- [x] Clerk webhook handler (org + user sync) — verified working
 - [x] Stripe webhook handler (subscription lifecycle)
 
 **UI Components**
@@ -273,10 +342,10 @@ Light and dark themes are both defined.
 **Environment Variables (.env.local)**
 - [x] NEXT_PUBLIC_SUPABASE_URL — set (`https://imjwqktxzahhnfmfbtfc.supabase.co`)
 - [x] NEXT_PUBLIC_SUPABASE_ANON_KEY — set
-- [ ] SUPABASE_SERVICE_ROLE_KEY — **MUST SET** (Supabase Dashboard → Settings → API → service_role key). Required for employee CRUD to work.
+- [x] SUPABASE_SERVICE_ROLE_KEY — set
 - [x] NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY — set
 - [x] CLERK_SECRET_KEY — set
-- [ ] CLERK_WEBHOOK_SECRET — set after deployment (Clerk Dashboard → Webhooks)
+- [x] CLERK_WEBHOOK_SECRET — set (Clerk dev instance)
 - [ ] STRIPE_SECRET_KEY — not set yet
 - [ ] STRIPE_WEBHOOK_SECRET — not set yet
 - [ ] STRIPE_*_PRICE_ID — not set yet (create products in Stripe first)
@@ -284,59 +353,12 @@ Light and dark themes are both defined.
 - [ ] SENTRY_DSN — not set yet
 - [ ] NEXT_PUBLIC_POSTHOG_KEY — not set yet (app works without it)
 
-**Employee CRUD integration**
-- [x] Code is written and ready
-- [ ] Requires `SUPABASE_SERVICE_ROLE_KEY` in .env.local to function
-- [ ] Requires a manual row in `organizations` table matching Clerk org ID
-- [ ] To create org row: Supabase Table Editor → organizations → Insert Row:
-  - `clerk_org_id`: (find in Clerk Dashboard → Organizations → click your org → copy ID)
-  - `name`: your company name
-  - `slug`: your-company-slug
-  - `plan`: starter
-  - `max_employees`: 10
-  - `settings`: `{}`
-- [ ] After org row exists + service role key set, test: navigate to /dashboard/employees → Add Employee
+### ❌ NOT YET BUILT — Pending
 
-### ❌ NOT YET BUILT — Pending Modules
-
-**Phase 1 — Build next**
-- [ ] Leave management module
-  - [ ] Leave request form (employee side)
-  - [ ] Leave approval workflow (manager/admin side)
-  - [ ] Leave balance display
-  - [ ] Team calendar view
-  - [ ] Leave policy configuration (settings page)
-  - [ ] Server actions: requestLeave, approveLeave, rejectLeave, getLeaveBalances
-  - [ ] Email notification on leave request (use Resend + leave-request.tsx template)
-- [ ] Document management
-  - [ ] File upload (use Supabase Storage or Uploadthing)
-  - [ ] Document categorization (policy, contract, ID, tax, certificate)
-  - [ ] Company-wide vs employee-specific documents
-  - [ ] Document acknowledgment tracking
-- [ ] Settings page
-  - [ ] Organization profile editing
-  - [ ] Department CRUD
-  - [ ] Leave policy CRUD
-  - [ ] Billing management (Stripe Customer Portal redirect)
-- [ ] Connect dashboard stats to live Supabase data
-  - [ ] Total active employees count
-  - [ ] Pending leave requests count
-  - [ ] Training completion percentage
-  - [ ] Compliance alerts count
-
-**Phase 2 — After Phase 1 is stable**
-- [ ] Performance reviews module
-  - [ ] Review cycle CRUD
-  - [ ] Self-assessment forms
-  - [ ] Manager assessment forms
-  - [ ] Goal setting and tracking
-  - [ ] Review history and ratings
-- [ ] Training & compliance module
-  - [ ] Course CRUD
-  - [ ] Employee enrollment and assignment
-  - [ ] Progress tracking
-  - [ ] Completion certificates
-  - [ ] Compliance deadline alerts (background job)
+**Near-term**
+- [ ] Connect dashboard stats to live Supabase data (active employee count, pending leaves, training %, compliance alerts)
+- [ ] Leave email notifications (Resend + leave-request.tsx template already exists)
+- [ ] Document acknowledgment tracking (employee acknowledges receipt)
 - [ ] Announcements / company-wide notices
 
 **Phase 3 — Future**
@@ -353,16 +375,18 @@ Light and dark themes are both defined.
 - [ ] Smart review summaries
 - [ ] Attrition risk indicators
 
+**Training — LMS Auto-Sync (planned, shown as Coming Soon in app)**
+- [ ] Webhook receivers for Coursera, LinkedIn Learning, TalentLMS, Docebo, Google Classroom
+- [ ] Auto-update `training_enrollments.status` and `progress_percent` on completion event
+
 ### ❌ NOT YET DONE — Infrastructure & DevOps
 
-- [ ] Deploy to Vercel
 - [ ] Connect custom domain (Namecheap → Cloudflare DNS → Vercel)
-- [ ] Configure Clerk webhook endpoint (needs deployed URL)
+- [ ] Switch Clerk to production instance (requires custom domain first)
 - [ ] Configure Stripe webhook endpoint (needs deployed URL)
 - [ ] Set up Sentry error tracking
 - [ ] Set up UptimeRobot monitoring
 - [ ] Set up PostHog analytics
-- [ ] Supabase Storage bucket for employee documents
 - [ ] Background jobs (Trigger.dev or Inngest) for:
   - [ ] Leave approval email notifications
   - [ ] Training deadline reminders
@@ -434,23 +458,25 @@ Configured in `src/lib/stripe.ts` as the `PLANS` object.
 
 ## Immediate Next Steps (in priority order)
 
-1. **Set SUPABASE_SERVICE_ROLE_KEY** in `.env.local` (Supabase → Settings → API)
-2. **Insert organization row** in Supabase matching your Clerk org ID
-3. **Test Employee CRUD** — add, edit, search, terminate an employee
-4. **Build Leave Management** — the first revenue-justifying feature
-5. **Build Department CRUD** in Settings (needed for employee department dropdowns)
-6. **Connect dashboard stats** to live data
-7. **Deploy to Vercel** and configure webhooks
-8. **Set up Stripe** billing with the 3 plan tiers
+1. **Connect dashboard stats** to live Supabase data (employee count, pending leaves, training %, compliance)
+2. **Set up Stripe** — create products/prices, set env vars, test billing flow
+3. **Custom domain** — point Namecheap domain via Cloudflare DNS to Vercel
+4. **Switch Clerk to production instance** — requires custom domain first
+5. **Set up Resend** — enable leave email notifications (template already built)
+6. **Set up Sentry + PostHog** — error tracking and analytics
 
 ---
 
 ## Known Issues / Gotchas
 
-1. **pgvector extension**: Remove the `CREATE EXTENSION IF NOT EXISTS "pgvector"` line from migration before running. Free Supabase tier doesn't have it.
-2. **Next.js version**: Pinned to 14.2.x. npm may try to resolve to 16.x if using `^14.2.0`. Explicitly install `next@14.2.23`.
-3. **eslint-config-next**: Must match Next.js major version. Pinned to `14.2.15`.
-4. **Supabase CLI on Windows**: Global install fails. Use `npx supabase` or the Supabase Dashboard SQL Editor.
-5. **Clerk org → Supabase sync**: Until the Clerk webhook is configured with a deployed URL, you must manually create the organization row in Supabase.
-6. **RLS bypass**: Server actions use the admin Supabase client (service role key) which bypasses RLS. This is intentional since Clerk JWT → Supabase RLS integration requires extra config. For production, consider setting up Supabase custom JWT verification with Clerk tokens.
-7. **`postinstall` script**: `package.json` has `"postinstall": "prisma generate || true"` — this is a no-op leftover. Can be removed safely.
+1. **pgvector extension**: Removed from migration — not available on free Supabase tier. Use only in Phase 4.
+2. **Next.js version**: Pinned to 14.2.x. Explicitly installed as `next@14.2.23`.
+3. **eslint-config-next**: Pinned to `14.2.15` to match ESLint 8.
+4. **Supabase CLI on Windows**: Global install fails. Use Supabase Dashboard SQL Editor for all migrations.
+5. **TypeScript build errors**: `typescript: { ignoreBuildErrors: true }` added to `next.config.js`. Root cause: Supabase v2 `PostgrestVersion:12` type inference returns `never` for partial selects. Workaround: cast with `as { id: string }` or use `ignoreBuildErrors`. Proper fix: run `npm run db:generate` against live Supabase to regenerate types.
+6. **ESLint no-unused-vars**: `@typescript-eslint/no-unused-vars` rule removed from `.eslintrc.json` (plugin not installed). Replaced with `no-unused-vars: "off"`.
+7. **RLS bypass**: Server actions use admin Supabase client (service role key) which bypasses RLS. Intentional — Clerk JWT → Supabase RLS integration not configured.
+8. **Clerk production instance**: Still on dev instance. Switch to production instance only after custom domain is configured (Clerk requires a verified domain for production).
+9. **`postinstall` script**: Removed from `package.json` (was a no-op `prisma generate || true` leftover).
+10. **New tables added post-migration**: `objectives` table was added manually via Supabase SQL Editor (not in the initial migration file). `reviews` table has an `objectives_id` column added via `ALTER TABLE`.
+11. **Supabase trigger function**: `update_updated_at_column()` function may not exist if running fresh migrations — create it separately before using it in triggers (Supabase SQL Editor splits on semicolons, so create the function and the table in separate queries).

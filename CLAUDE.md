@@ -19,7 +19,7 @@ JambaHR is an all-in-one HR management SaaS platform for small and medium busine
 | UI Components | Radix UI + CVA + tailwind-merge | Accessible primitives with variant system |
 | Auth | Clerk (with Organizations) | Multi-tenant auth, roles, invitations |
 | Database | Supabase (Postgres) | Data storage + Row Level Security for multi-tenancy |
-| Payments | Stripe | Subscription billing (per-employee pricing) |
+| Payments | Razorpay | Subscription billing (per-employee pricing, INR) |
 | Email | Resend + React Email | Transactional emails (leave approvals, reminders) |
 | Analytics | PostHog | Product analytics and feature flags |
 | Errors | Sentry | Error tracking and performance monitoring |
@@ -42,7 +42,7 @@ JambaHR is an all-in-one HR management SaaS platform for small and medium busine
 hr-portal/
 ├── src/
 │   ├── app/                          # Next.js App Router
-│   │   ├── layout.tsx                # Root layout (Clerk, fonts, PostHog, Sonner)
+│   │   ├── layout.tsx                # Root layout (Clerk, fonts, PostHog, Sonner, favicon)
 │   │   ├── page.tsx                  # Marketing landing page (public)
 │   │   ├── globals.css               # Design tokens (HSL CSS variables, light + dark)
 │   │   ├── (auth)/                   # Auth routes (public)
@@ -52,65 +52,85 @@ hr-portal/
 │   │   ├── onboarding/page.tsx       # Post-signup org creation wizard
 │   │   ├── api/webhooks/
 │   │   │   ├── clerk/route.ts        # Syncs Clerk user/org events → Supabase
-│   │   │   └── stripe/route.ts       # Manages subscription lifecycle
+│   │   │   ├── stripe/route.ts       # Legacy Stripe handler (kept, unused)
+│   │   │   └── razorpay/route.ts     # Razorpay subscription lifecycle webhook
 │   │   └── dashboard/                # Protected app (requires auth)
-│   │       ├── layout.tsx            # Sidebar + Header shell
-│   │       ├── page.tsx              # Dashboard home (stats, quick actions, setup checklist)
+│   │       ├── layout.tsx            # Sidebar + Header shell (fetches role for RBAC)
+│   │       ├── page.tsx              # Dashboard home (live stats, recent leaves, deadlines)
 │   │       ├── employees/page.tsx    # Employee directory with CRUD
-│   │       ├── leaves/page.tsx       # Leave management (placeholder)
-│   │       ├── documents/page.tsx    # Document hub (placeholder)
-│   │       ├── reviews/page.tsx      # Performance reviews (placeholder)
-│   │       ├── training/page.tsx     # Training & compliance (placeholder)
+│   │       ├── leaves/page.tsx       # Leave management
+│   │       ├── documents/page.tsx    # Document hub
+│   │       ├── reviews/page.tsx      # Performance reviews
+│   │       ├── training/page.tsx     # Training & compliance
+│   │       ├── objectives/page.tsx   # OKR objectives
+│   │       ├── directory/page.tsx    # Org chart tree view
+│   │       ├── profile/page.tsx      # Employee self-profile
 │   │       ├── payroll/page.tsx      # Payroll (placeholder — Phase 3)
-│   │       └── settings/page.tsx     # Org settings, billing, policies (placeholder)
+│   │       └── settings/page.tsx     # Org settings, billing, policies
 │   ├── actions/                      # Server Actions (all mutations)
-│   │   └── employees.ts             # list, add, update, delete, getDepartments
+│   │   ├── employees.ts             # list, add, update, delete, getDepartments
+│   │   ├── leaves.ts                # request, approve, reject, cancel, balances, policies
+│   │   ├── documents.ts             # list, upload, delete, signed URLs
+│   │   ├── reviews.ts               # cycles CRUD, self/manager review submit
+│   │   ├── objectives.ts            # OKR CRUD, submit, approve, reject
+│   │   ├── training.ts              # courses CRUD, enroll, progress, completion
+│   │   ├── settings.ts              # org profile, departments, leave policies
+│   │   ├── billing.ts               # Razorpay subscription creation, cancellation
+│   │   ├── dashboard.ts             # live stats, recent leaves, deadlines, review cycles
+│   │   └── notifications.ts         # getPendingCounts() for sidebar badges
 │   ├── components/
 │   │   ├── ui/                       # Reusable primitives
-│   │   │   ├── button.tsx            # CVA button with variants
-│   │   │   ├── card.tsx              # Card compound component
-│   │   │   └── badge.tsx             # Status badge with variants
+│   │   │   ├── button.tsx
+│   │   │   ├── card.tsx
+│   │   │   └── badge.tsx
 │   │   ├── layout/
-│   │   │   ├── sidebar.tsx           # Collapsible nav sidebar with Clerk UserButton
+│   │   │   ├── sidebar.tsx           # Collapsible nav, role-filtered items, badges
 │   │   │   ├── header.tsx            # Top bar with search + notifications
-│   │   │   └── posthog-provider.tsx  # Analytics provider wrapper
+│   │   │   └── posthog-provider.tsx
 │   │   ├── dashboard/
-│   │   │   ├── employees-client.tsx  # Employee page client wrapper (search, modal state)
-│   │   │   ├── employee-table.tsx    # Data table with actions dropdown
-│   │   │   └── employee-form.tsx     # Add/edit modal form with validation
-│   │   ├── forms/                    # Shared form components (empty — build as needed)
+│   │   │   ├── employees-client.tsx  # Employee page (Add button hidden for employees)
+│   │   │   ├── employee-table.tsx    # Data table (actions hidden for non-admins)
+│   │   │   └── employee-form.tsx     # Add/edit modal
+│   │   ├── leaves/                   # Leave request form, table, approval workflow
+│   │   ├── documents/                # Upload dialog, document list (upload hidden for employees)
+│   │   ├── reviews/                  # Cycle list, review dialog (create cycle hidden for employees)
+│   │   ├── objectives/               # Create/approve dialogs, objectives list
+│   │   ├── training/                 # Course dialog, enroll dialog, progress dialog, compliance
+│   │   ├── settings/                 # Org profile, departments, leave policies, billing section
+│   │   ├── forms/                    # Shared form components
 │   │   └── emails/
 │   │       └── leave-request.tsx     # React Email template for leave approvals
 │   ├── config/
-│   │   └── navigation.ts            # Sidebar nav items, app constants
+│   │   └── navigation.ts            # Sidebar nav items with requiredRole, APP_NAME
 │   ├── hooks/
-│   │   ├── index.ts                  # Barrel export
+│   │   ├── index.ts
 │   │   └── use-employee.ts          # Client hook for current employee + org context
 │   ├── lib/
 │   │   ├── utils.ts                  # cn(), formatDate(), formatCurrency(), getInitials()
-│   │   ├── stripe.ts                # Stripe client + PLANS config (starter/growth/business)
+│   │   ├── razorpay.ts              # Razorpay client + PLANS config (starter/growth/business)
+│   │   ├── current-user.ts          # getCurrentUser() → { orgId, clerkUserId, role, employeeId }
 │   │   ├── resend.ts                # Resend email client
 │   │   └── supabase/
-│   │       ├── client.ts            # Browser Supabase client (for client components)
-│   │       ├── server.ts            # Server Supabase client + Admin client (bypasses RLS)
-│   │       └── index.ts             # Barrel export
-│   ├── middleware.ts                 # Clerk route protection (public: /, /sign-in, /sign-up, /api/webhooks)
+│   │       ├── client.ts
+│   │       ├── server.ts
+│   │       └── index.ts
+│   ├── middleware.ts                 # Clerk route protection
 │   └── types/
-│       ├── database.types.ts         # Supabase DB types (placeholder — matches migration schema)
-│       └── index.ts                  # Row type shortcuts, UserRole, ROLE_HIERARCHY, ActionResult
+│       ├── database.types.ts
+│       └── index.ts                  # Row types, UserRole, ROLE_HIERARCHY, hasPermission(), ActionResult
 ├── supabase/
-│   ├── config.toml                   # Supabase project config
+│   ├── config.toml
 │   └── migrations/
 │       └── 001_initial_schema.sql    # Full schema: 12 tables, indexes, RLS, triggers
-├── scripts/                          # Seed scripts (empty — build as needed)
-├── public/                           # Static assets
-├── .env.example                      # All required environment variables
+├── public/
+│   └── Jamba.png                     # App logo — used as favicon and Razorpay checkout logo
+├── .env.example
 ├── package.json
-├── tsconfig.json                     # Strict mode, path aliases (@/*)
-├── tailwind.config.ts                # Custom theme with design tokens
+├── tsconfig.json
+├── tailwind.config.ts
 ├── next.config.js
 ├── postcss.config.js
-├── vercel.json                       # Vercel deployment config (bom1 region)
+├── vercel.json
 ├── .eslintrc.json
 ├── .prettierrc
 └── .gitignore
@@ -124,8 +144,8 @@ hr-portal/
 
 | Table | Purpose | Key columns |
 |-------|---------|-------------|
-| `organizations` | Tenant root | clerk_org_id, plan, stripe_customer_id, max_employees |
-| `employees` | Team directory | first_name, last_name, email, role, department_id, status, employment_type |
+| `organizations` | Tenant root | clerk_org_id, plan, stripe_customer_id (reused for Razorpay sub ID), max_employees |
+| `employees` | Team directory | first_name, last_name, email, role, department_id, status, employment_type, clerk_user_id |
 | `departments` | Org structure | name, head_id (FK → employees) |
 | `leave_policies` | Leave type config | type (paid/sick/casual/etc), days_per_year, carry_forward |
 | `leave_balances` | Per-employee per-year | total_days, used_days, carried_forward_days |
@@ -141,9 +161,8 @@ hr-portal/
 ### Multi-tenancy approach
 - Every table has `org_id` column with FK to `organizations`
 - RLS is enabled on ALL tables
-- RLS policies check `clerk_org_id` from Clerk JWT claims
-- Admin Supabase client (`SUPABASE_SERVICE_ROLE_KEY`) bypasses RLS — used in server actions and webhooks
-- **IMPORTANT**: The pgvector extension line was removed from the migration (not available on free Supabase). Use `pgvector` only in Phase 4 if needed.
+- Admin Supabase client (`SUPABASE_SERVICE_ROLE_KEY`) bypasses RLS — used in all server actions
+- **NOTE**: `stripe_customer_id` and `stripe_subscription_id` columns on `organizations` are reused for Razorpay (no schema change needed)
 
 ### Auto-updated timestamps
 Triggers on `organizations`, `employees`, `leave_requests` automatically update `updated_at`.
@@ -153,10 +172,9 @@ Triggers on `organizations`, `employees`, `leave_requests` automatically update 
 ## Authentication & Authorization
 
 ### Clerk setup
-- **Organizations enabled** — every user must belong to an org (Membership required)
+- **Organizations enabled** — every user must belong to an org
 - **Organization slugs enabled** — clean URLs
-- **Auto-create first org** — enabled for streamlined onboarding
-- **Limited membership**: 5 (free tier default, increase as needed)
+- **Production instance** — configured on `jambahr.com`
 - Roles: `owner`, `admin`, `manager`, `employee` — defined in `src/types/index.ts`
 - `ROLE_HIERARCHY` and `hasPermission()` helper for role-based access control
 
@@ -165,9 +183,63 @@ Triggers on `organizations`, `employees`, `leave_requests` automatically update 
 - All other routes require authentication via Clerk
 
 ### Webhook sync (Clerk → Supabase)
-- `POST /api/webhooks/clerk` handles: `organization.created`, `organization.updated`, `user.created`, `user.updated`
-- **Configured** on Clerk dev instance pointing to `https://hrme-nine.vercel.app/api/webhooks/clerk`
-- Verified working — org creation via Clerk triggers Supabase row creation
+- `POST /api/webhooks/clerk` — verified working on production
+- Subscribed events: `organization.created`, `organization.updated`, `user.created`, `user.updated`
+- Webhook endpoint: `https://jambahr.com/api/webhooks/clerk`
+
+### Role-Based Access Control (RBAC)
+
+**`src/lib/current-user.ts`** — central helper:
+- `getCurrentUser()` → `{ orgId, clerkUserId, role, employeeId }`
+- `isAdmin(role)` → true for `owner` | `admin`
+- `isManagerOrAbove(role)` → true for `owner` | `admin` | `manager`
+
+**Sidebar filtering** — nav items filtered by `requiredRole`:
+- Employees: see Dashboard, Directory, Leaves, Documents, Objectives, Training
+- Managers: above + Employees page, Reviews
+- Admins: everything including Settings, Payroll
+
+**Server action guards** (security layer):
+| Action | Required Role |
+|--------|--------------|
+| addEmployee, updateEmployee, terminateEmployee | admin |
+| uploadDocument, deleteDocument | admin |
+| approveLeave, rejectLeave | manager+ |
+| createReviewCycle, deleteReviewCycle | admin |
+| createCourse, updateCourse, deleteCourse, enrollEmployees, unenrollEmployee | admin |
+| updateOrgProfile, addLeavePolicy, updateLeavePolicy, deleteLeavePolicy | admin |
+
+**UI guards** (UX layer — buttons/dialogs hidden for lower roles):
+- Employees page: Add/Edit/Terminate hidden for non-admins
+- Leaves: employees only see their own requests; Approve/Reject hidden
+- Documents: Upload + Delete hidden for non-admins
+- Reviews: New Cycle + cycle management hidden for non-admins
+
+---
+
+## Billing — Razorpay
+
+### How it works
+1. User clicks Upgrade in `/dashboard/settings` → billing section
+2. `createSubscription(planKey)` server action creates a Razorpay subscription via API
+3. Returns `subscriptionId` + `keyId` to frontend
+4. Frontend loads Razorpay checkout JS and opens modal with `subscription_id`
+5. On payment success, Razorpay fires webhook → `POST /api/webhooks/razorpay`
+6. Webhook verifies HMAC signature, updates `organizations.plan` and `max_employees` in Supabase
+
+### Webhook events handled
+- `subscription.activated` → update org plan + max_employees
+- `subscription.charged` → no-op (subscription remains active)
+- `subscription.cancelled` / `subscription.completed` → downgrade to starter
+- `subscription.paused` → log warning
+- `payment.failed` → log error (TODO: send Resend email)
+
+### Plans config (`src/lib/razorpay.ts`)
+| Plan | Price | Max Employees |
+|------|-------|---------------|
+| Starter | Free | 10 |
+| Growth | ₹500/employee/month | 200 |
+| Business | ₹800/employee/month | 500 |
 
 ---
 
@@ -177,23 +249,18 @@ Triggers on `organizations`, `employees`, `leave_requests` automatically update 
 All data mutations use Next.js Server Actions in `src/actions/`. Pattern:
 ```typescript
 "use server";
-import { auth } from "@clerk/nextjs/server";
+import { getCurrentUser, isAdmin } from "@/lib/current-user";
 import { createAdminSupabase } from "@/lib/supabase/server";
 
-async function getOrgId() {
-  const { orgId } = auth();
-  // Resolve Clerk org → internal Supabase org UUID
-}
-
 export async function doSomething(data): Promise<ActionResult<T>> {
-  const org = await getOrgId();
-  if (!org) return { success: false, error: "Not authenticated" };
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Unauthorized" };
   // Validate with Zod, then CRUD via admin Supabase client
 }
 ```
 
 ### ActionResult pattern
-All server actions return `ActionResult<T>`:
 ```typescript
 type ActionResult<T = void> =
   | { success: true; data: T }
@@ -201,16 +268,12 @@ type ActionResult<T = void> =
 ```
 
 ### Client components
-Client-side pages follow this pattern:
-- Server component page (`page.tsx`) renders a client wrapper
-- Client wrapper manages state (search, modals, loading)
-- Calls server actions for data fetching and mutations
-- Uses `sonner` toast for success/error feedback
+- Server page (`page.tsx`) fetches data + role, passes both to client wrapper
+- Client wrapper hides/shows UI based on role prop
+- Uses `sonner` toast for feedback
 
 ### Design tokens
-All colors are HSL CSS variables in `globals.css`. Use `hsl(var(--primary))` pattern.
 Primary color: teal (`172 50% 36%`). Accent: warm orange (`32 95% 52%`).
-Light and dark themes are both defined.
 
 ---
 
@@ -220,178 +283,135 @@ Light and dark themes are both defined.
 
 **Infrastructure & Config**
 - [x] Full project scaffolding (Next.js 14, TypeScript, Tailwind)
-- [x] Tailwind config with custom design tokens (light + dark themes)
-- [x] ESLint, Prettier, TypeScript strict mode configured
-- [x] Path aliases (`@/*` → `./src/*`)
-- [x] Vercel config (bom1 region for India proximity)
+- [x] ESLint, Prettier, TypeScript strict mode
+- [x] Vercel deployment (bom1 region)
+- [x] Custom domain: `jambahr.com` (Namecheap → Cloudflare → Vercel)
+- [x] Clerk production instance configured on `jambahr.com`
+- [x] Jamba.png logo — favicon + Razorpay checkout logo
 
 **Auth**
-- [x] Clerk integration with ClerkProvider in root layout
+- [x] Clerk integration with Organizations
 - [x] Sign-in / sign-up pages
 - [x] Middleware for route protection
-- [x] Clerk Organizations enabled and configured
+- [x] Clerk webhook verified working (org auto-created in Supabase on signup)
 
 **Database**
-- [x] Full Supabase migration (12 tables, indexes, RLS policies, triggers)
-- [x] Migration successfully run on Supabase project `imjwqktxzahhnfmfbtfc`
-- [x] NOTE: `pgvector` extension line must be removed/commented out before running migration
+- [x] Full Supabase migration (12 tables, indexes, RLS, triggers)
+- [x] `objectives` table added manually via SQL Editor
+- [x] `reviews.objectives_id` column added via ALTER TABLE
 
 **App Shell**
-- [x] Marketing landing page with hero, features grid, CTA, footer
-- [x] Dashboard layout with collapsible sidebar + top header
-- [x] Navigation config for all modules
-- [x] Onboarding wizard (company name, industry, team size)
-- [x] Dashboard home with stat cards, quick actions, setup checklist
+- [x] Marketing landing page
+- [x] Dashboard layout with collapsible sidebar + role-filtered nav
+- [x] Onboarding wizard
+- [x] Dashboard home with live stats, recent leaves, upcoming deadlines, active review cycles
+
+**RBAC — Role-Based Access Control**
+- [x] `getCurrentUser()` shared helper (`src/lib/current-user.ts`)
+- [x] Sidebar filters nav items by role
+- [x] Server action guards on all admin/manager-only mutations
+- [x] UI hides admin controls for employees (Add Employee, Upload, Approve Leave, New Cycle, etc.)
+- [x] Employees only see their own leave requests
 
 **Employee CRUD**
-- [x] Server actions: listEmployees, addEmployee, updateEmployee, deleteEmployee, getEmployee, listDepartments
-- [x] Employee data table with search, status badges, role/dept/type columns
-- [x] Add/edit modal form with client-side validation
-- [x] Soft delete (marks as "terminated" instead of hard delete)
-- [x] Employee count limit enforcement based on plan
-- [x] Reporting Manager field (FK to employees.id) on add/edit form
+- [x] Full CRUD with role guards (admin only for mutations)
+- [x] Soft delete, employee count limit, reporting manager field
 
 **Directory**
-- [x] Org chart tree view (`/dashboard/directory`)
-- [x] Collapsible tree nodes — click chevron to collapse/expand branches
+- [x] Org chart tree view with collapsible branches (`/dashboard/directory`)
 
 **Leave Management** (`/dashboard/leaves`)
-- [x] Server actions: requestLeave, approveLeave, rejectLeave, cancelLeave, getLeaveBalances, listLeaveRequests
-- [x] Employee leave request form with leave type, date range, reason
-- [x] Manager approval/rejection workflow with comments
-- [x] Leave balance display per employee per year
-- [x] Leave policy configuration in Settings
+- [x] Request, approve, reject, cancel flow
+- [x] Leave balance cards per policy
+- [x] Employees see own requests only; managers see all
+- [x] Approve/Reject buttons hidden for employees
 
 **Document Management** (`/dashboard/documents`)
-- [x] Supabase Storage bucket `documents` (private)
-- [x] File upload with drag-and-drop (UploadDialog)
-- [x] Categories: policy, contract, ID, tax, certificate, other
-- [x] Company-wide vs employee-specific toggle
-- [x] Requires-acknowledgment flag
-- [x] Signed URL generation for secure downloads
-- [x] Search + category filter tabs
+- [x] Supabase Storage, drag-and-drop upload, signed URLs
+- [x] Categories, company-wide toggle, acknowledgment flag
+- [x] Upload/Delete hidden for non-admins
 
 **Settings** (`/dashboard/settings`)
-- [x] Org profile editing (name)
-- [x] Leave policies CRUD (type, days per year, carry-forward toggle)
-- [x] Department management
-- [x] Billing section with plan info and seat usage progress bar
+- [x] Org profile, department CRUD, leave policy CRUD
+- [x] Billing section with Razorpay upgrade flow
 
 **Sidebar Notification Badges**
-- [x] Red dot/count on Leaves (pending requests), Documents (requires acknowledgment), Objectives (pending approvals)
-- [x] `getPendingCounts()` in `src/actions/notifications.ts`
-- [x] Sidebar shows pill count when expanded, dot on icon when collapsed
+- [x] Pending leaves, docs requiring acknowledgment, pending objective approvals
 
 **Performance Reviews** (`/dashboard/reviews`)
-- [x] Review cycle CRUD (draft → active → completed)
-- [x] Per-employee review records auto-created when cycle is created
-- [x] Reviewer assigned from `reporting_manager_id` (falls back to cycle creator)
-- [x] Self-assessment: star rating (1–5), comments, ad-hoc goals with status
-- [x] Manager review: rating + comments
-- [x] View mode: side-by-side self vs manager ratings
-- [x] Cycle progress bar (completed/total)
+- [x] Review cycle CRUD (admin only)
+- [x] Self-assessment + manager review
+- [x] Objectives evaluation embedded in review dialog
 
 **Objectives / OKR** (`/dashboard/objectives`)
-- [x] `objectives` table added (migration run manually in Supabase SQL Editor)
-- [x] Employee creates quarterly/yearly objective sets with weighted items (must sum to 100%)
-- [x] Status flow: draft → submitted → approved/rejected
-- [x] Manager approval dialog with feedback
-- [x] Rejected objectives show feedback + "Revise and resubmit" link
-- [x] Objectives linked to reviews: employee evaluates each objective during self-review (status + progress % + comment)
-- [x] Manager rates each objective during manager review (1–5 stars + comment)
-- [x] Tabs: My Objectives | Pending Approvals | All Objectives (admin)
-- [x] Sidebar badge for pending approvals (managers)
+- [x] Draft → submitted → approved/rejected flow
+- [x] Manager approval dialog
+- [x] Linked to review cycles
 
 **Training & Compliance** (`/dashboard/training`)
-- [x] Course library CRUD (title, category, duration, content URL, mandatory flag, due date)
-- [x] Employee enrollment — admin assigns courses, prevents duplicate enrollment
-- [x] Completion flow: self-attestation checkbox + certificate URL (required for mandatory courses)
-- [x] Progress slider (0–95%) for in-progress tracking (separate from completion)
-- [x] Compliance tab: stat cards, overdue alerts, per-course completion breakdown
-- [x] "LMS Auto-Sync — Coming Soon" banner in Compliance tab
-- [x] Tabs: My Training | Course Library (admin) | Compliance (admin)
+- [x] Course library, enrollment, self-attestation completion
+- [x] Compliance tab with overdue alerts
+- [x] LMS Auto-Sync coming soon banner
 
-**Deployment**
-- [x] Deployed to Vercel at `https://hrme-nine.vercel.app`
-- [x] Clerk webhook configured (dev instance → Vercel URL)
-- [x] Auth redirects: sign-in → /dashboard, sign-up → /onboarding
-- [x] `typescript: { ignoreBuildErrors: true }` in next.config.js (Supabase v2 type inference workaround)
+**Billing — Razorpay**
+- [x] `src/lib/razorpay.ts` — client + PLANS config
+- [x] `src/actions/billing.ts` — createSubscription, cancelSubscription
+- [x] `src/app/api/webhooks/razorpay/route.ts` — HMAC-verified webhook handler
+- [x] Billing section UI with plan cards + Razorpay checkout modal
+- [x] Webhook endpoint configured in Razorpay dashboard
 
 **API Webhooks**
-- [x] Clerk webhook handler (org + user sync) — verified working
-- [x] Stripe webhook handler (subscription lifecycle)
-
-**UI Components**
-- [x] Button (CVA variants: default, destructive, outline, secondary, ghost, link)
-- [x] Card (compound: Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter)
-- [x] Badge (variants: default, secondary, destructive, success, warning, outline)
+- [x] Clerk webhook — org + user sync, verified working
+- [x] Razorpay webhook — subscription lifecycle
 
 **Email Templates**
 - [x] Leave request approval email (React Email)
 
-**Utilities**
-- [x] cn(), formatDate(), timeAgo(), formatCurrency(), getInitials(), slugify(), capitalize()
-- [x] Supabase browser + server + admin clients
-- [x] Stripe client with PLANS config
-- [x] Resend client
-- [x] PostHog provider
-- [x] useEmployee hook for client-side context
-
 ### ⚠️ PARTIALLY DONE — NEEDS ATTENTION
 
-**Environment Variables (.env.local)**
-- [x] NEXT_PUBLIC_SUPABASE_URL — set (`https://imjwqktxzahhnfmfbtfc.supabase.co`)
-- [x] NEXT_PUBLIC_SUPABASE_ANON_KEY — set
-- [x] SUPABASE_SERVICE_ROLE_KEY — set
-- [x] NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY — set
-- [x] CLERK_SECRET_KEY — set
-- [x] CLERK_WEBHOOK_SECRET — set (Clerk dev instance)
-- [ ] STRIPE_SECRET_KEY — not set yet
-- [ ] STRIPE_WEBHOOK_SECRET — not set yet
-- [ ] STRIPE_*_PRICE_ID — not set yet (create products in Stripe first)
+**Environment Variables (Vercel)**
+- [x] NEXT_PUBLIC_SUPABASE_URL
+- [x] NEXT_PUBLIC_SUPABASE_ANON_KEY
+- [x] SUPABASE_SERVICE_ROLE_KEY
+- [x] NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY (production)
+- [x] CLERK_SECRET_KEY (production)
+- [x] CLERK_WEBHOOK_SECRET (production)
+- [x] NEXT_PUBLIC_RAZORPAY_KEY_ID
+- [x] RAZORPAY_KEY_SECRET
+- [x] RAZORPAY_GROWTH_PLAN_ID
+- [x] RAZORPAY_BUSINESS_PLAN_ID
+- [x] RAZORPAY_WEBHOOK_SECRET
 - [ ] RESEND_API_KEY — not set yet
 - [ ] SENTRY_DSN — not set yet
-- [ ] NEXT_PUBLIC_POSTHOG_KEY — not set yet (app works without it)
+- [ ] NEXT_PUBLIC_POSTHOG_KEY — not set yet
 
 ### ❌ NOT YET BUILT — Pending
 
 **Near-term**
-- [ ] Connect dashboard stats to live Supabase data (active employee count, pending leaves, training %, compliance alerts)
 - [ ] Leave email notifications (Resend + leave-request.tsx template already exists)
 - [ ] Document acknowledgment tracking (employee acknowledges receipt)
 - [ ] Announcements / company-wide notices
 
 **Phase 3 — Future**
-- [ ] Payroll & compensation
-  - [ ] Salary structure configuration
-  - [ ] Payslip generation (PDF)
-  - [ ] Bonus and incentive tracking
-  - [ ] Tax calculation helpers
+- [ ] Payroll & compensation (salary, payslips, tax helpers)
 - [ ] Attendance (clock in/out, overtime)
 
-**Phase 4 — AI Features (future)**
+**Phase 4 — AI Features**
 - [ ] AI-powered job description generator
-- [ ] Semantic search across policies and documents (pgvector)
+- [ ] Semantic search (pgvector)
 - [ ] Smart review summaries
 - [ ] Attrition risk indicators
 
-**Training — LMS Auto-Sync (planned, shown as Coming Soon in app)**
+**Training — LMS Auto-Sync (shown as Coming Soon)**
 - [ ] Webhook receivers for Coursera, LinkedIn Learning, TalentLMS, Docebo, Google Classroom
-- [ ] Auto-update `training_enrollments.status` and `progress_percent` on completion event
 
-### ❌ NOT YET DONE — Infrastructure & DevOps
+### ❌ NOT YET DONE — Infrastructure
 
-- [ ] Connect custom domain (Namecheap → Cloudflare DNS → Vercel)
-- [ ] Switch Clerk to production instance (requires custom domain first)
-- [ ] Configure Stripe webhook endpoint (needs deployed URL)
+- [ ] Set up Resend (enable leave email notifications)
 - [ ] Set up Sentry error tracking
 - [ ] Set up UptimeRobot monitoring
 - [ ] Set up PostHog analytics
-- [ ] Background jobs (Trigger.dev or Inngest) for:
-  - [ ] Leave approval email notifications
-  - [ ] Training deadline reminders
-  - [ ] Compliance alerts
-  - [ ] Payroll calculations
+- [ ] Background jobs (Trigger.dev or Inngest) for email notifications, training reminders, compliance alerts
 
 ---
 
@@ -403,44 +423,32 @@ npm run build         # Production build
 npm run lint          # ESLint check
 npm run db:generate   # Regenerate Supabase types (needs CLI)
 npm run db:push       # Push migrations (needs CLI)
-npm run stripe:listen # Forward Stripe webhooks to localhost
 ```
 
 ---
 
 ## Coding Conventions
 
-### File naming
-- Components: PascalCase (`EmployeeForm.tsx` or `employee-form.tsx` — project uses kebab-case)
-- Server actions: camelCase functions in kebab-case files (`employees.ts` → `addEmployee()`)
-- Types: PascalCase for types/interfaces, UPPER_SNAKE for constants
-
 ### Server actions pattern
 - Always `"use server"` at top
+- Always call `getCurrentUser()` from `@/lib/current-user` for auth + role
+- Always check `isAdmin()` / `isManagerOrAbove()` before mutations
 - Always validate with Zod before DB operations
-- Always check auth with `getOrgId()` helper
 - Always return `ActionResult<T>`
 - Always `revalidatePath()` after mutations
-- Use `createAdminSupabase()` (bypasses RLS) since Clerk JWT → Supabase RLS integration is not configured
+- Use `createAdminSupabase()` (bypasses RLS)
 
 ### Component pattern
-- Server components by default (no `"use client"` unless needed)
-- Client components only when: useState, useEffect, event handlers, browser APIs
-- Use `sonner` toast for user feedback (toast.success / toast.error)
+- Server page → fetch data + role → pass to client wrapper
+- Client wrapper receives `role: UserRole` prop, conditionally renders admin UI
+- Use `hasPermission(role, "admin")` from `@/types` for UI guards
+- Use `sonner` toast for feedback
 - Use `lucide-react` for all icons
 
 ### Styling
 - Tailwind utility classes only — no custom CSS except in globals.css
-- Use `cn()` from `@/lib/utils` for conditional classes
-- Use CSS variables for colors: `bg-primary`, `text-muted-foreground`, etc.
-- Follow the design token system in `globals.css`
-
-### Form pattern
-- Client-side validation first (inline, no library needed for simple forms)
-- Server-side Zod validation in server actions
-- Display errors below fields
-- Loading state on submit button
-- Toast on success/error
+- Use `cn()` from `@/lib/utils`
+- CSS variables for colors: `bg-primary`, `text-muted-foreground`, etc.
 
 ---
 
@@ -452,31 +460,31 @@ npm run stripe:listen # Forward Stripe webhooks to localhost
 | Growth | ₹500/employee/month | 200 | + Reviews, Training, Compliance |
 | Business | ₹800/employee/month | 500 | + Payroll, Analytics, API, Priority support |
 
-Configured in `src/lib/stripe.ts` as the `PLANS` object.
+Configured in `src/lib/razorpay.ts` as the `PLANS` object.
 
 ---
 
 ## Immediate Next Steps (in priority order)
 
-1. **Connect dashboard stats** to live Supabase data (employee count, pending leaves, training %, compliance)
-2. **Set up Stripe** — create products/prices, set env vars, test billing flow
-3. **Custom domain** — point Namecheap domain via Cloudflare DNS to Vercel
-4. **Switch Clerk to production instance** — requires custom domain first
-5. **Set up Resend** — enable leave email notifications (template already built)
-6. **Set up Sentry + PostHog** — error tracking and analytics
+1. **Set up Resend** — enable leave approval email notifications (template already built)
+2. **Document acknowledgment** — employee acknowledges receipt of company docs
+3. **Set up Sentry + PostHog** — error tracking and analytics
+4. **Announcements module** — company-wide notices
+5. **Plan-based feature gating** — lock modules behind plan tier (Growth/Business)
 
 ---
 
 ## Known Issues / Gotchas
 
-1. **pgvector extension**: Removed from migration — not available on free Supabase tier. Use only in Phase 4.
-2. **Next.js version**: Pinned to 14.2.x. Explicitly installed as `next@14.2.23`.
+1. **pgvector extension**: Removed from migration — not available on free Supabase tier.
+2. **Next.js version**: Pinned to 14.2.x. Do not upgrade without migration plan.
 3. **eslint-config-next**: Pinned to `14.2.15` to match ESLint 8.
 4. **Supabase CLI on Windows**: Global install fails. Use Supabase Dashboard SQL Editor for all migrations.
-5. **TypeScript build errors**: `typescript: { ignoreBuildErrors: true }` added to `next.config.js`. Root cause: Supabase v2 `PostgrestVersion:12` type inference returns `never` for partial selects. Workaround: cast with `as { id: string }` or use `ignoreBuildErrors`. Proper fix: run `npm run db:generate` against live Supabase to regenerate types.
-6. **ESLint no-unused-vars**: `@typescript-eslint/no-unused-vars` rule removed from `.eslintrc.json` (plugin not installed). Replaced with `no-unused-vars: "off"`.
-7. **RLS bypass**: Server actions use admin Supabase client (service role key) which bypasses RLS. Intentional — Clerk JWT → Supabase RLS integration not configured.
-8. **Clerk production instance**: Still on dev instance. Switch to production instance only after custom domain is configured (Clerk requires a verified domain for production).
-9. **`postinstall` script**: Removed from `package.json` (was a no-op `prisma generate || true` leftover).
-10. **New tables added post-migration**: `objectives` table was added manually via Supabase SQL Editor (not in the initial migration file). `reviews` table has an `objectives_id` column added via `ALTER TABLE`.
-11. **Supabase trigger function**: `update_updated_at_column()` function may not exist if running fresh migrations — create it separately before using it in triggers (Supabase SQL Editor splits on semicolons, so create the function and the table in separate queries).
+5. **TypeScript build errors**: `typescript: { ignoreBuildErrors: true }` in `next.config.js`. Root cause: Supabase v2 type inference returns `never` for partial selects.
+6. **RLS bypass**: Server actions use admin Supabase client (service role key). Intentional — Clerk JWT → Supabase RLS not configured.
+7. **New tables added post-migration**: `objectives` table added manually via SQL Editor. `reviews.objectives_id` added via ALTER TABLE.
+8. **Supabase trigger function**: `update_updated_at_column()` must be created separately before running triggers (SQL Editor splits on semicolons).
+9. **Razorpay `stripe_*` columns**: `organizations.stripe_customer_id` and `stripe_subscription_id` are reused for Razorpay subscription IDs — no schema change was made.
+10. **Razorpay checkout script**: Loaded dynamically in `billing-section.tsx` via `loadRazorpayScript()` to avoid SSR issues.
+11. **RBAC fallback**: If a user has no employee record (e.g. org creator before onboarding), `getCurrentUser()` defaults their role to `"admin"` so they retain full access.
+12. **Employee page visibility**: The Employees page (`/dashboard/employees`) requires `manager` role or above in the sidebar nav. Employees cannot navigate to it, but the route itself is not hard-blocked — add middleware protection if needed.

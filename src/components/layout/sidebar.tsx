@@ -15,6 +15,7 @@ import {
   ChevronLeft,
   UserCircle,
   Network,
+  Target,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -32,12 +33,14 @@ const iconMap: Record<string, LucideIcon> = {
   Wallet,
   Settings,
   Network,
+  Target,
 };
 
 // Map nav href to badge key
 const BADGE_MAP: Record<string, keyof PendingCounts> = {
   "/dashboard/leaves": "leaves",
   "/dashboard/documents": "documents",
+  "/dashboard/objectives": "objectives",
 };
 
 export function Sidebar({ badges }: { badges: PendingCounts }) {

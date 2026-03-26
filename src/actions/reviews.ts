@@ -4,6 +4,8 @@ import { auth, clerkClient } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createAdminSupabase } from "@/lib/supabase/server";
+import { getApprovedObjectivesForEmployees } from "@/actions/objectives";
+import type { ObjectiveSet } from "@/actions/objectives";
 import type { ActionResult } from "@/types";
 
 // ---- Context helper ----
@@ -61,7 +63,10 @@ export type ReviewWithDetails = {
   status: "pending" | "self_review" | "manager_review" | "completed";
   completed_at: string | null;
   created_at: string;
+  objectives: ObjectiveSet[];
 };
+
+export type { ObjectiveSet };
 
 // ---- Cycle actions ----
 
@@ -237,7 +242,7 @@ export async function listCycleReviews(cycleId: string): Promise<ActionResult<Re
 
   if (error) return { success: false, error: error.message };
 
-  const reviews = (data ?? []).map((r: any) => ({
+  const baseReviews = (data ?? []).map((r: any) => ({
     id: r.id,
     cycle_id: r.cycle_id,
     employee_id: r.employee_id,
@@ -252,6 +257,20 @@ export async function listCycleReviews(cycleId: string): Promise<ActionResult<Re
     status: r.status,
     completed_at: r.completed_at,
     created_at: r.created_at,
+  }));
+
+  // Attach approved objectives per employee
+  const employeeIds = [...new Set(baseReviews.map((r) => r.employee_id))];
+  const allObjectives = await getApprovedObjectivesForEmployees(ctx.orgId, employeeIds);
+  const objMap: Record<string, ObjectiveSet[]> = {};
+  for (const obj of allObjectives) {
+    if (!objMap[obj.employee_id]) objMap[obj.employee_id] = [];
+    objMap[obj.employee_id].push(obj);
+  }
+
+  const reviews = baseReviews.map((r) => ({
+    ...r,
+    objectives: objMap[r.employee_id] ?? [],
   }));
 
   return { success: true, data: reviews };

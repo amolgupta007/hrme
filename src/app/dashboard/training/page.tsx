@@ -1,26 +1,64 @@
-export default function TrainingPage() {
+import { auth, clerkClient } from "@clerk/nextjs/server";
+import { createAdminSupabase } from "@/lib/supabase/server";
+import { listCourses, listMyEnrollments } from "@/actions/training";
+import { listEmployees } from "@/actions/employees";
+import { TrainingClient } from "@/components/training/training-client";
+
+async function getRole(): Promise<{ role: string } | null> {
+  const { orgId: sessionOrgId, userId } = auth();
+  if (!userId) return null;
+
+  let clerkOrgId = sessionOrgId ?? null;
+  if (!clerkOrgId) {
+    const client = await clerkClient();
+    const memberships = await client.users.getOrganizationMembershipList({ userId });
+    clerkOrgId = memberships.data[0]?.organization.id ?? null;
+  }
+  if (!clerkOrgId) return null;
+
+  const supabase = createAdminSupabase();
+  const { data: org } = await supabase
+    .from("organizations")
+    .select("id")
+    .eq("clerk_org_id", clerkOrgId)
+    .single();
+
+  if (!org) return null;
+
+  const { data: emp } = await supabase
+    .from("employees")
+    .select("role")
+    .eq("clerk_user_id", userId)
+    .eq("org_id", (org as { id: string }).id)
+    .single();
+
+  return emp ? { role: (emp as { role: string }).role } : null;
+}
+
+export default async function TrainingPage() {
+  const [roleCtx, coursesResult, enrollmentsResult, employeesResult] = await Promise.all([
+    getRole(),
+    listCourses(),
+    listMyEnrollments(),
+    listEmployees(),
+  ]);
+
+  const courses = coursesResult.success ? coursesResult.data : [];
+  const myEnrollments = enrollmentsResult.success ? enrollmentsResult.data : [];
+  const employees = employeesResult.success ? employeesResult.data : [];
+  const isAdmin =
+    roleCtx?.role === "admin" ||
+    roleCtx?.role === "owner" ||
+    roleCtx?.role === "manager";
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">
-            Training & Compliance
-          </h1>
-          <p className="mt-1 text-muted-foreground">
-            Assign courses, track completion, and ensure compliance.
-          </p>
-        </div>
-        <button className="inline-flex h-10 items-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90 transition-colors">
-          Create Course
-        </button>
-      </div>
-
-      <div className="rounded-xl border border-dashed border-border p-12 text-center">
-        <p className="text-muted-foreground">
-          Training courses and compliance tracking will appear here once
-          Supabase is connected.
-        </p>
-      </div>
+      <TrainingClient
+        courses={courses}
+        myEnrollments={myEnrollments}
+        employees={employees}
+        isAdmin={isAdmin}
+      />
     </div>
   );
 }

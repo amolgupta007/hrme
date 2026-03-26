@@ -215,7 +215,7 @@ function ObjectiveCard({
                       <span className="text-xs text-muted-foreground">{item.self_progress}% progress</span>
                     )}
                     {item.self_comment && (
-                      <span className="text-xs text-muted-foreground italic">"{item.self_comment}"</span>
+                      <span className="text-xs text-muted-foreground italic">&quot;{item.self_comment}&quot;</span>
                     )}
                   </div>
                 )}
@@ -225,7 +225,7 @@ function ObjectiveCard({
                   <div className="flex items-center gap-2 mt-1 flex-wrap text-xs text-muted-foreground">
                     <span className="font-medium text-foreground">Manager:</span>
                     <span>Rating {item.manager_rating}/5</span>
-                    {item.manager_comment && <span>· "{item.manager_comment}"</span>}
+                    {item.manager_comment && <span>· &quot;{item.manager_comment}&quot;</span>}
                   </div>
                 )}
               </div>

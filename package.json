@@ -44,6 +44,7 @@
     "nuqs": "^2.8.9",
     "posthog-js": "^1.160.0",
     "posthog-node": "^4.0.0",
+    "razorpay": "^2.9.6",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
     "react-email": "^5.2.10",

@@ -44,6 +44,11 @@ export const sidebarNav: NavItem[] = [
     icon: "GraduationCap",
   },
   {
+    title: "Announcements",
+    href: "/dashboard/announcements",
+    icon: "Megaphone",
+  },
+  {
     title: "Payroll",
     href: "/dashboard/payroll",
     icon: "Wallet",

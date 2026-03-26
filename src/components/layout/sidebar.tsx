@@ -16,6 +16,7 @@ import {
   UserCircle,
   Network,
   Target,
+  Megaphone,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -36,6 +37,7 @@ const iconMap: Record<string, LucideIcon> = {
   Settings,
   Network,
   Target,
+  Megaphone,
 };
 
 // Map nav href to badge key

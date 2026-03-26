@@ -4,6 +4,7 @@ import { auth, clerkClient } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createAdminSupabase } from "@/lib/supabase/server";
+import { getCurrentUser, isAdmin } from "@/lib/current-user";
 import type { ActionResult } from "@/types";
 
 async function getOrgContext() {
@@ -194,6 +195,9 @@ function mapEnrollments(data: any[]): Enrollment[] {
 export async function createCourse(
   formData: z.infer<typeof courseSchema>
 ): Promise<ActionResult<{ id: string }>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can create courses" };
   const ctx = await getOrgContext();
   if (!ctx) return { success: false, error: "Not authenticated" };
 
@@ -228,6 +232,9 @@ export async function updateCourse(
   courseId: string,
   formData: z.infer<typeof courseSchema>
 ): Promise<ActionResult<void>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can update courses" };
   const ctx = await getOrgContext();
   if (!ctx) return { success: false, error: "Not authenticated" };
 
@@ -258,6 +265,9 @@ export async function updateCourse(
 }
 
 export async function deleteCourse(courseId: string): Promise<ActionResult<void>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can delete courses" };
   const ctx = await getOrgContext();
   if (!ctx) return { success: false, error: "Not authenticated" };
 
@@ -280,6 +290,9 @@ export async function enrollEmployees(
   courseId: string,
   employeeIds: string[]
 ): Promise<ActionResult<void>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can enroll employees" };
   const ctx = await getOrgContext();
   if (!ctx) return { success: false, error: "Not authenticated" };
 
@@ -319,6 +332,9 @@ export async function enrollEmployees(
 export async function unenrollEmployee(
   enrollmentId: string
 ): Promise<ActionResult<void>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can unenroll employees" };
   const ctx = await getOrgContext();
   if (!ctx) return { success: false, error: "Not authenticated" };
 

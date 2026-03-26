@@ -4,6 +4,7 @@ import { auth, clerkClient } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createAdminSupabase } from "@/lib/supabase/server";
+import { getCurrentUser, isAdmin } from "@/lib/current-user";
 import type { ActionResult, Organization, LeavePolicy } from "@/types";
 
 // ---- Context helper ----
@@ -70,6 +71,9 @@ const orgProfileSchema = z.object({
 export async function updateOrgProfile(
   data: z.infer<typeof orgProfileSchema>
 ): Promise<ActionResult<void>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can update org settings" };
   const ctx = await getOrgContext();
   if (!ctx) return { success: false, error: "Not authenticated" };
 
@@ -104,6 +108,9 @@ const leavePolicySchema = z.object({
 export async function addLeavePolicy(
   data: z.infer<typeof leavePolicySchema>
 ): Promise<ActionResult<void>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can manage leave policies" };
   const ctx = await getOrgContext();
   if (!ctx) return { success: false, error: "Not authenticated" };
 
@@ -130,6 +137,9 @@ export async function updateLeavePolicy(
   id: string,
   data: z.infer<typeof leavePolicySchema>
 ): Promise<ActionResult<void>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can manage leave policies" };
   const ctx = await getOrgContext();
   if (!ctx) return { success: false, error: "Not authenticated" };
 
@@ -153,6 +163,9 @@ export async function updateLeavePolicy(
 }
 
 export async function deleteLeavePolicy(id: string): Promise<ActionResult<void>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can manage leave policies" };
   const ctx = await getOrgContext();
   if (!ctx) return { success: false, error: "Not authenticated" };
 

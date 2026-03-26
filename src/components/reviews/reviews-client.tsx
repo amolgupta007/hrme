@@ -13,7 +13,8 @@ import { updateCycleStatus, deleteReviewCycle } from "@/actions/reviews";
 import { CreateCycleDialog } from "./create-cycle-dialog";
 import { ReviewDialog } from "./review-dialog";
 import type { ReviewCycleWithStats, ReviewWithDetails } from "@/actions/reviews";
-import type { Employee } from "@/types";
+import type { Employee, UserRole } from "@/types";
+import { hasPermission } from "@/types";
 
 const STATUS_STYLES = {
   draft: "bg-muted text-muted-foreground",
@@ -40,9 +41,11 @@ interface ReviewsClientProps {
   employees: Employee[];
   cycleReviews: ReviewWithDetails[];
   activeCycleId: string | null;
+  role: UserRole;
 }
 
-export function ReviewsClient({ cycles, employees, cycleReviews, activeCycleId: initialCycleId }: ReviewsClientProps) {
+export function ReviewsClient({ cycles, employees, cycleReviews, activeCycleId: initialCycleId, role }: ReviewsClientProps) {
+  const canManageCycles = hasPermission(role, "admin");
   const [createOpen, setCreateOpen] = React.useState(false);
   const [activeCycleId, setActiveCycleId] = React.useState<string | null>(initialCycleId);
   const [reviewDialog, setReviewDialog] = React.useState<{
@@ -81,10 +84,12 @@ export function ReviewsClient({ cycles, employees, cycleReviews, activeCycleId: 
             <h1 className="text-2xl font-bold tracking-tight">Performance Reviews</h1>
             <p className="mt-1 text-muted-foreground">Run review cycles and track team performance.</p>
           </div>
-          <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            New Cycle
-          </Button>
+          {canManageCycles && (
+            <Button onClick={() => setCreateOpen(true)}>
+              <Plus className="mr-2 h-4 w-4" />
+              New Cycle
+            </Button>
+          )}
         </div>
 
         {cycles.length === 0 ? (
@@ -94,10 +99,12 @@ export function ReviewsClient({ cycles, employees, cycleReviews, activeCycleId: 
               <p className="font-medium text-sm">No review cycles yet</p>
               <p className="text-sm text-muted-foreground mt-0.5">Create a cycle to start collecting performance reviews.</p>
             </div>
-            <Button variant="outline" size="sm" onClick={() => setCreateOpen(true)}>
-              <Plus className="mr-2 h-4 w-4" />
-              New Cycle
-            </Button>
+            {canManageCycles && (
+              <Button variant="outline" size="sm" onClick={() => setCreateOpen(true)}>
+                <Plus className="mr-2 h-4 w-4" />
+                New Cycle
+              </Button>
+            )}
           </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -114,7 +121,7 @@ export function ReviewsClient({ cycles, employees, cycleReviews, activeCycleId: 
                       <p className="text-xs text-muted-foreground mt-0.5 truncate">{cycle.description}</p>
                     )}
                   </div>
-                  <DropdownMenu.Root>
+                  {canManageCycles && <DropdownMenu.Root>
                     <DropdownMenu.Trigger asChild onClick={(e) => e.stopPropagation()}>
                       <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0">
                         <MoreHorizontal className="h-4 w-4" />
@@ -149,7 +156,7 @@ export function ReviewsClient({ cycles, employees, cycleReviews, activeCycleId: 
                         </DropdownMenu.Item>
                       </DropdownMenu.Content>
                     </DropdownMenu.Portal>
-                  </DropdownMenu.Root>
+                  </DropdownMenu.Root>}
                 </div>
 
                 <div className="flex items-center gap-2 mb-4">
@@ -189,7 +196,7 @@ export function ReviewsClient({ cycles, employees, cycleReviews, activeCycleId: 
           </div>
         )}
 
-        <CreateCycleDialog open={createOpen} onOpenChange={setCreateOpen} employees={employees} />
+        {canManageCycles && <CreateCycleDialog open={createOpen} onOpenChange={setCreateOpen} employees={employees} />}
       </>
     );
   }

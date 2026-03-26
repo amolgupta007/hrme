@@ -19,11 +19,12 @@ interface LeaveRequestsTableProps {
   requests: LeaveRequestWithDetails[];
   activeFilter: string;
   onFilterChange: (f: string) => void;
+  canApprove?: boolean;
 }
 
 const FILTERS = ["all", "pending", "approved", "rejected", "cancelled"] as const;
 
-export function LeaveRequestsTable({ requests, activeFilter, onFilterChange }: LeaveRequestsTableProps) {
+export function LeaveRequestsTable({ requests, activeFilter, onFilterChange, canApprove = false }: LeaveRequestsTableProps) {
   const [acting, setActing] = React.useState<string | null>(null);
 
   async function handleApprove(id: string) {
@@ -132,31 +133,35 @@ export function LeaveRequestsTable({ requests, activeFilter, onFilterChange }: L
                     <StatusBadge status={req.status} />
                   </td>
                   <td className="px-4 py-3">
-                    <DropdownMenu.Root>
-                      <DropdownMenu.Trigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8" disabled={acting === req.id}>
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenu.Trigger>
-                      <DropdownMenu.Portal>
-                        <DropdownMenu.Content align="end" className="z-50 min-w-[140px] overflow-hidden rounded-lg border bg-popover p-1 shadow-md">
-                          {req.status === "pending" && (
-                            <>
-                              <DropdownMenu.Item
-                                className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm text-success outline-none hover:bg-success/10"
-                                onSelect={() => handleApprove(req.id)}
-                              >
-                                <Check className="h-3.5 w-3.5" />
-                                Approve
-                              </DropdownMenu.Item>
-                              <DropdownMenu.Item
-                                className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm text-destructive outline-none hover:bg-destructive/10"
-                                onSelect={() => handleReject(req.id)}
-                              >
-                                <X className="h-3.5 w-3.5" />
-                                Reject
-                              </DropdownMenu.Item>
-                              <DropdownMenu.Separator className="my-1 h-px bg-border" />
+                    {(canApprove || req.status === "pending") && (
+                      <DropdownMenu.Root>
+                        <DropdownMenu.Trigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8" disabled={acting === req.id}>
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenu.Trigger>
+                        <DropdownMenu.Portal>
+                          <DropdownMenu.Content align="end" className="z-50 min-w-[140px] overflow-hidden rounded-lg border bg-popover p-1 shadow-md">
+                            {req.status === "pending" && canApprove && (
+                              <>
+                                <DropdownMenu.Item
+                                  className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm text-success outline-none hover:bg-success/10"
+                                  onSelect={() => handleApprove(req.id)}
+                                >
+                                  <Check className="h-3.5 w-3.5" />
+                                  Approve
+                                </DropdownMenu.Item>
+                                <DropdownMenu.Item
+                                  className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm text-destructive outline-none hover:bg-destructive/10"
+                                  onSelect={() => handleReject(req.id)}
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                  Reject
+                                </DropdownMenu.Item>
+                                <DropdownMenu.Separator className="my-1 h-px bg-border" />
+                              </>
+                            )}
+                            {req.status === "pending" && (
                               <DropdownMenu.Item
                                 className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none hover:bg-accent"
                                 onSelect={() => handleCancel(req.id)}
@@ -164,16 +169,16 @@ export function LeaveRequestsTable({ requests, activeFilter, onFilterChange }: L
                                 <Ban className="h-3.5 w-3.5" />
                                 Cancel
                               </DropdownMenu.Item>
-                            </>
-                          )}
-                          {req.status !== "pending" && (
-                            <DropdownMenu.Item className="px-2 py-1.5 text-xs text-muted-foreground cursor-default">
-                              No actions available
-                            </DropdownMenu.Item>
-                          )}
-                        </DropdownMenu.Content>
-                      </DropdownMenu.Portal>
-                    </DropdownMenu.Root>
+                            )}
+                            {req.status !== "pending" && (
+                              <DropdownMenu.Item className="px-2 py-1.5 text-xs text-muted-foreground cursor-default">
+                                No actions available
+                              </DropdownMenu.Item>
+                            )}
+                          </DropdownMenu.Content>
+                        </DropdownMenu.Portal>
+                      </DropdownMenu.Root>
+                    )}
                   </td>
                 </tr>
               ))}

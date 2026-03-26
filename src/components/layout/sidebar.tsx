@@ -22,6 +22,8 @@ import { cn } from "@/lib/utils";
 import { sidebarNav, APP_NAME } from "@/config/navigation";
 import { useState } from "react";
 import type { PendingCounts } from "@/actions/notifications";
+import { hasPermission } from "@/types";
+import type { UserRole } from "@/types";
 
 const iconMap: Record<string, LucideIcon> = {
   LayoutDashboard,
@@ -43,9 +45,13 @@ const BADGE_MAP: Record<string, keyof PendingCounts> = {
   "/dashboard/objectives": "objectives",
 };
 
-export function Sidebar({ badges }: { badges: PendingCounts }) {
+export function Sidebar({ badges, role }: { badges: PendingCounts; role: UserRole }) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
+
+  const visibleNav = sidebarNav.filter((item) =>
+    !item.requiredRole || hasPermission(role, item.requiredRole)
+  );
 
   return (
     <aside
@@ -79,7 +85,7 @@ export function Sidebar({ badges }: { badges: PendingCounts }) {
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto px-3 py-4">
         <ul className="space-y-1">
-          {sidebarNav.map((item) => {
+          {visibleNav.map((item) => {
             const Icon = iconMap[item.icon] || LayoutDashboard;
             const isActive =
               pathname === item.href ||

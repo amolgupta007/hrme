@@ -10,6 +10,7 @@ export const sidebarNav: NavItem[] = [
     title: "Employees",
     href: "/dashboard/employees",
     icon: "Users",
+    requiredRole: "manager",
   },
   {
     title: "Directory",

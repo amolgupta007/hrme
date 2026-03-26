@@ -1,14 +1,17 @@
 import { listEmployees, listDepartments } from "@/actions/employees";
+import { getCurrentUser } from "@/lib/current-user";
 import { EmployeesClient } from "@/components/dashboard/employees-client";
 
 export default async function EmployeesPage() {
-  const [employeesResult, departmentsResult] = await Promise.all([
+  const [employeesResult, departmentsResult, userCtx] = await Promise.all([
     listEmployees(),
     listDepartments(),
+    getCurrentUser(),
   ]);
 
   const employees = employeesResult.success ? employeesResult.data : [];
   const departments = departmentsResult.success ? departmentsResult.data : [];
+  const role = userCtx?.role ?? "employee";
 
   return (
     <div className="space-y-6">
@@ -19,7 +22,7 @@ export default async function EmployeesPage() {
         </p>
       </div>
 
-      <EmployeesClient employees={employees} departments={departments} />
+      <EmployeesClient employees={employees} departments={departments} role={role} />
     </div>
   );
 }

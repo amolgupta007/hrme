@@ -3,6 +3,7 @@
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
 import { createAdminSupabase } from "@/lib/supabase/server";
+import { getCurrentUser, isAdmin } from "@/lib/current-user";
 import type { ActionResult } from "@/types";
 
 // ---- Context helper ----
@@ -96,6 +97,9 @@ export async function listDocuments(): Promise<ActionResult<DocumentWithUrl[]>> 
 }
 
 export async function uploadDocument(formData: FormData): Promise<ActionResult<void>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can upload documents" };
   const ctx = await getOrgContext();
   if (!ctx) return { success: false, error: "Not authenticated" };
 
@@ -167,6 +171,9 @@ export async function uploadDocument(formData: FormData): Promise<ActionResult<v
 }
 
 export async function deleteDocument(id: string): Promise<ActionResult<void>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can delete documents" };
   const ctx = await getOrgContext();
   if (!ctx) return { success: false, error: "Not authenticated" };
 

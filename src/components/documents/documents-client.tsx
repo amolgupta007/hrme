@@ -11,7 +11,8 @@ import { Button } from "@/components/ui/button";
 import { deleteDocument } from "@/actions/documents";
 import { UploadDialog } from "./upload-dialog";
 import type { DocumentWithUrl } from "@/actions/documents";
-import type { Employee } from "@/types";
+import type { Employee, UserRole } from "@/types";
+import { hasPermission } from "@/types";
 
 const CATEGORY_LABELS: Record<string, string> = {
   policy: "Policy",
@@ -48,9 +49,11 @@ function formatSize(bytes: number) {
 interface DocumentsClientProps {
   documents: DocumentWithUrl[];
   employees: Employee[];
+  role: UserRole;
 }
 
-export function DocumentsClient({ documents, employees }: DocumentsClientProps) {
+export function DocumentsClient({ documents, employees, role }: DocumentsClientProps) {
+  const canManage = hasPermission(role, "admin");
   const [search, setSearch] = React.useState("");
   const [category, setCategory] = React.useState("all");
   const [uploadOpen, setUploadOpen] = React.useState(false);
@@ -110,10 +113,12 @@ export function DocumentsClient({ documents, employees }: DocumentsClientProps) 
           ))}
         </div>
 
-        <Button onClick={() => setUploadOpen(true)} className="ml-auto shrink-0">
-          <Upload className="mr-2 h-4 w-4" />
-          Upload
-        </Button>
+        {canManage && (
+          <Button onClick={() => setUploadOpen(true)} className="ml-auto shrink-0">
+            <Upload className="mr-2 h-4 w-4" />
+            Upload
+          </Button>
+        )}
       </div>
 
       <p className="text-sm text-muted-foreground">
@@ -130,7 +135,7 @@ export function DocumentsClient({ documents, employees }: DocumentsClientProps) 
               {documents.length === 0 ? "Upload your first document to get started." : "Try adjusting your search or filter."}
             </p>
           </div>
-          {documents.length === 0 && (
+          {documents.length === 0 && canManage && (
             <Button variant="outline" size="sm" onClick={() => setUploadOpen(true)}>
               <Upload className="mr-2 h-4 w-4" />
               Upload Document
@@ -178,15 +183,17 @@ export function DocumentsClient({ documents, employees }: DocumentsClientProps) 
                       </Button>
                     </a>
                   )}
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-destructive hover:text-destructive"
-                    onClick={() => handleDelete(doc)}
-                    disabled={deleting === doc.id}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
+                  {canManage && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-destructive hover:text-destructive"
+                      onClick={() => handleDelete(doc)}
+                      disabled={deleting === doc.id}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
                 </div>
               </div>
             ))}
@@ -194,7 +201,7 @@ export function DocumentsClient({ documents, employees }: DocumentsClientProps) 
         </div>
       )}
 
-      <UploadDialog open={uploadOpen} onOpenChange={setUploadOpen} employees={employees} />
+      {canManage && <UploadDialog open={uploadOpen} onOpenChange={setUploadOpen} employees={employees} />}
     </>
   );
 }

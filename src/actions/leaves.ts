@@ -4,6 +4,7 @@ import { auth, clerkClient } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createAdminSupabase } from "@/lib/supabase/server";
+import { getCurrentUser, isManagerOrAbove } from "@/lib/current-user";
 import type { ActionResult, LeavePolicy, LeaveRequest } from "@/types";
 
 // ---- Context helper ----
@@ -234,6 +235,9 @@ export async function approveLeave(
   requestId: string,
   note?: string
 ): Promise<ActionResult<void>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isManagerOrAbove(user.role)) return { success: false, error: "Only managers can approve leave" };
   const ctx = await getOrgContext();
   if (!ctx) return { success: false, error: "Not authenticated" };
 
@@ -259,6 +263,9 @@ export async function rejectLeave(
   requestId: string,
   note?: string
 ): Promise<ActionResult<void>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isManagerOrAbove(user.role)) return { success: false, error: "Only managers can reject leave" };
   const ctx = await getOrgContext();
   if (!ctx) return { success: false, error: "Not authenticated" };
 

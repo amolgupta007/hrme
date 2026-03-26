@@ -5,16 +5,19 @@ import { Search, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EmployeeTable } from "./employee-table";
 import { EmployeeForm } from "./employee-form";
-import type { Employee, Department } from "@/types";
+import type { Employee, Department, UserRole } from "@/types";
+import { hasPermission } from "@/types";
 
 type EmployeeWithDept = Employee & { department_name: string | null };
 
 interface EmployeesClientProps {
   employees: EmployeeWithDept[];
   departments: Department[];
+  role: UserRole;
 }
 
-export function EmployeesClient({ employees, departments }: EmployeesClientProps) {
+export function EmployeesClient({ employees, departments, role }: EmployeesClientProps) {
+  const canManage = hasPermission(role, "admin");
   const [search, setSearch] = React.useState("");
   const [formOpen, setFormOpen] = React.useState(false);
   const [editingEmployee, setEditingEmployee] = React.useState<Employee | null>(null);
@@ -52,10 +55,12 @@ export function EmployeesClient({ employees, departments }: EmployeesClientProps
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <Button onClick={openAdd}>
-          <UserPlus className="mr-2 h-4 w-4" />
-          Add Employee
-        </Button>
+        {canManage && (
+          <Button onClick={openAdd}>
+            <UserPlus className="mr-2 h-4 w-4" />
+            Add Employee
+          </Button>
+        )}
       </div>
 
       <div className="text-sm text-muted-foreground">
@@ -66,16 +71,19 @@ export function EmployeesClient({ employees, departments }: EmployeesClientProps
       <EmployeeTable
         employees={filtered}
         departments={departments}
-        onEdit={openEdit}
+        onEdit={canManage ? openEdit : undefined}
+        canManage={canManage}
       />
 
-      <EmployeeForm
-        open={formOpen}
-        onOpenChange={setFormOpen}
-        employee={editingEmployee}
-        departments={departments}
-        employees={employees}
-      />
+      {canManage && (
+        <EmployeeForm
+          open={formOpen}
+          onOpenChange={setFormOpen}
+          employee={editingEmployee}
+          departments={departments}
+          employees={employees}
+        />
+      )}
     </>
   );
 }

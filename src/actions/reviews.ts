@@ -4,6 +4,7 @@ import { auth, clerkClient } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createAdminSupabase } from "@/lib/supabase/server";
+import { getCurrentUser, isAdmin } from "@/lib/current-user";
 import { getApprovedObjectivesForEmployees } from "@/actions/objectives";
 import type { ObjectiveSet } from "@/actions/objectives";
 import type { ActionResult } from "@/types";
@@ -118,6 +119,9 @@ export async function listReviewCycles(): Promise<ActionResult<ReviewCycleWithSt
 export async function createReviewCycle(
   formData: z.infer<typeof cycleSchema>
 ): Promise<ActionResult<{ id: string }>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can create review cycles" };
   const ctx = await getOrgContext();
   if (!ctx) return { success: false, error: "Not authenticated" };
 
@@ -209,6 +213,9 @@ export async function updateCycleStatus(
 }
 
 export async function deleteReviewCycle(cycleId: string): Promise<ActionResult<void>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can delete review cycles" };
   const ctx = await getOrgContext();
   if (!ctx) return { success: false, error: "Not authenticated" };
 

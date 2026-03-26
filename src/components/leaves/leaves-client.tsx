@@ -5,7 +5,8 @@ import { CalendarPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LeaveRequestForm } from "./leave-request-form";
 import { LeaveRequestsTable } from "./leave-requests-table";
-import type { Employee } from "@/types";
+import type { Employee, UserRole } from "@/types";
+import { hasPermission } from "@/types";
 import type { LeaveRequestWithDetails, PolicyWithUsage, EmployeeBalance } from "@/actions/leaves";
 
 interface LeavesClientProps {
@@ -13,6 +14,8 @@ interface LeavesClientProps {
   policies: PolicyWithUsage[];
   requests: LeaveRequestWithDetails[];
   balances: EmployeeBalance[];
+  role: UserRole;
+  currentEmployeeId: string | null;
 }
 
 const TYPE_COLORS: Record<string, string> = {
@@ -25,11 +28,17 @@ const TYPE_COLORS: Record<string, string> = {
   custom:    "bg-muted text-muted-foreground",
 };
 
-export function LeavesClient({ employees, policies, requests, balances }: LeavesClientProps) {
+export function LeavesClient({ employees, policies, requests, balances, role, currentEmployeeId }: LeavesClientProps) {
   const [formOpen, setFormOpen] = React.useState(false);
   const [filter, setFilter] = React.useState("all");
+  const canApprove = hasPermission(role, "manager");
 
-  const filtered = filter === "all" ? requests : requests.filter((r) => r.status === filter);
+  // Employees only see their own requests
+  const visibleRequests = canApprove
+    ? requests
+    : requests.filter((r) => r.employee_id === currentEmployeeId);
+
+  const filtered = filter === "all" ? visibleRequests : visibleRequests.filter((r) => r.status === filter);
 
   return (
     <>
@@ -78,6 +87,7 @@ export function LeavesClient({ employees, policies, requests, balances }: Leaves
           requests={filtered}
           activeFilter={filter}
           onFilterChange={setFilter}
+          canApprove={canApprove}
         />
       </div>
 

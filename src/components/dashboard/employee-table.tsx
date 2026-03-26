@@ -15,10 +15,11 @@ type EmployeeWithDept = Employee & { department_name: string | null };
 interface EmployeeTableProps {
   employees: EmployeeWithDept[];
   departments: Department[];
-  onEdit: (employee: Employee) => void;
+  onEdit?: (employee: Employee) => void;
+  canManage?: boolean;
 }
 
-export function EmployeeTable({ employees, onEdit }: EmployeeTableProps) {
+export function EmployeeTable({ employees, onEdit, canManage = false }: EmployeeTableProps) {
   const [terminating, setTerminating] = React.useState<string | null>(null);
 
   async function handleTerminate(id: string, name: string) {
@@ -95,36 +96,38 @@ export function EmployeeTable({ employees, onEdit }: EmployeeTableProps) {
                   <StatusBadge status={emp.status} />
                 </td>
                 <td className="px-4 py-3">
-                  <DropdownMenu.Root>
-                    <DropdownMenu.Trigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8">
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenu.Trigger>
-                    <DropdownMenu.Portal>
-                      <DropdownMenu.Content
-                        align="end"
-                        className="z-50 min-w-[140px] overflow-hidden rounded-lg border bg-popover p-1 shadow-md"
-                      >
-                        <DropdownMenu.Item
-                          className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none hover:bg-accent"
-                          onSelect={() => onEdit(emp)}
+                  {canManage && (
+                    <DropdownMenu.Root>
+                      <DropdownMenu.Trigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenu.Trigger>
+                      <DropdownMenu.Portal>
+                        <DropdownMenu.Content
+                          align="end"
+                          className="z-50 min-w-[140px] overflow-hidden rounded-lg border bg-popover p-1 shadow-md"
                         >
-                          <Pencil className="h-3.5 w-3.5" />
-                          Edit
-                        </DropdownMenu.Item>
-                        <DropdownMenu.Separator className="my-1 h-px bg-border" />
-                        <DropdownMenu.Item
-                          className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm text-destructive outline-none hover:bg-destructive/10"
-                          onSelect={() => handleTerminate(emp.id, fullName)}
-                          disabled={terminating === emp.id}
-                        >
-                          <UserX className="h-3.5 w-3.5" />
-                          {terminating === emp.id ? "Terminating..." : "Terminate"}
-                        </DropdownMenu.Item>
-                      </DropdownMenu.Content>
-                    </DropdownMenu.Portal>
-                  </DropdownMenu.Root>
+                          <DropdownMenu.Item
+                            className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none hover:bg-accent"
+                            onSelect={() => onEdit?.(emp)}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                            Edit
+                          </DropdownMenu.Item>
+                          <DropdownMenu.Separator className="my-1 h-px bg-border" />
+                          <DropdownMenu.Item
+                            className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm text-destructive outline-none hover:bg-destructive/10"
+                            onSelect={() => handleTerminate(emp.id, fullName)}
+                            disabled={terminating === emp.id}
+                          >
+                            <UserX className="h-3.5 w-3.5" />
+                            {terminating === emp.id ? "Terminating..." : "Terminate"}
+                          </DropdownMenu.Item>
+                        </DropdownMenu.Content>
+                      </DropdownMenu.Portal>
+                    </DropdownMenu.Root>
+                  )}
                 </td>
               </tr>
             );

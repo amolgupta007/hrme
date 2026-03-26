@@ -1,4 +1,5 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { NextResponse } from "next/server";
 
 const isPublicRoute = createRouteMatcher([
   "/",
@@ -8,6 +9,14 @@ const isPublicRoute = createRouteMatcher([
 ]);
 
 export default clerkMiddleware((auth, request) => {
+  const { userId } = auth();
+  const { pathname } = request.nextUrl;
+
+  // Redirect authenticated users away from marketing/auth pages to dashboard
+  if (userId && (pathname === "/" || pathname.startsWith("/sign-in") || pathname.startsWith("/sign-up"))) {
+    return NextResponse.redirect(new URL("/dashboard", request.url));
+  }
+
   if (!isPublicRoute(request)) {
     auth().protect();
   }
@@ -15,9 +24,7 @@ export default clerkMiddleware((auth, request) => {
 
 export const config = {
   matcher: [
-    // Skip Next.js internals and all static files
     "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
-    // Always run for API routes
     "/(api|trpc)(.*)",
   ],
 };

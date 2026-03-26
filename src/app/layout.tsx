@@ -30,6 +30,10 @@ export default function RootLayout({
 }) {
   return (
     <ClerkProvider
+      afterSignInUrl="/dashboard"
+      afterSignUpUrl="/onboarding"
+      signInUrl="/sign-in"
+      signUpUrl="/sign-up"
       appearance={{
         variables: {
           colorPrimary: "hsl(172, 50%, 36%)",

@@ -33,6 +33,11 @@ export const sidebarNav: NavItem[] = [
     requiredRole: "manager",
   },
   {
+    title: "Objectives",
+    href: "/dashboard/objectives",
+    icon: "Target",
+  },
+  {
     title: "Training",
     href: "/dashboard/training",
     icon: "GraduationCap",

@@ -42,7 +42,7 @@ export default function HomePage() {
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
           <Link href="/" className="flex items-center gap-2 text-xl font-bold tracking-tight">
             <Image src="/Jamba.png" alt="JambaHR" width={32} height={32} className="rounded-md" />
-            <span className="text-primary">Jamba</span>HR
+            <span><span className="text-primary">Jamba</span>HR</span>
           </Link>
           <div className="flex items-center gap-4">
             <Link

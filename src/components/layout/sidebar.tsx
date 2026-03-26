@@ -72,8 +72,7 @@ export function Sidebar({ badges, role }: { badges: PendingCounts; role: UserRol
         ) : (
           <Link href="/dashboard" className="flex items-center gap-2 text-lg font-bold tracking-tight">
             <Image src="/Jamba.png" alt="JambaHR" width={32} height={32} className="rounded-md" />
-            <span className="text-primary">Jamba</span>
-            <span className="text-sidebar-foreground">HR</span>
+            <span><span className="text-primary">Jamba</span><span className="text-sidebar-foreground">HR</span></span>
           </Link>
         )}
         <button

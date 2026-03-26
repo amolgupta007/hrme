@@ -58,8 +58,8 @@ export function Sidebar({ badges }: { badges: PendingCounts }) {
       <div className="flex h-16 items-center justify-between border-b border-sidebar-border px-4">
         {!collapsed && (
           <Link href="/dashboard" className="text-lg font-bold tracking-tight">
-            <span className="text-primary">HR</span>
-            <span className="text-sidebar-foreground">Flow</span>
+            <span className="text-primary">Jamba</span>
+            <span className="text-sidebar-foreground">HR</span>
           </Link>
         )}
         <button

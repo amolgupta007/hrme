@@ -56,6 +56,6 @@ export const sidebarNav: NavItem[] = [
   },
 ];
 
-export const APP_NAME = "HRFlow";
+export const APP_NAME = "JambaHR";
 export const APP_DESCRIPTION =
   "All-in-one HR platform for small and medium businesses";

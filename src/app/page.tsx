@@ -40,7 +40,7 @@ export default function HomePage() {
       <nav className="sticky top-0 z-50 border-b border-border/60 bg-background/80 backdrop-blur-lg">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
           <Link href="/" className="text-xl font-bold tracking-tight">
-            <span className="text-primary">HR</span>Flow
+            <span className="text-primary">Jamba</span>HR
           </Link>
           <div className="flex items-center gap-4">
             <Link
@@ -137,7 +137,7 @@ export default function HomePage() {
       {/* Footer */}
       <footer className="border-t border-border py-8">
         <div className="mx-auto max-w-6xl px-6 text-center text-sm text-muted-foreground">
-          © {new Date().getFullYear()} HRFlow. All rights reserved.
+          © {new Date().getFullYear()} JambaHR. All rights reserved.
         </div>
       </footer>
     </main>

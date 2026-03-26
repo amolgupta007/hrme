@@ -1,4 +1,4 @@
-# HRFlow — All-in-One HR Portal
+# JambaHR — All-in-One HR Portal
 
 HR management platform for small and medium businesses (10–500 employees) who don't want to hire a dedicated HR professional.
 
@@ -137,7 +137,7 @@ Or connect the GitHub repo to Vercel for auto-deploys on push.
 ## Key Design Decisions
 
 - **Multi-tenancy via RLS**: Every table has `org_id` with Row Level Security policies. The Clerk JWT contains the `org_id` claim, and Supabase RLS reads it to isolate data per organization.
-- **Clerk Organizations**: Maps 1:1 to HRFlow organizations. Handles invitations, role management, and SSO.
+- **Clerk Organizations**: Maps 1:1 to JambaHR organizations. Handles invitations, role management, and SSO.
 - **Server Actions**: All mutations use Next.js Server Actions with Zod validation. No raw API routes for data mutation.
 - **Per-employee pricing**: Stripe metered billing based on active employee count per organization.
 

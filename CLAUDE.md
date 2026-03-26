@@ -1,8 +1,8 @@
-# CLAUDE.md — HRFlow Project Guide
+# CLAUDE.md — JambaHR Project Guide
 
 ## What is this project?
 
-HRFlow is an all-in-one HR management SaaS platform for small and medium businesses (10–500 employees) who don't want to hire a dedicated HR professional. It handles employee directory, leave management, performance reviews, training & compliance, document storage, and payroll — all through a single web portal.
+JambaHR is an all-in-one HR management SaaS platform for small and medium businesses (10–500 employees) who don't want to hire a dedicated HR professional. It handles employee directory, leave management, performance reviews, training & compliance, document storage, and payroll — all through a single web portal.
 
 **Target customer**: Business owners / decision-makers at companies with 10–500 employees.
 **Two user types**: Admins (company owners/HR) who configure and manage, and Employees who self-serve (apply for leave, view docs, do reviews).

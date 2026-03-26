@@ -8,8 +8,8 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: {
-    default: "HRFlow — HR Management for Growing Teams",
-    template: "%s | HRFlow",
+    default: "JambaHR — HR Management for Growing Teams",
+    template: "%s | JambaHR",
   },
   description:
     "All-in-one HR platform for small and medium businesses. Manage employees, leaves, reviews, training, and payroll — without hiring an HR team.",

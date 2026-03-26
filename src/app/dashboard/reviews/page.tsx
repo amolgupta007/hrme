@@ -1,26 +1,29 @@
-export default function ReviewsPage() {
+import { listReviewCycles, listCycleReviews } from "@/actions/reviews";
+import { listEmployees } from "@/actions/employees";
+import { ReviewsClient } from "@/components/reviews/reviews-client";
+
+export default async function ReviewsPage() {
+  const [cyclesResult, employeesResult] = await Promise.all([
+    listReviewCycles(),
+    listEmployees(),
+  ]);
+
+  const cycles = cyclesResult.success ? cyclesResult.data : [];
+  const employees = employeesResult.success ? employeesResult.data : [];
+
+  // Pre-fetch reviews for the first active cycle (if any)
+  const activeCycle = cycles.find((c) => c.status === "active") ?? cycles[0] ?? null;
+  const reviewsResult = activeCycle ? await listCycleReviews(activeCycle.id) : null;
+  const cycleReviews = reviewsResult?.success ? reviewsResult.data : [];
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">
-            Performance Reviews
-          </h1>
-          <p className="mt-1 text-muted-foreground">
-            Run review cycles and track team performance.
-          </p>
-        </div>
-        <button className="inline-flex h-10 items-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90 transition-colors">
-          New Review Cycle
-        </button>
-      </div>
-
-      <div className="rounded-xl border border-dashed border-border p-12 text-center">
-        <p className="text-muted-foreground">
-          Review cycles and assessments will appear here once Supabase is
-          connected.
-        </p>
-      </div>
+      <ReviewsClient
+        cycles={cycles}
+        employees={employees}
+        cycleReviews={cycleReviews}
+        activeCycleId={null}
+      />
     </div>
   );
 }

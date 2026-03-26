@@ -299,7 +299,7 @@ export function ReviewDialog({ open, onOpenChange, review, mode }: ReviewDialogP
                                 {/* Employee's self-evaluation */}
                                 {(item.self_status || item.self_progress !== null) && (
                                   <div className="rounded-md bg-muted/40 px-3 py-2 space-y-0.5">
-                                    <p className="text-xs font-medium text-muted-foreground">Employee's Evaluation</p>
+                                    <p className="text-xs font-medium text-muted-foreground">Employee&apos;s Evaluation</p>
                                     <div className="flex items-center gap-2 flex-wrap text-xs">
                                       {item.self_status && (
                                         <span className={cn("rounded-full px-2 py-0.5 font-medium",
@@ -312,7 +312,7 @@ export function ReviewDialog({ open, onOpenChange, review, mode }: ReviewDialogP
                                         <span className="text-muted-foreground">{item.self_progress}% progress</span>
                                       )}
                                       {item.self_comment && (
-                                        <span className="text-muted-foreground italic">"{item.self_comment}"</span>
+                                        <span className="text-muted-foreground italic">&quot;{item.self_comment}&quot;</span>
                                       )}
                                     </div>
                                   </div>
@@ -365,7 +365,7 @@ export function ReviewDialog({ open, onOpenChange, review, mode }: ReviewDialogP
                                 {item.manager_rating !== null && (
                                   <div className="flex items-center gap-1.5">
                                     <span>Manager: {item.manager_rating}/5</span>
-                                    {item.manager_comment && <span>· "{item.manager_comment}"</span>}
+                                    {item.manager_comment && <span>· &quot;{item.manager_comment}&quot;</span>}
                                   </div>
                                 )}
                               </div>

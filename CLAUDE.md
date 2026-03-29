@@ -554,9 +554,9 @@ Primary color: teal (`172 50% 36%`). Accent: warm orange (`32 95% 52%`).
 - [x] RAZORPAY_GROWTH_PLAN_ID
 - [x] RAZORPAY_BUSINESS_PLAN_ID
 - [x] RAZORPAY_WEBHOOK_SECRET
-- [x] NEXT_PUBLIC_SENTRY_DSN (set — verify events arrive in Sentry dashboard)
-- [ ] RESEND_API_KEY — not set yet (leave emails are coded but won't send)
-- [ ] NEXT_PUBLIC_POSTHOG_KEY — not set yet
+- [x] NEXT_PUBLIC_SENTRY_DSN (set — verify events arrive in Sentry Issues dashboard)
+- [x] RESEND_API_KEY (set — requires jambahr.com verified as sender domain in Resend dashboard)
+- [x] NEXT_PUBLIC_POSTHOG_KEY (set — also set NEXT_PUBLIC_POSTHOG_HOST: us.i.posthog.com or eu.i.posthog.com)
 
 ### ❌ NOT YET BUILT — Pending
 
@@ -586,10 +586,9 @@ Primary color: teal (`172 50% 36%`). Accent: warm orange (`32 95% 52%`).
 
 ### ❌ NOT YET DONE — Infrastructure
 
-- [ ] Set up Resend (verify sender domain, set API key)
+- [ ] Verify `jambahr.com` as sender domain in Resend dashboard (DNS TXT/MX records) — required for emails to deliver
 - [ ] Set up UptimeRobot monitoring
-- [ ] Set up PostHog analytics (set NEXT_PUBLIC_POSTHOG_KEY)
-- [ ] Background jobs (Trigger.dev or Inngest) for email notifications, training reminders, compliance alerts
+- [ ] Background jobs (Trigger.dev or Inngest) for training reminders, compliance alerts, payment failure emails
 
 ---
 
@@ -654,9 +653,9 @@ Configured in `src/lib/razorpay.ts` (billing) and `src/config/plans.ts` (feature
 
 ## Immediate Next Steps (in priority order)
 
-1. **Set up Resend** — create account, verify sender domain, set `RESEND_API_KEY` in Vercel → leave emails go live
-2. **Set up PostHog** — set `NEXT_PUBLIC_POSTHOG_KEY` in Vercel → product analytics go live
-3. **Verify Sentry** — trigger a test error in production, confirm event appears in Sentry Issues dashboard
+1. **Verify Resend sender domain** — add DNS records for `jambahr.com` in Resend dashboard → leave emails will deliver
+2. **Verify Sentry** — trigger a test error in production, confirm event appears in Sentry Issues dashboard
+3. **Verify PostHog** — visit a page on production, confirm pageview appears in PostHog Live Events
 4. **UptimeRobot** — add `https://jambahr.com` monitor
 5. **Background jobs** — Trigger.dev or Inngest for training deadline reminders + compliance alerts
 

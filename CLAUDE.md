@@ -20,7 +20,7 @@ JambaHR is an all-in-one HR management SaaS platform for small and medium busine
 | Auth | Clerk (with Organizations) | Multi-tenant auth, roles, invitations |
 | Database | Supabase (Postgres) | Data storage + Row Level Security for multi-tenancy |
 | Payments | Razorpay | Subscription billing (per-employee pricing, INR) |
-| Email | Resend + React Email | Transactional emails (leave approvals, reminders) |
+| Email | Resend + React Email | Transactional emails (leave approvals, status notifications) |
 | Analytics | PostHog | Product analytics and feature flags |
 | Errors | Sentry | Error tracking and performance monitoring |
 | Hosting | Vercel | Deployment + edge functions |
@@ -33,6 +33,7 @@ JambaHR is an all-in-one HR management SaaS platform for small and medium busine
 - eslint-config-next is pinned to 14.2.15 to match ESLint 8
 - The `geist` font package must be installed separately (`npm install geist`)
 - Supabase CLI does NOT support global npm install on Windows — use the SQL Editor in the Supabase Dashboard instead
+- `@react-email/render` and `@react-email/components` must be listed in `serverComponentsExternalPackages` in `next.config.js` — otherwise Vercel build crashes
 
 ---
 
@@ -42,9 +43,10 @@ JambaHR is an all-in-one HR management SaaS platform for small and medium busine
 hr-portal/
 ├── src/
 │   ├── app/                          # Next.js App Router
-│   │   ├── layout.tsx                # Root layout (Clerk, fonts, PostHog, Sonner, favicon)
+│   │   ├── layout.tsx                # Root layout (Clerk, fonts, PostHog, Sonner, Sentry, favicon)
 │   │   ├── page.tsx                  # Marketing landing page (public)
 │   │   ├── globals.css               # Design tokens (HSL CSS variables, light + dark)
+│   │   ├── global-error.tsx          # Sentry React render error boundary
 │   │   ├── (auth)/                   # Auth routes (public)
 │   │   │   ├── sign-in/[[...sign-in]]/page.tsx
 │   │   │   └── sign-up/[[...sign-up]]/page.tsx
@@ -55,28 +57,30 @@ hr-portal/
 │   │   │   ├── stripe/route.ts       # Legacy Stripe handler (kept, unused)
 │   │   │   └── razorpay/route.ts     # Razorpay subscription lifecycle webhook
 │   │   └── dashboard/                # Protected app (requires auth)
-│   │       ├── layout.tsx            # Sidebar + Header shell (fetches role for RBAC)
+│   │       ├── layout.tsx            # Sidebar + Header shell (passes role + plan)
 │   │       ├── page.tsx              # Dashboard home (live stats, recent leaves, deadlines)
 │   │       ├── employees/page.tsx    # Employee directory with CRUD
 │   │       ├── leaves/page.tsx       # Leave management
-│   │       ├── documents/page.tsx    # Document hub
-│   │       ├── reviews/page.tsx      # Performance reviews
-│   │       ├── training/page.tsx     # Training & compliance
-│   │       ├── objectives/page.tsx   # OKR objectives
+│   │       ├── documents/page.tsx    # Document hub (Growth+ plan gate)
+│   │       ├── reviews/page.tsx      # Performance reviews (Growth+ plan gate)
+│   │       ├── training/page.tsx     # Training & compliance (Growth+ plan gate)
+│   │       ├── objectives/page.tsx   # OKR objectives (Growth+ plan gate)
+│   │       ├── announcements/page.tsx# Company-wide announcements
 │   │       ├── directory/page.tsx    # Org chart tree view
 │   │       ├── profile/page.tsx      # Employee self-profile
-│   │       ├── payroll/page.tsx      # Payroll (placeholder — Phase 3)
+│   │       ├── payroll/page.tsx      # Payroll (Business+ plan gate)
 │   │       └── settings/page.tsx     # Org settings, billing, policies
 │   ├── actions/                      # Server Actions (all mutations)
 │   │   ├── employees.ts             # list, add, update, delete, getDepartments
-│   │   ├── leaves.ts                # request, approve, reject, cancel, balances, policies
-│   │   ├── documents.ts             # list, upload, delete, signed URLs
+│   │   ├── leaves.ts                # request, approve, reject, cancel, balances, policies + email notifications
+│   │   ├── documents.ts             # list, upload, delete, signed URLs, acknowledgeDocument
 │   │   ├── reviews.ts               # cycles CRUD, self/manager review submit
 │   │   ├── objectives.ts            # OKR CRUD, submit, approve, reject
 │   │   ├── training.ts              # courses CRUD, enroll, progress, completion
 │   │   ├── settings.ts              # org profile, departments, leave policies
 │   │   ├── billing.ts               # Razorpay subscription creation, cancellation
 │   │   ├── dashboard.ts             # live stats, recent leaves, deadlines, review cycles
+│   │   ├── announcements.ts         # list, create, update, delete, pin/unpin, markRead
 │   │   └── notifications.ts         # getPendingCounts() for sidebar badges
 │   ├── components/
 │   │   ├── ui/                       # Reusable primitives
@@ -84,32 +88,36 @@ hr-portal/
 │   │   │   ├── card.tsx
 │   │   │   └── badge.tsx
 │   │   ├── layout/
-│   │   │   ├── sidebar.tsx           # Collapsible nav, role-filtered items, badges
+│   │   │   ├── sidebar.tsx           # Collapsible nav, role-filtered + plan-locked items, badges
 │   │   │   ├── header.tsx            # Top bar with search + notifications
+│   │   │   ├── upgrade-gate.tsx      # Full-page upgrade prompt for locked plan features
 │   │   │   └── posthog-provider.tsx
 │   │   ├── dashboard/
 │   │   │   ├── employees-client.tsx  # Employee page (Add button hidden for employees)
 │   │   │   ├── employee-table.tsx    # Data table (actions hidden for non-admins)
 │   │   │   └── employee-form.tsx     # Add/edit modal
 │   │   ├── leaves/                   # Leave request form, table, approval workflow
-│   │   ├── documents/                # Upload dialog, document list (upload hidden for employees)
+│   │   ├── documents/                # Upload dialog, document list, acknowledgment button
 │   │   ├── reviews/                  # Cycle list, review dialog (create cycle hidden for employees)
 │   │   ├── objectives/               # Create/approve dialogs, objectives list
-│   │   ├── training/                 # Course dialog, enroll dialog, progress dialog, compliance
+│   │   ├── training/                 # Course dialog, enroll dialog, progress dialog, compliance tab
+│   │   ├── announcements/            # Announcement list, create/edit dialog, pin controls
 │   │   ├── settings/                 # Org profile, departments, leave policies, billing section
 │   │   ├── forms/                    # Shared form components
 │   │   └── emails/
-│   │       └── leave-request.tsx     # React Email template for leave approvals
+│   │       ├── leave-request.tsx     # React Email template — new leave request (to managers)
+│   │       └── leave-status.tsx      # React Email template — approved/rejected notification (to employee)
 │   ├── config/
-│   │   └── navigation.ts            # Sidebar nav items with requiredRole, APP_NAME
+│   │   ├── navigation.ts            # Sidebar nav items with requiredRole + requiredPlan, APP_NAME
+│   │   └── plans.ts                 # OrgPlan type, PLAN_FEATURES map, hasFeature(), PLAN_UNLOCK_HIGHLIGHTS
 │   ├── hooks/
 │   │   ├── index.ts
 │   │   └── use-employee.ts          # Client hook for current employee + org context
 │   ├── lib/
 │   │   ├── utils.ts                  # cn(), formatDate(), formatCurrency(), getInitials()
 │   │   ├── razorpay.ts              # Razorpay client + PLANS config (starter/growth/business)
-│   │   ├── current-user.ts          # getCurrentUser() → { orgId, clerkUserId, role, employeeId }
-│   │   ├── resend.ts                # Resend email client
+│   │   ├── current-user.ts          # getCurrentUser() → { orgId, clerkUserId, role, employeeId, plan }
+│   │   ├── resend.ts                # Resend email client + FROM_EMAIL constant
 │   │   └── supabase/
 │   │       ├── client.ts
 │   │       ├── server.ts
@@ -117,13 +125,14 @@ hr-portal/
 │   ├── middleware.ts                 # Clerk route protection
 │   └── types/
 │       ├── database.types.ts
-│       └── index.ts                  # Row types, UserRole, ROLE_HIERARCHY, hasPermission(), ActionResult
+│       └── index.ts                  # Row types, UserRole, ROLE_HIERARCHY, hasPermission(), ActionResult, NavItem
 ├── supabase/
 │   ├── config.toml
 │   └── migrations/
 │       └── 001_initial_schema.sql    # Full schema: 12 tables, indexes, RLS, triggers
 ├── public/
-│   └── Jamba.png                     # App logo — used as favicon and Razorpay checkout logo
+│   ├── Jamba.png                     # App logo — used as favicon and Razorpay checkout logo
+│   └── pitchdeck.html                # 12-page HTML pitch deck (open in Chrome → Print → Save as PDF)
 ├── .env.example
 ├── package.json
 ├── tsconfig.json
@@ -140,7 +149,7 @@ hr-portal/
 
 ## Database Schema (Supabase Postgres)
 
-12 tables, all with `org_id` for multi-tenant isolation via RLS:
+13 tables, all with `org_id` for multi-tenant isolation via RLS:
 
 | Table | Purpose | Key columns |
 |-------|---------|-------------|
@@ -151,18 +160,26 @@ hr-portal/
 | `leave_balances` | Per-employee per-year | total_days, used_days, carried_forward_days |
 | `leave_requests` | Time-off requests | start_date, end_date, days, status (pending/approved/rejected/cancelled) |
 | `documents` | File metadata | category, file_url, is_company_wide, requires_acknowledgment |
+| `document_acknowledgments` | Who has acknowledged which doc | document_id, employee_id, acknowledged_at — added via SQL Editor |
 | `review_cycles` | Review period config | status (draft/active/completed), start_date, end_date |
 | `reviews` | Individual reviews | self_rating, manager_rating, goals (JSONB), objectives_id, status |
-| `training_courses` | Course library | category (ethics/compliance/safety/etc), is_mandatory, due_date |
-| `training_enrollments` | Employee ↔ Course | status, progress_percent, certificate_url |
+| `training_courses` | Course library | category (ethics/compliance/safety/skills/onboarding/custom), is_mandatory, due_date |
+| `training_enrollments` | Employee ↔ Course | status (assigned/in_progress/completed/overdue), progress_percent, certificate_url |
 | `holidays` | Company holidays | date, is_optional |
 | `objectives` | OKR objective sets | employee_id, manager_id, period_type, period_label, status (draft/submitted/approved/rejected), items (JSONB) |
+| `announcements` | Company-wide notices | title, body, category, is_pinned, created_by (FK → employees) |
 
 ### Multi-tenancy approach
 - Every table has `org_id` column with FK to `organizations`
 - RLS is enabled on ALL tables
 - Admin Supabase client (`SUPABASE_SERVICE_ROLE_KEY`) bypasses RLS — used in all server actions
 - **NOTE**: `stripe_customer_id` and `stripe_subscription_id` columns on `organizations` are reused for Razorpay (no schema change needed)
+
+### Tables added post-initial-migration (via SQL Editor)
+- `objectives` — full table with JSONB items, status enum, period fields
+- `announcements` — title, body, category, is_pinned, created_by
+- `document_acknowledgments` — document_id, employee_id, acknowledged_at; unique constraint on (document_id, employee_id)
+- `reviews.objectives_id` — ALTER TABLE ADD COLUMN
 
 ### Auto-updated timestamps
 Triggers on `organizations`, `employees`, `leave_requests` automatically update `updated_at`.
@@ -190,12 +207,12 @@ Triggers on `organizations`, `employees`, `leave_requests` automatically update 
 ### Role-Based Access Control (RBAC)
 
 **`src/lib/current-user.ts`** — central helper:
-- `getCurrentUser()` → `{ orgId, clerkUserId, role, employeeId }`
+- `getCurrentUser()` → `{ orgId, clerkUserId, role, employeeId, plan }`
 - `isAdmin(role)` → true for `owner` | `admin`
 - `isManagerOrAbove(role)` → true for `owner` | `admin` | `manager`
 
 **Sidebar filtering** — nav items filtered by `requiredRole`:
-- Employees: see Dashboard, Directory, Leaves, Documents, Objectives, Training
+- Employees: see Dashboard, Directory, Leaves, Announcements, Objectives, Training, Documents (if plan allows)
 - Managers: above + Employees page, Reviews
 - Admins: everything including Settings, Payroll
 
@@ -208,12 +225,99 @@ Triggers on `organizations`, `employees`, `leave_requests` automatically update 
 | createReviewCycle, deleteReviewCycle | admin |
 | createCourse, updateCourse, deleteCourse, enrollEmployees, unenrollEmployee | admin |
 | updateOrgProfile, addLeavePolicy, updateLeavePolicy, deleteLeavePolicy | admin |
+| createAnnouncement, updateAnnouncement, deleteAnnouncement, pinAnnouncement | admin |
 
 **UI guards** (UX layer — buttons/dialogs hidden for lower roles):
 - Employees page: Add/Edit/Terminate hidden for non-admins
 - Leaves: employees only see their own requests; Approve/Reject hidden
-- Documents: Upload + Delete hidden for non-admins
+- Documents: Upload + Delete hidden for non-admins; Acknowledge button shown for employees on required-ack docs
 - Reviews: New Cycle + cycle management hidden for non-admins
+- Announcements: Create/Edit/Delete/Pin hidden for non-admins; employees see read-only list
+
+---
+
+## Plan-Based Feature Gating
+
+### Config — `src/config/plans.ts`
+
+```typescript
+export type OrgPlan = "starter" | "growth" | "business";
+export type PlanFeature = "documents" | "reviews" | "objectives" | "training" | "payroll" |
+  "analytics" | "api" | "ai_assistant" | "ai_reviews" | "ai_attrition" | "semantic_search" |
+  "hiring_jd" | "ats" | "interview_scheduling" | "offer_letters" | "onboarding_workflows";
+
+export function hasFeature(plan: OrgPlan, feature: PlanFeature): boolean
+```
+
+### Feature tier mapping
+| Feature | Starter | Growth | Business |
+|---------|---------|--------|----------|
+| Employee Directory | ✅ | ✅ | ✅ |
+| Leave Management | ✅ | ✅ | ✅ |
+| Announcements | ✅ | ✅ | ✅ |
+| Documents | ❌ | ✅ | ✅ |
+| Reviews | ❌ | ✅ | ✅ |
+| Objectives / OKR | ❌ | ✅ | ✅ |
+| Training & Compliance | ❌ | ✅ | ✅ |
+| Hiring JD Generator | ❌ | ✅ | ✅ |
+| Payroll | ❌ | ❌ | ✅ |
+| Analytics | ❌ | ❌ | ✅ |
+| API Access | ❌ | ❌ | ✅ |
+| AI Assistant / Reviews / Attrition | ❌ | ❌ | ✅ |
+| Semantic Search (pgvector) | ❌ | ❌ | ✅ |
+| Full Hiring Suite (ATS, Interviews, Offers, Onboarding) | ❌ | ❌ | ✅ |
+
+### How gating works
+1. `getCurrentUser()` now returns `plan` (from `organizations.plan`)
+2. Each locked page checks `hasFeature(plan, feature)` at the top; returns `<UpgradeGate>` if locked
+3. Sidebar shows a `Lock` icon on items that require a higher plan (`PLAN_RANK` comparison)
+4. `UpgradeGate` component (`src/components/layout/upgrade-gate.tsx`) shows feature highlights and links to `/dashboard/settings#billing`
+
+---
+
+## Email Notifications — Resend
+
+### Leave request flow
+- `requestLeave()` → sends email to all org managers/admins with leave details (non-blocking)
+- `approveLeave()` / `rejectLeave()` → sends status email to the requesting employee
+- Template files:
+  - `src/components/emails/leave-request.tsx` — notification to approvers
+  - `src/components/emails/leave-status.tsx` — approved/rejected notification to employee
+
+### Setup requirement
+- `RESEND_API_KEY` must be set in Vercel (not yet set)
+- `FROM_EMAIL` constant in `src/lib/resend.ts` — update to a verified Resend sender domain
+
+---
+
+## Error Tracking — Sentry
+
+- `sentry.client.config.ts` / `sentry.server.config.ts` / `sentry.edge.config.ts` — SDK init
+- `src/app/global-error.tsx` — catches React render errors, calls `Sentry.captureException()`
+- Env var: `NEXT_PUBLIC_SENTRY_DSN` (note: must be `NEXT_PUBLIC_` prefix for client-side capture)
+- Sentry deprecation warnings in build output are cosmetic — no functional impact
+
+---
+
+## Document Acknowledgment
+
+- `documents.requires_acknowledgment` flag on upload
+- `document_acknowledgments` table: tracks which employees have acknowledged which docs
+- `acknowledgeDocument(documentId)` server action: upserts to acknowledgment table
+- UI: "Acknowledge" button on unacknowledged required docs; green "Acknowledged" badge after
+- Admins see "X acknowledged" count per document
+- Sidebar badge: counts only **unacknowledged** required docs for the current user
+
+---
+
+## Announcements Module
+
+- `/dashboard/announcements` — company-wide notices
+- Admins: create, edit, delete, pin/unpin announcements
+- Employees: read-only list with pin indicators
+- `announcements` table: title, body, category (general/policy/event/urgent), is_pinned, created_by
+- Pinned announcements appear at top of list
+- Sidebar badge: count of unread announcements (tracked in session/local state)
 
 ---
 
@@ -243,6 +347,45 @@ Triggers on `organizations`, `employees`, `leave_requests` automatically update 
 
 ---
 
+## Demo Org — test1
+
+A 15-person demo org is seeded in Supabase for the `test1` organization (Amol Gupta — amolgupta007@gmail.com).
+
+**Departments**: Engineering, Marketing, Sales, Operations, HR
+**Employees**: 15 people across all departments with various roles (owner, admin, manager, employee)
+**Seed data includes**:
+- Leave requests across multiple employees (pending, approved, rejected states)
+- Documents uploaded (company policies, contracts, offer letters)
+- Review cycles with self-assessments and manager reviews
+- Objectives (draft, submitted, approved states)
+- Training courses with enrollments at various progress levels
+- Announcements (pinned and regular)
+- Leave balances per employee
+
+Use this org to demo all JambaHR features end-to-end.
+
+---
+
+## Pitch Deck
+
+`public/pitchdeck.html` — 12-page styled pitch deck covering:
+1. Cover / tagline
+2. Problem statement
+3. JambaHR solution overview
+4. Module showcase
+5. Tech stack and why
+6. Architecture diagram
+7. Security and RBAC
+8. Database design
+9. Pricing model
+10. Market opportunity
+11. Product roadmap
+12. Closing / CTA
+
+**To generate PDF**: Open in Chrome → Ctrl+P → Destination: Save as PDF → Layout: Landscape → Save
+
+---
+
 ## Key Architecture Patterns
 
 ### Server Actions for mutations
@@ -268,8 +411,9 @@ type ActionResult<T = void> =
 ```
 
 ### Client components
-- Server page (`page.tsx`) fetches data + role, passes both to client wrapper
+- Server page (`page.tsx`) fetches data + role + plan, passes all to client wrapper
 - Client wrapper hides/shows UI based on role prop
+- Plan gating happens in the server page before any data fetching
 - Uses `sonner` toast for feedback
 
 ### Design tokens
@@ -299,19 +443,28 @@ Primary color: teal (`172 50% 36%`). Accent: warm orange (`32 95% 52%`).
 - [x] Full Supabase migration (12 tables, indexes, RLS, triggers)
 - [x] `objectives` table added manually via SQL Editor
 - [x] `reviews.objectives_id` column added via ALTER TABLE
+- [x] `announcements` table added via SQL Editor
+- [x] `document_acknowledgments` table added via SQL Editor
 
 **App Shell**
 - [x] Marketing landing page
-- [x] Dashboard layout with collapsible sidebar + role-filtered nav
+- [x] Dashboard layout with collapsible sidebar + role-filtered + plan-locked nav
 - [x] Onboarding wizard
 - [x] Dashboard home with live stats, recent leaves, upcoming deadlines, active review cycles
 
 **RBAC — Role-Based Access Control**
-- [x] `getCurrentUser()` shared helper (`src/lib/current-user.ts`)
+- [x] `getCurrentUser()` shared helper — returns `{ orgId, clerkUserId, role, employeeId, plan }`
 - [x] Sidebar filters nav items by role
 - [x] Server action guards on all admin/manager-only mutations
-- [x] UI hides admin controls for employees (Add Employee, Upload, Approve Leave, New Cycle, etc.)
-- [x] Employees only see their own leave requests
+- [x] UI hides admin controls for employees
+
+**Plan-Based Feature Gating**
+- [x] `src/config/plans.ts` — OrgPlan, PlanFeature, PLAN_FEATURES, hasFeature()
+- [x] `src/components/layout/upgrade-gate.tsx` — full-page upgrade prompt
+- [x] Sidebar lock icon on plan-restricted nav items
+- [x] Documents, Reviews, Objectives, Training — gated at Growth tier
+- [x] Payroll — gated at Business tier
+- [x] Future AI/Hiring features defined in PLAN_FEATURES for business tier
 
 **Employee CRUD**
 - [x] Full CRUD with role guards (admin only for mutations)
@@ -325,30 +478,40 @@ Primary color: teal (`172 50% 36%`). Accent: warm orange (`32 95% 52%`).
 - [x] Leave balance cards per policy
 - [x] Employees see own requests only; managers see all
 - [x] Approve/Reject buttons hidden for employees
+- [x] Email notification to managers on new request (Resend — requires RESEND_API_KEY)
+- [x] Email notification to employee on approve/reject (Resend — requires RESEND_API_KEY)
 
-**Document Management** (`/dashboard/documents`)
+**Document Management** (`/dashboard/documents`) — Growth+
 - [x] Supabase Storage, drag-and-drop upload, signed URLs
 - [x] Categories, company-wide toggle, acknowledgment flag
 - [x] Upload/Delete hidden for non-admins
+- [x] Employee acknowledgment flow (Acknowledge button → green badge)
+- [x] Admin sees acknowledgment count per document
+- [x] Sidebar badge counts only unacknowledged required docs for current user
+
+**Announcements** (`/dashboard/announcements`)
+- [x] Create, edit, delete, pin/unpin (admin only)
+- [x] Employees see read-only list with pinned items at top
+- [x] Categories: general, policy, event, urgent
 
 **Settings** (`/dashboard/settings`)
 - [x] Org profile, department CRUD, leave policy CRUD
 - [x] Billing section with Razorpay upgrade flow
 
 **Sidebar Notification Badges**
-- [x] Pending leaves, docs requiring acknowledgment, pending objective approvals
+- [x] Pending leaves, unacknowledged docs, pending objective approvals
 
-**Performance Reviews** (`/dashboard/reviews`)
+**Performance Reviews** (`/dashboard/reviews`) — Growth+
 - [x] Review cycle CRUD (admin only)
 - [x] Self-assessment + manager review
 - [x] Objectives evaluation embedded in review dialog
 
-**Objectives / OKR** (`/dashboard/objectives`)
+**Objectives / OKR** (`/dashboard/objectives`) — Growth+
 - [x] Draft → submitted → approved/rejected flow
 - [x] Manager approval dialog
 - [x] Linked to review cycles
 
-**Training & Compliance** (`/dashboard/training`)
+**Training & Compliance** (`/dashboard/training`) — Growth+
 - [x] Course library, enrollment, self-attestation completion
 - [x] Compliance tab with overdue alerts
 - [x] LMS Auto-Sync coming soon banner
@@ -360,12 +523,22 @@ Primary color: teal (`172 50% 36%`). Accent: warm orange (`32 95% 52%`).
 - [x] Billing section UI with plan cards + Razorpay checkout modal
 - [x] Webhook endpoint configured in Razorpay dashboard
 
-**API Webhooks**
-- [x] Clerk webhook — org + user sync, verified working
-- [x] Razorpay webhook — subscription lifecycle
+**Error Tracking — Sentry**
+- [x] Sentry SDK integrated (client + server + edge configs)
+- [x] `global-error.tsx` added for React render error capture
+- [x] Env var: `NEXT_PUBLIC_SENTRY_DSN` (must use `NEXT_PUBLIC_` prefix)
 
 **Email Templates**
-- [x] Leave request approval email (React Email)
+- [x] `leave-request.tsx` — new leave request notification to managers
+- [x] `leave-status.tsx` — approved/rejected notification to employee
+- [x] `next.config.js` — react-email packages added to `serverComponentsExternalPackages`
+
+**Demo Org**
+- [x] 15-person seed org (test1) created via Supabase SQL Editor
+- [x] Departments, employees, leaves, documents, reviews, objectives, training, announcements all seeded
+
+**Pitch Deck**
+- [x] `public/pitchdeck.html` — 12-page HTML pitch deck
 
 ### ⚠️ PARTIALLY DONE — NEEDS ATTENTION
 
@@ -381,36 +554,41 @@ Primary color: teal (`172 50% 36%`). Accent: warm orange (`32 95% 52%`).
 - [x] RAZORPAY_GROWTH_PLAN_ID
 - [x] RAZORPAY_BUSINESS_PLAN_ID
 - [x] RAZORPAY_WEBHOOK_SECRET
-- [ ] RESEND_API_KEY — not set yet
-- [ ] SENTRY_DSN — not set yet
+- [x] NEXT_PUBLIC_SENTRY_DSN (set — verify events arrive in Sentry dashboard)
+- [ ] RESEND_API_KEY — not set yet (leave emails are coded but won't send)
 - [ ] NEXT_PUBLIC_POSTHOG_KEY — not set yet
 
 ### ❌ NOT YET BUILT — Pending
 
 **Near-term**
-- [ ] Leave email notifications (Resend + leave-request.tsx template already exists)
-- [ ] Document acknowledgment tracking (employee acknowledges receipt)
-- [ ] Announcements / company-wide notices
+- [ ] Set up Resend account + verify sender domain → set RESEND_API_KEY in Vercel
+- [ ] Document acknowledgment deadline reminders (background job)
+- [ ] Payment failure email via Resend (Razorpay webhook already logs it)
 
 **Phase 3 — Future**
 - [ ] Payroll & compensation (salary, payslips, tax helpers)
 - [ ] Attendance (clock in/out, overtime)
 
-**Phase 4 — AI Features**
+**Phase 4 — AI Features (Business tier)**
 - [ ] AI-powered job description generator
 - [ ] Semantic search (pgvector)
 - [ ] Smart review summaries
 - [ ] Attrition risk indicators
+
+**Hiring Suite (Business tier)**
+- [ ] ATS (applicant tracking)
+- [ ] Interview scheduling
+- [ ] Offer letters
+- [ ] Onboarding workflows
 
 **Training — LMS Auto-Sync (shown as Coming Soon)**
 - [ ] Webhook receivers for Coursera, LinkedIn Learning, TalentLMS, Docebo, Google Classroom
 
 ### ❌ NOT YET DONE — Infrastructure
 
-- [ ] Set up Resend (enable leave email notifications)
-- [ ] Set up Sentry error tracking
+- [ ] Set up Resend (verify sender domain, set API key)
 - [ ] Set up UptimeRobot monitoring
-- [ ] Set up PostHog analytics
+- [ ] Set up PostHog analytics (set NEXT_PUBLIC_POSTHOG_KEY)
 - [ ] Background jobs (Trigger.dev or Inngest) for email notifications, training reminders, compliance alerts
 
 ---
@@ -431,15 +609,25 @@ npm run db:push       # Push migrations (needs CLI)
 
 ### Server actions pattern
 - Always `"use server"` at top
-- Always call `getCurrentUser()` from `@/lib/current-user` for auth + role
+- Always call `getCurrentUser()` from `@/lib/current-user` for auth + role + plan
 - Always check `isAdmin()` / `isManagerOrAbove()` before mutations
 - Always validate with Zod before DB operations
 - Always return `ActionResult<T>`
 - Always `revalidatePath()` after mutations
 - Use `createAdminSupabase()` (bypasses RLS)
 
+### Plan gating pattern (page level)
+```typescript
+const userCtx = await getCurrentUser();
+const plan = userCtx?.plan ?? "starter";
+if (!hasFeature(plan, "feature-name")) {
+  return <UpgradeGate feature="Feature Name" requiredPlan="growth" currentPlan={plan} />;
+}
+// proceed with data fetching only after gate passes
+```
+
 ### Component pattern
-- Server page → fetch data + role → pass to client wrapper
+- Server page → fetch data + role + plan → pass to client wrapper
 - Client wrapper receives `role: UserRole` prop, conditionally renders admin UI
 - Use `hasPermission(role, "admin")` from `@/types` for UI guards
 - Use `sonner` toast for feedback
@@ -456,21 +644,21 @@ npm run db:push       # Push migrations (needs CLI)
 
 | Tier | Price | Max Employees | Features |
 |------|-------|---------------|----------|
-| Starter | Free | 10 | Directory, Leave, Basic docs |
-| Growth | ₹500/employee/month | 200 | + Reviews, Training, Compliance |
-| Business | ₹800/employee/month | 500 | + Payroll, Analytics, API, Priority support |
+| Starter | Free | 10 | Directory, Leave, Announcements |
+| Growth | ₹500/employee/month | 200 | + Documents, Reviews, Objectives, Training, Hiring JD |
+| Business | ₹800/employee/month | 500 | + Payroll, Analytics, API, Full AI Suite, Full Hiring Suite |
 
-Configured in `src/lib/razorpay.ts` as the `PLANS` object.
+Configured in `src/lib/razorpay.ts` (billing) and `src/config/plans.ts` (feature flags).
 
 ---
 
 ## Immediate Next Steps (in priority order)
 
-1. **Set up Resend** — enable leave approval email notifications (template already built)
-2. **Document acknowledgment** — employee acknowledges receipt of company docs
-3. **Set up Sentry + PostHog** — error tracking and analytics
-4. **Announcements module** — company-wide notices
-5. **Plan-based feature gating** — lock modules behind plan tier (Growth/Business)
+1. **Set up Resend** — create account, verify sender domain, set `RESEND_API_KEY` in Vercel → leave emails go live
+2. **Set up PostHog** — set `NEXT_PUBLIC_POSTHOG_KEY` in Vercel → product analytics go live
+3. **Verify Sentry** — trigger a test error in production, confirm event appears in Sentry Issues dashboard
+4. **UptimeRobot** — add `https://jambahr.com` monitor
+5. **Background jobs** — Trigger.dev or Inngest for training deadline reminders + compliance alerts
 
 ---
 
@@ -482,9 +670,14 @@ Configured in `src/lib/razorpay.ts` as the `PLANS` object.
 4. **Supabase CLI on Windows**: Global install fails. Use Supabase Dashboard SQL Editor for all migrations.
 5. **TypeScript build errors**: `typescript: { ignoreBuildErrors: true }` in `next.config.js`. Root cause: Supabase v2 type inference returns `never` for partial selects.
 6. **RLS bypass**: Server actions use admin Supabase client (service role key). Intentional — Clerk JWT → Supabase RLS not configured.
-7. **New tables added post-migration**: `objectives` table added manually via SQL Editor. `reviews.objectives_id` added via ALTER TABLE.
+7. **New tables added post-migration**: `objectives`, `announcements`, `document_acknowledgments` tables added manually via SQL Editor. `reviews.objectives_id` added via ALTER TABLE.
 8. **Supabase trigger function**: `update_updated_at_column()` must be created separately before running triggers (SQL Editor splits on semicolons).
 9. **Razorpay `stripe_*` columns**: `organizations.stripe_customer_id` and `stripe_subscription_id` are reused for Razorpay subscription IDs — no schema change was made.
 10. **Razorpay checkout script**: Loaded dynamically in `billing-section.tsx` via `loadRazorpayScript()` to avoid SSR issues.
 11. **RBAC fallback**: If a user has no employee record (e.g. org creator before onboarding), `getCurrentUser()` defaults their role to `"admin"` so they retain full access.
-12. **Employee page visibility**: The Employees page (`/dashboard/employees`) requires `manager` role or above in the sidebar nav. Employees cannot navigate to it, but the route itself is not hard-blocked — add middleware protection if needed.
+12. **Employee page visibility**: The Employees page requires `manager` role or above in sidebar nav. Route itself is not hard-blocked — add middleware protection if needed.
+13. **react-email packages**: Must be in `serverComponentsExternalPackages` in `next.config.js`. If removed, Vercel build crashes when `leaves.ts` is imported.
+14. **Sentry DSN env var name**: Must be `NEXT_PUBLIC_SENTRY_DSN` (with `NEXT_PUBLIC_` prefix) for client-side error capture. A plain `SENTRY_DSN` will only work server-side.
+15. **Supabase JSON carriage returns**: When inserting JSONB via SQL Editor, avoid pasting JSON string literals directly — use `jsonb_build_array(jsonb_build_object(...))` syntax to prevent `0x0d` carriage return parse errors.
+16. **Training course categories**: Only `ethics`, `compliance`, `safety`, `skills`, `onboarding`, `custom` are valid — check constraint will reject others.
+17. **Training enrollment status**: Only `assigned`, `in_progress`, `completed`, `overdue` are valid — `not_started` is not a valid value.

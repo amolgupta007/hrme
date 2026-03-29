@@ -3,8 +3,12 @@
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { render } from "@react-email/render";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { getCurrentUser, isManagerOrAbove } from "@/lib/current-user";
+import { resend, FROM_EMAIL } from "@/lib/resend";
+import { LeaveRequestEmail } from "@/components/emails/leave-request";
+import { LeaveStatusEmail } from "@/components/emails/leave-status";
 import type { ActionResult, LeavePolicy, LeaveRequest } from "@/types";
 
 // ---- Context helper ----
@@ -226,6 +230,53 @@ export async function requestLeave(
 
   if (error) return { success: false, error: error.message };
 
+  // Send email notification to managers/admins (non-blocking)
+  try {
+    const supabase = createAdminSupabase();
+    const [{ data: employee }, { data: policy }, { data: managers }] = await Promise.all([
+      supabase
+        .from("employees")
+        .select("first_name, last_name")
+        .eq("id", validated.data.employeeId)
+        .single(),
+      supabase
+        .from("leave_policies")
+        .select("name")
+        .eq("id", validated.data.policyId)
+        .single(),
+      supabase
+        .from("employees")
+        .select("email")
+        .eq("org_id", ctx.orgId)
+        .in("role", ["owner", "admin", "manager"])
+        .eq("status", "active"),
+    ]);
+
+    const managerEmails = (managers ?? []).map((m: { email: string }) => m.email).filter(Boolean);
+    if (managerEmails.length > 0 && employee && policy) {
+      const employeeName = `${(employee as any).first_name} ${(employee as any).last_name}`.trim();
+      const html = await render(
+        LeaveRequestEmail({
+          employeeName,
+          leaveType: (policy as any).name,
+          startDate: validated.data.startDate,
+          endDate: validated.data.endDate,
+          days: validated.data.days,
+          reason: validated.data.reason ?? "",
+          approvalUrl: "https://jambahr.com/dashboard/leaves",
+        })
+      );
+      await resend.emails.send({
+        from: FROM_EMAIL,
+        to: managerEmails,
+        subject: `Leave Request: ${employeeName} — ${(policy as any).name}`,
+        html,
+      });
+    }
+  } catch {
+    // Email failure must not break the core action
+  }
+
   revalidatePath("/dashboard/leaves");
   revalidatePath("/dashboard");
   return { success: true, data: { id: (data as { id: string }).id } };
@@ -242,6 +293,15 @@ export async function approveLeave(
   if (!ctx) return { success: false, error: "Not authenticated" };
 
   const supabase = createAdminSupabase();
+
+  // Fetch request details before updating (for email)
+  const { data: leaveReq } = await supabase
+    .from("leave_requests")
+    .select("employee_id, policy_id, start_date, end_date, days, employees!employee_id(first_name, last_name, email), leave_policies(name)")
+    .eq("id", requestId)
+    .eq("org_id", ctx.orgId)
+    .single();
+
   const { error } = await supabase
     .from("leave_requests")
     .update({
@@ -253,6 +313,37 @@ export async function approveLeave(
     .eq("org_id", ctx.orgId);
 
   if (error) return { success: false, error: error.message };
+
+  // Notify employee (non-blocking)
+  try {
+    if (leaveReq) {
+      const req = leaveReq as any;
+      const employeeEmail = req.employees?.email;
+      const employeeName = `${req.employees?.first_name ?? ""} ${req.employees?.last_name ?? ""}`.trim();
+      if (employeeEmail) {
+        const html = await render(
+          LeaveStatusEmail({
+            employeeName,
+            leaveType: req.leave_policies?.name ?? "Leave",
+            startDate: req.start_date,
+            endDate: req.end_date,
+            days: Number(req.days),
+            status: "approved",
+            note: note || undefined,
+            dashboardUrl: "https://jambahr.com/dashboard/leaves",
+          })
+        );
+        await resend.emails.send({
+          from: FROM_EMAIL,
+          to: employeeEmail,
+          subject: "Your leave request has been approved",
+          html,
+        });
+      }
+    }
+  } catch {
+    // Email failure must not break the core action
+  }
 
   revalidatePath("/dashboard/leaves");
   revalidatePath("/dashboard");
@@ -270,6 +361,15 @@ export async function rejectLeave(
   if (!ctx) return { success: false, error: "Not authenticated" };
 
   const supabase = createAdminSupabase();
+
+  // Fetch request details before updating (for email)
+  const { data: leaveReq } = await supabase
+    .from("leave_requests")
+    .select("employee_id, policy_id, start_date, end_date, days, employees!employee_id(first_name, last_name, email), leave_policies(name)")
+    .eq("id", requestId)
+    .eq("org_id", ctx.orgId)
+    .single();
+
   const { error } = await supabase
     .from("leave_requests")
     .update({
@@ -281,6 +381,37 @@ export async function rejectLeave(
     .eq("org_id", ctx.orgId);
 
   if (error) return { success: false, error: error.message };
+
+  // Notify employee (non-blocking)
+  try {
+    if (leaveReq) {
+      const req = leaveReq as any;
+      const employeeEmail = req.employees?.email;
+      const employeeName = `${req.employees?.first_name ?? ""} ${req.employees?.last_name ?? ""}`.trim();
+      if (employeeEmail) {
+        const html = await render(
+          LeaveStatusEmail({
+            employeeName,
+            leaveType: req.leave_policies?.name ?? "Leave",
+            startDate: req.start_date,
+            endDate: req.end_date,
+            days: Number(req.days),
+            status: "rejected",
+            note: note || undefined,
+            dashboardUrl: "https://jambahr.com/dashboard/leaves",
+          })
+        );
+        await resend.emails.send({
+          from: FROM_EMAIL,
+          to: employeeEmail,
+          subject: "Your leave request has been rejected",
+          html,
+        });
+      }
+    }
+  } catch {
+    // Email failure must not break the core action
+  }
 
   revalidatePath("/dashboard/leaves");
   revalidatePath("/dashboard");

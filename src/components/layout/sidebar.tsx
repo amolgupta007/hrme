@@ -18,6 +18,7 @@ import {
   Network,
   Target,
   Megaphone,
+  Lock,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -26,6 +27,8 @@ import { useState } from "react";
 import type { PendingCounts } from "@/actions/notifications";
 import { hasPermission } from "@/types";
 import type { UserRole } from "@/types";
+import { hasFeature } from "@/config/plans";
+import type { OrgPlan } from "@/config/plans";
 
 const iconMap: Record<string, LucideIcon> = {
   LayoutDashboard,
@@ -48,7 +51,7 @@ const BADGE_MAP: Record<string, keyof PendingCounts> = {
   "/dashboard/objectives": "objectives",
 };
 
-export function Sidebar({ badges, role }: { badges: PendingCounts; role: UserRole }) {
+export function Sidebar({ badges, role, plan }: { badges: PendingCounts; role: UserRole; plan: OrgPlan }) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
 
@@ -101,6 +104,8 @@ export function Sidebar({ badges, role }: { badges: PendingCounts; role: UserRol
 
             const badgeKey = BADGE_MAP[item.href];
             const badgeCount = badgeKey ? badges[badgeKey] : 0;
+            const PLAN_RANK: Record<OrgPlan, number> = { starter: 0, growth: 1, business: 2 };
+            const isLocked = !!item.requiredPlan && PLAN_RANK[plan] < PLAN_RANK[item.requiredPlan];
 
             return (
               <li key={item.href}>
@@ -110,20 +115,25 @@ export function Sidebar({ badges, role }: { badges: PendingCounts; role: UserRol
                     "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
                     isActive
                       ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                      : isLocked
+                      ? "text-sidebar-foreground/40 hover:bg-sidebar-accent/30 hover:text-sidebar-foreground/60"
                       : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
                   )}
                   title={collapsed ? item.title : undefined}
                 >
                   <span className="relative shrink-0">
                     <Icon className="h-[18px] w-[18px]" />
-                    {badgeCount > 0 && collapsed && (
+                    {badgeCount > 0 && collapsed && !isLocked && (
                       <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-destructive text-[9px] font-bold text-destructive-foreground">
                         {badgeCount > 9 ? "9+" : badgeCount}
                       </span>
                     )}
                   </span>
                   {!collapsed && <span>{item.title}</span>}
-                  {!collapsed && badgeCount > 0 && (
+                  {!collapsed && isLocked && (
+                    <Lock className="ml-auto h-3.5 w-3.5 text-sidebar-foreground/30" />
+                  )}
+                  {!collapsed && !isLocked && badgeCount > 0 && (
                     <span className="ml-auto rounded-full bg-destructive px-2 py-0.5 text-xs font-semibold text-destructive-foreground">
                       {badgeCount > 99 ? "99+" : badgeCount}
                     </span>

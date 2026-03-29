@@ -26,22 +26,26 @@ export const sidebarNav: NavItem[] = [
     title: "Documents",
     href: "/dashboard/documents",
     icon: "FileText",
+    requiredPlan: "growth",
   },
   {
     title: "Reviews",
     href: "/dashboard/reviews",
     icon: "Star",
     requiredRole: "manager",
+    requiredPlan: "growth",
   },
   {
     title: "Objectives",
     href: "/dashboard/objectives",
     icon: "Target",
+    requiredPlan: "growth",
   },
   {
     title: "Training",
     href: "/dashboard/training",
     icon: "GraduationCap",
+    requiredPlan: "growth",
   },
   {
     title: "Announcements",
@@ -53,6 +57,7 @@ export const sidebarNav: NavItem[] = [
     href: "/dashboard/payroll",
     icon: "Wallet",
     requiredRole: "admin",
+    requiredPlan: "business",
   },
   {
     title: "Settings",

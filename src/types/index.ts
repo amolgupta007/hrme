@@ -43,6 +43,7 @@ export interface NavItem {
   href: string;
   icon: string;
   requiredRole?: UserRole;
+  requiredPlan?: "growth" | "business";
   badge?: string;
 }
 

@@ -16,6 +16,7 @@ const nextConfig = {
       bodySizeLimit: "10mb",
     },
     instrumentationHook: true,
+    serverComponentsExternalPackages: ["@react-email/render", "@react-email/components"],
   },
 };
 

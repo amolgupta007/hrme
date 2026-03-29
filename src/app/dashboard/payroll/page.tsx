@@ -1,4 +1,15 @@
-export default function PayrollPage() {
+import { getCurrentUser } from "@/lib/current-user";
+import { UpgradeGate } from "@/components/layout/upgrade-gate";
+import { hasFeature } from "@/config/plans";
+
+export default async function PayrollPage() {
+  const userCtx = await getCurrentUser();
+  const plan = userCtx?.plan ?? "starter";
+
+  if (!hasFeature(plan, "payroll")) {
+    return <UpgradeGate feature="Payroll & Compensation" requiredPlan="business" currentPlan={plan} />;
+  }
+
   return (
     <div className="space-y-6">
       <div>

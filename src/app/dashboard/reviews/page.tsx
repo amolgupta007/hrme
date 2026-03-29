@@ -2,12 +2,20 @@ import { listReviewCycles, listCycleReviews } from "@/actions/reviews";
 import { listEmployees } from "@/actions/employees";
 import { getCurrentUser } from "@/lib/current-user";
 import { ReviewsClient } from "@/components/reviews/reviews-client";
+import { UpgradeGate } from "@/components/layout/upgrade-gate";
+import { hasFeature } from "@/config/plans";
 
 export default async function ReviewsPage() {
-  const [cyclesResult, employeesResult, userCtx] = await Promise.all([
+  const userCtx = await getCurrentUser();
+  const plan = userCtx?.plan ?? "starter";
+
+  if (!hasFeature(plan, "reviews")) {
+    return <UpgradeGate feature="Performance Reviews" requiredPlan="growth" currentPlan={plan} />;
+  }
+
+  const [cyclesResult, employeesResult] = await Promise.all([
     listReviewCycles(),
     listEmployees(),
-    getCurrentUser(),
   ]);
 
   const cycles = cyclesResult.success ? cyclesResult.data : [];

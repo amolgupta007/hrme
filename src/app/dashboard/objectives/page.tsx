@@ -2,6 +2,9 @@ import { auth, clerkClient } from "@clerk/nextjs/server";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { listMyObjectives, listPendingApprovals, listAllObjectives } from "@/actions/objectives";
 import { ObjectivesClient } from "@/components/objectives/objectives-client";
+import { getCurrentUser } from "@/lib/current-user";
+import { UpgradeGate } from "@/components/layout/upgrade-gate";
+import { hasFeature } from "@/config/plans";
 
 async function getContext() {
   const { orgId: sessionOrgId, userId } = auth();
@@ -49,6 +52,13 @@ async function getContext() {
 }
 
 export default async function ObjectivesPage() {
+  const userCtx = await getCurrentUser();
+  const plan = userCtx?.plan ?? "starter";
+
+  if (!hasFeature(plan, "objectives")) {
+    return <UpgradeGate feature="Objectives & OKRs" requiredPlan="growth" currentPlan={plan} />;
+  }
+
   const [ctx, myResult, approvalsResult, allResult] = await Promise.all([
     getContext(),
     listMyObjectives(),

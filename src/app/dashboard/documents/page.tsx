@@ -2,12 +2,20 @@ import { listDocuments } from "@/actions/documents";
 import { listEmployees } from "@/actions/employees";
 import { getCurrentUser } from "@/lib/current-user";
 import { DocumentsClient } from "@/components/documents/documents-client";
+import { UpgradeGate } from "@/components/layout/upgrade-gate";
+import { hasFeature } from "@/config/plans";
 
 export default async function DocumentsPage() {
-  const [docsResult, empsResult, userCtx] = await Promise.all([
+  const userCtx = await getCurrentUser();
+  const plan = userCtx?.plan ?? "starter";
+
+  if (!hasFeature(plan, "documents")) {
+    return <UpgradeGate feature="Documents" requiredPlan="growth" currentPlan={plan} />;
+  }
+
+  const [docsResult, empsResult] = await Promise.all([
     listDocuments(),
     listEmployees(),
-    getCurrentUser(),
   ]);
 
   const documents = docsResult.success ? docsResult.data : [];

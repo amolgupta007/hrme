@@ -3,12 +3,12 @@
 import * as React from "react";
 import {
   Search, Upload, FileText, FileImage, File, Trash2,
-  Download, Building2, User, AlertCircle,
+  Download, Building2, User, AlertCircle, CheckCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn, formatDate } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { deleteDocument } from "@/actions/documents";
+import { deleteDocument, acknowledgeDocument } from "@/actions/documents";
 import { UploadDialog } from "./upload-dialog";
 import type { DocumentWithUrl } from "@/actions/documents";
 import type { Employee, UserRole } from "@/types";
@@ -58,6 +58,7 @@ export function DocumentsClient({ documents, employees, role }: DocumentsClientP
   const [category, setCategory] = React.useState("all");
   const [uploadOpen, setUploadOpen] = React.useState(false);
   const [deleting, setDeleting] = React.useState<string | null>(null);
+  const [acknowledging, setAcknowledging] = React.useState<string | null>(null);
 
   const filtered = documents.filter((doc) => {
     const q = search.toLowerCase();
@@ -76,6 +77,17 @@ export function DocumentsClient({ documents, employees, role }: DocumentsClientP
     setDeleting(null);
     if (result.success) {
       toast.success("Document deleted");
+    } else {
+      toast.error(result.error);
+    }
+  }
+
+  async function handleAcknowledge(doc: DocumentWithUrl) {
+    setAcknowledging(doc.id);
+    const result = await acknowledgeDocument(doc.id);
+    setAcknowledging(null);
+    if (result.success) {
+      toast.success(`"${doc.name}" acknowledged`);
     } else {
       toast.error(result.error);
     }
@@ -156,9 +168,21 @@ export function DocumentsClient({ documents, employees, role }: DocumentsClientP
                       {CATEGORY_LABELS[doc.category]}
                     </span>
                     {doc.requires_acknowledgment && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 px-2 py-0.5 text-xs font-medium">
-                        <AlertCircle className="h-3 w-3" />
-                        Ack required
+                      doc.acknowledged_by_me ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 px-2 py-0.5 text-xs font-medium">
+                          <CheckCircle2 className="h-3 w-3" />
+                          Acknowledged
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 px-2 py-0.5 text-xs font-medium">
+                          <AlertCircle className="h-3 w-3" />
+                          Ack required
+                        </span>
+                      )
+                    )}
+                    {canManage && doc.requires_acknowledgment && doc.acknowledgment_count > 0 && (
+                      <span className="text-xs text-muted-foreground">
+                        {doc.acknowledgment_count} acknowledged
                       </span>
                     )}
                   </div>
@@ -176,6 +200,18 @@ export function DocumentsClient({ documents, employees, role }: DocumentsClientP
                 </div>
 
                 <div className="flex items-center gap-1 shrink-0">
+                  {doc.requires_acknowledgment && !doc.acknowledged_by_me && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 text-xs"
+                      onClick={() => handleAcknowledge(doc)}
+                      disabled={acknowledging === doc.id}
+                    >
+                      <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+                      {acknowledging === doc.id ? "Saving..." : "Acknowledge"}
+                    </Button>
+                  )}
                   {doc.signed_url && (
                     <a href={doc.signed_url} target="_blank" rel="noopener noreferrer" download>
                       <Button variant="ghost" size="icon" className="h-8 w-8">

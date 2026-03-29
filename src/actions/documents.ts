@@ -43,6 +43,8 @@ export type DocumentWithUrl = {
   mime_type: string;
   is_company_wide: boolean;
   requires_acknowledgment: boolean;
+  acknowledged_by_me: boolean;
+  acknowledgment_count: number;
   employee_id: string | null;
   employee_name: string | null;
   uploaded_by: string;
@@ -57,21 +59,48 @@ export async function listDocuments(): Promise<ActionResult<DocumentWithUrl[]>> 
 
   const supabase = createAdminSupabase();
 
-  const { data: docs, error } = await supabase
-    .from("documents")
-    .select("*, employees!employee_id(first_name, last_name)")
+  // Get current user's employee ID for acknowledgment lookup
+  const { data: me } = await supabase
+    .from("employees")
+    .select("id")
     .eq("org_id", ctx.orgId)
-    .order("created_at", { ascending: false });
+    .eq("clerk_user_id", ctx.clerkUserId)
+    .single();
+  const myEmployeeId = (me as { id: string } | null)?.id ?? null;
+
+  const [{ data: docs, error }, { data: myAcks }, { data: allAcks }] = await Promise.all([
+    supabase
+      .from("documents")
+      .select("*, employees!employee_id(first_name, last_name)")
+      .eq("org_id", ctx.orgId)
+      .order("created_at", { ascending: false }),
+    myEmployeeId
+      ? supabase
+          .from("document_acknowledgments")
+          .select("document_id")
+          .eq("org_id", ctx.orgId)
+          .eq("employee_id", myEmployeeId)
+      : Promise.resolve({ data: [] }),
+    supabase
+      .from("document_acknowledgments")
+      .select("document_id")
+      .eq("org_id", ctx.orgId),
+  ]);
 
   if (error) return { success: false, error: error.message };
+
+  const ackedByMe = new Set((myAcks ?? []).map((a: any) => a.document_id));
+  const ackCountByDoc: Record<string, number> = {};
+  for (const a of allAcks ?? []) {
+    ackCountByDoc[a.document_id] = (ackCountByDoc[a.document_id] ?? 0) + 1;
+  }
 
   // Generate signed URLs for each document (1 hour expiry)
   const withUrls = await Promise.all(
     (docs ?? []).map(async (doc: any) => {
-      const path = doc.file_url;
       const { data: signed } = await supabase.storage
         .from("documents")
-        .createSignedUrl(path, 3600);
+        .createSignedUrl(doc.file_url, 3600);
 
       return {
         id: doc.id,
@@ -83,6 +112,8 @@ export async function listDocuments(): Promise<ActionResult<DocumentWithUrl[]>> 
         mime_type: doc.mime_type,
         is_company_wide: doc.is_company_wide,
         requires_acknowledgment: doc.requires_acknowledgment,
+        acknowledged_by_me: ackedByMe.has(doc.id),
+        acknowledgment_count: ackCountByDoc[doc.id] ?? 0,
         employee_id: doc.employee_id,
         employee_name: doc.employees
           ? `${doc.employees.first_name} ${doc.employees.last_name}`
@@ -94,6 +125,41 @@ export async function listDocuments(): Promise<ActionResult<DocumentWithUrl[]>> 
   );
 
   return { success: true, data: withUrls };
+}
+
+export async function acknowledgeDocument(documentId: string): Promise<ActionResult<void>> {
+  const ctx = await getOrgContext();
+  if (!ctx) return { success: false, error: "Not authenticated" };
+
+  const supabase = createAdminSupabase();
+
+  const { data: employee } = await supabase
+    .from("employees")
+    .select("id")
+    .eq("org_id", ctx.orgId)
+    .eq("clerk_user_id", ctx.clerkUserId)
+    .single();
+
+  if (!employee) return { success: false, error: "Employee record not found" };
+
+  const employeeId = (employee as { id: string }).id;
+
+  const { error } = await supabase
+    .from("document_acknowledgments")
+    .upsert(
+      {
+        org_id: ctx.orgId,
+        document_id: documentId,
+        employee_id: employeeId,
+        acknowledged_at: new Date().toISOString(),
+      },
+      { onConflict: "document_id,employee_id" }
+    );
+
+  if (error) return { success: false, error: error.message };
+
+  revalidatePath("/dashboard/documents");
+  return { success: true, data: undefined };
 }
 
 export async function uploadDocument(formData: FormData): Promise<ActionResult<void>> {

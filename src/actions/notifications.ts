@@ -39,7 +39,16 @@ export async function getPendingCounts(): Promise<PendingCounts> {
 
   const supabase = createAdminSupabase();
 
-  const [leavesResult, docsResult, objectivesCount] = await Promise.all([
+  // Find current employee ID for acknowledgment check
+  const { data: me } = await supabase
+    .from("employees")
+    .select("id")
+    .eq("org_id", ctx.orgId)
+    .eq("clerk_user_id", ctx.clerkUserId)
+    .single();
+  const myEmployeeId = (me as { id: string } | null)?.id ?? null;
+
+  const [leavesResult, docsResult, acksResult, objectivesCount] = await Promise.all([
     supabase
       .from("leave_requests")
       .select("*", { count: "exact", head: true })
@@ -47,15 +56,25 @@ export async function getPendingCounts(): Promise<PendingCounts> {
       .eq("status", "pending"),
     supabase
       .from("documents")
-      .select("*", { count: "exact", head: true })
+      .select("id")
       .eq("org_id", ctx.orgId)
       .eq("requires_acknowledgment", true),
+    myEmployeeId
+      ? supabase
+          .from("document_acknowledgments")
+          .select("document_id")
+          .eq("org_id", ctx.orgId)
+          .eq("employee_id", myEmployeeId)
+      : Promise.resolve({ data: [] }),
     getPendingObjectivesCount(ctx.orgId, ctx.clerkUserId),
   ]);
 
+  const ackedIds = new Set(((acksResult as any).data ?? []).map((a: any) => a.document_id));
+  const unacknowledgedDocs = (docsResult.data ?? []).filter((d: any) => !ackedIds.has(d.id)).length;
+
   return {
     leaves: leavesResult.count ?? 0,
-    documents: docsResult.count ?? 0,
+    documents: unacknowledgedDocs,
     objectives: objectivesCount,
   };
 }

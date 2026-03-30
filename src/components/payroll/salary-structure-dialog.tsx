@@ -33,6 +33,7 @@ export function SalaryStructureDialog({ open, onClose, employees, existing }: Pr
   const [ctcInput, setCtcInput] = useState(existing ? String(existing.ctc) : "");
   const [state, setState] = useState(existing?.state ?? "maharashtra");
   const [isMetro, setIsMetro] = useState(existing?.is_metro ?? true);
+  const [includeHra, setIncludeHra] = useState(existing?.include_hra ?? true);
   const [effectiveFrom, setEffectiveFrom] = useState(
     existing?.effective_from ?? new Date().toISOString().split("T")[0]
   );
@@ -46,6 +47,7 @@ export function SalaryStructureDialog({ open, onClose, employees, existing }: Pr
       setCtcInput(existing ? String(existing.ctc) : "");
       setState(existing?.state ?? "maharashtra");
       setIsMetro(existing?.is_metro ?? true);
+      setIncludeHra(existing?.include_hra ?? true);
       setEffectiveFrom(existing?.effective_from ?? new Date().toISOString().split("T")[0]);
     }
   }, [open, existing]);
@@ -60,7 +62,7 @@ export function SalaryStructureDialog({ open, onClose, employees, existing }: Pr
 
     setSaving(true);
     try {
-      const result = await upsertSalaryStructure({ employee_id: employeeId, ctc, state, is_metro: isMetro, effective_from: effectiveFrom });
+      const result = await upsertSalaryStructure({ employee_id: employeeId, ctc, state, is_metro: isMetro, include_hra: includeHra, effective_from: effectiveFrom });
       if (result.success) {
         toast.success(isEdit ? "Salary updated" : "Salary structure saved");
         onClose();
@@ -148,20 +150,37 @@ export function SalaryStructureDialog({ open, onClose, employees, existing }: Pr
               </select>
             </div>
 
-            {/* Metro */}
+            {/* HRA opt-in */}
             <div className="flex items-center gap-3">
               <input
                 type="checkbox"
-                id="is_metro"
-                checked={isMetro}
-                onChange={(e) => setIsMetro(e.target.checked)}
+                id="include_hra"
+                checked={includeHra}
+                onChange={(e) => setIncludeHra(e.target.checked)}
                 className="h-4 w-4 rounded"
               />
-              <label htmlFor="is_metro" className="text-sm">
-                Metro city{" "}
-                <span className="text-muted-foreground">(HRA: 50% of Basic vs 40%)</span>
+              <label htmlFor="include_hra" className="text-sm">
+                Include HRA component{" "}
+                <span className="text-muted-foreground">(employee has opted in with rent proof)</span>
               </label>
             </div>
+
+            {/* Metro — only relevant when HRA is included */}
+            {includeHra && (
+              <div className="flex items-center gap-3 pl-7">
+                <input
+                  type="checkbox"
+                  id="is_metro"
+                  checked={isMetro}
+                  onChange={(e) => setIsMetro(e.target.checked)}
+                  className="h-4 w-4 rounded"
+                />
+                <label htmlFor="is_metro" className="text-sm">
+                  Metro city{" "}
+                  <span className="text-muted-foreground">(HRA: 50% of Basic vs 40%)</span>
+                </label>
+              </div>
+            )}
 
             {/* Effective from */}
             <div>
@@ -195,7 +214,7 @@ export function SalaryStructureDialog({ open, onClose, employees, existing }: Pr
           <div>
             <p className="text-sm font-medium mb-2">Live Breakdown Preview</p>
             {ctc >= 100000 ? (
-              <CTCBreakdownCard ctc={ctc} state={state} isMetro={isMetro} />
+              <CTCBreakdownCard ctc={ctc} state={state} isMetro={isMetro} includeHra={includeHra} />
             ) : (
               <div className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
                 Enter a CTC of at least ₹1,00,000 to see the breakdown

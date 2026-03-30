@@ -26,6 +26,7 @@ export type SalaryStructureRow = {
   net_monthly: number;
   state: string;
   is_metro: boolean;
+  include_hra: boolean;
   effective_from: string;
 };
 
@@ -90,6 +91,7 @@ const SalaryStructureSchema = z.object({
   ctc: z.number().positive("CTC must be positive"),
   state: z.string().default("other"),
   is_metro: z.boolean().default(true),
+  include_hra: z.boolean().default(true),
   effective_from: z.string(),
 });
 
@@ -143,6 +145,7 @@ export async function getSalaryStructures(): Promise<ActionResult<SalaryStructur
       net_monthly: r.net_monthly,
       state: r.state,
       is_metro: r.is_metro,
+      include_hra: r.include_hra ?? true,
       effective_from: r.effective_from,
     };
   });
@@ -160,8 +163,8 @@ export async function upsertSalaryStructure(
   const parsed = SalaryStructureSchema.safeParse(input);
   if (!parsed.success) return { success: false, error: parsed.error.errors[0].message };
 
-  const { employee_id, ctc, state, is_metro, effective_from } = parsed.data;
-  const breakdown = computeCTCBreakdown(ctc, state, is_metro);
+  const { employee_id, ctc, state, is_metro, include_hra, effective_from } = parsed.data;
+  const breakdown = computeCTCBreakdown(ctc, state, is_metro, include_hra);
 
   const supabase = createAdminSupabase();
 
@@ -184,6 +187,7 @@ export async function upsertSalaryStructure(
         net_monthly: breakdown.netMonthly,
         state,
         is_metro,
+        include_hra,
         effective_from,
         updated_at: new Date().toISOString(),
       },

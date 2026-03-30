@@ -104,10 +104,11 @@ export interface CTCBreakdown {
 export function computeCTCBreakdown(
   ctc: number,
   state: string = "other",
-  isMetro: boolean = true
+  isMetro: boolean = true,
+  includeHra: boolean = true
 ): CTCBreakdown {
   const basicAnnual = Math.round(ctc * 0.4);
-  const hraAnnual = Math.round(basicAnnual * (isMetro ? 0.5 : 0.4));
+  const hraAnnual = includeHra ? Math.round(basicAnnual * (isMetro ? 0.5 : 0.4)) : 0;
   const employerPfMonthly = Math.min(Math.round((basicAnnual / 12) * 0.12), 1800);
   const employerPfAnnual = employerPfMonthly * 12;
   const employerGratuityAnnual = Math.round(basicAnnual * 0.0481);

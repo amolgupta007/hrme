@@ -6,12 +6,13 @@ interface CTCBreakdownCardProps {
   ctc: number;
   state: string;
   isMetro: boolean;
+  includeHra?: boolean;
 }
 
-export function CTCBreakdownCard({ ctc, state, isMetro }: CTCBreakdownCardProps) {
+export function CTCBreakdownCard({ ctc, state, isMetro, includeHra = true }: CTCBreakdownCardProps) {
   if (!ctc || ctc <= 0) return null;
 
-  const b = computeCTCBreakdown(ctc, state, isMetro);
+  const b = computeCTCBreakdown(ctc, state, isMetro, includeHra);
 
   return (
     <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-4 text-sm">
@@ -22,7 +23,9 @@ export function CTCBreakdownCard({ ctc, state, isMetro }: CTCBreakdownCardProps)
         </p>
         <div className="space-y-1">
           <Row label="Basic Salary (40%)" value={b.basicAnnual} />
-          <Row label={`HRA (${isMetro ? "50%" : "40%"} of Basic)`} value={b.hraAnnual} />
+          {includeHra && (
+            <Row label={`HRA (${isMetro ? "50%" : "40%"} of Basic)`} value={b.hraAnnual} />
+          )}
           <Row label="Special Allowance" value={b.specialAllowanceAnnual} />
           <Row label="Employer PF" value={b.employerPfAnnual} muted />
           <Row label="Employer Gratuity (4.81%)" value={b.employerGratuityAnnual} muted />
@@ -40,7 +43,7 @@ export function CTCBreakdownCard({ ctc, state, isMetro }: CTCBreakdownCardProps)
         <div className="space-y-1">
           <p className="text-xs text-muted-foreground font-medium">Earnings</p>
           <Row label="Basic" value={b.basicMonthly} indent />
-          <Row label="HRA" value={b.hraMonthly} indent />
+          {includeHra && <Row label="HRA" value={b.hraMonthly} indent />}
           <Row label="Special Allowance" value={b.specialAllowanceMonthly} indent />
           <Row label="Gross Salary" value={b.grossMonthly} bold />
 

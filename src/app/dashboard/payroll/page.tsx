@@ -1,6 +1,15 @@
 import { getCurrentUser } from "@/lib/current-user";
 import { UpgradeGate } from "@/components/layout/upgrade-gate";
 import { hasFeature } from "@/config/plans";
+import { isAdmin } from "@/lib/current-user";
+import { listEmployees } from "@/actions/employees";
+import {
+  getSalaryStructures,
+  getPayrollRuns,
+  getMyPayslips,
+} from "@/actions/payroll";
+import { PayrollClient } from "@/components/payroll/payroll-client";
+import { createAdminSupabase } from "@/lib/supabase/server";
 
 export default async function PayrollPage() {
   const userCtx = await getCurrentUser();
@@ -10,22 +19,48 @@ export default async function PayrollPage() {
     return <UpgradeGate feature="Payroll & Compensation" requiredPlan="business" currentPlan={plan} />;
   }
 
-  return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">
-          Payroll & Compensation
-        </h1>
-        <p className="mt-1 text-muted-foreground">
-          Salary structures, payslips, bonuses, and tax calculations.
-        </p>
-      </div>
+  const adminUser = userCtx ? isAdmin(userCtx.role) : false;
 
-      <div className="rounded-xl border border-dashed border-border p-12 text-center">
-        <p className="text-muted-foreground">
-          Payroll management will appear here. This is a Phase 3 feature.
-        </p>
-      </div>
-    </div>
+  const [empResult, salaryResult, runsResult, mySlipsResult] = await Promise.all([
+    listEmployees(),
+    getSalaryStructures(),
+    getPayrollRuns(),
+    getMyPayslips(),
+  ]);
+
+  const employees = empResult.success ? empResult.data : [];
+  const salaryStructures = salaryResult.success ? salaryResult.data : [];
+  const payrollRuns = runsResult.success ? runsResult.data : [];
+  const myPayslips = mySlipsResult.success ? mySlipsResult.data : [];
+
+  // Get org name
+  let orgName = "Your Company";
+  if (userCtx) {
+    const supabase = createAdminSupabase();
+    const { data: org } = await supabase
+      .from("organizations")
+      .select("name")
+      .eq("id", userCtx.orgId)
+      .single();
+    if (org) orgName = (org as { name: string }).name;
+  }
+
+  // Current employee name for payslip display
+  let currentEmployeeName = "Employee";
+  if (userCtx?.employeeId) {
+    const emp = (employees as any[]).find((e) => e.id === userCtx.employeeId);
+    if (emp) currentEmployeeName = `${emp.first_name} ${emp.last_name}`;
+  }
+
+  return (
+    <PayrollClient
+      isAdmin={adminUser}
+      employees={employees as any}
+      salaryStructures={salaryStructures}
+      payrollRuns={payrollRuns}
+      myPayslips={myPayslips}
+      orgName={orgName}
+      currentEmployeeName={currentEmployeeName}
+    />
   );
 }

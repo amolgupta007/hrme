@@ -4,5 +4,10 @@
   "devCommand": "next dev",
   "installCommand": "npm install",
   "regions": ["bom1"],
-  "crons": []
+  "crons": [
+    {
+      "path": "/api/cron/doc-reminders",
+      "schedule": "0 9 * * 1"
+    }
+  ]
 }

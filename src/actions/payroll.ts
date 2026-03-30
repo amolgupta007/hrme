@@ -107,39 +107,45 @@ export async function getSalaryStructures(): Promise<ActionResult<SalaryStructur
 
   const supabase = createAdminSupabase();
 
-  const { data, error } = await supabase
-    .from("salary_structures")
-    .select(`
-      id, employee_id, ctc, basic_monthly, hra_monthly,
-      special_allowance_monthly, gross_monthly, employee_pf_monthly,
-      professional_tax_monthly, tds_monthly, net_monthly,
-      state, is_metro, effective_from,
-      employees!employee_id(first_name, last_name, designation, departments(name))
-    `)
-    .eq("org_id", user.orgId)
-    .order("created_at", { ascending: false });
+  // Two separate queries to avoid nested join issues with Supabase PostgREST
+  const [{ data: structures, error }, { data: employees }] = await Promise.all([
+    supabase
+      .from("salary_structures")
+      .select("*")
+      .eq("org_id", user.orgId)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("employees")
+      .select("id, first_name, last_name, designation, department_id, departments(name)")
+      .eq("org_id", user.orgId),
+  ]);
 
   if (error) return { success: false, error: error.message };
 
-  const rows: SalaryStructureRow[] = (data ?? []).map((r: any) => ({
-    id: r.id,
-    employee_id: r.employee_id,
-    employee_name: `${r.employees.first_name} ${r.employees.last_name}`,
-    department: r.employees.departments?.name ?? null,
-    designation: r.employees.designation ?? null,
-    ctc: r.ctc,
-    basic_monthly: r.basic_monthly,
-    hra_monthly: r.hra_monthly,
-    special_allowance_monthly: r.special_allowance_monthly,
-    gross_monthly: r.gross_monthly,
-    employee_pf_monthly: r.employee_pf_monthly,
-    professional_tax_monthly: r.professional_tax_monthly,
-    tds_monthly: r.tds_monthly,
-    net_monthly: r.net_monthly,
-    state: r.state,
-    is_metro: r.is_metro,
-    effective_from: r.effective_from,
-  }));
+  const empMap = new Map((employees ?? []).map((e: any) => [e.id, e]));
+
+  const rows: SalaryStructureRow[] = (structures ?? []).map((r: any) => {
+    const emp = empMap.get(r.employee_id) as any;
+    return {
+      id: r.id,
+      employee_id: r.employee_id,
+      employee_name: emp ? `${emp.first_name} ${emp.last_name}` : "Unknown",
+      department: emp?.departments?.name ?? null,
+      designation: emp?.designation ?? null,
+      ctc: r.ctc,
+      basic_monthly: r.basic_monthly,
+      hra_monthly: r.hra_monthly,
+      special_allowance_monthly: r.special_allowance_monthly,
+      gross_monthly: r.gross_monthly,
+      employee_pf_monthly: r.employee_pf_monthly,
+      professional_tax_monthly: r.professional_tax_monthly,
+      tds_monthly: r.tds_monthly,
+      net_monthly: r.net_monthly,
+      state: r.state,
+      is_metro: r.is_metro,
+      effective_from: r.effective_from,
+    };
+  });
 
   return { success: true, data: rows };
 }
@@ -434,38 +440,44 @@ export async function getPayrollEntries(runId: string): Promise<ActionResult<Pay
 
   const supabase = createAdminSupabase();
 
-  const { data, error } = await supabase
-    .from("payroll_entries")
-    .select(`
-      id, employee_id, basic_monthly, hra_monthly, special_allowance_monthly,
-      gross_salary, employee_pf, professional_tax, tds,
-      lop_days, lop_deduction, bonus, total_deductions, net_pay,
-      employees!employee_id(first_name, last_name, departments(name))
-    `)
-    .eq("payroll_run_id", runId)
-    .eq("org_id", user.orgId)
-    .order("created_at");
+  const [{ data: entries, error }, { data: employees }] = await Promise.all([
+    supabase
+      .from("payroll_entries")
+      .select("id, employee_id, basic_monthly, hra_monthly, special_allowance_monthly, gross_salary, employee_pf, professional_tax, tds, lop_days, lop_deduction, bonus, total_deductions, net_pay")
+      .eq("payroll_run_id", runId)
+      .eq("org_id", user.orgId)
+      .order("created_at"),
+    supabase
+      .from("employees")
+      .select("id, first_name, last_name, department_id, departments(name)")
+      .eq("org_id", user.orgId),
+  ]);
 
   if (error) return { success: false, error: error.message };
 
-  const rows: PayrollEntry[] = (data ?? []).map((r: any) => ({
-    id: r.id,
-    employee_id: r.employee_id,
-    employee_name: `${r.employees.first_name} ${r.employees.last_name}`,
-    department: r.employees.departments?.name ?? null,
-    basic_monthly: r.basic_monthly,
-    hra_monthly: r.hra_monthly,
-    special_allowance_monthly: r.special_allowance_monthly,
-    gross_salary: r.gross_salary,
-    employee_pf: r.employee_pf,
-    professional_tax: r.professional_tax,
-    tds: r.tds,
-    lop_days: r.lop_days,
-    lop_deduction: r.lop_deduction,
-    bonus: r.bonus,
-    total_deductions: r.total_deductions,
-    net_pay: r.net_pay,
-  }));
+  const empMap = new Map((employees ?? []).map((e: any) => [e.id, e]));
+
+  const rows: PayrollEntry[] = (entries ?? []).map((r: any) => {
+    const emp = empMap.get(r.employee_id) as any;
+    return {
+      id: r.id,
+      employee_id: r.employee_id,
+      employee_name: emp ? `${emp.first_name} ${emp.last_name}` : "Unknown",
+      department: emp?.departments?.name ?? null,
+      basic_monthly: r.basic_monthly,
+      hra_monthly: r.hra_monthly,
+      special_allowance_monthly: r.special_allowance_monthly,
+      gross_salary: r.gross_salary,
+      employee_pf: r.employee_pf,
+      professional_tax: r.professional_tax,
+      tds: r.tds,
+      lop_days: r.lop_days,
+      lop_deduction: r.lop_deduction,
+      bonus: r.bonus,
+      total_deductions: r.total_deductions,
+      net_pay: r.net_pay,
+    };
+  });
 
   return { success: true, data: rows };
 }

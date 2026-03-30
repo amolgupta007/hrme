@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   Building2, Plus, Play, CheckCircle, Trash2, ChevronDown,
@@ -69,6 +70,7 @@ export function PayrollClient({
   orgName,
   currentEmployeeName,
 }: Props) {
+  const router = useRouter();
   const tabs = isAdmin
     ? ["Salary Structures", "Payroll Runs", "My Payslips"]
     : ["My Payslips"];
@@ -118,6 +120,7 @@ export function PayrollClient({
       const result = await processPayrollRun(runId);
       if (result.success) {
         toast.success("Payroll processed successfully");
+        router.refresh();
         // Refresh entries
         const entries = await getPayrollEntries(runId);
         if (entries.success) setRunEntries((prev) => ({ ...prev, [runId]: entries.data }));
@@ -134,7 +137,7 @@ export function PayrollClient({
     setMarkingPaid(runId);
     try {
       const result = await markPayrollPaid(runId);
-      if (result.success) toast.success("Payroll marked as paid");
+      if (result.success) { toast.success("Payroll marked as paid"); router.refresh(); }
       else toast.error(result.error);
     } finally {
       setMarkingPaid(null);
@@ -145,7 +148,7 @@ export function PayrollClient({
     setDeletingRun(runId);
     try {
       const result = await deletePayrollRun(runId);
-      if (result.success) toast.success("Payroll run deleted");
+      if (result.success) { toast.success("Payroll run deleted"); router.refresh(); }
       else toast.error(result.error);
     } finally {
       setDeletingRun(null);
@@ -527,12 +530,12 @@ export function PayrollClient({
       {/* Dialogs */}
       <SalaryStructureDialog
         open={salaryDialog.open}
-        onClose={() => setSalaryDialog({ open: false })}
+        onClose={() => { setSalaryDialog({ open: false }); router.refresh(); }}
         employees={employees.filter((e) => e.status === "active")}
         existing={salaryDialog.existing}
       />
 
-      <PayrollRunDialog open={runDialog} onClose={() => setRunDialog(false)} />
+      <PayrollRunDialog open={runDialog} onClose={() => { setRunDialog(false); router.refresh(); }} />
 
       {editEntry && (
         <EntryEditDialog

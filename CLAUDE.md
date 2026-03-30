@@ -168,6 +168,9 @@ hr-portal/
 | `holidays` | Company holidays | date, is_optional |
 | `objectives` | OKR objective sets | employee_id, manager_id, period_type, period_label, status (draft/submitted/approved/rejected), items (JSONB) |
 | `announcements` | Company-wide notices | title, body, category, is_pinned, created_by (FK → employees) |
+| `salary_structures` | Per-employee CTC config | employee_id, ctc, basic_monthly, hra_monthly, special_allowance_monthly, gross_monthly, net_monthly, state, is_metro |
+| `payroll_runs` | Monthly payroll execution | month (YYYY-MM), status (draft/processed/paid), working_days, total_gross, total_net |
+| `payroll_entries` | Per-employee per-run computed values | gross_salary, employee_pf, professional_tax, tds, lop_days, lop_deduction, bonus, net_pay |
 
 ### Multi-tenancy approach
 - Every table has `org_id` column with FK to `organizations`
@@ -531,7 +534,29 @@ Primary color: teal (`172 50% 36%`). Accent: warm orange (`32 95% 52%`).
 **Email Templates**
 - [x] `leave-request.tsx` — new leave request notification to managers
 - [x] `leave-status.tsx` — approved/rejected notification to employee
+- [x] `payment-failed.tsx` — payment failure / subscription paused alert to org admins
+- [x] `doc-reminder.tsx` — weekly unacknowledged document reminder to employees
 - [x] `next.config.js` — react-email packages added to `serverComponentsExternalPackages`
+
+**Payroll & Compensation** (`/dashboard/payroll`) — Business+
+- [x] `src/lib/ctc.ts` — CTC breakdown engine: PF caps, PT per state (10 states), new tax regime TDS slabs (FY 2025-26), Rebate u/s 87A
+- [x] Salary structure config per employee (CTC → auto-computes all components)
+- [x] Live CTC breakdown preview card in salary dialog
+- [x] Monthly payroll run: draft → process → mark paid flow
+- [x] LOP auto-calculated from approved unpaid leaves for the month
+- [x] Per-entry adjustment: bonus + LOP days override
+- [x] Printable payslip dialog (earnings + deductions table, Print → PDF via browser)
+- [x] Employee self-service: My Payslips tab
+- [x] 3 new DB tables: `salary_structures`, `payroll_runs`, `payroll_entries`
+
+**Cron Jobs**
+- [x] `src/app/api/cron/doc-reminders/route.ts` — weekly doc acknowledgment reminders
+- [x] `vercel.json` cron: every Monday 9am (`0 9 * * 1`)
+- [x] `CRON_SECRET` set in Vercel env vars
+
+**Razorpay Webhook — Email Alerts**
+- [x] `payment.failed` → sends payment failure email to all org admins
+- [x] `subscription.paused` → sends paused alert to all org admins
 
 **Demo Org**
 - [x] 15-person seed org (test1) created via Supabase SQL Editor
@@ -557,13 +582,9 @@ Primary color: teal (`172 50% 36%`). Accent: warm orange (`32 95% 52%`).
 - [x] NEXT_PUBLIC_SENTRY_DSN (set + verified working)
 - [x] RESEND_API_KEY (set + jambahr.com sender domain verified in Resend)
 - [x] NEXT_PUBLIC_POSTHOG_KEY (set + NEXT_PUBLIC_POSTHOG_HOST set + verified working)
+- [x] CRON_SECRET (set — used by /api/cron/doc-reminders)
 
 ### ❌ NOT YET BUILT — Pending
-
-**Near-term**
-- [ ] Set up Resend account + verify sender domain → set RESEND_API_KEY in Vercel
-- [ ] Document acknowledgment deadline reminders (background job)
-- [ ] Payment failure email via Resend (Razorpay webhook already logs it)
 
 **Phase 3 — Future**
 - [ ] Payroll & compensation (salary, payslips, tax helpers)
@@ -653,8 +674,8 @@ Configured in `src/lib/razorpay.ts` (billing) and `src/config/plans.ts` (feature
 ## Immediate Next Steps (in priority order)
 
 1. **UptimeRobot** — add `https://jambahr.com` monitor
-2. **Background jobs** — Trigger.dev or Inngest for training deadline reminders + compliance alerts
-3. **Payment failure email** — hook into Razorpay `payment.failed` webhook event to send Resend email
+2. **Training deadline reminders** — add a second Vercel Cron for overdue training alerts (pattern same as doc-reminders cron)
+3. **Payroll for demo org** — seed salary structures for test1 employees to demo the full payroll flow
 
 ---
 
@@ -677,3 +698,7 @@ Configured in `src/lib/razorpay.ts` (billing) and `src/config/plans.ts` (feature
 15. **Supabase JSON carriage returns**: When inserting JSONB via SQL Editor, avoid pasting JSON string literals directly — use `jsonb_build_array(jsonb_build_object(...))` syntax to prevent `0x0d` carriage return parse errors.
 16. **Training course categories**: Only `ethics`, `compliance`, `safety`, `skills`, `onboarding`, `custom` are valid — check constraint will reject others.
 17. **Training enrollment status**: Only `assigned`, `in_progress`, `completed`, `overdue` are valid — `not_started` is not a valid value.
+18. **Vercel Cron auth**: `/api/cron/doc-reminders` verifies `Authorization: Bearer CRON_SECRET`. The `CRON_SECRET` env var must be set in Vercel or the cron will return 401.
+19. **CTC breakdown rounding**: `computeCTCBreakdown` rounds to nearest rupee. Small rounding differences (₹1-2) between annual and monthly figures are expected due to integer rounding.
+20. **Payroll LOP**: Only leaves with policy type `unpaid` are counted as LOP. Paid/sick/casual leaves don't trigger LOP deduction — admin can manually add LOP days per entry.
+21. **`salary_structures` unique constraint**: One salary structure per employee per org. Updating runs an upsert — the effective_from date tracks when the structure was last revised.

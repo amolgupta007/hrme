@@ -116,7 +116,7 @@ export async function getSalaryStructures(): Promise<ActionResult<SalaryStructur
       .order("created_at", { ascending: false }),
     supabase
       .from("employees")
-      .select("id, first_name, last_name, designation, department_id, departments(name)")
+      .select("id, first_name, last_name, designation")
       .eq("org_id", user.orgId),
   ]);
 
@@ -130,7 +130,7 @@ export async function getSalaryStructures(): Promise<ActionResult<SalaryStructur
       id: r.id,
       employee_id: r.employee_id,
       employee_name: emp ? `${emp.first_name} ${emp.last_name}` : "Unknown",
-      department: emp?.departments?.name ?? null,
+      department: null,
       designation: emp?.designation ?? null,
       ctc: r.ctc,
       basic_monthly: r.basic_monthly,
@@ -449,7 +449,7 @@ export async function getPayrollEntries(runId: string): Promise<ActionResult<Pay
       .order("created_at"),
     supabase
       .from("employees")
-      .select("id, first_name, last_name, department_id, departments(name)")
+      .select("id, first_name, last_name")
       .eq("org_id", user.orgId),
   ]);
 
@@ -463,7 +463,7 @@ export async function getPayrollEntries(runId: string): Promise<ActionResult<Pay
       id: r.id,
       employee_id: r.employee_id,
       employee_name: emp ? `${emp.first_name} ${emp.last_name}` : "Unknown",
-      department: emp?.departments?.name ?? null,
+      department: null,
       basic_monthly: r.basic_monthly,
       hra_monthly: r.hra_monthly,
       special_allowance_monthly: r.special_allowance_monthly,

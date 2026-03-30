@@ -2,6 +2,9 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { createHmac } from "crypto";
 import { createAdminSupabase } from "@/lib/supabase/server";
+import { render } from "@react-email/render";
+import { resend, FROM_EMAIL } from "@/lib/resend";
+import { PaymentFailedEmail } from "@/components/emails/payment-failed";
 
 export async function POST(req: Request) {
   const body = await req.text();
@@ -64,14 +67,98 @@ export async function POST(req: Request) {
       case "subscription.paused": {
         const subscription = event.payload.subscription.entity;
         console.warn(`Subscription ${subscription.id} paused`);
-        // TODO: Send warning email via Resend
+
+        // Look up org to get admin email
+        const { data: org } = await supabase
+          .from("organizations")
+          .select("id, name")
+          .eq("stripe_subscription_id", subscription.id)
+          .single();
+
+        if (org) {
+          const orgData = org as { id: string; name: string };
+          const { data: admins } = await supabase
+            .from("employees")
+            .select("email, first_name")
+            .eq("org_id", orgData.id)
+            .in("role", ["owner", "admin"])
+            .eq("status", "active");
+
+          if (admins && admins.length > 0) {
+            const html = await render(
+              PaymentFailedEmail({
+                orgName: orgData.name,
+                planName: "subscription",
+                paymentId: subscription.id,
+                dashboardUrl: "https://jambahr.com/dashboard/settings",
+              })
+            );
+
+            await resend.emails.send({
+              from: FROM_EMAIL,
+              to: (admins as { email: string; first_name: string }[]).map((a) => a.email),
+              subject: "JambaHR – Your subscription has been paused",
+              html,
+            });
+          }
+        }
         break;
       }
 
       case "payment.failed": {
         const payment = event.payload.payment.entity;
         console.error(`Payment failed: ${payment.id}`);
-        // TODO: Send payment failure email via Resend
+
+        // Find the org via subscription ID
+        const subId = payment.subscription_id;
+        if (subId) {
+          const { data: org } = await supabase
+            .from("organizations")
+            .select("id, name, plan")
+            .eq("stripe_subscription_id", subId)
+            .single();
+
+          if (org) {
+            const orgData = org as { id: string; name: string; plan: string };
+            const { data: admins } = await supabase
+              .from("employees")
+              .select("email, first_name")
+              .eq("org_id", orgData.id)
+              .in("role", ["owner", "admin"])
+              .eq("status", "active");
+
+            if (admins && admins.length > 0) {
+              try {
+                const planLabel =
+                  orgData.plan === "business" ? "Business" : "Growth";
+                const amountStr = payment.amount
+                  ? `₹${(payment.amount / 100).toLocaleString("en-IN")}`
+                  : undefined;
+
+                const html = await render(
+                  PaymentFailedEmail({
+                    orgName: orgData.name,
+                    planName: planLabel,
+                    paymentId: payment.id,
+                    amount: amountStr,
+                    dashboardUrl: "https://jambahr.com/dashboard/settings",
+                  })
+                );
+
+                await resend.emails.send({
+                  from: FROM_EMAIL,
+                  to: (admins as { email: string; first_name: string }[]).map(
+                    (a) => a.email
+                  ),
+                  subject: "JambaHR – Payment Failed: Action Required",
+                  html,
+                });
+              } catch (emailErr) {
+                console.error("Failed to send payment failure email:", emailErr);
+              }
+            }
+          }
+        }
         break;
       }
 

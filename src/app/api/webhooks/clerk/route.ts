@@ -95,6 +95,39 @@ export async function POST(req: Request) {
         break;
       }
 
+      case "organizationMembership.created": {
+        // Fires when a user accepts an org invitation.
+        // Link their Clerk user ID to the existing Supabase employee record (matched by email).
+        const membershipData = event.data;
+        const clerkUserId: string = membershipData.public_user_data?.user_id;
+        const clerkOrgId: string = membershipData.organization?.id;
+        const memberEmail: string =
+          membershipData.public_user_data?.identifier ?? // Clerk v5+ field
+          membershipData.public_user_data?.email_address ?? // fallback
+          "";
+
+        if (!clerkUserId || !clerkOrgId || !memberEmail) break;
+
+        // Look up the org in Supabase
+        const { data: org } = await supabase
+          .from("organizations")
+          .select("id")
+          .eq("clerk_org_id", clerkOrgId)
+          .single();
+
+        if (!org) break;
+
+        // Find matching employee by email and write their clerk_user_id
+        await supabase
+          .from("employees")
+          .update({ clerk_user_id: clerkUserId })
+          .eq("org_id", (org as { id: string }).id)
+          .eq("email", memberEmail)
+          .is("clerk_user_id", null); // only set if not already linked
+
+        break;
+      }
+
       case "user.updated": {
         const { id, first_name, last_name, image_url } = event.data;
         await supabase

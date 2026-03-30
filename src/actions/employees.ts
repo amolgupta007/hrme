@@ -163,6 +163,20 @@ export async function addEmployee(
     return { success: false, error: error.message };
   }
 
+  // Send Clerk org invitation so the employee can sign in and access the dashboard
+  try {
+    const client = await clerkClient();
+    await client.organizations.createOrganizationInvitation({
+      organizationId: ids.clerkOrgId,
+      emailAddress: validated.data.email,
+      role: "org:member",
+      redirectUrl: `${process.env.NEXT_PUBLIC_APP_URL ?? "https://jambahr.com"}/dashboard`,
+    });
+  } catch (inviteErr: any) {
+    // Invitation failure is non-fatal — employee record is created, invite can be resent manually
+    console.warn("Clerk invitation failed (non-fatal):", inviteErr?.message ?? inviteErr);
+  }
+
   revalidatePath("/dashboard/employees");
   return { success: true, data: { id: (data as { id: string }).id } };
 }

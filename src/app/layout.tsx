@@ -3,6 +3,7 @@ import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import { ClerkProvider } from "@clerk/nextjs";
 import { Toaster } from "sonner";
+import { Suspense } from "react";
 import { PostHogProvider } from "@/components/layout/posthog-provider";
 import "./globals.css";
 
@@ -49,15 +50,17 @@ export default function RootLayout({
         <body
           className={`${GeistSans.variable} ${GeistMono.variable} font-sans`}
         >
-          <PostHogProvider>
-            {children}
-            <Toaster
-              position="bottom-right"
-              toastOptions={{
-                className: "font-sans",
-              }}
-            />
-          </PostHogProvider>
+          <Suspense>
+            <PostHogProvider>
+              {children}
+              <Toaster
+                position="bottom-right"
+                toastOptions={{
+                  className: "font-sans",
+                }}
+              />
+            </PostHogProvider>
+          </Suspense>
         </body>
       </html>
     </ClerkProvider>

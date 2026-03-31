@@ -461,3 +461,69 @@ export async function submitApplication(
 
   return { success: true, data: undefined };
 }
+
+// ---- AI: Job Description Generator ----
+
+export async function generateJobDescription(input: {
+  title: string;
+  department?: string;
+  employmentType: string;
+  locationType: string;
+  notes?: string;
+}): Promise<ActionResult<string>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return { success: false, error: "AI not configured" };
+
+  const Anthropic = (await import("@anthropic-ai/sdk")).default;
+  const client = new Anthropic({ apiKey });
+
+  const employmentLabels: Record<string, string> = {
+    full_time: "Full-time",
+    part_time: "Part-time",
+    contract: "Contract",
+    intern: "Internship",
+  };
+  const locationLabels: Record<string, string> = {
+    on_site: "On-site",
+    remote: "Remote",
+    hybrid: "Hybrid",
+  };
+
+  const prompt = `Write a professional job description for the following role. Output plain text only — no markdown, no asterisks, no headers with #. Use clear section labels followed by a colon, and write in a direct, engaging tone suited for an Indian SMB.
+
+Role: ${input.title}
+${input.department ? `Department: ${input.department}` : ""}
+Employment type: ${employmentLabels[input.employmentType] ?? input.employmentType}
+Work mode: ${locationLabels[input.locationType] ?? input.locationType}
+${input.notes ? `Additional context from hiring manager:\n${input.notes}` : ""}
+
+Structure the JD with these sections:
+About the Role
+What You'll Do
+What We're Looking For
+Nice to Have
+Why Join Us
+
+Keep it concise — around 300–400 words total.`;
+
+  try {
+    const message = await client.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 1024,
+      messages: [{ role: "user", content: prompt }],
+    });
+
+    const text = message.content
+      .filter((b) => b.type === "text")
+      .map((b) => (b as any).text)
+      .join("");
+
+    return { success: true, data: text.trim() };
+  } catch (err: any) {
+    console.error("JD generation error:", err);
+    return { success: false, error: "AI generation failed. Try again." };
+  }
+}

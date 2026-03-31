@@ -9,6 +9,7 @@ export type UserContext = {
   role: UserRole;
   employeeId: string | null;
   plan: OrgPlan;
+  jambaHireEnabled: boolean;
 };
 
 /**
@@ -30,13 +31,14 @@ export async function getCurrentUser(): Promise<UserContext | null> {
   const supabase = createAdminSupabase();
   const { data: org } = await supabase
     .from("organizations")
-    .select("id, plan")
+    .select("id, plan, settings")
     .eq("clerk_org_id", clerkOrgId)
     .single();
   if (!org) return null;
 
-  const orgId = (org as { id: string; plan: string }).id;
-  const plan = ((org as { id: string; plan: string }).plan as OrgPlan) ?? "starter";
+  const orgId = (org as any).id;
+  const plan = ((org as any).plan as OrgPlan) ?? "starter";
+  const jambaHireEnabled = !!((org as any).settings as any)?.jambahire_enabled;
 
   const { data: emp } = await supabase
     .from("employees")
@@ -50,7 +52,7 @@ export async function getCurrentUser(): Promise<UserContext | null> {
     : "admin";
   const employeeId = emp ? (emp as { id: string; role: string }).id : null;
 
-  return { orgId, clerkUserId: userId, role, employeeId, plan };
+  return { orgId, clerkUserId: userId, role, employeeId, plan, jambaHireEnabled };
 }
 
 export function isAdmin(role: UserRole): boolean {

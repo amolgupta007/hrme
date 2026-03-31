@@ -212,3 +212,32 @@ export async function listSettingsPolicies(): Promise<ActionResult<LeavePolicy[]
   if (error) return { success: false, error: error.message };
   return { success: true, data: data ?? [] };
 }
+
+export async function toggleJambaHire(enabled: boolean): Promise<ActionResult<void>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can manage products" };
+
+  const supabase = createAdminSupabase();
+
+  // Read current settings then merge
+  const { data: org } = await supabase
+    .from("organizations")
+    .select("settings")
+    .eq("id", user.orgId)
+    .single();
+
+  const currentSettings = (org as any)?.settings ?? {};
+  const newSettings = { ...currentSettings, jambahire_enabled: enabled };
+
+  const { error } = await supabase
+    .from("organizations")
+    .update({ settings: newSettings })
+    .eq("id", user.orgId);
+
+  if (error) return { success: false, error: error.message };
+
+  revalidatePath("/dashboard/settings");
+  revalidatePath("/dashboard");
+  return { success: true, data: undefined };
+}

@@ -4,16 +4,22 @@ import { DepartmentsSection } from "@/components/settings/departments-section";
 import { OrgProfileSection } from "@/components/settings/org-profile-section";
 import { LeavePoliciesSection } from "@/components/settings/leave-policies-section";
 import { BillingSection } from "@/components/settings/billing-section";
+import { ProductsSection } from "@/components/settings/products-section";
+import { getCurrentUser } from "@/lib/current-user";
+import { hasFeature } from "@/config/plans";
 
 export default async function SettingsPage() {
-  const [departmentsResult, profileResult, policiesResult] = await Promise.all([
+  const [departmentsResult, profileResult, policiesResult, userCtx] = await Promise.all([
     listDepartments(),
     getOrgProfile(),
     listSettingsPolicies(),
+    getCurrentUser(),
   ]);
 
   const departments = departmentsResult.success ? departmentsResult.data : [];
   const policies = policiesResult.success ? policiesResult.data : [];
+  const plan = userCtx?.plan ?? "starter";
+  const jambaHireEnabled = userCtx?.jambaHireEnabled ?? false;
 
   return (
     <div className="space-y-6">
@@ -36,6 +42,11 @@ export default async function SettingsPage() {
       <LeavePoliciesSection policies={policies} />
 
       <DepartmentsSection departments={departments} />
+
+      <ProductsSection
+        jambaHireEnabled={jambaHireEnabled}
+        isPlanEligible={hasFeature(plan, "ats")}
+      />
     </div>
   );
 }

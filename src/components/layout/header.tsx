@@ -1,9 +1,14 @@
 "use client";
 
-import { Search, Bell } from "lucide-react";
+import { Search, Bell, Briefcase } from "lucide-react";
 import { useState } from "react";
+import Link from "next/link";
 
-export function Header() {
+interface HeaderProps {
+  jambaHireEnabled?: boolean;
+}
+
+export function Header({ jambaHireEnabled = false }: HeaderProps) {
   const [searchQuery, setSearchQuery] = useState("");
 
   return (
@@ -22,9 +27,19 @@ export function Header() {
 
       {/* Actions */}
       <div className="flex items-center gap-2 ml-4">
+        {/* JambaHire switcher */}
+        {jambaHireEnabled && (
+          <Link
+            href="/hire"
+            className="flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 transition-colors hover:bg-indigo-100 dark:border-indigo-800 dark:bg-indigo-950/50 dark:text-indigo-400 dark:hover:bg-indigo-950"
+          >
+            <Briefcase className="h-3.5 w-3.5" />
+            JambaHire
+          </Link>
+        )}
+
         <button className="relative rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
           <Bell className="h-5 w-5" />
-          {/* Notification dot */}
           <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-accent" />
         </button>
       </div>

@@ -46,6 +46,12 @@ export default function HomePage() {
           </Link>
           <div className="flex items-center gap-4">
             <Link
+              href="/blog"
+              className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Blog
+            </Link>
+            <Link
               href="/sign-in"
               className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
             >

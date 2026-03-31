@@ -85,7 +85,7 @@ export default async function BlogPostPage({ params }: Props) {
 
         {/* Content */}
         <div
-          className="mt-8 prose prose-gray prose-lg max-w-none
+          className="blog-content mt-8 prose prose-gray prose-lg max-w-none
             prose-headings:font-bold prose-headings:text-gray-900
             prose-h2:text-2xl prose-h2:mt-10 prose-h2:mb-4
             prose-h3:text-lg prose-h3:mt-7 prose-h3:mb-3
@@ -94,9 +94,6 @@ export default async function BlogPostPage({ params }: Props) {
             prose-strong:text-gray-900
             prose-ul:text-gray-600 prose-ol:text-gray-600
             prose-li:my-1
-            prose-table:text-sm prose-thead:bg-gray-50
-            prose-th:px-4 prose-th:py-2 prose-th:text-left prose-th:font-semibold prose-th:text-gray-700
-            prose-td:px-4 prose-td:py-2 prose-td:border-b prose-td:border-gray-100
             prose-code:bg-gray-100 prose-code:rounded prose-code:px-1.5 prose-code:py-0.5 prose-code:text-sm prose-code:text-gray-800
             prose-blockquote:border-l-teal-400 prose-blockquote:text-gray-500
             prose-hr:border-gray-200"

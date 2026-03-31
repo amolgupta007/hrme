@@ -16,7 +16,7 @@ const nextConfig = {
       bodySizeLimit: "10mb",
     },
     instrumentationHook: true,
-    serverComponentsExternalPackages: ["@react-email/render", "@react-email/components"],
+    serverComponentsExternalPackages: ["@react-email/render", "@react-email/components", "@anthropic-ai/sdk"],
   },
 };
 

@@ -378,6 +378,24 @@ export async function rejectApplication(id: string, reason: string): Promise<Act
   return { success: true, data: undefined };
 }
 
+export async function bulkUpdateApplicationStage(ids: string[], stage: ApplicationStage): Promise<ActionResult<void>> {
+  const user = await getHireContext();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Admins only" };
+  if (!ids.length) return { success: false, error: "No candidates selected" };
+
+  const supabase = createAdminSupabase();
+  const { error } = await supabase
+    .from("applications")
+    .update({ stage, updated_at: new Date().toISOString() })
+    .in("id", ids)
+    .eq("org_id", user.orgId);
+
+  if (error) return { success: false, error: error.message };
+  revalidatePath("/hire/pipeline");
+  return { success: true, data: undefined };
+}
+
 // ---- Public (no auth required) ----
 
 export async function getPublicJobs(orgSlug: string): Promise<ActionResult<{ org: { name: string; slug: string }; jobs: Job[] }>> {

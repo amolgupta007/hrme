@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import Anthropic from "@anthropic-ai/sdk";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { getCurrentUser, isAdmin } from "@/lib/current-user";
 import type { ActionResult } from "@/types";
@@ -477,7 +478,6 @@ export async function generateJobDescription(input: {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return { success: false, error: "AI not configured" };
 
-  const Anthropic = (await import("@anthropic-ai/sdk")).default;
   const client = new Anthropic({ apiKey });
 
   const employmentLabels: Record<string, string> = {

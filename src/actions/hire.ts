@@ -527,3 +527,404 @@ Keep it concise — around 300–400 words total.`;
     return { success: false, error: "AI generation failed. Try again." };
   }
 }
+
+// ---- Types: Interviews & Offers ----
+
+export type InterviewSchedule = {
+  id: string;
+  org_id: string;
+  application_id: string;
+  candidate_name: string;
+  candidate_email: string;
+  job_title: string;
+  job_id: string;
+  interviewer_id: string | null;
+  interviewer_name: string | null;
+  scheduled_at: string;
+  duration_minutes: number;
+  interview_type: "video" | "phone" | "in_person";
+  meeting_link: string | null;
+  status: "scheduled" | "completed" | "cancelled" | "no_show";
+  notes: string | null;
+  feedback: InterviewFeedback | null;
+};
+
+export type InterviewFeedback = {
+  id: string;
+  schedule_id: string;
+  interviewer_id: string | null;
+  technical_rating: number | null;
+  communication_rating: number | null;
+  culture_fit_rating: number | null;
+  overall_rating: number | null;
+  recommendation: "strong_yes" | "yes" | "no" | "strong_no" | null;
+  notes: string | null;
+};
+
+export type Offer = {
+  id: string;
+  org_id: string;
+  application_id: string;
+  candidate_name: string;
+  candidate_email: string;
+  job_title: string;
+  ctc: number;
+  joining_date: string;
+  role_title: string;
+  department_id: string | null;
+  department_name: string | null;
+  reporting_manager_id: string | null;
+  reporting_manager_name: string | null;
+  additional_terms: string | null;
+  status: "draft" | "sent" | "accepted" | "declined" | "expired";
+  offer_token: string;
+  sent_at: string | null;
+  responded_at: string | null;
+  response_note: string | null;
+  created_at: string;
+};
+
+// ---- Interview Schedules ----
+
+export async function listInterviews(): Promise<ActionResult<InterviewSchedule[]>> {
+  const user = await getHireContext();
+  if (!user) return { success: false, error: "Not authenticated" };
+
+  const supabase = createAdminSupabase();
+  const [{ data: schedules, error }, { data: apps }, { data: candidates }, { data: jobs }, { data: employees }, { data: feedbacks }] = await Promise.all([
+    supabase.from("interview_schedules").select("*").eq("org_id", user.orgId).order("scheduled_at"),
+    supabase.from("applications").select("id, job_id, candidate_id").eq("org_id", user.orgId),
+    supabase.from("candidates").select("id, name, email").eq("org_id", user.orgId),
+    supabase.from("jobs").select("id, title").eq("org_id", user.orgId),
+    supabase.from("employees").select("id, first_name, last_name").eq("org_id", user.orgId),
+    supabase.from("interview_feedback").select("*").eq("org_id", user.orgId),
+  ]);
+
+  if (error) return { success: false, error: error.message };
+
+  const appMap = new Map((apps ?? []).map((a: any) => [a.id, a]));
+  const candMap = new Map((candidates ?? []).map((c: any) => [c.id, c]));
+  const jobMap = new Map((jobs ?? []).map((j: any) => [j.id, j.title]));
+  const empMap = new Map((employees ?? []).map((e: any) => [e.id, `${e.first_name} ${e.last_name}`]));
+  const feedbackMap = new Map((feedbacks ?? []).map((f: any) => [f.schedule_id, f]));
+
+  return {
+    success: true,
+    data: (schedules ?? []).map((s: any) => {
+      const app = appMap.get(s.application_id) as any;
+      const cand = app ? candMap.get(app.candidate_id) as any : null;
+      return {
+        ...s,
+        candidate_name: cand?.name ?? "Unknown",
+        candidate_email: cand?.email ?? "",
+        job_title: app ? (jobMap.get(app.job_id) ?? "Unknown") : "Unknown",
+        job_id: app?.job_id ?? "",
+        interviewer_name: s.interviewer_id ? (empMap.get(s.interviewer_id) ?? null) : null,
+        feedback: feedbackMap.get(s.id) ?? null,
+      };
+    }),
+  };
+}
+
+export async function scheduleInterview(input: {
+  application_id: string;
+  interviewer_id?: string;
+  scheduled_at: string;
+  duration_minutes: number;
+  interview_type: "video" | "phone" | "in_person";
+  meeting_link?: string;
+  notes?: string;
+}): Promise<ActionResult<{ id: string }>> {
+  const user = await getHireContext();
+  if (!user) return { success: false, error: "Not authenticated" };
+
+  const supabase = createAdminSupabase();
+  const { data, error } = await supabase
+    .from("interview_schedules")
+    .insert({
+      org_id: user.orgId,
+      application_id: input.application_id,
+      interviewer_id: input.interviewer_id || null,
+      scheduled_at: input.scheduled_at,
+      duration_minutes: input.duration_minutes,
+      interview_type: input.interview_type,
+      meeting_link: input.meeting_link || null,
+      notes: input.notes || null,
+      status: "scheduled",
+    })
+    .select("id")
+    .single();
+
+  if (error) return { success: false, error: error.message };
+
+  revalidatePath("/hire/interviews");
+  return { success: true, data: { id: (data as any).id } };
+}
+
+export async function updateInterviewStatus(
+  id: string,
+  status: "scheduled" | "completed" | "cancelled" | "no_show"
+): Promise<ActionResult<void>> {
+  const user = await getHireContext();
+  if (!user) return { success: false, error: "Not authenticated" };
+
+  const supabase = createAdminSupabase();
+  const { error } = await supabase
+    .from("interview_schedules")
+    .update({ status })
+    .eq("id", id)
+    .eq("org_id", user.orgId);
+
+  if (error) return { success: false, error: error.message };
+  revalidatePath("/hire/interviews");
+  return { success: true, data: undefined };
+}
+
+export async function submitInterviewFeedback(input: {
+  schedule_id: string;
+  technical_rating: number;
+  communication_rating: number;
+  culture_fit_rating: number;
+  overall_rating: number;
+  recommendation: "strong_yes" | "yes" | "no" | "strong_no";
+  notes: string;
+}): Promise<ActionResult<void>> {
+  const user = await getHireContext();
+  if (!user) return { success: false, error: "Not authenticated" };
+
+  const supabase = createAdminSupabase();
+  const { error } = await supabase
+    .from("interview_feedback")
+    .upsert(
+      {
+        org_id: user.orgId,
+        schedule_id: input.schedule_id,
+        interviewer_id: user.employeeId,
+        technical_rating: input.technical_rating,
+        communication_rating: input.communication_rating,
+        culture_fit_rating: input.culture_fit_rating,
+        overall_rating: input.overall_rating,
+        recommendation: input.recommendation,
+        notes: input.notes,
+        submitted_at: new Date().toISOString(),
+      },
+      { onConflict: "schedule_id,interviewer_id" }
+    );
+
+  if (error) return { success: false, error: error.message };
+  revalidatePath("/hire/interviews");
+  return { success: true, data: undefined };
+}
+
+// ---- Offers ----
+
+export async function listOffers(): Promise<ActionResult<Offer[]>> {
+  const user = await getHireContext();
+  if (!user) return { success: false, error: "Not authenticated" };
+
+  const supabase = createAdminSupabase();
+  const [{ data: offers, error }, { data: apps }, { data: candidates }, { data: jobs }, { data: depts }, { data: employees }] = await Promise.all([
+    supabase.from("offers").select("*").eq("org_id", user.orgId).order("created_at", { ascending: false }),
+    supabase.from("applications").select("id, job_id, candidate_id").eq("org_id", user.orgId),
+    supabase.from("candidates").select("id, name, email").eq("org_id", user.orgId),
+    supabase.from("jobs").select("id, title").eq("org_id", user.orgId),
+    supabase.from("departments").select("id, name").eq("org_id", user.orgId),
+    supabase.from("employees").select("id, first_name, last_name").eq("org_id", user.orgId),
+  ]);
+
+  if (error) return { success: false, error: error.message };
+
+  const appMap = new Map((apps ?? []).map((a: any) => [a.id, a]));
+  const candMap = new Map((candidates ?? []).map((c: any) => [c.id, c]));
+  const jobMap = new Map((jobs ?? []).map((j: any) => [j.id, j.title]));
+  const deptMap = new Map((depts ?? []).map((d: any) => [d.id, d.name]));
+  const empMap = new Map((employees ?? []).map((e: any) => [e.id, `${e.first_name} ${e.last_name}`]));
+
+  return {
+    success: true,
+    data: (offers ?? []).map((o: any) => {
+      const app = appMap.get(o.application_id) as any;
+      const cand = app ? candMap.get(app.candidate_id) as any : null;
+      return {
+        ...o,
+        candidate_name: cand?.name ?? "Unknown",
+        candidate_email: cand?.email ?? "",
+        job_title: app ? (jobMap.get(app.job_id) ?? "Unknown") : "Unknown",
+        department_name: o.department_id ? (deptMap.get(o.department_id) ?? null) : null,
+        reporting_manager_name: o.reporting_manager_id ? (empMap.get(o.reporting_manager_id) ?? null) : null,
+      };
+    }),
+  };
+}
+
+export async function createOffer(input: {
+  application_id: string;
+  ctc: number;
+  joining_date: string;
+  role_title: string;
+  department_id?: string;
+  reporting_manager_id?: string;
+  additional_terms?: string;
+}): Promise<ActionResult<{ id: string }>> {
+  const user = await getHireContext();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can create offers" };
+
+  const supabase = createAdminSupabase();
+  const { data, error } = await supabase
+    .from("offers")
+    .insert({
+      org_id: user.orgId,
+      application_id: input.application_id,
+      ctc: input.ctc,
+      joining_date: input.joining_date,
+      role_title: input.role_title,
+      department_id: input.department_id || null,
+      reporting_manager_id: input.reporting_manager_id || null,
+      additional_terms: input.additional_terms || null,
+      status: "draft",
+    })
+    .select("id")
+    .single();
+
+  if (error) return { success: false, error: error.message };
+  revalidatePath("/hire/offers");
+  return { success: true, data: { id: (data as any).id } };
+}
+
+export async function sendOffer(offerId: string): Promise<ActionResult<void>> {
+  const user = await getHireContext();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can send offers" };
+
+  const supabase = createAdminSupabase();
+  const { data: offer, error } = await supabase
+    .from("offers")
+    .select("*")
+    .eq("id", offerId)
+    .eq("org_id", user.orgId)
+    .single();
+
+  if (error || !offer) return { success: false, error: "Offer not found" };
+
+  const { data: app } = await supabase
+    .from("applications")
+    .select("candidate_id")
+    .eq("id", (offer as any).application_id)
+    .single();
+
+  const [{ data: candidate }, { data: org }] = await Promise.all([
+    supabase.from("candidates").select("name, email").eq("id", (app as any)?.candidate_id).single(),
+    supabase.from("organizations").select("name").eq("id", user.orgId).single(),
+  ]);
+
+  try {
+    const { resend, FROM_EMAIL } = await import("@/lib/resend");
+    const { render } = await import("@react-email/render");
+    const { OfferLetterEmail } = await import("@/components/emails/offer-letter");
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://jambahr.com";
+    const offerUrl = `${appUrl}/offers/${(offer as any).offer_token}`;
+
+    const html = await render(
+      OfferLetterEmail({
+        candidateName: (candidate as any)?.name ?? "Candidate",
+        orgName: (org as any)?.name ?? "Company",
+        roleTitle: (offer as any).role_title,
+        ctc: (offer as any).ctc,
+        joiningDate: (offer as any).joining_date,
+        additionalTerms: (offer as any).additional_terms ?? undefined,
+        offerUrl,
+      })
+    );
+
+    await resend.emails.send({
+      from: FROM_EMAIL,
+      to: (candidate as any)?.email ?? "",
+      subject: `Your offer letter from ${(org as any)?.name ?? "us"}`,
+      html,
+    });
+  } catch (emailErr) {
+    console.error("Offer email failed:", emailErr);
+  }
+
+  await supabase
+    .from("offers")
+    .update({ status: "sent", sent_at: new Date().toISOString() })
+    .eq("id", offerId)
+    .eq("org_id", user.orgId);
+
+  revalidatePath("/hire/offers");
+  return { success: true, data: undefined };
+}
+
+// ---- Public: Offer Response ----
+
+export async function getOfferByToken(token: string): Promise<ActionResult<{ offer: Offer; orgName: string }>> {
+  const supabase = createAdminSupabase();
+
+  const { data: offer, error } = await supabase
+    .from("offers")
+    .select("*")
+    .eq("offer_token", token)
+    .single();
+
+  if (error || !offer) return { success: false, error: "Offer not found or expired" };
+
+  const { data: app } = await supabase
+    .from("applications")
+    .select("candidate_id, job_id")
+    .eq("id", (offer as any).application_id)
+    .single();
+
+  const [{ data: candidate }, { data: job }, { data: org }] = await Promise.all([
+    supabase.from("candidates").select("name, email").eq("id", (app as any)?.candidate_id).single(),
+    supabase.from("jobs").select("title").eq("id", (app as any)?.job_id).single(),
+    supabase.from("organizations").select("name").eq("id", (offer as any).org_id).single(),
+  ]);
+
+  return {
+    success: true,
+    data: {
+      orgName: (org as any)?.name ?? "Company",
+      offer: {
+        ...(offer as any),
+        candidate_name: (candidate as any)?.name ?? "Candidate",
+        candidate_email: (candidate as any)?.email ?? "",
+        job_title: (job as any)?.title ?? "",
+        department_name: null,
+        reporting_manager_name: null,
+      },
+    },
+  };
+}
+
+export async function respondToOffer(
+  token: string,
+  response: "accepted" | "declined",
+  note?: string
+): Promise<ActionResult<void>> {
+  const supabase = createAdminSupabase();
+
+  const { data: offer, error } = await supabase
+    .from("offers")
+    .select("id, status, application_id, org_id")
+    .eq("offer_token", token)
+    .single();
+
+  if (error || !offer) return { success: false, error: "Offer not found" };
+  if ((offer as any).status !== "sent") return { success: false, error: "This offer is no longer active" };
+
+  await supabase
+    .from("offers")
+    .update({ status: response, responded_at: new Date().toISOString(), response_note: note || null })
+    .eq("id", (offer as any).id);
+
+  if (response === "accepted") {
+    await supabase
+      .from("applications")
+      .update({ stage: "hired", updated_at: new Date().toISOString() })
+      .eq("id", (offer as any).application_id);
+  }
+
+  return { success: true, data: undefined };
+}

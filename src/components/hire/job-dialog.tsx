@@ -2,10 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Sparkles, Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { createJob, updateJob } from "@/actions/hire";
+import { createJob, updateJob, generateJobDescription } from "@/actions/hire";
 import type { Job } from "@/actions/hire";
 import type { Department } from "@/types";
 
@@ -33,6 +33,8 @@ export function JobDialog({ open, onClose, departments, existing }: Props) {
     existing?.custom_questions ?? []
   );
   const [saving, setSaving] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [aiNotes, setAiNotes] = useState("");
 
   useEffect(() => {
     if (open) {
@@ -47,8 +49,32 @@ export function JobDialog({ open, onClose, departments, existing }: Props) {
       setShowSalary(existing?.show_salary ?? false);
       setStatus(existing?.status ?? "draft");
       setQuestions(existing?.custom_questions ?? []);
+      setAiNotes("");
     }
   }, [open, existing]);
+
+  async function handleGenerate() {
+    if (!title.trim()) return toast.error("Enter a job title first");
+    setGenerating(true);
+    try {
+      const dept = departments.find((d) => d.id === departmentId);
+      const result = await generateJobDescription({
+        title: title.trim(),
+        department: dept?.name,
+        employmentType,
+        locationType,
+        notes: aiNotes.trim() || undefined,
+      });
+      if (result.success) {
+        setDescription(result.data);
+        toast.success("JD generated");
+      } else {
+        toast.error(result.error);
+      }
+    } finally {
+      setGenerating(false);
+    }
+  }
 
   function addQuestion() {
     setQuestions((q) => [...q, { question: "", required: false }]);
@@ -175,6 +201,29 @@ export function JobDialog({ open, onClose, departments, existing }: Props) {
                 Show on posting
               </label>
             </div>
+          </div>
+
+          {/* AI JD Generator */}
+          <div className="rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50/50 dark:bg-indigo-950/20 p-3 space-y-2">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-indigo-700 dark:text-indigo-300">
+              <Sparkles className="h-3.5 w-3.5" />
+              Generate Job Description with AI
+            </div>
+            <textarea
+              className={`${inputCls} min-h-[56px] resize-none text-xs`}
+              placeholder="Optional: add context — e.g. '3+ years React, startup experience preferred, will lead a team of 2'"
+              value={aiNotes}
+              onChange={(e) => setAiNotes(e.target.value)}
+            />
+            <button
+              type="button"
+              onClick={handleGenerate}
+              disabled={generating || !title.trim()}
+              className="flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+            >
+              {generating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+              {generating ? "Generating…" : description ? "Regenerate" : "Generate"}
+            </button>
           </div>
 
           {/* Description */}

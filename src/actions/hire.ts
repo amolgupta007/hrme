@@ -524,6 +524,7 @@ Keep it concise — around 300–400 words total.`;
     return { success: true, data: text.trim() };
   } catch (err: any) {
     console.error("JD generation error:", err);
-    return { success: false, error: "AI generation failed. Try again." };
+    const msg = err?.message ?? err?.error?.message ?? String(err);
+    return { success: false, error: `AI error: ${msg}` };
   }
 }

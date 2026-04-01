@@ -126,14 +126,20 @@
 }
 
 /* Blog post table styles */
+.blog-content .table-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 1.5rem 0;
+  border-radius: 0.5rem;
+  border: 1px solid #e5e7eb;
+}
+
 .blog-content table {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.9rem;
-  margin: 1.5rem 0;
-  overflow: hidden;
-  border-radius: 0.5rem;
-  border: 1px solid #e5e7eb;
+  margin: 0;
+  min-width: 400px;
 }
 
 .blog-content table thead {

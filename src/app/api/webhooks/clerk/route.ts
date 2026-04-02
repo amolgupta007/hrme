@@ -2,12 +2,12 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { Webhook } from "svix";
 import { createAdminSupabase } from "@/lib/supabase/server";
-import { resend, FROM_EMAIL } from "@/lib/resend";
+import { resend, FROM_EMAIL, FOUNDER_EMAIL_FROM } from "@/lib/resend";
 import { render } from "@react-email/render";
 import { FounderAlertEmail } from "@/components/emails/founder-alert";
 import { WelcomeEmail } from "@/components/emails/welcome";
 
-const FOUNDER_EMAIL = "amolgupta007@gmail.com";
+const FOUNDER_EMAIL = "amol@jambahr.com";
 
 const DEFAULT_LEAVE_POLICIES = [
   { name: "Casual Leave", type: "casual", days_per_year: 8, carry_forward: false, max_carry_forward_days: 0, applicable_from_months: 0, requires_approval: true },
@@ -140,7 +140,7 @@ export async function POST(req: Request) {
 
         // 5. Send founder alert (non-blocking)
         resend.emails.send({
-          from: FROM_EMAIL,
+          from: FOUNDER_EMAIL_FROM,
           to: FOUNDER_EMAIL,
           subject: `🎉 New signup: ${name}`,
           html: await render(
@@ -157,7 +157,7 @@ export async function POST(req: Request) {
         // 6. Send welcome email to new client (non-blocking)
         if (ownerEmail) {
           resend.emails.send({
-            from: FROM_EMAIL,
+            from: FOUNDER_EMAIL_FROM,
             to: ownerEmail,
             subject: `Welcome to JambaHR — your workspace is ready`,
             html: await render(

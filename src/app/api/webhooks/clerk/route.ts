@@ -2,6 +2,35 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { Webhook } from "svix";
 import { createAdminSupabase } from "@/lib/supabase/server";
+import { resend, FROM_EMAIL } from "@/lib/resend";
+import { render } from "@react-email/render";
+import { FounderAlertEmail } from "@/components/emails/founder-alert";
+import { WelcomeEmail } from "@/components/emails/welcome";
+
+const FOUNDER_EMAIL = "amolgupta007@gmail.com";
+
+const DEFAULT_LEAVE_POLICIES = [
+  { name: "Casual Leave", type: "casual", days_per_year: 8, carry_forward: false, max_carry_forward_days: 0, applicable_from_months: 0, requires_approval: true },
+  { name: "Sick Leave", type: "sick", days_per_year: 8, carry_forward: true, max_carry_forward_days: 4, applicable_from_months: 0, requires_approval: false },
+  { name: "Earned Leave", type: "paid", days_per_year: 18, carry_forward: true, max_carry_forward_days: 30, applicable_from_months: 6, requires_approval: true },
+  { name: "Leave Without Pay", type: "unpaid", days_per_year: 0, carry_forward: false, max_carry_forward_days: 0, applicable_from_months: 0, requires_approval: true },
+];
+
+const DEFAULT_HOLIDAYS_2026 = [
+  { name: "New Year's Day", date: "2026-01-01", is_optional: false },
+  { name: "Republic Day", date: "2026-01-26", is_optional: false },
+  { name: "Holi", date: "2026-03-03", is_optional: false },
+  { name: "Good Friday", date: "2026-04-03", is_optional: true },
+  { name: "Eid ul-Fitr", date: "2026-03-31", is_optional: true },
+  { name: "Ambedkar Jayanti", date: "2026-04-14", is_optional: false },
+  { name: "Eid ul-Adha", date: "2026-06-07", is_optional: true },
+  { name: "Independence Day", date: "2026-08-15", is_optional: false },
+  { name: "Janmashtami", date: "2026-08-20", is_optional: true },
+  { name: "Gandhi Jayanti", date: "2026-10-02", is_optional: false },
+  { name: "Dussehra", date: "2026-10-11", is_optional: false },
+  { name: "Diwali", date: "2026-10-29", is_optional: false },
+  { name: "Christmas", date: "2026-12-25", is_optional: false },
+];
 
 /**
  * Clerk Webhook Handler
@@ -61,15 +90,86 @@ export async function POST(req: Request) {
   try {
     switch (eventType) {
       case "organization.created": {
-        const { id, name, slug } = event.data;
-        await supabase.from("organizations").insert({
-          clerk_org_id: id,
-          name,
-          slug: slug || name.toLowerCase().replace(/\s+/g, "-"),
-          plan: "starter",
-          max_employees: 10,
-          settings: {},
-        });
+        const { id, name, slug, created_by } = event.data;
+
+        // 1. Create org row
+        const { data: newOrg } = await supabase
+          .from("organizations")
+          .insert({
+            clerk_org_id: id,
+            name,
+            slug: slug || name.toLowerCase().replace(/\s+/g, "-"),
+            plan: "starter",
+            max_employees: 10,
+            settings: {},
+          })
+          .select("id")
+          .single();
+
+        if (newOrg) {
+          const orgId = (newOrg as { id: string }).id;
+
+          // 2. Seed default leave policies
+          await supabase.from("leave_policies").insert(
+            DEFAULT_LEAVE_POLICIES.map((p) => ({ ...p, org_id: orgId }))
+          );
+
+          // 3. Seed holidays for current year
+          const currentYear = new Date().getFullYear();
+          const holidays =
+            currentYear === 2026 ? DEFAULT_HOLIDAYS_2026 : DEFAULT_HOLIDAYS_2026;
+          await supabase.from("holidays").insert(
+            holidays.map((h) => ({ ...h, org_id: orgId }))
+          );
+        }
+
+        // 4. Look up owner email from Clerk user data
+        let ownerEmail = "";
+        let ownerFirstName = "there";
+        if (created_by) {
+          const { data: userData } = await supabase
+            .from("employees")
+            .select("email, first_name")
+            .eq("clerk_user_id", created_by)
+            .single();
+          if (userData) {
+            ownerEmail = (userData as any).email ?? "";
+            ownerFirstName = (userData as any).first_name ?? "there";
+          }
+        }
+
+        // 5. Send founder alert (non-blocking)
+        resend.emails.send({
+          from: FROM_EMAIL,
+          to: FOUNDER_EMAIL,
+          subject: `🎉 New signup: ${name}`,
+          html: await render(
+            FounderAlertEmail({
+              orgName: name,
+              industry: (event.data as any).public_metadata?.industry ?? "Unknown",
+              companySize: (event.data as any).public_metadata?.companySize ?? "Unknown",
+              ownerEmail: ownerEmail || "unknown",
+              signupTime: new Date().toISOString(),
+            })
+          ),
+        }).catch((err: unknown) => console.error("Founder alert email failed:", err));
+
+        // 6. Send welcome email to new client (non-blocking)
+        if (ownerEmail) {
+          resend.emails.send({
+            from: FROM_EMAIL,
+            to: ownerEmail,
+            subject: `Welcome to JambaHR — your workspace is ready`,
+            html: await render(
+              WelcomeEmail({
+                orgName: name,
+                ownerFirstName,
+                dashboardUrl: "https://jambahr.com/dashboard",
+              })
+            ),
+          }).catch((err: unknown) => console.error("Welcome email failed:", err));
+        }
+
         break;
       }
 

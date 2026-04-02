@@ -680,8 +680,9 @@ Primary color: teal (`172 50% 36%`). Accent: warm orange (`32 95% 52%`).
 - [x] Public offer response page (`/offers/[token]`) — accept/decline with notes, no auth required
 - [x] Public careers page (`/careers/[slug]`) — shows active jobs for org slug
 - [x] Public job application form (no auth)
-- [x] AI job description generator via `@anthropic-ai/sdk`
+- [x] AI job description generator via `@anthropic-ai/sdk` — verified working in production
 - [x] `toggleJambaHire()` in settings.ts — stored in `organizations.settings.jambahire_enabled`
+- [x] Settings toggle UI — `src/components/settings/products-section.tsx` with plan gate + toast feedback
 - [x] `getCurrentUser()` returns `jambaHireEnabled` boolean
 - [x] 6 new DB tables via SQL Editor: `jobs`, `candidates`, `applications`, `interview_schedules`, `interview_feedback`, `offers`
 
@@ -714,7 +715,7 @@ Primary color: teal (`172 50% 36%`). Accent: warm orange (`32 95% 52%`).
 - [x] RESEND_API_KEY (set + jambahr.com sender domain verified in Resend)
 - [x] NEXT_PUBLIC_POSTHOG_KEY (set + NEXT_PUBLIC_POSTHOG_HOST set + verified working)
 - [x] CRON_SECRET (set — used by /api/cron/doc-reminders)
-- [ ] ANTHROPIC_API_KEY — required for JambaHire AI job description generator (`generateJobDescription()` in `hire.ts`)
+- [x] ANTHROPIC_API_KEY — set + verified working (AI JD generator in JambaHire)
 
 ### ❌ NOT YET BUILT — Pending
 
@@ -729,7 +730,6 @@ Primary color: teal (`172 50% 36%`). Accent: warm orange (`32 95% 52%`).
 
 **JambaHire — Remaining**
 - [ ] Onboarding workflows (post-hire)
-- [ ] JambaHire enable/disable toggle UI in settings page (action exists, UI pending)
 
 **Training — LMS Auto-Sync (shown as Coming Soon)**
 - [ ] Webhook receivers for Coursera, LinkedIn Learning, TalentLMS, Docebo, Google Classroom
@@ -802,11 +802,11 @@ Configured in `src/lib/razorpay.ts` (billing) and `src/config/plans.ts` (feature
 
 ## Immediate Next Steps (in priority order)
 
-1. **UptimeRobot** — add `https://jambahr.com` monitor
+1. ~~**UptimeRobot**~~ — done
 2. **Training deadline reminders** — add a second Vercel Cron for overdue training alerts (pattern same as doc-reminders cron)
-3. **Payroll for demo org** — seed salary structures for test1 employees to demo the full payroll flow
-4. **JambaHire settings toggle UI** — add toggle in `/dashboard/settings` to enable/disable the module per org (action `toggleJambaHire()` exists in `settings.ts`)
-5. **Seed JambaHire demo data** — add jobs, candidates, pipeline stages, offers to test1 org for demos
+3. ~~**Payroll for demo org**~~ — done (salary structures for all 15 test1 employees, Maharashtra/metro, ₹12–36 LPA by role)
+4. ~~**JambaHire settings toggle UI**~~ — done (`src/components/settings/products-section.tsx`, plan-gated to Business tier)
+5. ~~**Seed JambaHire demo data**~~ — done (4 jobs, 10 candidates, full pipeline, 3 interviews, 2 offers)
 6. **Blog — more SEO articles** — add more posts to `src/content/blog/` covering Indian HR/compliance topics
 
 ---

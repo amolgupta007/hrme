@@ -15,7 +15,7 @@ BEGIN
 
   -- Insert salary structures for all active employees
   -- Using INSERT ... ON CONFLICT DO UPDATE so re-running is safe
-  INSERT INTO salary_structures (org_id, employee_id, ctc, basic_monthly, hra_monthly, special_allowance_monthly, gross_monthly, employee_pf_monthly, professional_tax_monthly, tds_monthly, net_monthly, state, is_metro, include_hra, effective_from)
+  INSERT INTO salary_structures (org_id, employee_id, ctc, basic_monthly, hra_monthly, special_allowance_monthly, gross_monthly, employee_pf_monthly, employer_pf_monthly, employer_gratuity_annual, professional_tax_monthly, tds_monthly, net_monthly, state, is_metro, include_hra, effective_from)
   SELECT
     v_org_id,
     e.id,
@@ -55,12 +55,16 @@ BEGIN
       ELSE                98400
     END AS gross_monthly,
     -- Employee PF = 12% of basic (capped at 1800)
+    1800 AS employee_pf_monthly,
+    -- Employer PF = 3.67% of basic (capped at ~1100)
+    1100 AS employer_pf_monthly,
+    -- Employer gratuity annual = 4.81% of basic annual
     CASE e.role
-      WHEN 'owner'   THEN 1800
-      WHEN 'admin'   THEN 1800
-      WHEN 'manager' THEN 1800
-      ELSE                1800
-    END AS employee_pf_monthly,
+      WHEN 'owner'   THEN 69264   -- 4.81% of 1440000
+      WHEN 'admin'   THEN 46176   -- 4.81% of 960000
+      WHEN 'manager' THEN 34632   -- 4.81% of 720000
+      ELSE                23088   -- 4.81% of 480000
+    END AS employer_gratuity_annual,
     -- Professional Tax (Maharashtra, metro)
     200 AS professional_tax_monthly,
     -- TDS (approximate monthly, new regime)

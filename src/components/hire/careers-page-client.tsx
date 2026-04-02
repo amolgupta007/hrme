@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { MapPin, Briefcase, Clock, ChevronDown, ChevronUp, Send, X } from "lucide-react";
+import { MapPin, Briefcase, Clock, ChevronDown, ChevronUp, Send, X, Linkedin } from "lucide-react";
 import { submitApplication } from "@/actions/hire";
 import type { Job } from "@/actions/hire";
 
@@ -103,12 +103,23 @@ export function CareersPageClient({ org, jobs }: Props) {
                     <pre className="text-sm whitespace-pre-wrap font-sans leading-relaxed text-foreground/90">
                       {job.description}
                     </pre>
-                    <button
-                      onClick={() => setApplyingId(job.id)}
-                      className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 transition-colors"
-                    >
-                      Apply for this role
-                    </button>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => setApplyingId(job.id)}
+                        className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 transition-colors"
+                      >
+                        Apply for this role
+                      </button>
+                      <a
+                        href={`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(`https://jambahr.com/careers/${org.slug}`)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 rounded-lg border border-[#0A66C2] px-4 py-2 text-sm font-semibold text-[#0A66C2] hover:bg-[#0A66C2]/5 transition-colors"
+                      >
+                        <Linkedin className="h-4 w-4" />
+                        Share
+                      </a>
+                    </div>
                   </div>
                 )}
               </div>

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Plus, MapPin, Briefcase, Users, MoreHorizontal, Pencil, Trash2, Play, Pause, Eye } from "lucide-react";
+import { Plus, MapPin, Briefcase, Users, MoreHorizontal, Pencil, Trash2, Play, Pause, Eye, Linkedin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { JobDialog } from "./job-dialog";
 import { updateJobStatus, deleteJob } from "@/actions/hire";
@@ -43,9 +43,14 @@ interface Props {
   jobs: Job[];
   departments: Department[];
   isAdmin: boolean;
+  orgSlug: string;
 }
 
-export function JobsClient({ jobs, departments, isAdmin }: Props) {
+export function JobsClient({ jobs, departments, isAdmin, orgSlug }: Props) {
+  function linkedInShareUrl(jobTitle: string) {
+    const careersUrl = `https://jambahr.com/careers/${orgSlug}`;
+    return `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(careersUrl)}`;
+  }
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<JobStatus | "all">("all");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -195,6 +200,17 @@ export function JobsClient({ jobs, departments, isAdmin }: Props) {
                           >
                             <Eye className="h-3.5 w-3.5" /> View
                           </Link>
+                          {orgSlug && job.status === "active" && (
+                            <a
+                              href={linkedInShareUrl(job.title)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted w-full text-left text-[#0A66C2]"
+                              onClick={() => setOpenMenuId(null)}
+                            >
+                              <Linkedin className="h-3.5 w-3.5" /> Share on LinkedIn
+                            </a>
+                          )}
                           <button
                             className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted w-full text-left"
                             onClick={() => { setEditingJob(job); setDialogOpen(true); setOpenMenuId(null); }}

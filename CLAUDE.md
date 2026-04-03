@@ -69,10 +69,14 @@ hr-portal/
 │   │   │   ├── pipeline/page.tsx     # Kanban pipeline: 7 stages, bulk moves, analytics funnel
 │   │   │   ├── interviews/page.tsx   # Interview scheduling & feedback collection
 │   │   │   └── offers/page.tsx       # Offer creation, sending, and tracking
-│   │   ├── api/webhooks/
-│   │   │   ├── clerk/route.ts        # Syncs Clerk user/org events → Supabase
-│   │   │   ├── stripe/route.ts       # Legacy Stripe handler (kept, unused)
-│   │   │   └── razorpay/route.ts     # Razorpay subscription lifecycle webhook
+│   │   ├── api/
+│   │   │   ├── webhooks/
+│   │   │   │   ├── clerk/route.ts        # Syncs Clerk user/org events → Supabase; seeds default leave policies + holidays on signup; sends founder alert + welcome emails
+│   │   │   │   ├── stripe/route.ts       # Legacy Stripe handler (kept, unused)
+│   │   │   │   └── razorpay/route.ts     # Razorpay subscription lifecycle webhook
+│   │   │   └── cron/
+│   │   │       ├── doc-reminders/route.ts       # Weekly unacknowledged doc reminders (Mondays 9am IST)
+│   │   │       └── onboarding-nudges/route.ts   # Daily nudge emails for orgs at day 1/3/5/7 (9:30am IST)
 │   │   └── dashboard/                # Protected app (requires auth)
 │   │       ├── layout.tsx            # Sidebar + Header shell (passes role + plan)
 │   │       ├── page.tsx              # Dashboard home (live stats, recent leaves, deadlines)
@@ -138,7 +142,11 @@ hr-portal/
 │   │   └── emails/
 │   │       ├── leave-request.tsx     # React Email template — new leave request (to managers)
 │   │       ├── leave-status.tsx      # React Email template — approved/rejected notification (to employee)
-│   │       └── offer-letter.tsx      # React Email template — offer letter with Accept/Decline buttons
+│   │       ├── offer-letter.tsx      # React Email template — offer letter with Accept/Decline buttons
+│   │       ├── founder-alert.tsx     # React Email template — new signup alert to amol@jambahr.com
+│   │       ├── welcome.tsx           # React Email template — welcome email to new client with getting started guide
+│   │       ├── onboarding-nudge.tsx  # React Email template — Day 1/3/5 nudge emails (generic template with day-specific content)
+│   │       └── upgrade-push.tsx      # React Email template — Day 7 upgrade pitch email (lists locked features + pricing)
 │   ├── config/
 │   │   ├── navigation.ts            # Sidebar nav items with requiredRole + requiredPlan, APP_NAME
 │   │   └── plans.ts                 # OrgPlan type, PLAN_FEATURES map, hasFeature(), PLAN_UNLOCK_HIGHLIGHTS
@@ -153,7 +161,7 @@ hr-portal/
 │   │   ├── utils.ts                  # cn(), formatDate(), formatCurrency(), getInitials()
 │   │   ├── razorpay.ts              # Razorpay client + PLANS config (starter/growth/business)
 │   │   ├── current-user.ts          # getCurrentUser() → { orgId, clerkUserId, role, employeeId, plan, jambaHireEnabled }
-│   │   ├── resend.ts                # Resend email client + FROM_EMAIL constant
+│   │   ├── resend.ts                # Resend email client + FROM_EMAIL, FOUNDER_EMAIL_FROM, NOREPLY_EMAIL_FROM constants
 │   │   ├── blog.ts                  # getAllPosts(), getPost(slug) — reads markdown from src/content/blog/
 │   │   ├── calendar.ts              # getGoogleCalendarUrl(), getOutlookCalendarUrl(), generateICS(), downloadICS()
 │   │   └── supabase/
@@ -168,6 +176,10 @@ hr-portal/
 │   ├── config.toml
 │   └── migrations/
 │       └── 001_initial_schema.sql    # Full schema: 12 tables, indexes, RLS, triggers
+├── scripts/
+│   ├── seed-payroll-demo.sql         # Upserts salary structures for all 15 test1 employees (Maharashtra/metro, ₹12–36 LPA by role)
+│   ├── seed-jambahire-demo.sql       # Seeds 4 jobs, 10 candidates, full pipeline, 3 interviews, 2 offers for test1 org
+│   └── fix-salary-structures-columns.sql  # ALTER TABLE to add missing columns: include_hra, employer_pf_monthly, employer_gratuity_annual, updated_at
 ├── public/
 │   ├── Jamba.png                     # App logo — used as favicon and Razorpay checkout logo
 │   └── pitchdeck.html                # 12-page HTML pitch deck (open in Chrome → Print → Save as PDF)
@@ -326,16 +338,39 @@ export function hasFeature(plan: OrgPlan, feature: PlanFeature): boolean
 
 ## Email Notifications — Resend
 
+### Sender identities (`src/lib/resend.ts`)
+Three sender addresses configured, all via Google Workspace aliases on `jambahr.com`:
+- `support@jambahr.com` — transactional emails (leave requests, document reminders, payment alerts)
+- `amol@jambahr.com` — personal-feel emails (founder alerts, welcome emails, onboarding nudges)
+- `noreply@jambahr.com` — system emails (offer letters, status notifications)
+
 ### Leave request flow
 - `requestLeave()` → sends email to all org managers/admins with leave details (non-blocking)
 - `approveLeave()` / `rejectLeave()` → sends status email to the requesting employee
-- Template files:
-  - `src/components/emails/leave-request.tsx` — notification to approvers
-  - `src/components/emails/leave-status.tsx` — approved/rejected notification to employee
+- Templates: `leave-request.tsx` (to approvers) + `leave-status.tsx` (to employee)
+
+### New client onboarding flow (triggered by Clerk `organization.created` webhook)
+1. Default leave policies seeded: Casual (8 days), Sick (8 days), Earned/PL (18 days), Unpaid (0 days)
+2. Indian holidays for current year seeded (13 national/optional holidays)
+3. Founder alert email → `amol@jambahr.com` — notifies with org name, industry, size, owner email
+4. Welcome email → new client — getting started guide + Starter plan feature list
+
+### Onboarding nudge sequence (daily cron at 9:30am IST)
+| Day | Email | Content |
+|-----|-------|---------|
+| Day 1 | `onboarding-nudge.tsx` | Add your employees guide |
+| Day 3 | `onboarding-nudge.tsx` | Review leave policies and holidays |
+| Day 5 | `onboarding-nudge.tsx` | Invite your team |
+| Day 7 | `upgrade-push.tsx` | Upgrade pitch — lists locked features + Growth pricing |
+
+### Other email flows
+- Weekly doc reminder (Monday 9am IST) — unacknowledged docs alert to employees
+- Payment failure / subscription paused — alert to all org admins
+- Offer letter — sent to candidates with accept/decline token link
 
 ### Setup requirement
-- `RESEND_API_KEY` must be set in Vercel (not yet set)
-- `FROM_EMAIL` constant in `src/lib/resend.ts` — update to a verified Resend sender domain
+- `RESEND_API_KEY` set in Vercel — `jambahr.com` sender domain verified in Resend
+- Google Workspace: `amol@jambahr.com`, `support@jambahr.com`, `noreply@jambahr.com` all verified
 
 ---
 
@@ -637,6 +672,10 @@ Primary color: teal (`172 50% 36%`). Accent: warm orange (`32 95% 52%`).
 - [x] `leave-status.tsx` — approved/rejected notification to employee
 - [x] `payment-failed.tsx` — payment failure / subscription paused alert to org admins
 - [x] `doc-reminder.tsx` — weekly unacknowledged document reminder to employees
+- [x] `founder-alert.tsx` — new signup notification to amol@jambahr.com (org name, industry, size, owner email)
+- [x] `welcome.tsx` — welcome email to new client (getting started guide + Starter plan features)
+- [x] `onboarding-nudge.tsx` — generic Day 1/3/5 nudge email (day-specific badge color + content)
+- [x] `upgrade-push.tsx` — Day 7 upgrade push email (locked features list + Growth pricing CTA)
 - [x] `next.config.js` — react-email packages added to `serverComponentsExternalPackages`
 
 **Payroll & Compensation** (`/dashboard/payroll`) — Business+
@@ -651,17 +690,39 @@ Primary color: teal (`172 50% 36%`). Accent: warm orange (`32 95% 52%`).
 - [x] 3 new DB tables: `salary_structures`, `payroll_runs`, `payroll_entries`
 
 **Cron Jobs**
-- [x] `src/app/api/cron/doc-reminders/route.ts` — weekly doc acknowledgment reminders
-- [x] `vercel.json` cron: every Monday 9am (`0 9 * * 1`)
+- [x] `src/app/api/cron/doc-reminders/route.ts` — weekly doc acknowledgment reminders (Monday 9am IST)
+- [x] `src/app/api/cron/onboarding-nudges/route.ts` — daily nudge emails for Day 1/3/5/7 orgs (9:30am IST)
+- [x] `vercel.json` crons: doc-reminders `0 9 * * 1`, onboarding-nudges `30 3 * * *` (3:30am UTC = 9am IST)
 - [x] `CRON_SECRET` set in Vercel env vars
 
 **Razorpay Webhook — Email Alerts**
 - [x] `payment.failed` → sends payment failure email to all org admins
 - [x] `subscription.paused` → sends paused alert to all org admins
 
+**Client Onboarding Automation**
+- [x] Clerk `organization.created` webhook seeds default leave policies (Casual/Sick/Earned/Unpaid) for every new org
+- [x] Clerk `organization.created` webhook seeds 13 Indian holidays for the current year
+- [x] Founder alert email fired on every new signup → `amol@jambahr.com`
+- [x] Welcome email sent to new client with getting started guide
+- [x] Day 1/3/5/7 onboarding nudge cron — engages new orgs automatically
+- [x] Google Workspace configured: `amol@jambahr.com`, `support@jambahr.com`, `noreply@jambahr.com`
+
+**LinkedIn Integration (JambaHire)**
+- [x] "Share on LinkedIn" button on public careers page — next to "Apply for this role"
+- [x] "Share on LinkedIn" option in admin jobs list dropdown — visible for active jobs only
+- [x] Both link to `linkedin.com/sharing/share-offsite/?url=jambahr.com/careers/[org-slug]`
+
+**Blog Improvements**
+- [x] Table rendering fix: tables wrapped in `.table-wrapper` div with `overflow-x: auto` — scrollable on mobile
+- [x] `remark-gfm` plugin added — enables GitHub Flavored Markdown (tables, strikethrough, task lists)
+- [x] `globals.css` — `.blog-content .table-wrapper` styles for scrollable, bordered table containers
+
 **Demo Org**
 - [x] 15-person seed org (test1) created via Supabase SQL Editor
 - [x] Departments, employees, leaves, documents, reviews, objectives, training, announcements all seeded
+- [x] Payroll seeded: salary structures for all 15 employees (Maharashtra/metro, ₹12–36 LPA by role)
+- [x] JambaHire seeded: 4 jobs, 10 candidates, full 7-stage pipeline, 3 interviews, 2 offers
+- [x] Seed scripts: `scripts/seed-payroll-demo.sql`, `scripts/seed-jambahire-demo.sql`
 
 **Pitch Deck**
 - [x] `public/pitchdeck.html` — 12-page HTML pitch deck
@@ -736,7 +797,7 @@ Primary color: teal (`172 50% 36%`). Accent: warm orange (`32 95% 52%`).
 
 ### ❌ NOT YET DONE — Infrastructure
 
-- [ ] Set up UptimeRobot monitoring
+- [x] ~~Set up UptimeRobot monitoring~~ — done
 - [ ] Background jobs (Trigger.dev or Inngest) for training reminders, compliance alerts, payment failure emails
 
 ---
@@ -803,11 +864,14 @@ Configured in `src/lib/razorpay.ts` (billing) and `src/config/plans.ts` (feature
 ## Immediate Next Steps (in priority order)
 
 1. ~~**UptimeRobot**~~ — done
-2. **Training deadline reminders** — add a second Vercel Cron for overdue training alerts (pattern same as doc-reminders cron)
-3. ~~**Payroll for demo org**~~ — done (salary structures for all 15 test1 employees, Maharashtra/metro, ₹12–36 LPA by role)
-4. ~~**JambaHire settings toggle UI**~~ — done (`src/components/settings/products-section.tsx`, plan-gated to Business tier)
-5. ~~**Seed JambaHire demo data**~~ — done (4 jobs, 10 candidates, full pipeline, 3 interviews, 2 offers)
-6. **Blog — more SEO articles** — add more posts to `src/content/blog/` covering Indian HR/compliance topics
+2. ~~**Payroll for demo org**~~ — done (salary structures for all 15 test1 employees, Maharashtra/metro, ₹12–36 LPA by role)
+3. ~~**JambaHire settings toggle UI**~~ — done (`src/components/settings/products-section.tsx`, plan-gated to Business tier)
+4. ~~**Seed JambaHire demo data**~~ — done (4 jobs, 10 candidates, full pipeline, 3 interviews, 2 offers)
+5. ~~**Client onboarding automation**~~ — done (leave policies + holidays seeded on signup, welcome + founder emails, Day 1/3/5/7 nudge cron)
+6. ~~**LinkedIn share integration**~~ — done (careers page + admin jobs list)
+7. **Training deadline reminders** — add a Vercel Cron for overdue training alerts (pattern same as doc-reminders cron)
+8. **Blog — more SEO articles** — add more posts to `src/content/blog/` covering Indian HR/compliance topics (ESI rules, gratuity, HR software comparison, etc.)
+9. **Marketing** — submit to software directories (SoftwareSuggest, Capterra, G2, Techjockey), set up LinkedIn company page, run Google Search Ads
 
 ---
 
@@ -841,3 +905,9 @@ Configured in `src/lib/razorpay.ts` (billing) and `src/config/plans.ts` (feature
 26. **AI JD generation requires `ANTHROPIC_API_KEY`**: The `generateJobDescription()` action in `hire.ts` calls `@anthropic-ai/sdk`. Add `ANTHROPIC_API_KEY` to Vercel env vars or the action will fail silently.
 27. **Calendar ICS download**: `downloadICS()` in `src/lib/calendar.ts` uses `URL.createObjectURL` — client-side only. Do not call from server components.
 28. **Interview feedback upsert**: Unique constraint on `(schedule_id, interviewer_id)` — submitting feedback twice updates the existing row rather than creating a duplicate.
+29. **Onboarding nudge cron timing**: Uses `±12hr window` around days 1/3/5/7 to avoid missing orgs due to cron drift. An org created at 11pm will still receive the Day 1 email the next morning at 9:30am IST.
+30. **Default leave policies on signup**: Seeded in the Clerk `organization.created` webhook handler. If the webhook fires before the org row is fully created in Supabase, policies won't be seeded — manually run the SQL if a new org is missing policies.
+31. **`salary_structures` missing columns**: Original table created via SQL Editor was missing `include_hra`, `employer_pf_monthly`, `employer_gratuity_annual`, `updated_at`. Run `scripts/fix-salary-structures-columns.sql` if the table was created before these were added.
+32. **Blog table rendering**: Tables in markdown are wrapped in `.table-wrapper` via custom `remark` plugin in `src/lib/blog.ts`. `border-radius` doesn't work with `border-collapse: collapse` (CSS spec limitation) — the wrapper div carries the border and rounded corners instead.
+33. **LinkedIn share URL**: Points to the org's careers page (`/careers/[slug]`), not to individual job URLs. This is intentional — LinkedIn's share dialog only supports top-level URL sharing, not deep-linking to a specific job in the list.
+34. **`resend.ts` sender constants**: Three named constants — `FROM_EMAIL` (support@), `FOUNDER_EMAIL_FROM` (amol@), `NOREPLY_EMAIL_FROM` (noreply@). Import the right one per email type. Do not hardcode addresses in action files.

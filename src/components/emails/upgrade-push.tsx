@@ -34,14 +34,14 @@ export function UpgradePushEmail({
           <Text style={badgeStyle}>Week 1 complete 🎉</Text>
 
           <Text style={headingStyle}>
-            {ownerFirstName}, you've been on JambaHR for a week
+            {ownerFirstName}, you&apos;ve been on JambaHR for a week
           </Text>
 
           <Text style={textStyle}>
             {employeeCount > 0
               ? `You've set up ${orgName} with ${employeeCount} employee${employeeCount > 1 ? "s" : ""}. Nice start.`
               : `Your workspace for ${orgName} is ready and waiting.`}{" "}
-            Here's what you're missing on the free plan:
+            Here&apos;s what you&apos;re missing on the free plan:
           </Text>
 
           {/* Locked features */}
@@ -59,12 +59,12 @@ export function UpgradePushEmail({
           </Button>
 
           <Text style={nudgeStyle}>
-            Still on the fence? Reply to this email and I'll walk you through what makes sense for your team size.
+            Still on the fence? Reply to this email and I&apos;ll walk you through what makes sense for your team size.
           </Text>
 
           <Hr style={hrStyle} />
           <Text style={footerStyle}>
-            You're on the JambaHR Starter plan (free, up to 10 employees).{"\n"}
+            You&apos;re on the JambaHR Starter plan (free, up to 10 employees).{"\n"}
             {orgName} · jambahr.com
           </Text>
         </Container>

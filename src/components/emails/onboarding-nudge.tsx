@@ -73,7 +73,7 @@ export function OnboardingNudgeEmail({
 
           <Hr style={hrStyle} />
           <Text style={footerStyle}>
-            You're receiving this because you signed up for JambaHR with {orgName}.{"\n"}
+            You&apos;re receiving this because you signed up for JambaHR with {orgName}.{"\n"}
             Questions? Reply to this email.
           </Text>
         </Container>

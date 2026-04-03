@@ -30,7 +30,7 @@ export function WelcomeEmail({
 
           <Text style={headingStyle}>Welcome to JambaHR, {ownerFirstName}! 👋</Text>
           <Text style={textStyle}>
-            Your workspace for <strong>{orgName}</strong> is ready. You're now on the
+            Your workspace for <strong>{orgName}</strong> is ready. You&apos;re now on the
             Starter plan — free for up to 10 employees, no credit card needed.
           </Text>
 
@@ -47,7 +47,7 @@ export function WelcomeEmail({
           </Button>
 
           {/* What's included */}
-          <Text style={sectionHeadingStyle}>What's included on the free plan:</Text>
+          <Text style={sectionHeadingStyle}>What&apos;s included on the free plan:</Text>
           <Section style={featuresStyle}>
             <Text style={featureItemStyle}>✓ Employee directory (up to 10 employees)</Text>
             <Text style={featureItemStyle}>✓ Leave management — requests, approvals, balances</Text>

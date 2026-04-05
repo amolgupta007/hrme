@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { toast } from "sonner";
-import { MapPin, Briefcase, Clock, ChevronDown, ChevronUp, Send, X, Linkedin } from "lucide-react";
-import { submitApplication } from "@/actions/hire";
+import { MapPin, Briefcase, Clock, ChevronDown, ChevronUp, Send, X, Linkedin, Paperclip, Plus, Trash2 } from "lucide-react";
+import { submitApplication, uploadApplicationFile } from "@/actions/hire";
 import type { Job } from "@/actions/hire";
 
 const EMPLOYMENT_LABELS: Record<string, string> = {
@@ -146,6 +146,16 @@ function ApplyModal({ job, onClose }: { job: Job; onClose: () => void }) {
   const [linkedin, setLinkedin] = useState("");
   const [coverNote, setCoverNote] = useState("");
   const [answers, setAnswers] = useState<string[]>(job.custom_questions.map(() => ""));
+
+  // Resume
+  const [resumeFile, setResumeFile] = useState<File | null>(null);
+  const resumeRef = useRef<HTMLInputElement>(null);
+
+  // Work samples
+  const [workFile, setWorkFile] = useState<File | null>(null);
+  const workFileRef = useRef<HTMLInputElement>(null);
+  const [workLinks, setWorkLinks] = useState<string[]>([""]);
+
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
@@ -156,11 +166,33 @@ function ApplyModal({ job, onClose }: { job: Job; onClose: () => void }) {
 
     setSubmitting(true);
     try {
+      // Upload resume if provided
+      let resumeUrl: string | undefined;
+      if (resumeFile) {
+        const fd = new FormData();
+        fd.append("file", resumeFile);
+        const res = await uploadApplicationFile(fd);
+        if (!res.success) { toast.error(res.error); setSubmitting(false); return; }
+        resumeUrl = res.data.url;
+      }
+
+      // Upload work file if provided
+      const workSamples: string[] = workLinks.map((l) => l.trim()).filter(Boolean);
+      if (workFile) {
+        const fd = new FormData();
+        fd.append("file", workFile);
+        const res = await uploadApplicationFile(fd);
+        if (!res.success) { toast.error(res.error); setSubmitting(false); return; }
+        workSamples.unshift(res.data.url);
+      }
+
       const result = await submitApplication(job.id, {
         name: name.trim(),
         email: email.trim(),
         phone: phone.trim() || undefined,
         linkedin_url: linkedin.trim() || undefined,
+        resume_url: resumeUrl,
+        work_samples: workSamples.length > 0 ? workSamples : undefined,
         cover_note: coverNote.trim() || undefined,
         answers: job.custom_questions.map((q, i) => ({
           question: q.question,
@@ -241,6 +273,103 @@ function ApplyModal({ job, onClose }: { job: Job; onClose: () => void }) {
                 value={coverNote}
                 onChange={(e) => setCoverNote(e.target.value)}
               />
+            </div>
+
+            {/* Resume upload */}
+            <div>
+              <label className="text-sm font-medium">Resume / CV</label>
+              <div
+                className="mt-1 flex items-center gap-3 rounded-lg border border-dashed border-input bg-background px-3 py-2.5 cursor-pointer hover:border-indigo-400 transition-colors"
+                onClick={() => resumeRef.current?.click()}
+              >
+                <Paperclip className="h-4 w-4 text-muted-foreground shrink-0" />
+                <span className="text-sm text-muted-foreground truncate">
+                  {resumeFile ? resumeFile.name : "Upload PDF, DOC, or DOCX (max 5 MB)"}
+                </span>
+                {resumeFile && (
+                  <button
+                    type="button"
+                    className="ml-auto text-muted-foreground hover:text-destructive"
+                    onClick={(e) => { e.stopPropagation(); setResumeFile(null); if (resumeRef.current) resumeRef.current.value = ""; }}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+              <input
+                ref={resumeRef}
+                type="file"
+                accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                className="hidden"
+                onChange={(e) => setResumeFile(e.target.files?.[0] ?? null)}
+              />
+            </div>
+
+            {/* Work samples */}
+            <div>
+              <label className="text-sm font-medium">Work Samples <span className="text-muted-foreground font-normal">(optional)</span></label>
+              <p className="text-xs text-muted-foreground mt-0.5 mb-2">Share a portfolio, GitHub, Behance, case study, or any file that shows your work.</p>
+
+              {/* File upload */}
+              <div
+                className="flex items-center gap-3 rounded-lg border border-dashed border-input bg-background px-3 py-2.5 cursor-pointer hover:border-indigo-400 transition-colors mb-2"
+                onClick={() => workFileRef.current?.click()}
+              >
+                <Paperclip className="h-4 w-4 text-muted-foreground shrink-0" />
+                <span className="text-sm text-muted-foreground truncate">
+                  {workFile ? workFile.name : "Upload a file (PDF, ZIP, image — max 5 MB)"}
+                </span>
+                {workFile && (
+                  <button
+                    type="button"
+                    className="ml-auto text-muted-foreground hover:text-destructive"
+                    onClick={(e) => { e.stopPropagation(); setWorkFile(null); if (workFileRef.current) workFileRef.current.value = ""; }}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+              <input
+                ref={workFileRef}
+                type="file"
+                accept=".pdf,.zip,.png,.jpg,.jpeg,.gif,.mp4,.pptx,.key"
+                className="hidden"
+                onChange={(e) => setWorkFile(e.target.files?.[0] ?? null)}
+              />
+
+              {/* Links */}
+              <div className="space-y-2">
+                {workLinks.map((link, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <input
+                      className={`${inputCls} mt-0 flex-1`}
+                      placeholder="https://github.com/you, portfolio.com, etc."
+                      value={link}
+                      onChange={(e) => {
+                        const updated = [...workLinks];
+                        updated[i] = e.target.value;
+                        setWorkLinks(updated);
+                      }}
+                    />
+                    {workLinks.length > 1 && (
+                      <button
+                        type="button"
+                        className="text-muted-foreground hover:text-destructive"
+                        onClick={() => setWorkLinks(workLinks.filter((_, idx) => idx !== i))}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-700 font-medium"
+                  onClick={() => setWorkLinks([...workLinks, ""])}
+                >
+                  <Plus className="h-3 w-3" /> Add another link
+                </button>
+              </div>
             </div>
 
             {/* Custom questions */}

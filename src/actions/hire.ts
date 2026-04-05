@@ -432,9 +432,38 @@ export async function getPublicJobs(orgSlug: string): Promise<ActionResult<{ org
   };
 }
 
+export async function uploadApplicationFile(formData: FormData): Promise<ActionResult<{ url: string }>> {
+  const file = formData.get("file") as File | null;
+  if (!file || file.size === 0) return { success: false, error: "No file provided" };
+  if (file.size > 5 * 1024 * 1024) return { success: false, error: "File must be under 5 MB" };
+
+  const supabase = createAdminSupabase();
+  const ext = file.name.split(".").pop()?.toLowerCase() ?? "bin";
+  const path = `applications/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+
+  const bytes = await file.arrayBuffer();
+  const { error } = await supabase.storage
+    .from("documents")
+    .upload(path, bytes, { contentType: file.type });
+
+  if (error) return { success: false, error: error.message };
+
+  const { data: urlData } = supabase.storage.from("documents").getPublicUrl(path);
+  return { success: true, data: { url: urlData.publicUrl } };
+}
+
 export async function submitApplication(
   jobId: string,
-  data: { name: string; email: string; phone?: string; linkedin_url?: string; cover_note?: string; answers?: { question: string; answer: string }[] }
+  data: {
+    name: string;
+    email: string;
+    phone?: string;
+    linkedin_url?: string;
+    resume_url?: string;
+    work_samples?: string[];
+    cover_note?: string;
+    answers?: { question: string; answer: string }[];
+  }
 ): Promise<ActionResult<void>> {
   const supabase = createAdminSupabase();
 
@@ -449,19 +478,32 @@ export async function submitApplication(
 
   const orgId = (job as any).org_id;
 
-  // Upsert candidate (same email = same candidate)
+  // Upsert candidate — update resume_url if provided
+  const candidatePayload: Record<string, unknown> = {
+    org_id: orgId,
+    name: data.name,
+    email: data.email,
+    phone: data.phone || null,
+    linkedin_url: data.linkedin_url || null,
+    source: "direct",
+  };
+  if (data.resume_url) candidatePayload.resume_url = data.resume_url;
+
   const { data: candidate, error: candError } = await supabase
     .from("candidates")
-    .upsert(
-      { org_id: orgId, name: data.name, email: data.email, phone: data.phone || null, linkedin_url: data.linkedin_url || null, source: "direct" },
-      { onConflict: "org_id,email" }
-    )
+    .upsert(candidatePayload, { onConflict: "org_id,email" })
     .select("id")
     .single();
 
   if (candError || !candidate) return { success: false, error: "Failed to save application" };
 
-  // Insert application (ignore duplicate — already applied)
+  // Build answers array — append work samples as a special entry if provided
+  const allAnswers = [...(data.answers ?? [])];
+  const workSamples = (data.work_samples ?? []).filter(Boolean);
+  if (workSamples.length > 0) {
+    allAnswers.push({ question: "__work_samples__", answer: workSamples.join("\n") });
+  }
+
   const { error: appError } = await supabase
     .from("applications")
     .insert({
@@ -470,7 +512,7 @@ export async function submitApplication(
       candidate_id: (candidate as any).id,
       stage: "applied",
       cover_note: data.cover_note || null,
-      answers: data.answers ?? [],
+      answers: allAnswers,
     });
 
   if (appError) {

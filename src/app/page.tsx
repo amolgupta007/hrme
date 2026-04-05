@@ -130,7 +130,8 @@ export default function HomePage() {
 
         <AnimateIn animation="fade-up" delay={80}>
           <h1 className="mx-auto max-w-3xl text-5xl font-bold tracking-tight leading-[1.1] sm:text-6xl">
-            Right now, someone on your team doesn&apos;t know their leave balance.
+            Leaves on WhatsApp. Payroll in Excel. Resumes in email.{" "}
+            <span className="text-primary">There&apos;s a better way.</span>
           </h1>
         </AnimateIn>
 

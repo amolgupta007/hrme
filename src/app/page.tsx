@@ -130,8 +130,8 @@ export default function HomePage() {
 
         <AnimateIn animation="fade-up" delay={80}>
           <h1 className="mx-auto max-w-3xl text-5xl font-bold tracking-tight leading-[1.1] sm:text-6xl">
-            Leaves on WhatsApp. Payroll in Excel. Resumes in email.{" "}
-            <span className="text-primary">There&apos;s a better way.</span>
+            Good people leave companies with broken HR.{" "}
+            <span className="text-primary">Yours is next.</span>
           </h1>
         </AnimateIn>
 

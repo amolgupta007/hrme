@@ -130,8 +130,8 @@ export default function HomePage() {
 
         <AnimateIn animation="fade-up" delay={80}>
           <h1 className="mx-auto max-w-3xl text-5xl font-bold tracking-tight leading-[1.1] sm:text-6xl">
-            Good people leave companies with broken HR.{" "}
-            <span className="text-primary">Yours is next.</span>
+            From first hire to five hundred —{" "}
+            <span className="text-primary">HR that grows with you.</span>
           </h1>
         </AnimateIn>
 

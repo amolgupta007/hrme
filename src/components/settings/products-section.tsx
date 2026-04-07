@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { Briefcase, Clock, Wallet, ExternalLink } from "lucide-react";
-import { toggleJambaHire, toggleAttendance, toggleAttendancePayroll } from "@/actions/settings";
+import { Briefcase, Clock, Wallet, ExternalLink, MessageSquareWarning } from "lucide-react";
+import { toggleJambaHire, toggleAttendance, toggleAttendancePayroll, toggleGrievances } from "@/actions/settings";
 import { useRouter } from "next/navigation";
 
 interface Props {
@@ -11,6 +11,7 @@ interface Props {
   isPlanEligible: boolean;
   attendanceEnabled: boolean;
   attendancePayrollEnabled: boolean;
+  grievancesEnabled: boolean;
 }
 
 function Toggle({ enabled, onChange, disabled }: { enabled: boolean; onChange: () => void; disabled?: boolean }) {
@@ -33,10 +34,11 @@ function Toggle({ enabled, onChange, disabled }: { enabled: boolean; onChange: (
   );
 }
 
-export function ProductsSection({ jambaHireEnabled, isPlanEligible, attendanceEnabled, attendancePayrollEnabled }: Props) {
+export function ProductsSection({ jambaHireEnabled, isPlanEligible, attendanceEnabled, attendancePayrollEnabled, grievancesEnabled }: Props) {
   const [jhEnabled, setJhEnabled] = useState(jambaHireEnabled);
   const [attEnabled, setAttEnabled] = useState(attendanceEnabled);
   const [attPayrollEnabled, setAttPayrollEnabled] = useState(attendancePayrollEnabled);
+  const [grvEnabled, setGrvEnabled] = useState(grievancesEnabled);
   const [loading, setLoading] = useState<string | null>(null);
   const router = useRouter();
 
@@ -132,6 +134,39 @@ export function ProductsSection({ jambaHireEnabled, isPlanEligible, attendanceEn
             </div>
           </div>
           <Toggle enabled={attEnabled} onChange={handleAttendance} disabled={loading === "attendance"} />
+        </div>
+
+        {/* Grievances & Feedback */}
+        <div className="flex items-start justify-between gap-4 rounded-lg border border-border p-4">
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-rose-100 dark:bg-rose-950">
+              <MessageSquareWarning className="h-5 w-5 text-rose-600 dark:text-rose-400" />
+            </div>
+            <div>
+              <p className="font-semibold text-sm">Grievances & Feedback</p>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                Anonymous complaint and suggestion box. Employees raise issues; admins track and resolve them privately.
+              </p>
+              {grvEnabled && (
+                <a href="/dashboard/grievances" className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-rose-600 hover:underline dark:text-rose-400">
+                  View Grievances <ExternalLink className="h-3 w-3" />
+                </a>
+              )}
+            </div>
+          </div>
+          <Toggle
+            enabled={grvEnabled}
+            onChange={async () => {
+              setLoading("grievances");
+              const next = !grvEnabled;
+              try {
+                const result = await toggleGrievances(next);
+                if (result.success) { setGrvEnabled(next); toast.success(next ? "Grievances enabled" : "Grievances disabled"); router.refresh(); }
+                else toast.error(result.error);
+              } finally { setLoading(null); }
+            }}
+            disabled={loading === "grievances"}
+          />
         </div>
 
         {/* Attendance → Payroll integration (only visible when attendance is on) */}

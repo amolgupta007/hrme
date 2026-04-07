@@ -12,6 +12,7 @@ export type UserContext = {
   jambaHireEnabled: boolean;
   attendanceEnabled: boolean;
   attendancePayrollEnabled: boolean;
+  grievancesEnabled: boolean;
 };
 
 /**
@@ -44,6 +45,7 @@ export async function getCurrentUser(): Promise<UserContext | null> {
   const jambaHireEnabled = !!settings?.jambahire_enabled;
   const attendanceEnabled = !!settings?.attendance_enabled;
   const attendancePayrollEnabled = !!settings?.attendance_payroll_enabled;
+  const grievancesEnabled = !!settings?.grievances_enabled;
 
   const { data: emp } = await supabase
     .from("employees")
@@ -57,7 +59,7 @@ export async function getCurrentUser(): Promise<UserContext | null> {
     : "admin";
   const employeeId = emp ? (emp as { id: string; role: string }).id : null;
 
-  return { orgId, clerkUserId: userId, role, employeeId, plan, jambaHireEnabled, attendanceEnabled, attendancePayrollEnabled };
+  return { orgId, clerkUserId: userId, role, employeeId, plan, jambaHireEnabled, attendanceEnabled, attendancePayrollEnabled, grievancesEnabled };
 }
 
 export function isAdmin(role: UserRole): boolean {

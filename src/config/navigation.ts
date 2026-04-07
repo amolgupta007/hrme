@@ -54,6 +54,12 @@ export const sidebarNav: NavItem[] = [
     featureFlag: "attendance",
   },
   {
+    title: "Grievances",
+    href: "/dashboard/grievances",
+    icon: "MessageSquareWarning",
+    featureFlag: "grievances",
+  },
+  {
     title: "Announcements",
     href: "/dashboard/announcements",
     icon: "Megaphone",

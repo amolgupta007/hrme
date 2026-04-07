@@ -18,6 +18,7 @@ export default async function DashboardLayout({
   const jambaHireEnabled = userCtx?.jambaHireEnabled ?? false;
   const features = {
     attendance: userCtx?.attendanceEnabled ?? false,
+    grievances: userCtx?.grievancesEnabled ?? false,
   };
 
   return (

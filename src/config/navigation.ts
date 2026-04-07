@@ -48,6 +48,12 @@ export const sidebarNav: NavItem[] = [
     requiredPlan: "growth",
   },
   {
+    title: "Attendance",
+    href: "/dashboard/attendance",
+    icon: "Clock",
+    featureFlag: "attendance",
+  },
+  {
     title: "Announcements",
     href: "/dashboard/announcements",
     icon: "Megaphone",

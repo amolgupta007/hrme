@@ -20,6 +20,8 @@ export default async function SettingsPage() {
   const policies = policiesResult.success ? policiesResult.data : [];
   const plan = userCtx?.plan ?? "starter";
   const jambaHireEnabled = userCtx?.jambaHireEnabled ?? false;
+  const attendanceEnabled = userCtx?.attendanceEnabled ?? false;
+  const attendancePayrollEnabled = userCtx?.attendancePayrollEnabled ?? false;
 
   return (
     <div className="space-y-6">
@@ -46,6 +48,8 @@ export default async function SettingsPage() {
       <ProductsSection
         jambaHireEnabled={jambaHireEnabled}
         isPlanEligible={hasFeature(plan, "ats")}
+        attendanceEnabled={attendanceEnabled}
+        attendancePayrollEnabled={attendancePayrollEnabled}
       />
     </div>
   );

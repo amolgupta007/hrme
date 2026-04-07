@@ -18,6 +18,7 @@ import {
   Network,
   Target,
   Megaphone,
+  Clock,
   Lock,
   type LucideIcon,
 } from "lucide-react";
@@ -42,6 +43,7 @@ const iconMap: Record<string, LucideIcon> = {
   Network,
   Target,
   Megaphone,
+  Clock,
 };
 
 // Map nav href to badge key
@@ -51,13 +53,15 @@ const BADGE_MAP: Record<string, keyof PendingCounts> = {
   "/dashboard/objectives": "objectives",
 };
 
-export function Sidebar({ badges, role, plan }: { badges: PendingCounts; role: UserRole; plan: OrgPlan }) {
+export function Sidebar({ badges, role, plan, features }: { badges: PendingCounts; role: UserRole; plan: OrgPlan; features?: Record<string, boolean> }) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
 
-  const visibleNav = sidebarNav.filter((item) =>
-    !item.requiredRole || hasPermission(role, item.requiredRole)
-  );
+  const visibleNav = sidebarNav.filter((item) => {
+    if (item.requiredRole && !hasPermission(role, item.requiredRole)) return false;
+    if (item.featureFlag && !features?.[item.featureFlag]) return false;
+    return true;
+  });
 
   return (
     <aside

@@ -16,10 +16,13 @@ export default async function DashboardLayout({
   const role = userCtx?.role ?? "employee";
   const plan = userCtx?.plan ?? "starter";
   const jambaHireEnabled = userCtx?.jambaHireEnabled ?? false;
+  const features = {
+    attendance: userCtx?.attendanceEnabled ?? false,
+  };
 
   return (
     <div className="flex min-h-screen">
-      <Sidebar badges={badges} role={role} plan={plan} />
+      <Sidebar badges={badges} role={role} plan={plan} features={features} />
       <div className="flex flex-1 flex-col">
         <Header jambaHireEnabled={jambaHireEnabled} badges={badges} role={role} />
         <main className="flex-1 p-6">{children}</main>

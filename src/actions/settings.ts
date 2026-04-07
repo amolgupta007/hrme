@@ -241,3 +241,59 @@ export async function toggleJambaHire(enabled: boolean): Promise<ActionResult<vo
   revalidatePath("/dashboard");
   return { success: true, data: undefined };
 }
+
+export async function toggleAttendance(enabled: boolean): Promise<ActionResult<void>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can manage features" };
+
+  const supabase = createAdminSupabase();
+  const { data: org } = await supabase
+    .from("organizations")
+    .select("settings")
+    .eq("id", user.orgId)
+    .single();
+
+  const currentSettings = (org as any)?.settings ?? {};
+  // When disabling attendance, also disable payroll integration
+  const newSettings = enabled
+    ? { ...currentSettings, attendance_enabled: true }
+    : { ...currentSettings, attendance_enabled: false, attendance_payroll_enabled: false };
+
+  const { error } = await supabase
+    .from("organizations")
+    .update({ settings: newSettings })
+    .eq("id", user.orgId);
+
+  if (error) return { success: false, error: error.message };
+
+  revalidatePath("/dashboard/settings");
+  revalidatePath("/dashboard");
+  return { success: true, data: undefined };
+}
+
+export async function toggleAttendancePayroll(enabled: boolean): Promise<ActionResult<void>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can manage features" };
+
+  const supabase = createAdminSupabase();
+  const { data: org } = await supabase
+    .from("organizations")
+    .select("settings")
+    .eq("id", user.orgId)
+    .single();
+
+  const currentSettings = (org as any)?.settings ?? {};
+  const newSettings = { ...currentSettings, attendance_payroll_enabled: enabled };
+
+  const { error } = await supabase
+    .from("organizations")
+    .update({ settings: newSettings })
+    .eq("id", user.orgId);
+
+  if (error) return { success: false, error: error.message };
+
+  revalidatePath("/dashboard/settings");
+  return { success: true, data: undefined };
+}

@@ -44,6 +44,7 @@ export interface NavItem {
   icon: string;
   requiredRole?: UserRole;
   requiredPlan?: "growth" | "business";
+  featureFlag?: string;
   badge?: string;
 }
 

@@ -297,3 +297,30 @@ export async function toggleAttendancePayroll(enabled: boolean): Promise<ActionR
   revalidatePath("/dashboard/settings");
   return { success: true, data: undefined };
 }
+
+export async function toggleGrievances(enabled: boolean): Promise<ActionResult<void>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can manage features" };
+
+  const supabase = createAdminSupabase();
+  const { data: org } = await supabase
+    .from("organizations")
+    .select("settings")
+    .eq("id", user.orgId)
+    .single();
+
+  const currentSettings = (org as any)?.settings ?? {};
+  const newSettings = { ...currentSettings, grievances_enabled: enabled };
+
+  const { error } = await supabase
+    .from("organizations")
+    .update({ settings: newSettings })
+    .eq("id", user.orgId);
+
+  if (error) return { success: false, error: error.message };
+
+  revalidatePath("/dashboard/settings");
+  revalidatePath("/dashboard");
+  return { success: true, data: undefined };
+}

@@ -454,6 +454,20 @@ export async function uploadApplicationFile(formData: FormData): Promise<ActionR
   return { success: true, data: { url: urlData.publicUrl } };
 }
 
+const applicationSchema = z.object({
+  name: z.string().min(1, "Name is required").max(200),
+  email: z.string().email("Valid email required"),
+  phone: z.string().max(20).optional(),
+  linkedin_url: z.string().url("Invalid LinkedIn URL").optional().or(z.literal("")),
+  resume_url: z.string().optional(),
+  work_samples: z.array(z.string()).optional(),
+  cover_note: z.string().max(2000).optional(),
+  answers: z.array(z.object({
+    question: z.string(),
+    answer: z.string(),
+  })).optional(),
+});
+
 export async function submitApplication(
   jobId: string,
   data: {
@@ -467,6 +481,12 @@ export async function submitApplication(
     answers?: { question: string; answer: string }[];
   }
 ): Promise<ActionResult<void>> {
+  const validated = applicationSchema.safeParse(data);
+  if (!validated.success) {
+    return { success: false, error: validated.error.errors[0]?.message ?? "Validation failed" };
+  }
+  const d = validated.data;
+
   const supabase = createAdminSupabase();
 
   const { data: job, error: jobError } = await supabase
@@ -483,13 +503,13 @@ export async function submitApplication(
   // Upsert candidate — update resume_url if provided
   const candidatePayload: Record<string, unknown> = {
     org_id: orgId,
-    name: data.name,
-    email: data.email,
-    phone: data.phone || null,
-    linkedin_url: data.linkedin_url || null,
+    name: d.name,
+    email: d.email,
+    phone: d.phone || null,
+    linkedin_url: d.linkedin_url || null,
     source: "direct",
   };
-  if (data.resume_url) candidatePayload.resume_url = data.resume_url;
+  if (d.resume_url) candidatePayload.resume_url = d.resume_url;
 
   const { data: candidate, error: candError } = await supabase
     .from("candidates")
@@ -500,8 +520,8 @@ export async function submitApplication(
   if (candError || !candidate) return { success: false, error: "Failed to save application" };
 
   // Build answers array — append work samples as a special entry if provided
-  const allAnswers = [...(data.answers ?? [])];
-  const workSamples = (data.work_samples ?? []).filter(Boolean);
+  const allAnswers = [...(d.answers ?? [])];
+  const workSamples = (d.work_samples ?? []).filter(Boolean);
   if (workSamples.length > 0) {
     allAnswers.push({ question: "__work_samples__", answer: workSamples.join("\n") });
   }
@@ -513,7 +533,7 @@ export async function submitApplication(
       job_id: jobId,
       candidate_id: (candidate as any).id,
       stage: "applied",
-      cover_note: data.cover_note || null,
+      cover_note: d.cover_note || null,
       answers: allAnswers,
     });
 

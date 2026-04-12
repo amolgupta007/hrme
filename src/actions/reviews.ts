@@ -4,7 +4,7 @@ import { auth, clerkClient } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createAdminSupabase } from "@/lib/supabase/server";
-import { getCurrentUser, isAdmin } from "@/lib/current-user";
+import { getCurrentUser, isAdmin, isManagerOrAbove } from "@/lib/current-user";
 import { getApprovedObjectivesForEmployees } from "@/actions/objectives";
 import type { ObjectiveSet } from "@/actions/objectives";
 import type { ActionResult } from "@/types";
@@ -196,15 +196,16 @@ export async function updateCycleStatus(
   cycleId: string,
   status: "draft" | "active" | "completed"
 ): Promise<ActionResult<void>> {
-  const ctx = await getOrgContext();
-  if (!ctx) return { success: false, error: "Not authenticated" };
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can update cycle status" };
 
   const supabase = createAdminSupabase();
   const { error } = await supabase
     .from("review_cycles")
     .update({ status })
     .eq("id", cycleId)
-    .eq("org_id", ctx.orgId);
+    .eq("org_id", user.orgId);
 
   if (error) return { success: false, error: error.message };
 
@@ -296,8 +297,8 @@ export async function submitSelfReview(
   reviewId: string,
   data: z.infer<typeof selfReviewSchema>
 ): Promise<ActionResult<void>> {
-  const ctx = await getOrgContext();
-  if (!ctx) return { success: false, error: "Not authenticated" };
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
 
   const validated = selfReviewSchema.safeParse(data);
   if (!validated.success) {
@@ -305,6 +306,18 @@ export async function submitSelfReview(
   }
 
   const supabase = createAdminSupabase();
+
+  // Verify this review belongs to the calling employee
+  const { data: review } = await supabase
+    .from("reviews")
+    .select("employee_id")
+    .eq("id", reviewId)
+    .eq("org_id", user.orgId)
+    .single();
+  if (!review || (review as any).employee_id !== user.employeeId) {
+    return { success: false, error: "You can only submit your own self-review" };
+  }
+
   const { error } = await supabase
     .from("reviews")
     .update({
@@ -314,7 +327,7 @@ export async function submitSelfReview(
       status: "manager_review",
     })
     .eq("id", reviewId)
-    .eq("org_id", ctx.orgId);
+    .eq("org_id", user.orgId);
 
   if (error) return { success: false, error: error.message };
 
@@ -331,8 +344,9 @@ export async function submitManagerReview(
   reviewId: string,
   data: z.infer<typeof managerReviewSchema>
 ): Promise<ActionResult<void>> {
-  const ctx = await getOrgContext();
-  if (!ctx) return { success: false, error: "Not authenticated" };
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isManagerOrAbove(user.role)) return { success: false, error: "Only managers can submit manager reviews" };
 
   const validated = managerReviewSchema.safeParse(data);
   if (!validated.success) {
@@ -349,7 +363,7 @@ export async function submitManagerReview(
       completed_at: new Date().toISOString(),
     })
     .eq("id", reviewId)
-    .eq("org_id", ctx.orgId);
+    .eq("org_id", user.orgId);
 
   if (error) return { success: false, error: error.message };
 

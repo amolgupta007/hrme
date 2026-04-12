@@ -345,6 +345,7 @@ export async function updateApplicationStage(
 ): Promise<ActionResult<void>> {
   const user = await getHireContext();
   if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can move application stages" };
 
   const supabase = createAdminSupabase();
   const { error } = await supabase
@@ -363,6 +364,7 @@ export async function updateApplicationStage(
 export async function rejectApplication(id: string, reason: string): Promise<ActionResult<void>> {
   const user = await getHireContext();
   if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can reject applications" };
 
   const supabase = createAdminSupabase();
   const { error } = await supabase
@@ -697,6 +699,7 @@ export async function scheduleInterview(input: {
 }): Promise<ActionResult<{ id: string }>> {
   const user = await getHireContext();
   if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can schedule interviews" };
 
   const supabase = createAdminSupabase();
   const { data, error } = await supabase
@@ -727,6 +730,7 @@ export async function updateInterviewStatus(
 ): Promise<ActionResult<void>> {
   const user = await getHireContext();
   if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can update interview status" };
 
   const supabase = createAdminSupabase();
   const { error } = await supabase
@@ -753,6 +757,19 @@ export async function submitInterviewFeedback(input: {
   if (!user) return { success: false, error: "Not authenticated" };
 
   const supabase = createAdminSupabase();
+
+  // Verify caller is assigned interviewer or admin
+  const { data: schedule } = await supabase
+    .from("interview_schedules")
+    .select("interviewer_id")
+    .eq("id", input.schedule_id)
+    .eq("org_id", user.orgId)
+    .single();
+  if (!schedule) return { success: false, error: "Interview not found" };
+  if (!isAdmin(user.role) && (schedule as any).interviewer_id !== user.employeeId) {
+    return { success: false, error: "You can only submit feedback for interviews you conducted" };
+  }
+
   const { error } = await supabase
     .from("interview_feedback")
     .upsert(

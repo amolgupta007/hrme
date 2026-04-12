@@ -44,3 +44,6 @@ next-env.d.ts
 .vscode/
 .idea/
 .vs/
+
+# git worktrees
+.worktrees/

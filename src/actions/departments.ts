@@ -4,6 +4,7 @@ import { auth, clerkClient } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createAdminSupabase } from "@/lib/supabase/server";
+import { getCurrentUser, isAdmin } from "@/lib/current-user";
 import type { ActionResult, Department } from "@/types";
 
 async function getOrgId(): Promise<string | null> {
@@ -46,8 +47,10 @@ export async function listDepartments(): Promise<ActionResult<Department[]>> {
 export async function addDepartment(
   formData: z.infer<typeof departmentSchema>
 ): Promise<ActionResult<{ id: string }>> {
-  const orgId = await getOrgId();
-  if (!orgId) return { success: false, error: "Not authenticated" };
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can manage departments" };
+  const orgId = user.orgId;
   const validated = departmentSchema.safeParse(formData);
   if (!validated.success) {
     return { success: false, error: validated.error.errors[0]?.message ?? "Validation failed" };
@@ -75,8 +78,10 @@ export async function updateDepartment(
   id: string,
   formData: z.infer<typeof departmentSchema>
 ): Promise<ActionResult<void>> {
-  const orgId = await getOrgId();
-  if (!orgId) return { success: false, error: "Not authenticated" };
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can manage departments" };
+  const orgId = user.orgId;
   const validated = departmentSchema.safeParse(formData);
   if (!validated.success) {
     return { success: false, error: validated.error.errors[0]?.message ?? "Validation failed" };
@@ -97,8 +102,10 @@ export async function updateDepartment(
 }
 
 export async function deleteDepartment(id: string): Promise<ActionResult<void>> {
-  const orgId = await getOrgId();
-  if (!orgId) return { success: false, error: "Not authenticated" };
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can manage departments" };
+  const orgId = user.orgId;
   const supabase = createAdminSupabase();
 
   // Check if any employees are assigned

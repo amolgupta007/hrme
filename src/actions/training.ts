@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { getCurrentUser, isAdmin } from "@/lib/current-user";
+import { hasFeature } from "@/config/plans";
 import type { ActionResult } from "@/types";
 
 async function getOrgContext() {
@@ -198,6 +199,9 @@ export async function createCourse(
   const user = await getCurrentUser();
   if (!user) return { success: false, error: "Not authenticated" };
   if (!isAdmin(user.role)) return { success: false, error: "Only admins can create courses" };
+  if (!hasFeature(user.plan, "training")) {
+    return { success: false, error: "Training module requires Growth plan or above" };
+  }
   const ctx = await getOrgContext();
   if (!ctx) return { success: false, error: "Not authenticated" };
 
@@ -235,6 +239,9 @@ export async function updateCourse(
   const user = await getCurrentUser();
   if (!user) return { success: false, error: "Not authenticated" };
   if (!isAdmin(user.role)) return { success: false, error: "Only admins can update courses" };
+  if (!hasFeature(user.plan, "training")) {
+    return { success: false, error: "Training module requires Growth plan or above" };
+  }
   const ctx = await getOrgContext();
   if (!ctx) return { success: false, error: "Not authenticated" };
 
@@ -268,6 +275,9 @@ export async function deleteCourse(courseId: string): Promise<ActionResult<void>
   const user = await getCurrentUser();
   if (!user) return { success: false, error: "Not authenticated" };
   if (!isAdmin(user.role)) return { success: false, error: "Only admins can delete courses" };
+  if (!hasFeature(user.plan, "training")) {
+    return { success: false, error: "Training module requires Growth plan or above" };
+  }
   const ctx = await getOrgContext();
   if (!ctx) return { success: false, error: "Not authenticated" };
 
@@ -293,6 +303,9 @@ export async function enrollEmployees(
   const user = await getCurrentUser();
   if (!user) return { success: false, error: "Not authenticated" };
   if (!isAdmin(user.role)) return { success: false, error: "Only admins can enroll employees" };
+  if (!hasFeature(user.plan, "training")) {
+    return { success: false, error: "Training module requires Growth plan or above" };
+  }
   const ctx = await getOrgContext();
   if (!ctx) return { success: false, error: "Not authenticated" };
 

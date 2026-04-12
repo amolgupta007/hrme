@@ -88,6 +88,7 @@ export function AttendanceClient({ today, history, team, employees, isManager, a
       from: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
     });
     if (result.success) setFilteredHistory(result.data);
+    else toast.error(result.error);
   }
 
   const todayDate = new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" });

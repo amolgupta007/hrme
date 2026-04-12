@@ -110,6 +110,7 @@ export function PayrollClient({
       setLoadingEntries(runId);
       const result = await getPayrollEntries(runId);
       if (result.success) setRunEntries((prev) => ({ ...prev, [runId]: result.data }));
+      else toast.error(result.error);
       setLoadingEntries(null);
     }
   }

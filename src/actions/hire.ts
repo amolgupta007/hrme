@@ -843,6 +843,7 @@ export async function createOffer(input: {
       reporting_manager_id: input.reporting_manager_id || null,
       additional_terms: input.additional_terms || null,
       status: "draft",
+      offer_token: crypto.randomUUID(),
     })
     .select("id")
     .single();

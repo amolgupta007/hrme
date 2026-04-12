@@ -1,12 +1,18 @@
 import { getOfferByToken, respondToOffer } from "@/actions/hire";
 import { CheckCircle2, XCircle, Building2 } from "lucide-react";
+import { redirect } from "next/navigation";
 
 interface Props {
   params: { token: string };
-  searchParams: { response?: string };
 }
 
-export default async function OfferResponsePage({ params, searchParams }: Props) {
+async function handleOfferResponse(token: string, decision: "accepted" | "declined") {
+  "use server";
+  await respondToOffer(token, decision);
+  redirect(`/offers/${token}`);
+}
+
+export default async function OfferResponsePage({ params }: Props) {
   const result = await getOfferByToken(params.token);
 
   if (!result.success) {
@@ -22,20 +28,10 @@ export default async function OfferResponsePage({ params, searchParams }: Props)
   }
 
   const { offer, orgName } = result.data;
+  const alreadyResponded = offer.status === "accepted" || offer.status === "declined";
 
-  // Handle response action from query param (from email buttons)
-  let responseResult: { success: boolean; error?: string } | null = null;
-  if (searchParams.response === "accept" && offer.status === "sent") {
-    responseResult = await respondToOffer(params.token, "accepted");
-  } else if (searchParams.response === "decline" && offer.status === "sent") {
-    responseResult = await respondToOffer(params.token, "declined");
-  }
-
-  const finalStatus = responseResult?.success
-    ? searchParams.response === "accept" ? "accepted" : "declined"
-    : offer.status;
-
-  const alreadyResponded = finalStatus === "accepted" || finalStatus === "declined";
+  const acceptAction = handleOfferResponse.bind(null, params.token, "accepted");
+  const declineAction = handleOfferResponse.bind(null, params.token, "declined");
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 flex items-center justify-center p-4">
@@ -107,11 +103,11 @@ export default async function OfferResponsePage({ params, searchParams }: Props)
         {/* Response Section */}
         {alreadyResponded ? (
           <div className={`rounded-2xl border p-6 text-center ${
-            finalStatus === "accepted"
+            offer.status === "accepted"
               ? "bg-green-50 border-green-200"
               : "bg-gray-50 border-gray-200"
           }`}>
-            {finalStatus === "accepted" ? (
+            {offer.status === "accepted" ? (
               <>
                 <CheckCircle2 className="mx-auto h-10 w-10 text-green-500 mb-3" />
                 <h2 className="text-lg font-bold text-green-800">Offer Accepted!</h2>
@@ -134,27 +130,31 @@ export default async function OfferResponsePage({ params, searchParams }: Props)
             <p className="text-sm font-medium text-yellow-800">This offer has expired.</p>
             <p className="text-xs text-yellow-600 mt-1">Please contact {orgName} if you have questions.</p>
           </div>
-        ) : (
+        ) : offer.status === "sent" ? (
           <div className="bg-white rounded-2xl shadow-sm border p-6 space-y-4">
             <p className="text-sm text-gray-600 text-center">Please respond to this offer:</p>
             <div className="flex gap-3">
-              <a
-                href={`/offers/${params.token}?response=accept`}
-                className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-green-600 hover:bg-green-700 text-white font-semibold py-3 text-sm transition-colors"
-              >
-                <CheckCircle2 className="h-4 w-4" />
-                Accept Offer
-              </a>
-              <a
-                href={`/offers/${params.token}?response=decline`}
-                className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-3 text-sm transition-colors"
-              >
-                <XCircle className="h-4 w-4" />
-                Decline
-              </a>
+              <form action={acceptAction} className="flex-1">
+                <button
+                  type="submit"
+                  className="w-full flex items-center justify-center gap-2 rounded-xl bg-green-600 hover:bg-green-700 text-white font-semibold py-3 text-sm transition-colors"
+                >
+                  <CheckCircle2 className="h-4 w-4" />
+                  Accept Offer
+                </button>
+              </form>
+              <form action={declineAction} className="flex-1">
+                <button
+                  type="submit"
+                  className="w-full flex items-center justify-center gap-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-3 text-sm transition-colors"
+                >
+                  <XCircle className="h-4 w-4" />
+                  Decline
+                </button>
+              </form>
             </div>
           </div>
-        )}
+        ) : null}
 
         <p className="text-center text-xs text-gray-400">
           Powered by JambaHire · {orgName}

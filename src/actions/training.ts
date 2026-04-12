@@ -348,6 +348,9 @@ export async function unenrollEmployee(
   const user = await getCurrentUser();
   if (!user) return { success: false, error: "Not authenticated" };
   if (!isAdmin(user.role)) return { success: false, error: "Only admins can unenroll employees" };
+  if (!hasFeature(user.plan, "training")) {
+    return { success: false, error: "Training module requires Growth plan or above" };
+  }
   const ctx = await getOrgContext();
   if (!ctx) return { success: false, error: "Not authenticated" };
 

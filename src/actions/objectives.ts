@@ -4,6 +4,7 @@ import { auth, clerkClient } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createAdminSupabase } from "@/lib/supabase/server";
+import { getCurrentUser, isManagerOrAbove } from "@/lib/current-user";
 import type { ActionResult } from "@/types";
 
 async function getOrgContext() {
@@ -314,8 +315,9 @@ export async function approveObjectives(
   objectiveId: string,
   feedback?: string
 ): Promise<ActionResult<void>> {
-  const ctx = await getOrgContext();
-  if (!ctx) return { success: false, error: "Not authenticated" };
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isManagerOrAbove(user.role)) return { success: false, error: "Only managers can approve objectives" };
 
   const supabase = createAdminSupabase();
   const { error } = await supabase
@@ -326,7 +328,7 @@ export async function approveObjectives(
       manager_feedback: feedback ?? null,
     })
     .eq("id", objectiveId)
-    .eq("org_id", ctx.orgId);
+    .eq("org_id", user.orgId);
 
   if (error) return { success: false, error: error.message };
 
@@ -338,8 +340,9 @@ export async function rejectObjectives(
   objectiveId: string,
   feedback: string
 ): Promise<ActionResult<void>> {
-  const ctx = await getOrgContext();
-  if (!ctx) return { success: false, error: "Not authenticated" };
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isManagerOrAbove(user.role)) return { success: false, error: "Only managers can reject objectives" };
 
   if (!feedback.trim()) return { success: false, error: "Feedback is required for rejection" };
 
@@ -348,7 +351,7 @@ export async function rejectObjectives(
     .from("objectives")
     .update({ status: "rejected", manager_feedback: feedback })
     .eq("id", objectiveId)
-    .eq("org_id", ctx.orgId);
+    .eq("org_id", user.orgId);
 
   if (error) return { success: false, error: error.message };
 

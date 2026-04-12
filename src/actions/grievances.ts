@@ -56,6 +56,9 @@ export async function submitGrievance(
 ): Promise<ActionResult<{ tracking_token: string }>> {
   const user = await getCurrentUser();
   if (!user) return { success: false, error: "Not authenticated" };
+  if (!user.grievancesEnabled) {
+    return { success: false, error: "Grievances module is not enabled for your organization" };
+  }
 
   const validated = submitSchema.safeParse(input);
   if (!validated.success) return { success: false, error: validated.error.errors[0].message };
@@ -97,6 +100,9 @@ export async function listGrievances(filters?: {
 }): Promise<ActionResult<GrievanceRecord[]>> {
   const user = await getCurrentUser();
   if (!user) return { success: false, error: "Not authenticated" };
+  if (!user.grievancesEnabled) {
+    return { success: false, error: "Grievances module is not enabled for your organization" };
+  }
 
   const supabase = createAdminSupabase();
 
@@ -141,6 +147,9 @@ export async function updateGrievanceStatus(
 ): Promise<ActionResult<void>> {
   const user = await getCurrentUser();
   if (!user) return { success: false, error: "Not authenticated" };
+  if (!user.grievancesEnabled) {
+    return { success: false, error: "Grievances module is not enabled for your organization" };
+  }
   if (!isAdmin(user.role)) return { success: false, error: "Unauthorized" };
 
   const supabase = createAdminSupabase();
@@ -189,6 +198,9 @@ export async function getGrievanceByToken(
 export async function getGrievanceStats(): Promise<ActionResult<GrievanceStats>> {
   const user = await getCurrentUser();
   if (!user) return { success: false, error: "Not authenticated" };
+  if (!user.grievancesEnabled) {
+    return { success: false, error: "Grievances module is not enabled for your organization" };
+  }
   if (!isAdmin(user.role)) return { success: false, error: "Unauthorized" };
 
   const supabase = createAdminSupabase();

@@ -4,6 +4,7 @@ import { currentUser, clerkClient, auth } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createAdminSupabase } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/current-user";
 import type { ActionResult, Employee } from "@/types";
 
 export type Address = {
@@ -121,11 +122,9 @@ export async function updateMyProfile(
   employeeId: string,
   formData: z.infer<typeof profileSchema>
 ): Promise<ActionResult<void>> {
-  const user = await currentUser();
+  const user = await getCurrentUser();
   if (!user) return { success: false, error: "Not authenticated" };
-
-  const orgId = await getOrgId();
-  if (!orgId) return { success: false, error: "Organization not found" };
+  if (user.employeeId !== employeeId) return { success: false, error: "Forbidden" };
 
   const validated = profileSchema.safeParse(formData);
   if (!validated.success) {
@@ -154,7 +153,7 @@ export async function updateMyProfile(
       permanent_address: d.permanentAddress ?? null,
     })
     .eq("id", employeeId)
-    .eq("org_id", orgId);
+    .eq("org_id", user.orgId);
 
   if (error) return { success: false, error: error.message };
 

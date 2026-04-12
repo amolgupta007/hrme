@@ -411,7 +411,7 @@ export async function getPublicJobs(orgSlug: string): Promise<ActionResult<{ org
 
   const { data: jobs, error } = await supabase
     .from("jobs")
-    .select("*")
+    .select("id, org_id, title, description, employment_type, location_type, location, salary_min, salary_max, show_salary, status, custom_questions, created_at")
     .eq("org_id", (org as any).id)
     .eq("status", "active")
     .order("created_at", { ascending: false });

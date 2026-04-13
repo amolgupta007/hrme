@@ -20,6 +20,19 @@ const CATEGORIES = [
   { value: "other", label: "Other" },
 ];
 
+const SPACES = [
+  { value: "company_wide", label: "Company Wide", description: "Visible to all employees" },
+  { value: "personal", label: "Personal Files", description: "Visible to one employee + admins" },
+  { value: "owner_vault", label: "Owner Vault", description: "Visible to admins only" },
+] as const;
+
+type SpaceValue = "company_wide" | "personal" | "owner_vault";
+
+const ACK_METHODS = [
+  { value: "type_name", label: "Type-your-name", description: "For NDA, Code of Conduct" },
+  { value: "audit_trail", label: "Audit trail", description: "For Leave Policy, general policies" },
+] as const;
+
 const inputCn =
   "flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2";
 
@@ -35,21 +48,22 @@ export function UploadDialog({ open, onOpenChange, employees }: UploadDialogProp
   const [file, setFile] = React.useState<File | null>(null);
   const [name, setName] = React.useState("");
   const [category, setCategory] = React.useState("other");
-  const [isCompanyWide, setIsCompanyWide] = React.useState(true);
+  const [space, setSpace] = React.useState<SpaceValue>("company_wide");
   const [employeeId, setEmployeeId] = React.useState("");
   const [requiresAck, setRequiresAck] = React.useState(false);
+  const [ackMethod, setAckMethod] = React.useState<"type_name" | "audit_trail">("audit_trail");
   const [loading, setLoading] = React.useState(false);
   const inputRef = React.useRef<HTMLInputElement>(null);
 
-  // Reset on open
   React.useEffect(() => {
     if (open) {
       setFile(null);
       setName("");
       setCategory("other");
-      setIsCompanyWide(true);
+      setSpace("company_wide");
       setEmployeeId("");
       setRequiresAck(false);
+      setAckMethod("audit_trail");
     }
   }, [open]);
 
@@ -62,14 +76,18 @@ export function UploadDialog({ open, onOpenChange, employees }: UploadDialogProp
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!file) { toast.error("Please select a file"); return; }
+    if (space === "personal" && !employeeId) { toast.error("Please select an employee"); return; }
 
     const fd = new FormData();
     fd.append("file", file);
     fd.append("name", name || file.name);
     fd.append("category", category);
-    fd.append("is_company_wide", String(isCompanyWide));
-    fd.append("employee_id", employeeId);
-    fd.append("requires_acknowledgment", String(requiresAck));
+    fd.append("space", space);
+    if (space === "personal") fd.append("employee_id", employeeId);
+    fd.append(
+      "ack_method",
+      space === "company_wide" && requiresAck ? ackMethod : "none"
+    );
 
     setLoading(true);
     const result = await uploadDocument(fd);
@@ -152,22 +170,43 @@ export function UploadDialog({ open, onOpenChange, employees }: UploadDialogProp
               </Select.Root>
             </div>
 
-            {/* Company-wide toggle */}
-            <div className="flex items-center gap-3">
-              <input
-                id="company_wide"
-                type="checkbox"
-                className="h-4 w-4 rounded border-input accent-primary"
-                checked={isCompanyWide}
-                onChange={(e) => { setIsCompanyWide(e.target.checked); setEmployeeId(""); }}
-              />
-              <Label.Root htmlFor="company_wide" className="text-sm font-medium cursor-pointer">
-                Company-wide document (visible to all employees)
-              </Label.Root>
+            {/* Space selector */}
+            <div className="space-y-2">
+              <Label.Root className="text-sm font-medium">Space</Label.Root>
+              <div className="space-y-1.5">
+                {SPACES.map((s) => (
+                  <label
+                    key={s.value}
+                    className={cn(
+                      "flex items-start gap-3 rounded-lg border px-3 py-2.5 cursor-pointer transition-colors",
+                      space === s.value
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:border-primary/40"
+                    )}
+                  >
+                    <input
+                      type="radio"
+                      name="space"
+                      value={s.value}
+                      checked={space === s.value}
+                      onChange={() => {
+                        setSpace(s.value);
+                        setEmployeeId("");
+                        setRequiresAck(false);
+                      }}
+                      className="mt-0.5 accent-primary"
+                    />
+                    <div>
+                      <p className="text-sm font-medium leading-none">{s.label}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{s.description}</p>
+                    </div>
+                  </label>
+                ))}
+              </div>
             </div>
 
-            {/* Employee picker (when not company-wide) */}
-            {!isCompanyWide && (
+            {/* Employee picker — Personal Files only */}
+            {space === "personal" && (
               <div className="space-y-1.5">
                 <Label.Root className="text-sm font-medium">Employee</Label.Root>
                 <Select.Root
@@ -196,19 +235,55 @@ export function UploadDialog({ open, onOpenChange, employees }: UploadDialogProp
               </div>
             )}
 
-            {/* Requires acknowledgment */}
-            <div className="flex items-center gap-3">
-              <input
-                id="requires_ack"
-                type="checkbox"
-                className="h-4 w-4 rounded border-input accent-primary"
-                checked={requiresAck}
-                onChange={(e) => setRequiresAck(e.target.checked)}
-              />
-              <Label.Root htmlFor="requires_ack" className="text-sm font-medium cursor-pointer">
-                Requires employee acknowledgment
-              </Label.Root>
-            </div>
+            {/* Acknowledgment — Company Wide only */}
+            {space === "company_wide" && (
+              <>
+                <div className="flex items-center gap-3">
+                  <input
+                    id="requires_ack"
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-input accent-primary"
+                    checked={requiresAck}
+                    onChange={(e) => setRequiresAck(e.target.checked)}
+                  />
+                  <Label.Root htmlFor="requires_ack" className="text-sm font-medium cursor-pointer">
+                    Requires employee acknowledgment
+                  </Label.Root>
+                </div>
+
+                {requiresAck && (
+                  <div className="space-y-2 pl-7">
+                    <p className="text-sm font-medium">Acknowledgment method</p>
+                    <div className="space-y-1.5">
+                      {ACK_METHODS.map((m) => (
+                        <label
+                          key={m.value}
+                          className={cn(
+                            "flex items-start gap-3 rounded-lg border px-3 py-2.5 cursor-pointer transition-colors",
+                            ackMethod === m.value
+                              ? "border-primary bg-primary/5"
+                              : "border-border hover:border-primary/40"
+                          )}
+                        >
+                          <input
+                            type="radio"
+                            name="ack_method"
+                            value={m.value}
+                            checked={ackMethod === m.value}
+                            onChange={() => setAckMethod(m.value)}
+                            className="mt-0.5 accent-primary"
+                          />
+                          <div>
+                            <p className="text-sm font-medium leading-none">{m.label}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">{m.description}</p>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
 
             <div className="flex justify-end gap-3 pt-1">
               <Dialog.Close asChild>

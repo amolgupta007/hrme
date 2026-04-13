@@ -2,533 +2,245 @@
 
 ## What is this project?
 
-JambaHR is an all-in-one HR management SaaS platform for small and medium businesses (10–500 employees) who don't want to hire a dedicated HR professional. It handles employee directory, leave management, performance reviews, training & compliance, document storage, and payroll — all through a single web portal.
+JambaHR is an all-in-one HR management SaaS platform for small and medium businesses (10–500 employees). Handles employee directory, leave management, performance reviews, training & compliance, document storage, payroll, and ATS — all through a single web portal.
 
 **Target customer**: Business owners / decision-makers at companies with 10–500 employees.
-**Two user types**: Admins (company owners/HR) who configure and manage, and Employees who self-serve (apply for leave, view docs, do reviews).
+**Two user types**: Admins (company owners/HR) and Employees (self-serve).
 
 ---
 
 ## Tech Stack
 
-| Layer | Tool | Purpose |
-|-------|------|---------|
-| Framework | Next.js 14 (App Router) | Full-stack React with RSC and Server Actions |
-| Language | TypeScript (strict) | Type safety throughout |
-| Styling | Tailwind CSS 3.4 + tailwindcss-animate | Utility-first CSS with custom design tokens |
-| UI Components | Radix UI + CVA + tailwind-merge | Accessible primitives with variant system |
-| Auth | Clerk (with Organizations) | Multi-tenant auth, roles, invitations |
-| Database | Supabase (Postgres) | Data storage + Row Level Security for multi-tenancy |
-| Payments | Razorpay | Subscription billing (per-employee pricing, INR) |
-| Email | Resend + React Email | Transactional emails (leave approvals, status notifications) |
-| Analytics | PostHog | Product analytics and feature flags |
-| Errors | Sentry | Error tracking and performance monitoring |
-| Hosting | Vercel | Deployment + edge functions |
-| DNS | Cloudflare | DNS + DDoS protection |
-| Monitoring | UptimeRobot | Uptime checks |
-| Domain | Namecheap | Domain registration |
+| Layer | Tool |
+|-------|------|
+| Framework | Next.js 14 (App Router), TypeScript strict |
+| Styling | Tailwind CSS 3.4 + Radix UI + CVA + tailwind-merge |
+| Auth | Clerk (with Organizations) |
+| Database | Supabase (Postgres + RLS) |
+| Payments | Razorpay (INR, per-employee pricing) |
+| Email | Resend + React Email |
+| Analytics / Errors | PostHog + Sentry |
+| Hosting | Vercel (bom1 region), Cloudflare DNS |
 
-### Important version notes
-- Next.js is pinned to 14.2.x — do NOT upgrade to 15/16 without migration
-- eslint-config-next is pinned to 14.2.15 to match ESLint 8
-- The `geist` font package must be installed separately (`npm install geist`)
+### Critical version pins
+- Next.js **14.2.x** — do NOT upgrade to 15/16
+- `eslint-config-next` pinned to **14.2.15** (matches ESLint 8)
+- `@react-email/render` + `@react-email/components` must be in `serverComponentsExternalPackages` in `next.config.js` — Vercel build crashes otherwise
+- `@anthropic-ai/sdk` (^0.80.0) — AI JD generation in JambaHire
+- `gray-matter`, `remark`, `remark-html`, `remark-gfm` — blog markdown system
+- `tailwindcss-typography` — required for blog `prose` classes
 - Supabase CLI does NOT support global npm install on Windows — use the SQL Editor in the Supabase Dashboard instead
-- `@react-email/render` and `@react-email/components` must be listed in `serverComponentsExternalPackages` in `next.config.js` — otherwise Vercel build crashes
-- `@anthropic-ai/sdk` (^0.80.0) — used for AI job description generation in JambaHire
-- `gray-matter`, `remark`, `remark-html`, `remark-gfm` — used for the blog markdown system
-- `tailwindcss-typography` plugin — required for blog `prose` CSS classes
 
 ---
 
 ## Project Structure
 
 ```
-hr-portal/
-├── src/
-│   ├── app/                          # Next.js App Router
-│   │   ├── layout.tsx                # Root layout (Clerk, fonts, PostHog, Sonner, Sentry, favicon)
-│   │   ├── page.tsx                  # Marketing landing page (public)
-│   │   ├── globals.css               # Design tokens (HSL CSS variables, light + dark)
-│   │   ├── global-error.tsx          # Sentry React render error boundary
-│   │   ├── (auth)/                   # Auth routes (public)
-│   │   │   ├── sign-in/[[...sign-in]]/page.tsx
-│   │   │   └── sign-up/[[...sign-up]]/page.tsx
-│   │   ├── (marketing)/              # Future marketing pages
-│   │   ├── onboarding/page.tsx       # Post-signup org creation wizard
-│   │   ├── blog/                     # Public blog (no auth required)
-│   │   │   ├── page.tsx              # Blog listing with category filter
-│   │   │   └── [slug]/page.tsx       # Individual post (SSG via generateStaticParams)
-│   │   ├── careers/[slug]/page.tsx   # Public careers page — shows active jobs for org (no auth)
-│   │   ├── offers/[token]/page.tsx   # Public offer response page — accept/decline (no auth, token-based)
-│   │   ├── hire/                     # JambaHire ATS module (auth required, separate layout)
-│   │   │   ├── layout.tsx            # JambaHire layout with HireNav
-│   │   │   ├── page.tsx              # JambaHire overview/dashboard
-│   │   │   ├── jobs/page.tsx         # Job listings + create/edit/status control
-│   │   │   ├── jobs/[id]/page.tsx    # Individual job detail with applicant list
-│   │   │   ├── candidates/page.tsx   # Candidate directory with tags & application history
-│   │   │   ├── pipeline/page.tsx     # Kanban pipeline: 7 stages, bulk moves, analytics funnel
-│   │   │   ├── interviews/page.tsx   # Interview scheduling & feedback collection
-│   │   │   └── offers/page.tsx       # Offer creation, sending, and tracking
-│   │   ├── api/
-│   │   │   ├── webhooks/
-│   │   │   │   ├── clerk/route.ts        # Syncs Clerk user/org events → Supabase; seeds default leave policies + holidays on signup; sends founder alert + welcome emails
-│   │   │   │   ├── stripe/route.ts       # Legacy Stripe handler (kept, unused)
-│   │   │   │   └── razorpay/route.ts     # Razorpay subscription lifecycle webhook
-│   │   │   └── cron/
-│   │   │       ├── doc-reminders/route.ts       # Weekly unacknowledged doc reminders (Mondays 9am IST)
-│   │   │       └── onboarding-nudges/route.ts   # Daily nudge emails for orgs at day 1/3/5/7 (9:30am IST)
-│   │   └── dashboard/                # Protected app (requires auth)
-│   │       ├── layout.tsx            # Sidebar + Header shell (passes role + plan)
-│   │       ├── page.tsx              # Dashboard home (live stats, recent leaves, deadlines)
-│   │       ├── employees/page.tsx    # Employee directory with CRUD
-│   │       ├── leaves/page.tsx       # Leave management
-│   │       ├── documents/page.tsx    # Document hub (Growth+ plan gate)
-│   │       ├── reviews/page.tsx      # Performance reviews (Growth+ plan gate)
-│   │       ├── training/page.tsx     # Training & compliance (Growth+ plan gate)
-│   │       ├── objectives/page.tsx   # OKR objectives (Growth+ plan gate)
-│   │       ├── announcements/page.tsx# Company-wide announcements
-│   │       ├── directory/page.tsx    # Org chart tree view
-│   │       ├── profile/page.tsx      # Employee self-profile
-│   │       ├── payroll/page.tsx      # Payroll (Business+ plan gate)
-│   │       └── settings/page.tsx     # Org settings, billing, policies
-│   ├── actions/                      # Server Actions (all mutations)
-│   │   ├── employees.ts             # list, add, update, delete, getDepartments
-│   │   ├── leaves.ts                # request, approve, reject, cancel, balances, policies + email notifications
-│   │   ├── documents.ts             # list, upload, delete, signed URLs, acknowledgeDocument
-│   │   ├── reviews.ts               # cycles CRUD, self/manager review submit
-│   │   ├── objectives.ts            # OKR CRUD, submit, approve, reject
-│   │   ├── training.ts              # courses CRUD, enroll, progress, completion
-│   │   ├── settings.ts              # org profile, departments, leave policies, toggleJambaHire()
-│   │   ├── billing.ts               # Razorpay subscription creation, cancellation
-│   │   ├── dashboard.ts             # live stats, recent leaves, deadlines, review cycles
-│   │   ├── announcements.ts         # list, create, update, delete, pin/unpin, markRead
-│   │   ├── notifications.ts         # getPendingCounts() for sidebar badges
-│   │   └── hire.ts                  # Full JambaHire ATS: jobs, candidates, applications, interviews, feedback, offers (public endpoints too)
-│   ├── components/
-│   │   ├── ui/                       # Reusable primitives
-│   │   │   ├── button.tsx
-│   │   │   ├── card.tsx
-│   │   │   └── badge.tsx
-│   │   ├── layout/
-│   │   │   ├── sidebar.tsx           # Collapsible nav, role-filtered + plan-locked items, badges
-│   │   │   ├── header.tsx            # Top bar with search + notifications
-│   │   │   ├── upgrade-gate.tsx      # Full-page upgrade prompt for locked plan features
-│   │   │   └── posthog-provider.tsx
-│   │   ├── dashboard/
-│   │   │   ├── employees-client.tsx  # Employee page (Add button hidden for employees)
-│   │   │   ├── employee-table.tsx    # Data table (actions hidden for non-admins)
-│   │   │   └── employee-form.tsx     # Add/edit modal
-│   │   ├── leaves/                   # Leave request form, table, approval workflow
-│   │   ├── documents/                # Upload dialog, document list, acknowledgment button
-│   │   ├── reviews/                  # Cycle list, review dialog (create cycle hidden for employees)
-│   │   ├── objectives/               # Create/approve dialogs, objectives list
-│   │   ├── training/                 # Course dialog, enroll dialog, progress dialog, compliance tab
-│   │   ├── announcements/            # Announcement list, create/edit dialog, pin controls
-│   │   ├── settings/                 # Org profile, departments, leave policies, billing section
-│   │   ├── hire/                     # JambaHire components (12 files)
-│   │   │   ├── hire-nav.tsx          # Top nav bar for the /hire module
-│   │   │   ├── jobs-client.tsx       # Jobs listing with sorting + job dialog
-│   │   │   ├── job-dialog.tsx        # Job create/edit form with custom questions
-│   │   │   ├── job-detail-client.tsx # Job detail view with applicant count
-│   │   │   ├── candidates-client.tsx # Candidate list with tags & application links
-│   │   │   ├── pipeline-client.tsx   # Kanban board: drag-and-drop, bulk moves, funnel analytics, filters
-│   │   │   ├── interviews-client.tsx # Interview list with schedule + feedback buttons
-│   │   │   ├── schedule-interview-dialog.tsx  # Interview scheduling form with calendar links
-│   │   │   ├── feedback-dialog.tsx   # Structured feedback (4 rating scales + recommendation)
-│   │   │   ├── offers-client.tsx     # Offers list with create + send flow
-│   │   │   ├── careers-page-client.tsx # Public careers page display component
-│   │   │   └── calendar-links.tsx    # Google/Outlook/ICS calendar link generator
-│   │   ├── forms/                    # Shared form components
-│   │   └── emails/
-│   │       ├── leave-request.tsx     # React Email template — new leave request (to managers)
-│   │       ├── leave-status.tsx      # React Email template — approved/rejected notification (to employee)
-│   │       ├── offer-letter.tsx      # React Email template — offer letter with Accept/Decline buttons
-│   │       ├── founder-alert.tsx     # React Email template — new signup alert to amol@jambahr.com
-│   │       ├── welcome.tsx           # React Email template — welcome email to new client with getting started guide
-│   │       ├── onboarding-nudge.tsx  # React Email template — Day 1/3/5 nudge emails (generic template with day-specific content)
-│   │       └── upgrade-push.tsx      # React Email template — Day 7 upgrade pitch email (lists locked features + pricing)
-│   ├── config/
-│   │   ├── navigation.ts            # Sidebar nav items with requiredRole + requiredPlan, APP_NAME
-│   │   └── plans.ts                 # OrgPlan type, PLAN_FEATURES map, hasFeature(), PLAN_UNLOCK_HIGHLIGHTS
-│   ├── hooks/
-│   │   ├── index.ts
-│   │   └── use-employee.ts          # Client hook for current employee + org context
-│   ├── content/
-│   │   └── blog/                     # Markdown blog posts (frontmatter: title, excerpt, date, author, category, readTime)
-│   │       ├── how-to-calculate-pf-pt-tds-india.md
-│   │       └── leave-policy-template-india-2025.md
-│   ├── lib/
-│   │   ├── utils.ts                  # cn(), formatDate(), formatCurrency(), getInitials()
-│   │   ├── razorpay.ts              # Razorpay client + PLANS config (starter/growth/business)
-│   │   ├── current-user.ts          # getCurrentUser() → { orgId, clerkUserId, role, employeeId, plan, jambaHireEnabled }
-│   │   ├── resend.ts                # Resend email client + FROM_EMAIL, FOUNDER_EMAIL_FROM, NOREPLY_EMAIL_FROM constants
-│   │   ├── blog.ts                  # getAllPosts(), getPost(slug) — reads markdown from src/content/blog/
-│   │   ├── calendar.ts              # getGoogleCalendarUrl(), getOutlookCalendarUrl(), generateICS(), downloadICS()
-│   │   └── supabase/
-│   │       ├── client.ts
-│   │       ├── server.ts
-│   │       └── index.ts
-│   ├── middleware.ts                 # Clerk route protection
-│   └── types/
-│       ├── database.types.ts
-│       └── index.ts                  # Row types, UserRole, ROLE_HIERARCHY, hasPermission(), ActionResult, NavItem
-├── supabase/
-│   ├── config.toml
-│   └── migrations/
-│       └── 001_initial_schema.sql    # Full schema: 12 tables, indexes, RLS, triggers
-├── scripts/
-│   ├── seed-payroll-demo.sql         # Upserts salary structures for all 15 test1 employees (Maharashtra/metro, ₹12–36 LPA by role)
-│   ├── seed-jambahire-demo.sql       # Seeds 4 jobs, 10 candidates, full pipeline, 3 interviews, 2 offers for test1 org
-│   └── fix-salary-structures-columns.sql  # ALTER TABLE to add missing columns: include_hra, employer_pf_monthly, employer_gratuity_annual, updated_at
-├── public/
-│   ├── Jamba.png                     # App logo — used as favicon and Razorpay checkout logo
-│   └── pitchdeck.html                # 12-page HTML pitch deck (open in Chrome → Print → Save as PDF)
-├── .env.example
-├── package.json
-├── tsconfig.json
-├── tailwind.config.ts
-├── next.config.js
-├── postcss.config.js
-├── vercel.json
-├── .eslintrc.json
-├── .prettierrc
-└── .gitignore
+hr-portal/src/
+├── app/
+│   ├── layout.tsx / globals.css / global-error.tsx
+│   ├── page.tsx                    # Marketing landing page
+│   ├── (auth)/sign-in, sign-up
+│   ├── onboarding/page.tsx
+│   ├── blog/[slug]/page.tsx        # SSG markdown blog
+│   ├── careers/[slug]/page.tsx     # Public job listings (no auth)
+│   ├── offers/[token]/page.tsx     # Candidate accept/decline (no auth)
+│   ├── hire/                       # JambaHire ATS (Business tier, layout + 6 pages)
+│   ├── api/webhooks/clerk|razorpay|stripe
+│   ├── api/cron/doc-reminders|onboarding-nudges
+│   └── dashboard/                  # All protected pages
+│       ├── layout.tsx (sidebar + header)
+│       ├── employees, leaves, documents, reviews, training
+│       ├── objectives, announcements, directory, profile
+│       ├── payroll, attendance, grievances, settings
+├── actions/                        # ALL mutations as Server Actions
+│   employees, leaves, documents, reviews, objectives, training
+│   settings, billing, dashboard, announcements, notifications
+│   attendance, grievances, hire
+├── components/
+│   ├── ui/                         # button, card, badge
+│   ├── layout/                     # sidebar, header, upgrade-gate, posthog-provider
+│   ├── dashboard/ leaves/ documents/ reviews/ objectives/ training/
+│   ├── announcements/ attendance/ grievances/ settings/
+│   ├── hire/                       # 12 files (hire-nav, jobs, candidates, pipeline, interviews, offers, etc.)
+│   └── emails/                     # React Email templates (leave-request, leave-status, offer-letter,
+│                                   #   founder-alert, welcome, onboarding-nudge, upgrade-push, doc-reminder, payment-failed)
+├── config/navigation.ts, plans.ts
+├── lib/
+│   ├── utils.ts                    # cn(), formatDate(), formatCurrency(), getInitials()
+│   ├── current-user.ts             # getCurrentUser() → { orgId, clerkUserId, role, employeeId, plan, jambaHireEnabled, attendanceEnabled, grievancesEnabled }
+│   ├── razorpay.ts / resend.ts / blog.ts / calendar.ts
+│   └── supabase/client.ts, server.ts, index.ts
+├── content/blog/                   # Markdown posts (title, excerpt, date, author, category, readTime)
+├── middleware.ts
+└── types/database.types.ts, index.ts
+supabase/migrations/001_initial_schema.sql
+scripts/seed-payroll-demo.sql, seed-jambahire-demo.sql, fix-salary-structures-columns.sql
+public/Jamba.png (favicon + Razorpay logo), pitchdeck.html
 ```
 
 ---
 
 ## Database Schema (Supabase Postgres)
 
-19 tables, all with `org_id` for multi-tenant isolation via RLS:
+All tables have `org_id` (FK → organizations) for multi-tenant RLS isolation.
 
-| Table | Purpose | Key columns |
-|-------|---------|-------------|
-| `organizations` | Tenant root | clerk_org_id, plan, stripe_customer_id (reused for Razorpay sub ID), max_employees |
-| `employees` | Team directory | first_name, last_name, email, role, department_id, status, employment_type, clerk_user_id |
-| `departments` | Org structure | name, head_id (FK → employees) |
-| `leave_policies` | Leave type config | type (paid/sick/casual/etc), days_per_year, carry_forward |
-| `leave_balances` | Per-employee per-year | total_days, used_days, carried_forward_days |
-| `leave_requests` | Time-off requests | start_date, end_date, days, status (pending/approved/rejected/cancelled) |
-| `documents` | File metadata | category, file_url, is_company_wide, requires_acknowledgment |
-| `document_acknowledgments` | Who has acknowledged which doc | document_id, employee_id, acknowledged_at — added via SQL Editor |
-| `review_cycles` | Review period config | status (draft/active/completed), start_date, end_date |
-| `reviews` | Individual reviews | self_rating, manager_rating, goals (JSONB), objectives_id, status |
-| `training_courses` | Course library | category (ethics/compliance/safety/skills/onboarding/custom), is_mandatory, due_date |
-| `training_enrollments` | Employee ↔ Course | status (assigned/in_progress/completed/overdue), progress_percent, certificate_url |
-| `holidays` | Company holidays | date, is_optional |
-| `objectives` | OKR objective sets | employee_id, manager_id, period_type, period_label, status (draft/submitted/approved/rejected), items (JSONB) |
-| `announcements` | Company-wide notices | title, body, category, is_pinned, created_by (FK → employees) |
-| `salary_structures` | Per-employee CTC config | employee_id, ctc, basic_monthly, hra_monthly, special_allowance_monthly, gross_monthly, net_monthly, state, is_metro |
-| `payroll_runs` | Monthly payroll execution | month (YYYY-MM), status (draft/processed/paid), working_days, total_gross, total_net |
-| `payroll_entries` | Per-employee per-run computed values | gross_salary, employee_pf, professional_tax, tds, lop_days, lop_deduction, bonus, net_pay |
-| `jobs` | Job postings | title, description, employment_type, location_type, location, salary_min, salary_max, show_salary, status (draft/active/paused/closed), custom_questions (JSONB), created_by |
-| `candidates` | Candidate profiles | name, email, phone, resume_url, linkedin_url, source, tags (JSONB) |
-| `applications` | Job applications | job_id, candidate_id, stage (applied/screening/interview_1/interview_2/final_round/offer/hired), rejection_reason, cover_note |
-| `interview_schedules` | Interview bookings | application_id, interviewer_id, scheduled_at, duration_minutes, interview_type (video/phone/in_person), meeting_link, status (scheduled/completed/cancelled/no_show) |
-| `interview_feedback` | Structured interview feedback | schedule_id, interviewer_id, technical_rating, communication_rating, culture_fit_rating, overall_rating, recommendation (strong_yes/yes/no/strong_no), notes; unique(schedule_id, interviewer_id) |
-| `offers` | Offer letters | application_id, ctc, joining_date, role_title, department_id, reporting_manager_id, additional_terms, status (draft/sent/accepted/declined), offer_token (unique), responded_at, response_note |
+| Table | Key columns |
+|-------|-------------|
+| `organizations` | clerk_org_id, plan, stripe_customer_id (reused for Razorpay), max_employees, settings (JSONB) |
+| `employees` | first_name, last_name, email, role, department_id, status, employment_type, clerk_user_id |
+| `departments` | name, head_id (FK → employees) |
+| `leave_policies` | type (paid/sick/casual/unpaid/etc), days_per_year, carry_forward |
+| `leave_balances` | total_days, used_days, carried_forward_days |
+| `leave_requests` | start_date, end_date, days, status (pending/approved/rejected/cancelled) |
+| `documents` | category, file_url, is_company_wide, requires_acknowledgment |
+| `document_acknowledgments` | document_id, employee_id, acknowledged_at |
+| `review_cycles` | status (draft/active/completed), start_date, end_date |
+| `reviews` | self_rating, manager_rating, goals (JSONB), objectives_id, status |
+| `training_courses` | category (ethics/compliance/safety/skills/onboarding/custom), is_mandatory, due_date |
+| `training_enrollments` | status (assigned/in_progress/completed/overdue), progress_percent |
+| `holidays` | date, is_optional |
+| `objectives` | employee_id, manager_id, period_type, period_label, status (draft/submitted/approved/rejected), items (JSONB) |
+| `announcements` | title, body, category (general/policy/event/urgent), is_pinned, created_by |
+| `salary_structures` | employee_id, ctc, basic_monthly, hra_monthly, special_allowance_monthly, gross_monthly, net_monthly, state, is_metro |
+| `payroll_runs` | month (YYYY-MM), status (draft/processed/paid), working_days |
+| `payroll_entries` | gross_salary, employee_pf, professional_tax, tds, lop_days, lop_deduction, bonus, net_pay |
+| `jobs` | title, employment_type, location_type, salary_min/max, status (draft/active/paused/closed), custom_questions (JSONB) |
+| `candidates` | name, email, phone, resume_url, linkedin_url, source, tags (JSONB) |
+| `applications` | job_id, candidate_id, stage (applied/screening/interview_1/interview_2/final_round/offer/hired) |
+| `interview_schedules` | application_id, interviewer_id, scheduled_at, interview_type (video/phone/in_person), status |
+| `interview_feedback` | schedule_id, interviewer_id, technical/communication/culture_fit/overall rating, recommendation; unique(schedule_id, interviewer_id) |
+| `offers` | application_id, ctc, joining_date, status (draft/sent/accepted/declined), offer_token (unique UUID) |
+| `grievances` | employee_id (null if anonymous), type, severity (low/medium/high/urgent), is_anonymous, tracking_token (unique), status (open/in_review/resolved/closed) |
 
-### Multi-tenancy approach
-- Every table has `org_id` column with FK to `organizations`
-- RLS is enabled on ALL tables
-- Admin Supabase client (`SUPABASE_SERVICE_ROLE_KEY`) bypasses RLS — used in all server actions
-- **NOTE**: `stripe_customer_id` and `stripe_subscription_id` columns on `organizations` are reused for Razorpay (no schema change needed)
+### Tables added post-initial-migration (via SQL Editor — NOT in 001_initial_schema.sql)
+`objectives`, `announcements`, `document_acknowledgments`, `salary_structures`, `payroll_runs`, `payroll_entries`, `jobs`, `candidates`, `applications`, `interview_schedules`, `interview_feedback`, `offers`, `grievances`
+Also: `reviews.objectives_id` added via ALTER TABLE
 
-### Tables added post-initial-migration (via SQL Editor)
-- `objectives` — full table with JSONB items, status enum, period fields
-- `announcements` — title, body, category, is_pinned, created_by
-- `document_acknowledgments` — document_id, employee_id, acknowledged_at; unique constraint on (document_id, employee_id)
-- `reviews.objectives_id` — ALTER TABLE ADD COLUMN
-- `salary_structures`, `payroll_runs`, `payroll_entries` — payroll module tables
-- `jobs`, `candidates`, `applications`, `interview_schedules`, `interview_feedback`, `offers` — JambaHire ATS tables
-
-### Auto-updated timestamps
-Triggers on `organizations`, `employees`, `leave_requests` automatically update `updated_at`.
+### Multi-tenancy
+- RLS enabled on ALL tables; admin Supabase client (`SUPABASE_SERVICE_ROLE_KEY`) bypasses RLS — used in all server actions
+- `stripe_customer_id` / `stripe_subscription_id` columns reused for Razorpay (no schema change)
 
 ---
 
 ## Authentication & Authorization
 
-### Clerk setup
-- **Organizations enabled** — every user must belong to an org
-- **Organization slugs enabled** — clean URLs
-- **Production instance** — configured on `jambahr.com`
-- Roles: `owner`, `admin`, `manager`, `employee` — defined in `src/types/index.ts`
-- `ROLE_HIERARCHY` and `hasPermission()` helper for role-based access control
+### Clerk
+- Production instance on `jambahr.com`; Organizations enabled; org slugs enabled
+- Roles: `owner` | `admin` | `manager` | `employee` (see `src/types/index.ts`)
+- `ROLE_HIERARCHY` + `hasPermission()` in types
 
-### Route protection (middleware.ts)
-- Public routes: `/`, `/sign-in(.*)`, `/sign-up(.*)`, `/api/webhooks(.*)`, `/blog(.*)`, `/careers(.*)`, `/offers(.*)`
-- All other routes require authentication via Clerk
+### Route protection (`middleware.ts`)
+Public: `/`, `/sign-in(.*)`, `/sign-up(.*)`, `/api/webhooks(.*)`, `/blog(.*)`, `/careers(.*)`, `/offers(.*)`
 
-### Webhook sync (Clerk → Supabase)
-- `POST /api/webhooks/clerk` — verified working on production
-- Subscribed events: `organization.created`, `organization.updated`, `user.created`, `user.updated`
-- Webhook endpoint: `https://jambahr.com/api/webhooks/clerk`
+### RBAC — `src/lib/current-user.ts`
+- `getCurrentUser()` → `{ orgId, clerkUserId, role, employeeId, plan, jambaHireEnabled, attendanceEnabled, grievancesEnabled }`
+- `isAdmin(role)` → owner | admin
+- `isManagerOrAbove(role)` → owner | admin | manager
+- Fallback: if no employee record, defaults to `admin` role (protects org creators pre-onboarding)
 
-### Role-Based Access Control (RBAC)
-
-**`src/lib/current-user.ts`** — central helper:
-- `getCurrentUser()` → `{ orgId, clerkUserId, role, employeeId, plan }`
-- `isAdmin(role)` → true for `owner` | `admin`
-- `isManagerOrAbove(role)` → true for `owner` | `admin` | `manager`
-
-**Sidebar filtering** — nav items filtered by `requiredRole`:
-- Employees: see Dashboard, Directory, Leaves, Announcements, Objectives, Training, Documents (if plan allows)
-- Managers: above + Employees page, Reviews
-- Admins: everything including Settings, Payroll
-
-**Server action guards** (security layer):
+### Server action guards (security layer)
 | Action | Required Role |
 |--------|--------------|
 | addEmployee, updateEmployee, terminateEmployee | admin |
 | uploadDocument, deleteDocument | admin |
 | approveLeave, rejectLeave | manager+ |
 | createReviewCycle, deleteReviewCycle | admin |
-| createCourse, updateCourse, deleteCourse, enrollEmployees, unenrollEmployee | admin |
+| createCourse, updateCourse, deleteCourse, enrollEmployees | admin |
 | updateOrgProfile, addLeavePolicy, updateLeavePolicy, deleteLeavePolicy | admin |
 | createAnnouncement, updateAnnouncement, deleteAnnouncement, pinAnnouncement | admin |
-
-**UI guards** (UX layer — buttons/dialogs hidden for lower roles):
-- Employees page: Add/Edit/Terminate hidden for non-admins
-- Leaves: employees only see their own requests; Approve/Reject hidden
-- Documents: Upload + Delete hidden for non-admins; Acknowledge button shown for employees on required-ack docs
-- Reviews: New Cycle + cycle management hidden for non-admins
-- Announcements: Create/Edit/Delete/Pin hidden for non-admins; employees see read-only list
+| updateGrievanceStatus, getGrievanceStats, listGrievances (all) | admin |
 
 ---
 
 ## Plan-Based Feature Gating
 
-### Config — `src/config/plans.ts`
+**`src/config/plans.ts`**: `OrgPlan = "starter" | "growth" | "business"`, `hasFeature(plan, feature)`
 
-```typescript
-export type OrgPlan = "starter" | "growth" | "business";
-export type PlanFeature = "documents" | "reviews" | "objectives" | "training" | "payroll" |
-  "analytics" | "api" | "ai_assistant" | "ai_reviews" | "ai_attrition" | "semantic_search" |
-  "hiring_jd" | "ats" | "interview_scheduling" | "offer_letters" | "onboarding_workflows";
-
-export function hasFeature(plan: OrgPlan, feature: PlanFeature): boolean
-```
-
-### Feature tier mapping
 | Feature | Starter | Growth | Business |
 |---------|---------|--------|----------|
-| Employee Directory | ✅ | ✅ | ✅ |
-| Leave Management | ✅ | ✅ | ✅ |
-| Announcements | ✅ | ✅ | ✅ |
-| Documents | ❌ | ✅ | ✅ |
-| Reviews | ❌ | ✅ | ✅ |
-| Objectives / OKR | ❌ | ✅ | ✅ |
-| Training & Compliance | ❌ | ✅ | ✅ |
-| Hiring JD Generator | ❌ | ✅ | ✅ |
-| Payroll | ❌ | ❌ | ✅ |
-| Analytics | ❌ | ❌ | ✅ |
-| API Access | ❌ | ❌ | ✅ |
-| AI Assistant / Reviews / Attrition | ❌ | ❌ | ✅ |
-| Semantic Search (pgvector) | ❌ | ❌ | ✅ |
-| Full Hiring Suite (ATS, Interviews, Offers, Onboarding) | ❌ | ❌ | ✅ |
+| Directory, Leave, Announcements | ✅ | ✅ | ✅ |
+| Documents, Reviews, Objectives, Training, Hiring JD | ❌ | ✅ | ✅ |
+| Payroll, Analytics, API, Full AI Suite, Full Hiring (ATS) | ❌ | ❌ | ✅ |
 
 ### How gating works
-1. `getCurrentUser()` now returns `plan` (from `organizations.plan`)
-2. Each locked page checks `hasFeature(plan, feature)` at the top; returns `<UpgradeGate>` if locked
-3. Sidebar shows a `Lock` icon on items that require a higher plan (`PLAN_RANK` comparison)
-4. `UpgradeGate` component (`src/components/layout/upgrade-gate.tsx`) shows feature highlights and links to `/dashboard/settings#billing`
+1. `getCurrentUser()` returns `plan`
+2. Each locked page: `if (!hasFeature(plan, "feature")) return <UpgradeGate />`
+3. Sidebar shows `Lock` icon on plan-restricted items
+4. `UpgradeGate` links to `/dashboard/settings#billing`
 
 ---
 
 ## Email Notifications — Resend
 
-### Sender identities (`src/lib/resend.ts`)
-Three sender addresses configured, all via Google Workspace aliases on `jambahr.com`:
-- `support@jambahr.com` — transactional emails (leave requests, document reminders, payment alerts)
-- `amol@jambahr.com` — personal-feel emails (founder alerts, welcome emails, onboarding nudges)
-- `noreply@jambahr.com` — system emails (offer letters, status notifications)
+**Sender constants** (always import from `src/lib/resend.ts`, never hardcode):
+- `FROM_EMAIL` → `support@jambahr.com` (transactional: leaves, doc reminders, payment alerts)
+- `FOUNDER_EMAIL_FROM` → `amol@jambahr.com` (founder alerts, welcome, nudges)
+- `NOREPLY_EMAIL_FROM` → `noreply@jambahr.com` (offer letters, status notifications)
 
-### Leave request flow
-- `requestLeave()` → sends email to all org managers/admins with leave details (non-blocking)
-- `approveLeave()` / `rejectLeave()` → sends status email to the requesting employee
-- Templates: `leave-request.tsx` (to approvers) + `leave-status.tsx` (to employee)
+**Leave flow**: `requestLeave()` → email to all managers/admins. `approveLeave/rejectLeave()` → email to employee.
 
-### New client onboarding flow (triggered by Clerk `organization.created` webhook)
-1. Default leave policies seeded: Casual (8 days), Sick (8 days), Earned/PL (18 days), Unpaid (0 days)
-2. Indian holidays for current year seeded (13 national/optional holidays)
-3. Founder alert email → `amol@jambahr.com` — notifies with org name, industry, size, owner email
-4. Welcome email → new client — getting started guide + Starter plan feature list
+**Onboarding automation** (triggered by Clerk `organization.created` webhook):
+- Seeds: Casual (8d), Sick (8d), Earned/PL (18d), Unpaid (0d) leave policies + 13 Indian holidays
+- Sends: founder alert email + welcome email to new client
 
-### Onboarding nudge sequence (daily cron at 9:30am IST)
-| Day | Email | Content |
-|-----|-------|---------|
-| Day 1 | `onboarding-nudge.tsx` | Add your employees guide |
-| Day 3 | `onboarding-nudge.tsx` | Review leave policies and holidays |
-| Day 5 | `onboarding-nudge.tsx` | Invite your team |
-| Day 7 | `upgrade-push.tsx` | Upgrade pitch — lists locked features + Growth pricing |
+**Nudge cron** (daily 9:30am IST = `30 3 * * *` UTC): Day 1/3/5 nudge emails, Day 7 upgrade push
 
-### Other email flows
-- Weekly doc reminder (Monday 9am IST) — unacknowledged docs alert to employees
-- Payment failure / subscription paused — alert to all org admins
-- Offer letter — sent to candidates with accept/decline token link
-
-### Setup requirement
-- `RESEND_API_KEY` set in Vercel — `jambahr.com` sender domain verified in Resend
-- Google Workspace: `amol@jambahr.com`, `support@jambahr.com`, `noreply@jambahr.com` all verified
-
----
-
-## Error Tracking — Sentry
-
-- `sentry.client.config.ts` / `sentry.server.config.ts` / `sentry.edge.config.ts` — SDK init
-- `src/app/global-error.tsx` — catches React render errors, calls `Sentry.captureException()`
-- Env var: `NEXT_PUBLIC_SENTRY_DSN` (note: must be `NEXT_PUBLIC_` prefix for client-side capture)
-- Sentry deprecation warnings in build output are cosmetic — no functional impact
-
----
-
-## Document Acknowledgment
-
-- `documents.requires_acknowledgment` flag on upload
-- `document_acknowledgments` table: tracks which employees have acknowledged which docs
-- `acknowledgeDocument(documentId)` server action: upserts to acknowledgment table
-- UI: "Acknowledge" button on unacknowledged required docs; green "Acknowledged" badge after
-- Admins see "X acknowledged" count per document
-- Sidebar badge: counts only **unacknowledged** required docs for the current user
-
----
-
-## Announcements Module
-
-- `/dashboard/announcements` — company-wide notices
-- Admins: create, edit, delete, pin/unpin announcements
-- Employees: read-only list with pin indicators
-- `announcements` table: title, body, category (general/policy/event/urgent), is_pinned, created_by
-- Pinned announcements appear at top of list
-- Sidebar badge: count of unread announcements (tracked in session/local state)
-
----
-
-## JambaHire — ATS Module
-
-JambaHire is a full applicant tracking system embedded in the same codebase under `/hire/*`. It is a Business-tier feature toggled per org via `organizations.settings.jambahire_enabled`.
-
-### Feature set
-- **Jobs**: Create/edit job postings with employment type, location type, salary range, and custom screening questions
-- **Candidates**: Centralized candidate directory across all jobs; tags, resume/LinkedIn URLs
-- **Pipeline**: 7-stage Kanban (Applied → Screening → Interview 1 → Interview 2 → Final Round → Offer → Hired); drag-and-drop, bulk moves, funnel analytics, date/name filters
-- **Interviews**: Schedule interviews (video/phone/in-person), track status, collect structured feedback with 4 rating scales and a hire recommendation
-- **Calendar**: Generate Google Calendar links, Outlook links, or downloadable ICS files from interview details
-- **Offers**: Draft → Send → Accept/Decline lifecycle; offer sent via React Email template with unique token link
-- **Public pages**: `/careers/[org-slug]` (active jobs listing), `/offers/[token]` (candidate accept/decline, no auth required), `/hire/jobs/[id]/apply` (public application form)
-- **AI JD Generator**: `generateJobDescription()` action calls Anthropic Claude to draft job descriptions — requires `ANTHROPIC_API_KEY`
-
-### Key action functions in `src/actions/hire.ts`
-| Category | Functions |
-|----------|-----------|
-| Jobs | `listJobs`, `getJob`, `createJob`, `updateJob`, `updateJobStatus`, `deleteJob`, `generateJobDescription` |
-| Candidates | `listCandidates`, `addCandidate`, `updateCandidate`, `tagCandidate` |
-| Applications | `listApplications`, `listAllApplications`, `updateApplicationStage`, `bulkUpdateApplicationStage`, `rejectApplication`, `submitApplication` (public) |
-| Interviews | `listInterviews`, `scheduleInterview`, `updateInterviewStatus`, `submitInterviewFeedback` |
-| Offers | `listOffers`, `createOffer`, `sendOffer`, `updateOfferStatus`, `deleteOffer`, `getOfferByToken` (public), `respondToOffer` (public) |
-| Public | `getPublicJobs(orgSlug)`, `submitApplication` |
-
----
-
-## Blog Module
-
-A static markdown blog at `/blog` for SEO content targeting Indian HR managers.
-
-### How it works
-- Posts live in `src/content/blog/` as `.md` files with frontmatter
-- `src/lib/blog.ts` reads them from the filesystem at build time
-- `/blog` lists all posts with category filter
-- `/blog/[slug]` renders HTML via `remark` + `remark-gfm` + `remark-html` with Tailwind `prose` classes
-- Pages are statically generated (`generateStaticParams`) — adding posts requires redeploy
-
-### Frontmatter schema
-```yaml
----
-title: "Post Title"
-excerpt: "One-line summary"
-date: "2025-01-15"
-author: "Author Name"
-category: "Payroll & Compliance"   # or HR Templates | HR Tips | Product Updates
-readTime: "8 min read"
----
-```
-
-### Current posts
-- `how-to-calculate-pf-pt-tds-india.md` — PF, PT, and TDS calculation guide for Indian employers
-- `leave-policy-template-india-2025.md` — Leave policy template for Indian companies
+**Other**: Weekly doc acknowledgment reminders (Monday 9am IST), payment failure alerts
 
 ---
 
 ## Billing — Razorpay
 
-### How it works
-1. User clicks Upgrade in `/dashboard/settings` → billing section
-2. `createSubscription(planKey)` server action creates a Razorpay subscription via API
-3. Returns `subscriptionId` + `keyId` to frontend
-4. Frontend loads Razorpay checkout JS and opens modal with `subscription_id`
-5. On payment success, Razorpay fires webhook → `POST /api/webhooks/razorpay`
-6. Webhook verifies HMAC signature, updates `organizations.plan` and `max_employees` in Supabase
+Flow: User clicks Upgrade → `createSubscription(planKey)` → Razorpay checkout modal → webhook → update `organizations.plan`
 
-### Webhook events handled
-- `subscription.activated` → update org plan + max_employees
-- `subscription.charged` → no-op (subscription remains active)
-- `subscription.cancelled` / `subscription.completed` → downgrade to starter
-- `subscription.paused` → log warning
-- `payment.failed` → log error (TODO: send Resend email)
+**Webhook** (`/api/webhooks/razorpay`): HMAC-verified. `subscription.activated` → upgrade plan. `subscription.cancelled/completed` → downgrade to starter.
 
-### Plans config (`src/lib/razorpay.ts`)
 | Plan | Price | Max Employees |
 |------|-------|---------------|
 | Starter | Free | 10 |
 | Growth | ₹500/employee/month | 200 |
 | Business | ₹800/employee/month | 500 |
 
----
-
-## Demo Org — test1
-
-A 15-person demo org is seeded in Supabase for the `test1` organization (Amol Gupta — amolgupta007@gmail.com).
-
-**Departments**: Engineering, Marketing, Sales, Operations, HR
-**Employees**: 15 people across all departments with various roles (owner, admin, manager, employee)
-**Seed data includes**:
-- Leave requests across multiple employees (pending, approved, rejected states)
-- Documents uploaded (company policies, contracts, offer letters)
-- Review cycles with self-assessments and manager reviews
-- Objectives (draft, submitted, approved states)
-- Training courses with enrollments at various progress levels
-- Announcements (pinned and regular)
-- Leave balances per employee
-
-Use this org to demo all JambaHR features end-to-end.
+Configured in `src/lib/razorpay.ts` (billing) and `src/config/plans.ts` (feature flags).
 
 ---
 
-## Pitch Deck
+## JambaHire — ATS Module (`/hire/*`)
 
-`public/pitchdeck.html` — 12-page styled pitch deck covering:
-1. Cover / tagline
-2. Problem statement
-3. JambaHR solution overview
-4. Module showcase
-5. Tech stack and why
-6. Architecture diagram
-7. Security and RBAC
-8. Database design
-9. Pricing model
-10. Market opportunity
-11. Product roadmap
-12. Closing / CTA
+Business-tier, toggled per-org via `organizations.settings.jambahire_enabled`. Redirects to settings if disabled.
 
-**To generate PDF**: Open in Chrome → Ctrl+P → Destination: Save as PDF → Layout: Landscape → Save
+**Features**: Job postings with custom questions, candidate directory, 7-stage Kanban pipeline (Applied → Screening → Interview 1 → Interview 2 → Final Round → Offer → Hired), bulk stage moves, funnel analytics, interview scheduling (video/phone/in-person), structured feedback (4 rating scales + recommendation), Google/Outlook/ICS calendar links, offer letters with accept/decline token flow, AI job description generator via `@anthropic-ai/sdk`.
+
+**Public pages** (no auth): `/careers/[org-slug]`, `/offers/[token]`, `/hire/jobs/[id]/apply`
+
+All actions in `src/actions/hire.ts`.
+
+---
+
+## Grievances Module (`/dashboard/grievances`)
+
+Feature-flagged via `organizations.settings.grievances_enabled`. Three tabs:
+- **Submit**: Any user. Issues `GRV-XXXXXX` tracking token.
+- **Track**: Any user. Enter token to see status + admin notes.
+- **Inbox**: Admins see all grievances. Others see own non-anonymous submissions only.
+
+Anonymous submissions: `employee_id = null`, never recoverable. Only managers/employees (not admins) see own submissions in "My Submissions" — RBAC exception vs other modules.
+
+---
+
+## Payroll Module (`/dashboard/payroll`) — Business+
+
+- `src/lib/ctc.ts` — CTC breakdown: PF caps, PT per state (10 states), TDS slabs FY 2025-26, Rebate u/s 87A
+- Salary structure config per employee → auto-computes components
+- Monthly run: draft → process → mark paid. LOP from approved unpaid leaves.
+- Printable payslip (browser Print → PDF). Employee self-service "My Payslips" tab.
 
 ---
 
 ## Key Architecture Patterns
 
-### Server Actions for mutations
-All data mutations use Next.js Server Actions in `src/actions/`. Pattern:
+### Server Action pattern
 ```typescript
 "use server";
 import { getCurrentUser, isAdmin } from "@/lib/current-user";
@@ -538,376 +250,113 @@ export async function doSomething(data): Promise<ActionResult<T>> {
   const user = await getCurrentUser();
   if (!user) return { success: false, error: "Not authenticated" };
   if (!isAdmin(user.role)) return { success: false, error: "Unauthorized" };
-  // Validate with Zod, then CRUD via admin Supabase client
+  // Zod validate → CRUD via admin Supabase client → revalidatePath()
 }
 ```
 
 ### ActionResult pattern
 ```typescript
-type ActionResult<T = void> =
-  | { success: true; data: T }
-  | { success: false; error: string };
+type ActionResult<T = void> = { success: true; data: T } | { success: false; error: string };
 ```
-
-### Client components
-- Server page (`page.tsx`) fetches data + role + plan, passes all to client wrapper
-- Client wrapper hides/shows UI based on role prop
-- Plan gating happens in the server page before any data fetching
-- Uses `sonner` toast for feedback
-
-### Design tokens
-Primary color: teal (`172 50% 36%`). Accent: warm orange (`32 95% 52%`).
-
----
-
-## Current Status — What's Done vs Pending
-
-### ✅ COMPLETED
-
-**Infrastructure & Config**
-- [x] Full project scaffolding (Next.js 14, TypeScript, Tailwind)
-- [x] ESLint, Prettier, TypeScript strict mode
-- [x] Vercel deployment (bom1 region)
-- [x] Custom domain: `jambahr.com` (Namecheap → Cloudflare → Vercel)
-- [x] Clerk production instance configured on `jambahr.com`
-- [x] Jamba.png logo — favicon + Razorpay checkout logo
-
-**Auth**
-- [x] Clerk integration with Organizations
-- [x] Sign-in / sign-up pages
-- [x] Middleware for route protection
-- [x] Clerk webhook verified working (org auto-created in Supabase on signup)
-
-**Database**
-- [x] Full Supabase migration (12 tables, indexes, RLS, triggers)
-- [x] `objectives` table added manually via SQL Editor
-- [x] `reviews.objectives_id` column added via ALTER TABLE
-- [x] `announcements` table added via SQL Editor
-- [x] `document_acknowledgments` table added via SQL Editor
-
-**App Shell**
-- [x] Marketing landing page
-- [x] Dashboard layout with collapsible sidebar + role-filtered + plan-locked nav
-- [x] Onboarding wizard
-- [x] Dashboard home with live stats, recent leaves, upcoming deadlines, active review cycles
-
-**RBAC — Role-Based Access Control**
-- [x] `getCurrentUser()` shared helper — returns `{ orgId, clerkUserId, role, employeeId, plan }`
-- [x] Sidebar filters nav items by role
-- [x] Server action guards on all admin/manager-only mutations
-- [x] UI hides admin controls for employees
-
-**Plan-Based Feature Gating**
-- [x] `src/config/plans.ts` — OrgPlan, PlanFeature, PLAN_FEATURES, hasFeature()
-- [x] `src/components/layout/upgrade-gate.tsx` — full-page upgrade prompt
-- [x] Sidebar lock icon on plan-restricted nav items
-- [x] Documents, Reviews, Objectives, Training — gated at Growth tier
-- [x] Payroll — gated at Business tier
-- [x] Future AI/Hiring features defined in PLAN_FEATURES for business tier
-
-**Employee CRUD**
-- [x] Full CRUD with role guards (admin only for mutations)
-- [x] Soft delete, employee count limit, reporting manager field
-
-**Directory**
-- [x] Org chart tree view with collapsible branches (`/dashboard/directory`)
-
-**Leave Management** (`/dashboard/leaves`)
-- [x] Request, approve, reject, cancel flow
-- [x] Leave balance cards per policy
-- [x] Employees see own requests only; managers see all
-- [x] Approve/Reject buttons hidden for employees
-- [x] Email notification to managers on new request (Resend — requires RESEND_API_KEY)
-- [x] Email notification to employee on approve/reject (Resend — requires RESEND_API_KEY)
-
-**Document Management** (`/dashboard/documents`) — Growth+
-- [x] Supabase Storage, drag-and-drop upload, signed URLs
-- [x] Categories, company-wide toggle, acknowledgment flag
-- [x] Upload/Delete hidden for non-admins
-- [x] Employee acknowledgment flow (Acknowledge button → green badge)
-- [x] Admin sees acknowledgment count per document
-- [x] Sidebar badge counts only unacknowledged required docs for current user
-
-**Announcements** (`/dashboard/announcements`)
-- [x] Create, edit, delete, pin/unpin (admin only)
-- [x] Employees see read-only list with pinned items at top
-- [x] Categories: general, policy, event, urgent
-
-**Settings** (`/dashboard/settings`)
-- [x] Org profile, department CRUD, leave policy CRUD
-- [x] Billing section with Razorpay upgrade flow
-
-**Sidebar Notification Badges**
-- [x] Pending leaves, unacknowledged docs, pending objective approvals
-
-**Performance Reviews** (`/dashboard/reviews`) — Growth+
-- [x] Review cycle CRUD (admin only)
-- [x] Self-assessment + manager review
-- [x] Objectives evaluation embedded in review dialog
-
-**Objectives / OKR** (`/dashboard/objectives`) — Growth+
-- [x] Draft → submitted → approved/rejected flow
-- [x] Manager approval dialog
-- [x] Linked to review cycles
-
-**Training & Compliance** (`/dashboard/training`) — Growth+
-- [x] Course library, enrollment, self-attestation completion
-- [x] Compliance tab with overdue alerts
-- [x] LMS Auto-Sync coming soon banner
-
-**Billing — Razorpay**
-- [x] `src/lib/razorpay.ts` — client + PLANS config
-- [x] `src/actions/billing.ts` — createSubscription, cancelSubscription
-- [x] `src/app/api/webhooks/razorpay/route.ts` — HMAC-verified webhook handler
-- [x] Billing section UI with plan cards + Razorpay checkout modal
-- [x] Webhook endpoint configured in Razorpay dashboard
-
-**Error Tracking — Sentry**
-- [x] Sentry SDK integrated (client + server + edge configs)
-- [x] `global-error.tsx` added for React render error capture
-- [x] Env var: `NEXT_PUBLIC_SENTRY_DSN` (must use `NEXT_PUBLIC_` prefix)
-
-**Email Templates**
-- [x] `leave-request.tsx` — new leave request notification to managers
-- [x] `leave-status.tsx` — approved/rejected notification to employee
-- [x] `payment-failed.tsx` — payment failure / subscription paused alert to org admins
-- [x] `doc-reminder.tsx` — weekly unacknowledged document reminder to employees
-- [x] `founder-alert.tsx` — new signup notification to amol@jambahr.com (org name, industry, size, owner email)
-- [x] `welcome.tsx` — welcome email to new client (getting started guide + Starter plan features)
-- [x] `onboarding-nudge.tsx` — generic Day 1/3/5 nudge email (day-specific badge color + content)
-- [x] `upgrade-push.tsx` — Day 7 upgrade push email (locked features list + Growth pricing CTA)
-- [x] `next.config.js` — react-email packages added to `serverComponentsExternalPackages`
-
-**Payroll & Compensation** (`/dashboard/payroll`) — Business+
-- [x] `src/lib/ctc.ts` — CTC breakdown engine: PF caps, PT per state (10 states), new tax regime TDS slabs (FY 2025-26), Rebate u/s 87A
-- [x] Salary structure config per employee (CTC → auto-computes all components)
-- [x] Live CTC breakdown preview card in salary dialog
-- [x] Monthly payroll run: draft → process → mark paid flow
-- [x] LOP auto-calculated from approved unpaid leaves for the month
-- [x] Per-entry adjustment: bonus + LOP days override
-- [x] Printable payslip dialog (earnings + deductions table, Print → PDF via browser)
-- [x] Employee self-service: My Payslips tab
-- [x] 3 new DB tables: `salary_structures`, `payroll_runs`, `payroll_entries`
-
-**Cron Jobs**
-- [x] `src/app/api/cron/doc-reminders/route.ts` — weekly doc acknowledgment reminders (Monday 9am IST)
-- [x] `src/app/api/cron/onboarding-nudges/route.ts` — daily nudge emails for Day 1/3/5/7 orgs (9:30am IST)
-- [x] `vercel.json` crons: doc-reminders `0 9 * * 1`, onboarding-nudges `30 3 * * *` (3:30am UTC = 9am IST)
-- [x] `CRON_SECRET` set in Vercel env vars
-
-**Razorpay Webhook — Email Alerts**
-- [x] `payment.failed` → sends payment failure email to all org admins
-- [x] `subscription.paused` → sends paused alert to all org admins
-
-**Client Onboarding Automation**
-- [x] Clerk `organization.created` webhook seeds default leave policies (Casual/Sick/Earned/Unpaid) for every new org
-- [x] Clerk `organization.created` webhook seeds 13 Indian holidays for the current year
-- [x] Founder alert email fired on every new signup → `amol@jambahr.com`
-- [x] Welcome email sent to new client with getting started guide
-- [x] Day 1/3/5/7 onboarding nudge cron — engages new orgs automatically
-- [x] Google Workspace configured: `amol@jambahr.com`, `support@jambahr.com`, `noreply@jambahr.com`
-
-**LinkedIn Integration (JambaHire)**
-- [x] "Share on LinkedIn" button on public careers page — next to "Apply for this role"
-- [x] "Share on LinkedIn" option in admin jobs list dropdown — visible for active jobs only
-- [x] Both link to `linkedin.com/sharing/share-offsite/?url=jambahr.com/careers/[org-slug]`
-
-**Blog Improvements**
-- [x] Table rendering fix: tables wrapped in `.table-wrapper` div with `overflow-x: auto` — scrollable on mobile
-- [x] `remark-gfm` plugin added — enables GitHub Flavored Markdown (tables, strikethrough, task lists)
-- [x] `globals.css` — `.blog-content .table-wrapper` styles for scrollable, bordered table containers
-
-**Demo Org**
-- [x] 15-person seed org (test1) created via Supabase SQL Editor
-- [x] Departments, employees, leaves, documents, reviews, objectives, training, announcements all seeded
-- [x] Payroll seeded: salary structures for all 15 employees (Maharashtra/metro, ₹12–36 LPA by role)
-- [x] JambaHire seeded: 4 jobs, 10 candidates, full 7-stage pipeline, 3 interviews, 2 offers
-- [x] Seed scripts: `scripts/seed-payroll-demo.sql`, `scripts/seed-jambahire-demo.sql`
-
-**Pitch Deck**
-- [x] `public/pitchdeck.html` — 12-page HTML pitch deck
-
-**JambaHire — Full ATS Module** (`/hire/*`) — Business tier
-- [x] Job postings: create, edit, status control (draft/active/paused/closed), custom questions
-- [x] Candidate directory with tags, resume/LinkedIn URLs, application history
-- [x] Kanban pipeline: 7 stages (Applied → Screening → Interview 1 → Interview 2 → Final Round → Offer → Hired)
-- [x] Bulk stage moves: select multiple candidates, move in batch
-- [x] Pipeline analytics funnel: % in each stage + drop-off rates
-- [x] Date/name filters on pipeline view (7/30/90 days, search by name)
-- [x] Interview scheduling: type (video/phone/in_person), meeting link, duration
-- [x] Interview feedback: 4-scale ratings (technical, communication, culture fit, overall) + recommendation
-- [x] Calendar integration: Google Calendar, Outlook, and ICS download links
-- [x] Offer creation and sending via email (React Email template)
-- [x] Public offer response page (`/offers/[token]`) — accept/decline with notes, no auth required
-- [x] Public careers page (`/careers/[slug]`) — shows active jobs for org slug
-- [x] Public job application form (no auth)
-- [x] AI job description generator via `@anthropic-ai/sdk` — verified working in production
-- [x] `toggleJambaHire()` in settings.ts — stored in `organizations.settings.jambahire_enabled`
-- [x] Settings toggle UI — `src/components/settings/products-section.tsx` with plan gate + toast feedback
-- [x] `getCurrentUser()` returns `jambaHireEnabled` boolean
-- [x] 6 new DB tables via SQL Editor: `jobs`, `candidates`, `applications`, `interview_schedules`, `interview_feedback`, `offers`
-
-**Blog Module** (`/blog/*`) — Public
-- [x] Markdown-based blog with frontmatter (title, excerpt, date, author, category, readTime)
-- [x] Blog listing page with category filter
-- [x] Individual post pages with SEO metadata + Open Graph (SSG via `generateStaticParams`)
-- [x] Tailwind Typography (`prose` classes) for post content
-- [x] 2 SEO articles: PF/PT/TDS calculation guide + leave policy template
-- [x] `src/lib/blog.ts` — `getAllPosts()`, `getPost(slug)` file system utilities
-
-**Analytics**
-- [x] PostHog pageview tracking fires on every route change (not just initial load)
-
-### ⚠️ PARTIALLY DONE — NEEDS ATTENTION
-
-**Environment Variables (Vercel)**
-- [x] NEXT_PUBLIC_SUPABASE_URL
-- [x] NEXT_PUBLIC_SUPABASE_ANON_KEY
-- [x] SUPABASE_SERVICE_ROLE_KEY
-- [x] NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY (production)
-- [x] CLERK_SECRET_KEY (production)
-- [x] CLERK_WEBHOOK_SECRET (production)
-- [x] NEXT_PUBLIC_RAZORPAY_KEY_ID
-- [x] RAZORPAY_KEY_SECRET
-- [x] RAZORPAY_GROWTH_PLAN_ID
-- [x] RAZORPAY_BUSINESS_PLAN_ID
-- [x] RAZORPAY_WEBHOOK_SECRET
-- [x] NEXT_PUBLIC_SENTRY_DSN (set + verified working)
-- [x] RESEND_API_KEY (set + jambahr.com sender domain verified in Resend)
-- [x] NEXT_PUBLIC_POSTHOG_KEY (set + NEXT_PUBLIC_POSTHOG_HOST set + verified working)
-- [x] CRON_SECRET (set — used by /api/cron/doc-reminders)
-- [x] ANTHROPIC_API_KEY — set + verified working (AI JD generator in JambaHire)
-
-### ❌ NOT YET BUILT — Pending
-
-**Attendance (Future)**
-- [ ] Clock in/out
-- [ ] Overtime tracking
-
-**Phase 4 — AI Features (Business tier)**
-- [ ] Semantic search (pgvector)
-- [ ] Smart review summaries
-- [ ] Attrition risk indicators
-
-**JambaHire — Remaining**
-- [ ] Onboarding workflows (post-hire)
-
-**Training — LMS Auto-Sync (shown as Coming Soon)**
-- [ ] Webhook receivers for Coursera, LinkedIn Learning, TalentLMS, Docebo, Google Classroom
-
-### ❌ NOT YET DONE — Infrastructure
-
-- [x] ~~Set up UptimeRobot monitoring~~ — done
-- [ ] Background jobs (Trigger.dev or Inngest) for training reminders, compliance alerts, payment failure emails
-
----
-
-## Development Commands
-
-```bash
-npm run dev           # Start dev server (http://localhost:3000)
-npm run build         # Production build
-npm run lint          # ESLint check
-npm run db:generate   # Regenerate Supabase types (needs CLI)
-npm run db:push       # Push migrations (needs CLI)
-```
-
----
-
-## Coding Conventions
-
-### Server actions pattern
-- Always `"use server"` at top
-- Always call `getCurrentUser()` from `@/lib/current-user` for auth + role + plan
-- Always check `isAdmin()` / `isManagerOrAbove()` before mutations
-- Always validate with Zod before DB operations
-- Always return `ActionResult<T>`
-- Always `revalidatePath()` after mutations
-- Use `createAdminSupabase()` (bypasses RLS)
 
 ### Plan gating pattern (page level)
 ```typescript
-const userCtx = await getCurrentUser();
-const plan = userCtx?.plan ?? "starter";
-if (!hasFeature(plan, "feature-name")) {
+const user = await getCurrentUser();
+if (!hasFeature(user?.plan ?? "starter", "feature-name")) {
   return <UpgradeGate feature="Feature Name" requiredPlan="growth" currentPlan={plan} />;
 }
-// proceed with data fetching only after gate passes
 ```
 
 ### Component pattern
 - Server page → fetch data + role + plan → pass to client wrapper
 - Client wrapper receives `role: UserRole` prop, conditionally renders admin UI
 - Use `hasPermission(role, "admin")` from `@/types` for UI guards
-- Use `sonner` toast for feedback
-- Use `lucide-react` for all icons
+- `sonner` for toasts, `lucide-react` for all icons
 
-### Styling
-- Tailwind utility classes only — no custom CSS except in globals.css
-- Use `cn()` from `@/lib/utils`
-- CSS variables for colors: `bg-primary`, `text-muted-foreground`, etc.
+### Design tokens
+Primary: teal `172 50% 36%`. Accent: warm orange `32 95% 52%`. Use CSS variables (`bg-primary`, `text-muted-foreground`). Tailwind utilities only — no custom CSS except `globals.css`.
 
 ---
 
-## Pricing Model
+## Cron Jobs (Vercel)
 
-| Tier | Price | Max Employees | Features |
-|------|-------|---------------|----------|
-| Starter | Free | 10 | Directory, Leave, Announcements |
-| Growth | ₹500/employee/month | 200 | + Documents, Reviews, Objectives, Training, Hiring JD |
-| Business | ₹800/employee/month | 500 | + Payroll, Analytics, API, Full AI Suite, Full Hiring Suite |
+| Route | Schedule | Purpose |
+|-------|----------|---------|
+| `/api/cron/doc-reminders` | `0 9 * * 1` (Mon 9am IST) | Email employees with unacknowledged required docs |
+| `/api/cron/onboarding-nudges` | `30 3 * * *` (9:30am IST) | Day 1/3/5/7 nudge emails for new orgs |
 
-Configured in `src/lib/razorpay.ts` (billing) and `src/config/plans.ts` (feature flags).
+Both require `Authorization: Bearer CRON_SECRET` header. `CRON_SECRET` env var must be set in Vercel.
 
 ---
 
-## Immediate Next Steps (in priority order)
+## Pending Work
 
-1. ~~**UptimeRobot**~~ — done
-2. ~~**Payroll for demo org**~~ — done (salary structures for all 15 test1 employees, Maharashtra/metro, ₹12–36 LPA by role)
-3. ~~**JambaHire settings toggle UI**~~ — done (`src/components/settings/products-section.tsx`, plan-gated to Business tier)
-4. ~~**Seed JambaHire demo data**~~ — done (4 jobs, 10 candidates, full pipeline, 3 interviews, 2 offers)
-5. ~~**Client onboarding automation**~~ — done (leave policies + holidays seeded on signup, welcome + founder emails, Day 1/3/5/7 nudge cron)
-6. ~~**LinkedIn share integration**~~ — done (careers page + admin jobs list)
-7. **Training deadline reminders** — add a Vercel Cron for overdue training alerts (pattern same as doc-reminders cron)
-8. **Blog — more SEO articles** — add more posts to `src/content/blog/` covering Indian HR/compliance topics (ESI rules, gratuity, HR software comparison, etc.)
-9. **Marketing** — submit to software directories (SoftwareSuggest, Capterra, G2, Techjockey), set up LinkedIn company page, run Google Search Ads
+### ❌ Not yet built
+- **Training deadline reminder cron** — Vercel Cron for overdue training alerts (same pattern as doc-reminders)
+- **Blog SEO articles** — more posts in `src/content/blog/` (ESI, gratuity, HR software comparison)
+- **Marketing** — SoftwareSuggest, Capterra, G2, Techjockey listings; LinkedIn company page; Google Ads
+- **Phase 4 AI** (Business tier): semantic search (pgvector), smart review summaries, attrition risk
+- **JambaHire**: onboarding workflows (post-hire)
+- **Training LMS Auto-Sync** (shown as Coming Soon): Coursera, LinkedIn Learning, TalentLMS
+
+### ❌ Infrastructure
+- Background jobs (Trigger.dev or Inngest) for training reminders, compliance alerts
+
+---
+
+## Development Commands
+
+```bash
+npm run dev           # http://localhost:3000
+npm run build
+npm run lint
+npm run db:generate   # Regenerate Supabase types (needs CLI)
+npm run db:push       # Push migrations (needs CLI)
+```
 
 ---
 
 ## Known Issues / Gotchas
 
-1. **pgvector extension**: Removed from migration — not available on free Supabase tier.
+1. **pgvector**: Removed from migration — not available on free Supabase tier.
 2. **Next.js version**: Pinned to 14.2.x. Do not upgrade without migration plan.
-3. **eslint-config-next**: Pinned to `14.2.15` to match ESLint 8.
-4. **Supabase CLI on Windows**: Global install fails. Use Supabase Dashboard SQL Editor for all migrations.
-5. **TypeScript build errors**: `typescript: { ignoreBuildErrors: true }` in `next.config.js`. Root cause: Supabase v2 type inference returns `never` for partial selects.
-6. **RLS bypass**: Server actions use admin Supabase client (service role key). Intentional — Clerk JWT → Supabase RLS not configured.
-7. **New tables added post-migration**: `objectives`, `announcements`, `document_acknowledgments` tables added manually via SQL Editor. `reviews.objectives_id` added via ALTER TABLE.
-8. **Supabase trigger function**: `update_updated_at_column()` must be created separately before running triggers (SQL Editor splits on semicolons).
-9. **Razorpay `stripe_*` columns**: `organizations.stripe_customer_id` and `stripe_subscription_id` are reused for Razorpay subscription IDs — no schema change was made.
-10. **Razorpay checkout script**: Loaded dynamically in `billing-section.tsx` via `loadRazorpayScript()` to avoid SSR issues.
-11. **RBAC fallback**: If a user has no employee record (e.g. org creator before onboarding), `getCurrentUser()` defaults their role to `"admin"` so they retain full access.
-12. **Employee page visibility**: The Employees page requires `manager` role or above in sidebar nav. Route itself is not hard-blocked — add middleware protection if needed.
-13. **react-email packages**: Must be in `serverComponentsExternalPackages` in `next.config.js`. If removed, Vercel build crashes when `leaves.ts` is imported.
-14. **Sentry DSN env var name**: Must be `NEXT_PUBLIC_SENTRY_DSN` (with `NEXT_PUBLIC_` prefix) for client-side error capture. A plain `SENTRY_DSN` will only work server-side.
-15. **Supabase JSON carriage returns**: When inserting JSONB via SQL Editor, avoid pasting JSON string literals directly — use `jsonb_build_array(jsonb_build_object(...))` syntax to prevent `0x0d` carriage return parse errors.
-16. **Training course categories**: Only `ethics`, `compliance`, `safety`, `skills`, `onboarding`, `custom` are valid — check constraint will reject others.
-17. **Training enrollment status**: Only `assigned`, `in_progress`, `completed`, `overdue` are valid — `not_started` is not a valid value.
-18. **Vercel Cron auth**: `/api/cron/doc-reminders` verifies `Authorization: Bearer CRON_SECRET`. The `CRON_SECRET` env var must be set in Vercel or the cron will return 401.
-19. **CTC breakdown rounding**: `computeCTCBreakdown` rounds to nearest rupee. Small rounding differences (₹1-2) between annual and monthly figures are expected due to integer rounding.
-20. **Payroll LOP**: Only leaves with policy type `unpaid` are counted as LOP. Paid/sick/casual leaves don't trigger LOP deduction — admin can manually add LOP days per entry.
-21. **`salary_structures` unique constraint**: One salary structure per employee per org. Updating runs an upsert — the effective_from date tracks when the structure was last revised.
-22. **JambaHire tables not in initial migration**: All 6 hiring tables (`jobs`, `candidates`, `applications`, `interview_schedules`, `interview_feedback`, `offers`) must be created via Supabase SQL Editor — they are not in `001_initial_schema.sql`.
-23. **JambaHire enable flag**: The module is toggled per-org via `organizations.settings.jambahire_enabled`. If the flag is absent or false, `/hire/*` redirects to `/dashboard/settings`. Seed this flag in Supabase for demo orgs.
-24. **Offer token uniqueness**: `offers.offer_token` is a UUID generated server-side at creation. The public `/offers/[token]` page is unauthenticated — do not expose sensitive candidate PII beyond what's needed for the accept/decline flow.
-25. **Blog markdown rendering**: Blog posts are read from `src/content/blog/` at build time via `fs`. This means adding new posts requires a redeploy. `generateStaticParams()` handles SSG — new slugs not in the build will 404 until redeployed.
-26. **AI JD generation requires `ANTHROPIC_API_KEY`**: The `generateJobDescription()` action in `hire.ts` calls `@anthropic-ai/sdk`. Add `ANTHROPIC_API_KEY` to Vercel env vars or the action will fail silently.
-27. **Calendar ICS download**: `downloadICS()` in `src/lib/calendar.ts` uses `URL.createObjectURL` — client-side only. Do not call from server components.
-28. **Interview feedback upsert**: Unique constraint on `(schedule_id, interviewer_id)` — submitting feedback twice updates the existing row rather than creating a duplicate.
-29. **Onboarding nudge cron timing**: Uses `±12hr window` around days 1/3/5/7 to avoid missing orgs due to cron drift. An org created at 11pm will still receive the Day 1 email the next morning at 9:30am IST.
-30. **Default leave policies on signup**: Seeded in the Clerk `organization.created` webhook handler. If the webhook fires before the org row is fully created in Supabase, policies won't be seeded — manually run the SQL if a new org is missing policies.
-31. **`salary_structures` missing columns**: Original table created via SQL Editor was missing `include_hra`, `employer_pf_monthly`, `employer_gratuity_annual`, `updated_at`. Run `scripts/fix-salary-structures-columns.sql` if the table was created before these were added.
-32. **Blog table rendering**: Tables in markdown are wrapped in `.table-wrapper` via custom `remark` plugin in `src/lib/blog.ts`. `border-radius` doesn't work with `border-collapse: collapse` (CSS spec limitation) — the wrapper div carries the border and rounded corners instead.
-33. **LinkedIn share URL**: Points to the org's careers page (`/careers/[slug]`), not to individual job URLs. This is intentional — LinkedIn's share dialog only supports top-level URL sharing, not deep-linking to a specific job in the list.
-34. **`resend.ts` sender constants**: Three named constants — `FROM_EMAIL` (support@), `FOUNDER_EMAIL_FROM` (amol@), `NOREPLY_EMAIL_FROM` (noreply@). Import the right one per email type. Do not hardcode addresses in action files.
+3. **TypeScript build errors**: `typescript: { ignoreBuildErrors: true }` in `next.config.js`. Supabase v2 type inference returns `never` for partial selects.
+4. **Supabase CLI on Windows**: Use Supabase Dashboard SQL Editor for all migrations.
+5. **RLS bypass**: Server actions use admin Supabase client (service role key). Intentional — Clerk JWT → Supabase RLS not configured.
+6. **New tables not in migration**: All post-initial tables (objectives, announcements, document_acknowledgments, payroll tables, JambaHire tables, grievances) must be created via SQL Editor.
+7. **Supabase trigger function**: `update_updated_at_column()` must be created separately before triggers (SQL Editor splits on semicolons).
+8. **Razorpay `stripe_*` columns**: `organizations.stripe_customer_id` / `stripe_subscription_id` reused for Razorpay — no schema change.
+9. **Razorpay checkout script**: Loaded dynamically via `loadRazorpayScript()` in `billing-section.tsx` to avoid SSR issues.
+10. **react-email packages**: Must be in `serverComponentsExternalPackages` in `next.config.js`. Removing crashes Vercel build.
+11. **Sentry DSN**: Must be `NEXT_PUBLIC_SENTRY_DSN` (not plain `SENTRY_DSN`) for client-side capture.
+12. **Supabase JSONB via SQL Editor**: Use `jsonb_build_array(jsonb_build_object(...))` — don't paste JSON string literals (causes `0x0d` carriage return parse errors).
+13. **Training course categories**: Only `ethics`, `compliance`, `safety`, `skills`, `onboarding`, `custom` — check constraint rejects others.
+14. **Training enrollment status**: Only `assigned`, `in_progress`, `completed`, `overdue` — `not_started` is invalid.
+15. **CTC rounding**: `computeCTCBreakdown` rounds to nearest rupee. ₹1-2 differences between annual/monthly are expected.
+16. **Payroll LOP**: Only `unpaid` leave type triggers LOP. Paid/sick/casual leaves don't — admin can manually add LOP days per entry.
+17. **`salary_structures` missing columns**: Run `scripts/fix-salary-structures-columns.sql` if table was created before `include_hra`, `employer_pf_monthly`, `employer_gratuity_annual`, `updated_at` were added.
+18. **`salary_structures` unique constraint**: One per employee per org — upsert updates existing row.
+19. **JambaHire enable flag**: Toggled via `organizations.settings.jambahire_enabled`. Missing/false → redirect to settings. To seed: `UPDATE organizations SET settings = settings || '{"jambahire_enabled": true}'::jsonb WHERE clerk_org_id = '...'`.
+20. **Offer token**: UUID generated server-side. `/offers/[token]` is unauthenticated — don't expose candidate PII beyond accept/decline needs.
+21. **Blog posts require redeploy**: Read from `src/content/blog/` at build time via `fs`. New slugs 404 until redeployed.
+22. **AI JD generation**: Requires `ANTHROPIC_API_KEY` in Vercel env vars. Fails silently if missing.
+23. **Calendar ICS download**: `downloadICS()` uses `URL.createObjectURL` — client-side only, don't call from server components.
+24. **Interview feedback upsert**: Unique on `(schedule_id, interviewer_id)` — submitting twice updates existing row.
+25. **Onboarding nudge cron**: Uses ±12hr window around days 1/3/5/7 to handle cron drift.
+26. **Default leave policies on signup**: Seeded in Clerk webhook. If webhook fires before org row exists in Supabase, manually run the SQL.
+27. **LinkedIn share URL**: Points to org's careers page, not individual job — LinkedIn share dialog doesn't support deep-linking to specific jobs.
+28. **`resend.ts` sender constants**: Import `FROM_EMAIL`, `FOUNDER_EMAIL_FROM`, or `NOREPLY_EMAIL_FROM`. Never hardcode addresses in action files.
+29. **Grievances enable flag**: `organizations.settings.grievances_enabled`. To enable: `UPDATE organizations SET settings = settings || '{"grievances_enabled": true}'::jsonb WHERE clerk_org_id = '...'`.
+30. **Grievances anonymous**: `is_anonymous = true` → `employee_id = null`. Cannot be de-anonymized. "My Submissions" filters by `employee_id` so anonymous entries never appear there.
+31. **Grievances RBAC**: `manager` falls through to employee path — only sees own submissions. Different from other modules where managers have elevated access.
+32. **Blog table rendering**: Tables wrapped in `.table-wrapper` via custom remark plugin. `border-radius` doesn't work with `border-collapse: collapse` — wrapper div carries the rounded border.
+33. **Employee page visibility**: Sidebar requires `manager`+ role. Route itself is not middleware-blocked.
+34. **RBAC fallback**: No employee record → defaults to `admin` role in `getCurrentUser()`.
+
+---
+
+## Demo Org — test1
+
+15-person org for Amol Gupta (`amolgupta007@gmail.com`). Departments: Engineering, Marketing, Sales, Operations, HR. Full seed data across all modules including payroll (Maharashtra/metro, ₹12–36 LPA by role) and JambaHire (4 jobs, 10 candidates, full pipeline, 3 interviews, 2 offers).
+
+Seed scripts: `scripts/seed-payroll-demo.sql`, `scripts/seed-jambahire-demo.sql`

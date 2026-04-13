@@ -207,9 +207,19 @@ export async function uploadDocument(formData: FormData): Promise<ActionResult<v
 
   const name = (formData.get("name") as string)?.trim() || file.name;
   const category = (formData.get("category") as string) || "other";
-  const isCompanyWide = formData.get("is_company_wide") === "true";
-  const employeeId = (formData.get("employee_id") as string) || null;
-  const requiresAck = formData.get("requires_acknowledgment") === "true";
+  const space = ((formData.get("space") as string) || "company_wide") as
+    | "owner_vault"
+    | "company_wide"
+    | "personal";
+  const ackMethod = ((formData.get("ack_method") as string) || "none") as
+    | "type_name"
+    | "audit_trail"
+    | "none";
+  const employeeId = space === "personal"
+    ? (formData.get("employee_id") as string) || null
+    : null;
+  const requiresAck = ackMethod !== "none";
+  const isCompanyWide = space === "company_wide";
 
   if (file.size > 10 * 1024 * 1024) {
     return { success: false, error: "File too large — maximum 10 MB" };
@@ -250,12 +260,14 @@ export async function uploadDocument(formData: FormData): Promise<ActionResult<v
     org_id: ctx.orgId,
     name,
     category: category as any,
+    space,
+    ack_method: ackMethod,
     file_url: storagePath,
     file_size: file.size,
     mime_type: file.type || "application/octet-stream",
     uploaded_by: uploaderId,
     is_company_wide: isCompanyWide,
-    employee_id: isCompanyWide ? null : employeeId,
+    employee_id: employeeId,
     requires_acknowledgment: requiresAck,
   });
 

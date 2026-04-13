@@ -37,6 +37,8 @@ export type DocumentWithUrl = {
   id: string;
   name: string;
   category: "policy" | "contract" | "id_proof" | "tax" | "certificate" | "other";
+  space: "owner_vault" | "company_wide" | "personal";
+  ack_method: "type_name" | "audit_trail" | "none";
   file_url: string;
   signed_url: string;
   file_size: number;
@@ -51,15 +53,33 @@ export type DocumentWithUrl = {
   created_at: string;
 };
 
+export type AckEntry = {
+  employeeId: string;
+  employeeName: string;
+  acknowledgedAt: string;
+  signatureText: string | null;
+};
+
+export type SignedRecord = {
+  documentId: string;
+  documentName: string;
+  ackMethod: "type_name" | "audit_trail";
+  totalEmployees: number;
+  acknowledgments: AckEntry[];
+  pendingNames: string[];
+};
+
 // ---- Actions ----
 
 export async function listDocuments(): Promise<ActionResult<DocumentWithUrl[]>> {
   const ctx = await getOrgContext();
   if (!ctx) return { success: false, error: "Not authenticated" };
 
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+
   const supabase = createAdminSupabase();
 
-  // Get current user's employee ID for acknowledgment lookup
   const { data: me } = await supabase
     .from("employees")
     .select("id")
@@ -68,12 +88,24 @@ export async function listDocuments(): Promise<ActionResult<DocumentWithUrl[]>> 
     .single();
   const myEmployeeId = (me as { id: string } | null)?.id ?? null;
 
+  let query = supabase
+    .from("documents")
+    .select("*, employees!employee_id(first_name, last_name)")
+    .eq("org_id", ctx.orgId)
+    .order("created_at", { ascending: false });
+
+  if (!isAdmin(user.role)) {
+    if (myEmployeeId) {
+      query = query.or(
+        `space.eq.company_wide,and(space.eq.personal,employee_id.eq.${myEmployeeId})`
+      );
+    } else {
+      query = query.eq("space", "company_wide");
+    }
+  }
+
   const [{ data: docs, error }, { data: myAcks }, { data: allAcks }] = await Promise.all([
-    supabase
-      .from("documents")
-      .select("*, employees!employee_id(first_name, last_name)")
-      .eq("org_id", ctx.orgId)
-      .order("created_at", { ascending: false }),
+    query,
     myEmployeeId
       ? supabase
           .from("document_acknowledgments")
@@ -95,7 +127,6 @@ export async function listDocuments(): Promise<ActionResult<DocumentWithUrl[]>> 
     ackCountByDoc[a.document_id] = (ackCountByDoc[a.document_id] ?? 0) + 1;
   }
 
-  // Generate signed URLs for each document (1 hour expiry)
   const withUrls = await Promise.all(
     (docs ?? []).map(async (doc: any) => {
       const { data: signed } = await supabase.storage
@@ -106,6 +137,8 @@ export async function listDocuments(): Promise<ActionResult<DocumentWithUrl[]>> 
         id: doc.id,
         name: doc.name,
         category: doc.category,
+        space: doc.space ?? "company_wide",
+        ack_method: doc.ack_method ?? "none",
         file_url: doc.file_url,
         signed_url: signed?.signedUrl ?? "",
         file_size: doc.file_size,

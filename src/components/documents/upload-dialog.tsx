@@ -105,15 +105,17 @@ export function UploadDialog({ open, onOpenChange, employees }: UploadDialogProp
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/50 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl bg-background p-6 shadow-lg data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95">
-          <div className="flex items-center justify-between mb-5">
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 flex w-full max-w-md -translate-x-1/2 -translate-y-1/2 flex-col max-h-[90vh] rounded-xl bg-background shadow-lg data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95">
+          {/* Sticky header */}
+          <div className="flex shrink-0 items-center justify-between px-6 pt-6 pb-4">
             <Dialog.Title className="text-lg font-semibold">Upload Document</Dialog.Title>
             <Dialog.Close asChild>
               <Button variant="ghost" size="icon"><X className="h-4 w-4" /></Button>
             </Dialog.Close>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+          <div className="flex-1 overflow-y-auto px-6 space-y-4">
             {/* File drop zone */}
             <div
               onClick={() => inputRef.current?.click()}
@@ -285,7 +287,9 @@ export function UploadDialog({ open, onOpenChange, employees }: UploadDialogProp
               </>
             )}
 
-            <div className="flex justify-end gap-3 pt-1">
+          </div>
+            {/* Sticky footer */}
+            <div className="shrink-0 flex justify-end gap-3 border-t border-border px-6 py-4">
               <Dialog.Close asChild>
                 <Button type="button" variant="outline">Cancel</Button>
               </Dialog.Close>

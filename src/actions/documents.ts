@@ -160,9 +160,21 @@ export async function listDocuments(): Promise<ActionResult<DocumentWithUrl[]>> 
   return { success: true, data: withUrls };
 }
 
-export async function acknowledgeDocument(documentId: string): Promise<ActionResult<void>> {
+export async function acknowledgeDocument(
+  documentId: string,
+  method: "type_name" | "audit_trail",
+  signatureText?: string
+): Promise<ActionResult<void>> {
   const ctx = await getOrgContext();
   if (!ctx) return { success: false, error: "Not authenticated" };
+
+  const { headers } = await import("next/headers");
+  const headersList = headers();
+  const ip =
+    headersList.get("x-forwarded-for") ??
+    headersList.get("x-real-ip") ??
+    "unknown";
+  const userAgent = headersList.get("user-agent") ?? "unknown";
 
   const supabase = createAdminSupabase();
 
@@ -185,6 +197,10 @@ export async function acknowledgeDocument(documentId: string): Promise<ActionRes
         document_id: documentId,
         employee_id: employeeId,
         acknowledged_at: new Date().toISOString(),
+        method,
+        signature_text: signatureText ?? null,
+        ip_address: ip,
+        user_agent: userAgent,
       },
       { onConflict: "document_id,employee_id" }
     );
@@ -314,4 +330,70 @@ export async function deleteDocument(id: string): Promise<ActionResult<void>> {
 
   revalidatePath("/dashboard/documents");
   return { success: true, data: undefined };
+}
+
+export async function getSignedRecords(): Promise<ActionResult<SignedRecord[]>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Unauthorized" };
+
+  const ctx = await getOrgContext();
+  if (!ctx) return { success: false, error: "Not authenticated" };
+
+  const supabase = createAdminSupabase();
+
+  const [{ data: docs }, { data: employees }, { data: acks }] = await Promise.all([
+    supabase
+      .from("documents")
+      .select("id, name, ack_method")
+      .eq("org_id", ctx.orgId)
+      .eq("requires_acknowledgment", true)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("employees")
+      .select("id, first_name, last_name")
+      .eq("org_id", ctx.orgId)
+      .eq("status", "active"),
+    supabase
+      .from("document_acknowledgments")
+      .select("document_id, employee_id, acknowledged_at, signature_text")
+      .eq("org_id", ctx.orgId),
+  ]);
+
+  const allEmployees = (employees ?? []) as {
+    id: string;
+    first_name: string;
+    last_name: string;
+  }[];
+  const totalEmployees = allEmployees.length;
+
+  const records: SignedRecord[] = (docs ?? []).map((doc: any) => {
+    const docAcks = (acks ?? []).filter((a: any) => a.document_id === doc.id);
+    const ackedIds = new Set(docAcks.map((a: any) => a.employee_id));
+
+    const acknowledgments: AckEntry[] = docAcks.map((a: any) => {
+      const emp = allEmployees.find((e) => e.id === a.employee_id);
+      return {
+        employeeId: a.employee_id,
+        employeeName: emp ? `${emp.first_name} ${emp.last_name}` : "Unknown",
+        acknowledgedAt: a.acknowledged_at,
+        signatureText: a.signature_text ?? null,
+      };
+    });
+
+    const pendingNames = allEmployees
+      .filter((e) => !ackedIds.has(e.id))
+      .map((e) => `${e.first_name} ${e.last_name}`);
+
+    return {
+      documentId: doc.id,
+      documentName: doc.name,
+      ackMethod: doc.ack_method as "type_name" | "audit_trail",
+      totalEmployees,
+      acknowledgments,
+      pendingNames,
+    };
+  });
+
+  return { success: true, data: records };
 }

@@ -1,6 +1,6 @@
-import { listDocuments } from "@/actions/documents";
+import { listDocuments, getSignedRecords } from "@/actions/documents";
 import { listEmployees } from "@/actions/employees";
-import { getCurrentUser } from "@/lib/current-user";
+import { getCurrentUser, isAdmin } from "@/lib/current-user";
 import { DocumentsClient } from "@/components/documents/documents-client";
 import { UpgradeGate } from "@/components/layout/upgrade-gate";
 import { hasFeature } from "@/config/plans";
@@ -13,14 +13,17 @@ export default async function DocumentsPage() {
     return <UpgradeGate feature="Documents" requiredPlan="growth" currentPlan={plan} />;
   }
 
-  const [docsResult, empsResult] = await Promise.all([
+  const role = userCtx?.role ?? "employee";
+
+  const [docsResult, empsResult, signedResult] = await Promise.all([
     listDocuments(),
     listEmployees(),
+    isAdmin(role) ? getSignedRecords() : Promise.resolve({ success: true as const, data: [] }),
   ]);
 
   const documents = docsResult.success ? docsResult.data : [];
   const employees = empsResult.success ? empsResult.data : [];
-  const role = userCtx?.role ?? "employee";
+  const signedRecords = signedResult.success ? signedResult.data : [];
 
   return (
     <div className="space-y-5">
@@ -31,7 +34,12 @@ export default async function DocumentsPage() {
         </p>
       </div>
 
-      <DocumentsClient documents={documents} employees={employees} role={role} />
+      <DocumentsClient
+        documents={documents}
+        employees={employees}
+        role={role}
+        signedRecords={signedRecords}
+      />
     </div>
   );
 }

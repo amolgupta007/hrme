@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Plus, MapPin, Briefcase, Users, MoreHorizontal, Pencil, Trash2, Play, Pause, Eye, Linkedin } from "lucide-react";
+import { Plus, MapPin, Briefcase, Users, MoreHorizontal, Pencil, Trash2, Play, Pause, Eye, Linkedin, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { JobDialog } from "./job-dialog";
 import { updateJobStatus, deleteJob } from "@/actions/hire";
@@ -56,11 +56,27 @@ export function JobsClient({ jobs, departments, isAdmin, orgSlug }: Props) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingJob, setEditingJob] = useState<Job | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<{ jobId: string; action: string } | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpenMenuId(null);
+      }
+    }
+    if (openMenuId) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [openMenuId]);
 
   const filtered = activeTab === "all" ? jobs : jobs.filter((j) => j.status === activeTab);
 
   async function handleStatusChange(id: string, status: JobStatus) {
+    setPendingAction({ jobId: id, action: status });
     const result = await updateJobStatus(id, status);
+    setPendingAction(null);
     if (result.success) {
       toast.success(`Job marked as ${status}`);
       router.refresh();
@@ -72,7 +88,9 @@ export function JobsClient({ jobs, departments, isAdmin, orgSlug }: Props) {
 
   async function handleDelete(id: string) {
     if (!confirm("Delete this job? All applications will also be deleted.")) return;
+    setPendingAction({ jobId: id, action: "delete" });
     const result = await deleteJob(id);
+    setPendingAction(null);
     if (result.success) {
       toast.success("Job deleted");
       router.refresh();
@@ -183,7 +201,7 @@ export function JobsClient({ jobs, departments, isAdmin, orgSlug }: Props) {
                   </div>
 
                   {isAdmin && (
-                    <div className="relative">
+                    <div className="relative" ref={menuRef}>
                       <button
                         onClick={() => setOpenMenuId(openMenuId === job.id ? null : job.id)}
                         className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted transition-colors"
@@ -219,34 +237,50 @@ export function JobsClient({ jobs, departments, isAdmin, orgSlug }: Props) {
                           </button>
                           {job.status === "active" && (
                             <button
-                              className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted w-full text-left"
+                              className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted w-full text-left disabled:opacity-50"
+                              disabled={pendingAction?.jobId === job.id}
                               onClick={() => handleStatusChange(job.id, "paused")}
                             >
-                              <Pause className="h-3.5 w-3.5" /> Pause
+                              {pendingAction?.jobId === job.id && pendingAction.action === "paused"
+                                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                : <Pause className="h-3.5 w-3.5" />}
+                              Pause
                             </button>
                           )}
                           {(job.status === "draft" || job.status === "paused") && (
                             <button
-                              className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted w-full text-left"
+                              className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted w-full text-left disabled:opacity-50"
+                              disabled={pendingAction?.jobId === job.id}
                               onClick={() => handleStatusChange(job.id, "active")}
                             >
-                              <Play className="h-3.5 w-3.5" /> Activate
+                              {pendingAction?.jobId === job.id && pendingAction.action === "active"
+                                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                : <Play className="h-3.5 w-3.5" />}
+                              Activate
                             </button>
                           )}
                           {job.status !== "closed" && (
                             <button
-                              className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted w-full text-left"
+                              className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted w-full text-left disabled:opacity-50"
+                              disabled={pendingAction?.jobId === job.id}
                               onClick={() => handleStatusChange(job.id, "closed")}
                             >
+                              {pendingAction?.jobId === job.id && pendingAction.action === "closed"
+                                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                : null}
                               Close role
                             </button>
                           )}
                           <div className="my-1 border-t border-border" />
                           <button
-                            className="flex items-center gap-2 px-3 py-2 text-sm text-destructive hover:bg-muted w-full text-left"
+                            className="flex items-center gap-2 px-3 py-2 text-sm text-destructive hover:bg-muted w-full text-left disabled:opacity-50"
+                            disabled={pendingAction?.jobId === job.id}
                             onClick={() => handleDelete(job.id)}
                           >
-                            <Trash2 className="h-3.5 w-3.5" /> Delete
+                            {pendingAction?.jobId === job.id && pendingAction.action === "delete"
+                              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              : <Trash2 className="h-3.5 w-3.5" />}
+                            Delete
                           </button>
                         </div>
                       )}

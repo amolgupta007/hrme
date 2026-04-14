@@ -22,9 +22,10 @@ const LOCATION_LABELS: Record<string, string> = {
 interface Props {
   org: { name: string; slug: string };
   jobs: Job[];
+  defaultSource?: string;
 }
 
-export function CareersPageClient({ org, jobs }: Props) {
+export function CareersPageClient({ org, jobs, defaultSource }: Props) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [applyingId, setApplyingId] = useState<string | null>(null);
 
@@ -194,6 +195,7 @@ function ApplyModal({ job, onClose }: { job: Job; onClose: () => void }) {
         resume_url: resumeUrl,
         work_samples: workSamples.length > 0 ? workSamples : undefined,
         cover_note: coverNote.trim() || undefined,
+        source: defaultSource,
         answers: job.custom_questions.map((q, i) => ({
           question: q.question,
           answer: answers[i] ?? "",

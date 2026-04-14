@@ -479,6 +479,7 @@ export async function submitApplication(
     work_samples?: string[];
     cover_note?: string;
     answers?: { question: string; answer: string }[];
+    source?: string;
   }
 ): Promise<ActionResult<void>> {
   const validated = applicationSchema.safeParse(data);
@@ -507,7 +508,9 @@ export async function submitApplication(
     email: d.email,
     phone: d.phone || null,
     linkedin_url: d.linkedin_url || null,
-    source: "direct",
+    source: ["direct", "referral", "linkedin", "naukri", "indeed", "other"].includes(data.source ?? "")
+      ? data.source!
+      : "direct",
   };
   if (d.resume_url) candidatePayload.resume_url = d.resume_url;
 

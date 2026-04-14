@@ -916,12 +916,13 @@ export async function sendOffer(offerId: string): Promise<ActionResult<void>> {
     supabase.from("organizations").select("name").eq("id", user.orgId).single(),
   ]);
 
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://jambahr.com";
+  const offerUrl = `${appUrl}/offers/${(offer as any).offer_token}`;
+
   try {
     const { resend, FROM_EMAIL } = await import("@/lib/resend");
     const { render } = await import("@react-email/render");
     const { OfferLetterEmail } = await import("@/components/emails/offer-letter");
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://jambahr.com";
-    const offerUrl = `${appUrl}/offers/${(offer as any).offer_token}`;
 
     const html = await render(
       OfferLetterEmail({
@@ -941,18 +942,22 @@ export async function sendOffer(offerId: string): Promise<ActionResult<void>> {
       subject: `Your offer letter from ${(org as any)?.name ?? "us"}`,
       html,
     });
+
+    await supabase
+      .from("offers")
+      .update({ status: "sent", sent_at: new Date().toISOString() })
+      .eq("id", offerId)
+      .eq("org_id", user.orgId);
+
+    revalidatePath("/hire/offers");
+    return { success: true, data: undefined };
   } catch (emailErr) {
     console.error("Offer email failed:", emailErr);
+    return {
+      success: false,
+      error: `Offer saved but email failed to send. Share this link with the candidate directly: ${offerUrl}`,
+    };
   }
-
-  await supabase
-    .from("offers")
-    .update({ status: "sent", sent_at: new Date().toISOString() })
-    .eq("id", offerId)
-    .eq("org_id", user.orgId);
-
-  revalidatePath("/hire/offers");
-  return { success: true, data: undefined };
 }
 
 // ---- Public: Offer Response ----

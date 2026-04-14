@@ -984,7 +984,7 @@ export async function getOfferByToken(token: string): Promise<ActionResult<{ off
 
   const [{ data: candidate }, { data: job }, { data: org }] = await Promise.all([
     supabase.from("candidates").select("name, email").eq("id", (app as any)?.candidate_id).single(),
-    supabase.from("jobs").select("title").eq("id", (app as any)?.job_id).single(),
+    supabase.from("jobs").select("title, department_id, departments(name)").eq("id", (app as any)?.job_id).single(),
     supabase.from("organizations").select("name").eq("id", (offer as any).org_id).single(),
   ]);
 
@@ -997,7 +997,7 @@ export async function getOfferByToken(token: string): Promise<ActionResult<{ off
         candidate_name: (candidate as any)?.name ?? "Candidate",
         candidate_email: (candidate as any)?.email ?? "",
         job_title: (job as any)?.title ?? "",
-        department_name: null,
+        department_name: ((job as any)?.departments as { name: string } | null)?.name ?? null,
         reporting_manager_name: null,
       },
     },

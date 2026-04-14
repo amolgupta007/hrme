@@ -44,16 +44,19 @@ export function FeedbackDialog({ open, onClose, interview }: Props) {
   const [saving, setSaving] = useState(false);
 
   async function handleSubmit() {
-    if (!recommendation) return toast.error("Select a recommendation");
+    if (!technical) return toast.error("Rate technical skills");
+    if (!communication) return toast.error("Rate communication");
+    if (!cultureFit) return toast.error("Rate culture fit");
     if (!overall) return toast.error("Give an overall rating");
+    if (!recommendation) return toast.error("Select a recommendation");
 
     setSaving(true);
     try {
       const result = await submitInterviewFeedback({
         schedule_id: interview.id,
-        technical_rating: technical || 3,
-        communication_rating: communication || 3,
-        culture_fit_rating: cultureFit || 3,
+        technical_rating: technical,
+        communication_rating: communication,
+        culture_fit_rating: cultureFit,
         overall_rating: overall,
         recommendation: recommendation as any,
         notes,
@@ -125,7 +128,7 @@ export function FeedbackDialog({ open, onClose, interview }: Props) {
 
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={onClose}>Cancel</Button>
-            <Button onClick={handleSubmit} disabled={saving} className="bg-indigo-600 hover:bg-indigo-700 text-white">
+            <Button onClick={handleSubmit} disabled={saving || !technical || !communication || !cultureFit || !overall || !recommendation} className="bg-indigo-600 hover:bg-indigo-700 text-white">
               {saving ? "Saving…" : existing ? "Update Feedback" : "Submit Feedback"}
             </Button>
           </div>

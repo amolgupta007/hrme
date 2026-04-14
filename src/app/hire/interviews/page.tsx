@@ -20,7 +20,7 @@ export default async function InterviewsPage() {
     <InterviewsClient
       interviews={interviews}
       applications={applications}
-      employees={employees as any}
+      employees={employees as { id: string; first_name: string; last_name: string }[]}
       isAdmin={admin}
     />
   );

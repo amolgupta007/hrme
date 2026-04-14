@@ -5,10 +5,6 @@ import { usePathname } from "next/navigation";
 import { Briefcase, LayoutDashboard, FileText, Users, Kanban, CalendarDays, FileSignature, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-interface HireNavProps {
-  isAdmin: boolean;
-}
-
 const NAV_ITEMS = [
   { label: "Overview", href: "/hire", icon: LayoutDashboard, exact: true },
   { label: "Jobs", href: "/hire/jobs", icon: FileText },
@@ -18,7 +14,7 @@ const NAV_ITEMS = [
   { label: "Offers", href: "/hire/offers", icon: FileSignature },
 ];
 
-export function HireNav({ isAdmin }: HireNavProps) {
+export function HireNav() {
   const pathname = usePathname();
 
   return (

@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getCurrentUser, isAdmin } from "@/lib/current-user";
+import { getCurrentUser } from "@/lib/current-user";
 import { HireNav } from "@/components/hire/hire-nav";
 
 export default async function HireLayout({ children }: { children: React.ReactNode }) {
@@ -10,7 +10,7 @@ export default async function HireLayout({ children }: { children: React.ReactNo
 
   return (
     <div className="min-h-screen bg-[#f5f4ff] dark:bg-[#0e0c1a]">
-      <HireNav isAdmin={isAdmin(user.role)} />
+      <HireNav />
       <main className="mx-auto max-w-7xl px-6 py-8">{children}</main>
     </div>
   );

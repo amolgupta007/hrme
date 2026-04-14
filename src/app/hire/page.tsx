@@ -74,16 +74,6 @@ export default function HirePage() {
           </a>
         ))}
       </div>
-
-      {/* Coming soon banner */}
-      <div className="rounded-xl border border-dashed border-indigo-200 bg-indigo-50/50 px-6 py-5 text-center dark:border-indigo-900/40 dark:bg-indigo-950/20">
-        <p className="text-sm font-medium text-indigo-700 dark:text-indigo-300">
-          Full hiring suite coming soon
-        </p>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Jobs, pipeline, interviews, and offer management are being built. Check back soon.
-        </p>
-      </div>
     </div>
   );
 }

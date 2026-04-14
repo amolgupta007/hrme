@@ -24,7 +24,7 @@ export default async function OffersPage() {
       offers={offers}
       applications={applications}
       departments={departments}
-      employees={employees as any}
+      employees={employees as { id: string; first_name: string; last_name: string }[]}
       isAdmin={admin}
     />
   );

@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Plus, MapPin, Briefcase, Users, MoreHorizontal, Pencil, Trash2, Play, Pause, Eye, Linkedin, Loader2 } from "lucide-react";
+import { Plus, MapPin, Briefcase, Users, MoreHorizontal, Pencil, Trash2, Play, Pause, Eye, Linkedin, Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { JobDialog } from "./job-dialog";
 import { updateJobStatus, deleteJob } from "@/actions/hire";
@@ -57,17 +57,15 @@ export function JobsClient({ jobs, departments, isAdmin, orgSlug }: Props) {
   const [editingJob, setEditingJob] = useState<Job | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<{ jobId: string; action: string } | null>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-
   useEffect(() => {
+    if (!openMenuId) return;
     function handleClickOutside(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+      const target = e.target as Element;
+      if (!target.closest("[data-job-dropdown]")) {
         setOpenMenuId(null);
       }
     }
-    if (openMenuId) {
-      document.addEventListener("mousedown", handleClickOutside);
-    }
+    document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [openMenuId]);
 
@@ -201,7 +199,7 @@ export function JobsClient({ jobs, departments, isAdmin, orgSlug }: Props) {
                   </div>
 
                   {isAdmin && (
-                    <div className="relative" ref={menuRef}>
+                    <div className="relative" data-job-dropdown>
                       <button
                         onClick={() => setOpenMenuId(openMenuId === job.id ? null : job.id)}
                         className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted transition-colors"
@@ -267,7 +265,7 @@ export function JobsClient({ jobs, departments, isAdmin, orgSlug }: Props) {
                             >
                               {pendingAction?.jobId === job.id && pendingAction.action === "closed"
                                 ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                : null}
+                                : <X className="h-3.5 w-3.5" />}
                               Close role
                             </button>
                           )}

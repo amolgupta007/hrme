@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 
 interface Props {
   params: { token: string };
+  searchParams: { response?: string };
 }
 
 async function handleOfferResponse(token: string, decision: "accepted" | "declined") {
@@ -12,7 +13,23 @@ async function handleOfferResponse(token: string, decision: "accepted" | "declin
   redirect(`/offers/${token}`);
 }
 
-export default async function OfferResponsePage({ params }: Props) {
+export default async function OfferResponsePage({ params, searchParams }: Props) {
+  const responseParam = searchParams.response;
+  if (responseParam === "accepted" || responseParam === "declined") {
+    const respondResult = await respondToOffer(params.token, responseParam);
+    if (!respondResult.success && respondResult.error === "Offer not found") {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+          <div className="max-w-md w-full bg-white rounded-2xl shadow-sm border p-8 text-center">
+            <XCircle className="mx-auto h-12 w-12 text-red-400 mb-4" />
+            <h1 className="text-xl font-bold mb-2">Offer Not Found</h1>
+            <p className="text-sm text-gray-500">This offer link is invalid or has expired.</p>
+          </div>
+        </div>
+      );
+    }
+  }
+
   const result = await getOfferByToken(params.token);
 
   if (!result.success) {

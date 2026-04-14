@@ -62,10 +62,10 @@ export function OfferLetterEmail({
             This offer is valid for 7 days from the date of this email.
           </Text>
 
-          <Button style={acceptButtonStyle} href={`${offerUrl}?response=accept`}>
+          <Button style={acceptButtonStyle} href={`${offerUrl}?response=accepted`}>
             Accept Offer
           </Button>
-          <Button style={declineButtonStyle} href={`${offerUrl}?response=decline`}>
+          <Button style={declineButtonStyle} href={`${offerUrl}?response=declined`}>
             Decline Offer
           </Button>
 

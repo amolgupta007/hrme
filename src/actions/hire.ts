@@ -936,6 +936,81 @@ export async function createOffer(input: {
   return { success: true, data: { id: (data as any).id } };
 }
 
+export async function updateOffer(
+  offerId: string,
+  input: {
+    role_title: string;
+    ctc: number;
+    joining_date: string;
+    department_id?: string;
+    reporting_manager_id?: string;
+    additional_terms?: string;
+  }
+): Promise<ActionResult<void>> {
+  const user = await getHireContext();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can edit offers" };
+
+  const supabase = createAdminSupabase();
+  const { data: existing, error: fetchErr } = await supabase
+    .from("offers")
+    .select("status")
+    .eq("id", offerId)
+    .eq("org_id", user.orgId)
+    .single();
+
+  if (fetchErr || !existing) return { success: false, error: "Offer not found" };
+  if (!["draft", "sent"].includes((existing as any).status)) {
+    return { success: false, error: "Cannot edit an offer that has been accepted or declined" };
+  }
+
+  const { error } = await supabase
+    .from("offers")
+    .update({
+      role_title: input.role_title,
+      ctc: input.ctc,
+      joining_date: input.joining_date,
+      department_id: input.department_id || null,
+      reporting_manager_id: input.reporting_manager_id || null,
+      additional_terms: input.additional_terms || null,
+    })
+    .eq("id", offerId)
+    .eq("org_id", user.orgId);
+
+  if (error) return { success: false, error: error.message };
+  revalidatePath("/hire/offers");
+  return { success: true, data: undefined };
+}
+
+export async function deleteOffer(offerId: string): Promise<ActionResult<void>> {
+  const user = await getHireContext();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can delete offers" };
+
+  const supabase = createAdminSupabase();
+  const { data: existing, error: fetchErr } = await supabase
+    .from("offers")
+    .select("status")
+    .eq("id", offerId)
+    .eq("org_id", user.orgId)
+    .single();
+
+  if (fetchErr || !existing) return { success: false, error: "Offer not found" };
+  if (["accepted", "declined"].includes((existing as any).status)) {
+    return { success: false, error: "Cannot delete an offer that has already been responded to" };
+  }
+
+  const { error } = await supabase
+    .from("offers")
+    .delete()
+    .eq("id", offerId)
+    .eq("org_id", user.orgId);
+
+  if (error) return { success: false, error: error.message };
+  revalidatePath("/hire/offers");
+  return { success: true, data: undefined };
+}
+
 export async function sendOffer(offerId: string): Promise<ActionResult<void>> {
   const user = await getHireContext();
   if (!user) return { success: false, error: "Not authenticated" };

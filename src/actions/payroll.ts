@@ -110,7 +110,7 @@ export async function getSalaryStructures(): Promise<ActionResult<SalaryStructur
   const supabase = createAdminSupabase();
 
   // Two separate queries to avoid nested join issues with Supabase PostgREST
-  const [{ data: structures, error }, { data: employees }] = await Promise.all([
+  const [{ data: structures, error }, { data: employees }, { data: departments }] = await Promise.all([
     supabase
       .from("salary_structures")
       .select("*")
@@ -118,12 +118,17 @@ export async function getSalaryStructures(): Promise<ActionResult<SalaryStructur
       .order("created_at", { ascending: false }),
     supabase
       .from("employees")
-      .select("id, first_name, last_name, designation")
+      .select("id, first_name, last_name, designation, department_id")
+      .eq("org_id", user.orgId),
+    supabase
+      .from("departments")
+      .select("id, name")
       .eq("org_id", user.orgId),
   ]);
 
   if (error) return { success: false, error: error.message };
 
+  const deptMap = new Map((departments ?? []).map((d: any) => [d.id, d.name]));
   const empMap = new Map((employees ?? []).map((e: any) => [e.id, e]));
 
   const rows: SalaryStructureRow[] = (structures ?? []).map((r: any) => {
@@ -132,7 +137,7 @@ export async function getSalaryStructures(): Promise<ActionResult<SalaryStructur
       id: r.id,
       employee_id: r.employee_id,
       employee_name: emp ? `${emp.first_name} ${emp.last_name}` : "Unknown",
-      department: null,
+      department: emp?.department_id ? (deptMap.get(emp.department_id) ?? null) : null,
       designation: emp?.designation ?? null,
       ctc: r.ctc,
       basic_monthly: r.basic_monthly,
@@ -444,7 +449,7 @@ export async function getPayrollEntries(runId: string): Promise<ActionResult<Pay
 
   const supabase = createAdminSupabase();
 
-  const [{ data: entries, error }, { data: employees }] = await Promise.all([
+  const [{ data: entries, error }, { data: employees }, { data: departments }] = await Promise.all([
     supabase
       .from("payroll_entries")
       .select("id, employee_id, basic_monthly, hra_monthly, special_allowance_monthly, gross_salary, employee_pf, professional_tax, tds, lop_days, lop_deduction, bonus, total_deductions, net_pay")
@@ -453,12 +458,17 @@ export async function getPayrollEntries(runId: string): Promise<ActionResult<Pay
       .order("created_at"),
     supabase
       .from("employees")
-      .select("id, first_name, last_name")
+      .select("id, first_name, last_name, department_id")
+      .eq("org_id", user.orgId),
+    supabase
+      .from("departments")
+      .select("id, name")
       .eq("org_id", user.orgId),
   ]);
 
   if (error) return { success: false, error: error.message };
 
+  const deptMap = new Map((departments ?? []).map((d: any) => [d.id, d.name]));
   const empMap = new Map((employees ?? []).map((e: any) => [e.id, e]));
 
   const rows: PayrollEntry[] = (entries ?? []).map((r: any) => {
@@ -467,7 +477,7 @@ export async function getPayrollEntries(runId: string): Promise<ActionResult<Pay
       id: r.id,
       employee_id: r.employee_id,
       employee_name: emp ? `${emp.first_name} ${emp.last_name}` : "Unknown",
-      department: null,
+      department: emp?.department_id ? (deptMap.get(emp.department_id) ?? null) : null,
       basic_monthly: r.basic_monthly,
       hra_monthly: r.hra_monthly,
       special_allowance_monthly: r.special_allowance_monthly,

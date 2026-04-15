@@ -612,5 +612,7 @@ export async function getMyPayslips(): Promise<ActionResult<MyPayslip[]>> {
     net_pay: r.net_pay,
   }));
 
-  return { success: true, data: rows };
+  // Exclude drafts — admin is still editing, not relevant to the employee yet
+  const filtered = rows.filter((r) => r.status !== "draft");
+  return { success: true, data: filtered };
 }

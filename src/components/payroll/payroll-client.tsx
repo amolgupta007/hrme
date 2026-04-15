@@ -146,6 +146,7 @@ export function PayrollClient({
   }
 
   async function handleDeleteRun(runId: string) {
+    if (!confirm("Delete this payroll run? This cannot be undone.")) return;
     setDeletingRun(runId);
     try {
       const result = await deletePayrollRun(runId);

@@ -116,6 +116,10 @@ export function PayrollClient({
   }
 
   async function handleProcess(runId: string) {
+    const run = runs.find((r) => r.id === runId);
+    if (run?.status === "processed") {
+      if (!confirm("This run has already been processed. Reprocessing will reset all manual bonus and LOP edits. Continue?")) return;
+    }
     setProcessingRun(runId);
     try {
       const result = await processPayrollRun(runId);

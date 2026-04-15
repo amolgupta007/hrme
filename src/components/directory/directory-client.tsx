@@ -132,6 +132,7 @@ export function DirectoryClient({ employees }: DirectoryClientProps) {
 
 function EmployeeCard({ employee: e }: { employee: DirectoryEmployee }) {
   const fullName = `${e.first_name} ${e.last_name}`;
+  const displayStatus = e.is_on_leave && e.status === "active" ? "on_leave" : e.status;
   return (
     <div className="rounded-xl border border-border bg-card p-4 hover:shadow-sm transition-shadow space-y-3">
       {/* Avatar + name + role */}
@@ -146,7 +147,7 @@ function EmployeeCard({ employee: e }: { employee: DirectoryEmployee }) {
           {/* Status dot */}
           <span className={cn(
             "absolute bottom-0.5 right-0.5 h-3.5 w-3.5 rounded-full ring-2 ring-card",
-            STATUS_DOT[e.status] ?? "bg-gray-400"
+            STATUS_DOT[displayStatus] ?? "bg-gray-400"
           )} />
         </div>
         <div className="min-w-0 flex-1">

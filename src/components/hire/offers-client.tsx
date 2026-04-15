@@ -3,9 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Plus, FileText, Send, CheckCircle2, XCircle, Clock } from "lucide-react";
+import { Plus, FileText, Send, CheckCircle2, XCircle, Clock, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { createOffer, sendOffer } from "@/actions/hire";
+import { createOffer, sendOffer, updateOffer, deleteOffer } from "@/actions/hire";
 import type { Offer, Application } from "@/actions/hire";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -70,11 +70,40 @@ export function OffersClient({ offers, applications, departments, employees, isA
     reporting_manager_id: "",
     additional_terms: "",
   });
+  const [editingOffer, setEditingOffer] = useState<Offer | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const displayed = tab === "all" ? offers : offers.filter((o) => o.status === tab);
 
   function setField(key: keyof CreateOfferForm, value: string) {
     setForm((f) => ({ ...f, [key]: value }));
+  }
+
+  function handleEdit(offer: Offer) {
+    setForm({
+      application_id: offer.application_id,
+      role_title: offer.role_title,
+      ctc: String(offer.ctc),
+      joining_date: offer.joining_date,
+      department_id: offer.department_id ?? "",
+      reporting_manager_id: offer.reporting_manager_id ?? "",
+      additional_terms: offer.additional_terms ?? "",
+    });
+    setEditingOffer(offer);
+    setCreateOpen(true);
+  }
+
+  async function handleDelete(offerId: string) {
+    if (!confirm("Delete this offer? This cannot be undone.")) return;
+    setDeletingId(offerId);
+    const result = await deleteOffer(offerId);
+    setDeletingId(null);
+    if (result.success) {
+      toast.success("Offer deleted");
+      router.refresh();
+    } else {
+      toast.error(result.error);
+    }
   }
 
   async function handleCreate() {
@@ -84,20 +113,34 @@ export function OffersClient({ offers, applications, departments, employees, isA
     if (!form.joining_date) return toast.error("Select joining date");
 
     setSaving(true);
-    const result = await createOffer({
-      application_id: form.application_id,
-      role_title: form.role_title.trim(),
-      ctc: Number(form.ctc),
-      joining_date: form.joining_date,
-      department_id: form.department_id || undefined,
-      reporting_manager_id: form.reporting_manager_id || undefined,
-      additional_terms: form.additional_terms || undefined,
-    });
-    setSaving(false);
+    let result;
 
+    if (editingOffer) {
+      result = await updateOffer(editingOffer.id, {
+        role_title: form.role_title.trim(),
+        ctc: Number(form.ctc),
+        joining_date: form.joining_date,
+        department_id: form.department_id || undefined,
+        reporting_manager_id: form.reporting_manager_id || undefined,
+        additional_terms: form.additional_terms || undefined,
+      });
+    } else {
+      result = await createOffer({
+        application_id: form.application_id,
+        role_title: form.role_title.trim(),
+        ctc: Number(form.ctc),
+        joining_date: form.joining_date,
+        department_id: form.department_id || undefined,
+        reporting_manager_id: form.reporting_manager_id || undefined,
+        additional_terms: form.additional_terms || undefined,
+      });
+    }
+
+    setSaving(false);
     if (result.success) {
-      toast.success("Offer created");
+      toast.success(editingOffer ? "Offer updated" : "Offer created");
       setCreateOpen(false);
+      setEditingOffer(null);
       setForm({ application_id: "", role_title: "", ctc: "", joining_date: "", department_id: "", reporting_manager_id: "", additional_terms: "" });
       router.refresh();
     } else {
@@ -206,15 +249,31 @@ export function OffersClient({ offers, applications, departments, employees, isA
                   </div>
                 )}
 
-                {isAdmin && offer.status === "draft" && (
+                {isAdmin && (offer.status === "draft" || offer.status === "sent") && (
                   <div className="flex items-center gap-2 pt-1">
+                    {offer.status === "draft" && (
+                      <button
+                        onClick={() => handleSend(offer.id)}
+                        disabled={sending === offer.id}
+                        className="flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
+                      >
+                        <Send className="h-3 w-3" />
+                        {sending === offer.id ? "Sending…" : "Send Offer"}
+                      </button>
+                    )}
                     <button
-                      onClick={() => handleSend(offer.id)}
-                      disabled={sending === offer.id}
-                      className="flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
+                      onClick={() => handleEdit(offer)}
+                      className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-muted"
                     >
-                      <Send className="h-3 w-3" />
-                      {sending === offer.id ? "Sending…" : "Send Offer"}
+                      <Pencil className="h-3 w-3" /> Edit
+                    </button>
+                    <button
+                      onClick={() => handleDelete(offer.id)}
+                      disabled={deletingId === offer.id}
+                      className="flex items-center gap-1.5 rounded-md border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-60"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                      {deletingId === offer.id ? "Deleting…" : "Delete"}
                     </button>
                   </div>
                 )}
@@ -224,15 +283,20 @@ export function OffersClient({ offers, applications, departments, employees, isA
         </div>
       )}
 
-      {/* Create Offer Dialog */}
+      {/* Create / Edit Offer Dialog */}
       {createOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-lg rounded-2xl bg-white dark:bg-[#150e2b] p-6 shadow-xl space-y-4 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-lg font-bold">Create Offer Letter</h2>
+            <h2 className="text-lg font-bold">{editingOffer ? "Edit Offer" : "Create Offer Letter"}</h2>
 
             <div>
               <label className="text-sm font-medium">Candidate *</label>
-              <select className={inputCls} value={form.application_id} onChange={(e) => setField("application_id", e.target.value)}>
+              <select
+                className={inputCls}
+                value={form.application_id}
+                onChange={(e) => setField("application_id", e.target.value)}
+                disabled={!!editingOffer}
+              >
                 <option value="">Select candidate…</option>
                 {applications.filter((a) => a.stage !== "hired" && a.stage !== "rejected").map((a) => (
                   <option key={a.id} value={a.id}>{a.candidate_name} — {a.job_title}</option>
@@ -286,9 +350,9 @@ export function OffersClient({ offers, applications, departments, employees, isA
             </div>
 
             <div className="flex justify-end gap-2 pt-2">
-              <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
+              <Button variant="outline" onClick={() => { setCreateOpen(false); setEditingOffer(null); }}>Cancel</Button>
               <Button onClick={handleCreate} disabled={saving} className="bg-indigo-600 hover:bg-indigo-700 text-white">
-                {saving ? "Creating…" : "Create Offer"}
+                {saving ? (editingOffer ? "Saving…" : "Creating…") : (editingOffer ? "Save Changes" : "Create Offer")}
               </Button>
             </div>
           </div>

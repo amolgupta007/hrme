@@ -119,7 +119,7 @@ export function EmployeeTable({
                   </td>
                   {/* Status */}
                   <td className="px-4 py-3">
-                    <StatusBadge status={emp.status} />
+                    <StatusBadge status={emp.status} isOnLeave={(emp as any).is_on_leave} />
                   </td>
                   {/* Actions */}
                   <td className="px-4 py-3">
@@ -266,13 +266,14 @@ function RoleBadge({ role }: { role: Employee["role"] }) {
 
 // ---- Status badge ----
 
-function StatusBadge({ status }: { status: Employee["status"] }) {
-  const map: Record<Employee["status"], { label: string; variant: "success" | "warning" | "destructive" | "secondary" }> = {
+function StatusBadge({ status, isOnLeave }: { status: Employee["status"]; isOnLeave?: boolean }) {
+  const displayStatus = isOnLeave && status === "active" ? "on_leave" : status;
+  const map: Record<string, { label: string; variant: "success" | "warning" | "destructive" | "secondary" }> = {
     active:     { label: "Active",     variant: "success" },
     on_leave:   { label: "On Leave",   variant: "warning" },
     inactive:   { label: "Inactive",   variant: "secondary" },
     terminated: { label: "Terminated", variant: "destructive" },
   };
-  const { label, variant } = map[status] ?? { label: status, variant: "secondary" as const };
+  const { label, variant } = map[displayStatus] ?? { label: displayStatus, variant: "secondary" as const };
   return <Badge variant={variant}>{label}</Badge>;
 }

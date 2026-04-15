@@ -64,6 +64,8 @@ export type Application = {
   rejection_reason: string | null;
   cover_note: string | null;
   applied_at: string;
+  resume_url: string | null;
+  answers: { question: string; answer: string }[] | null;
 };
 
 // ---- Schemas ----
@@ -287,7 +289,7 @@ export async function listApplications(jobId: string): Promise<ActionResult<Appl
   const supabase = createAdminSupabase();
   const [{ data: apps, error }, { data: candidates }, { data: job }] = await Promise.all([
     supabase.from("applications").select("*").eq("job_id", jobId).eq("org_id", user.orgId).order("applied_at"),
-    supabase.from("candidates").select("id, name, email").eq("org_id", user.orgId),
+    supabase.from("candidates").select("id, name, email, resume_url").eq("org_id", user.orgId),
     supabase.from("jobs").select("title").eq("id", jobId).single(),
   ]);
 
@@ -304,6 +306,8 @@ export async function listApplications(jobId: string): Promise<ActionResult<Appl
         job_title: (job as any)?.title ?? "",
         candidate_name: cand?.name ?? "Unknown",
         candidate_email: cand?.email ?? "",
+        resume_url: (cand as any)?.resume_url ?? null,
+        answers: (a as any).answers ?? null,
       };
     }),
   };

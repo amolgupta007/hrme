@@ -167,6 +167,30 @@ export function JobDetailClient({ job, applications, departments, isAdmin }: Pro
                     <p className="mt-2 text-xs text-muted-foreground border-t border-border pt-2">{app.cover_note}</p>
                   )}
 
+                  {(app.resume_url || (app.answers && app.answers.filter((a: { question: string; answer: string }) => a.question !== "__work_samples__").length > 0)) && (
+                    <div className="mt-2 border-t border-border pt-2 space-y-2">
+                      {app.resume_url && (
+                        <a
+                          href={app.resume_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 text-xs font-medium text-indigo-600 hover:underline dark:text-indigo-400"
+                        >
+                          View Resume
+                        </a>
+                      )}
+                      {app.answers &&
+                        app.answers
+                          .filter((a: { question: string; answer: string }) => a.question !== "__work_samples__")
+                          .map((a: { question: string; answer: string }, i: number) => (
+                            <div key={i}>
+                              <p className="text-xs font-medium text-muted-foreground">{a.question}</p>
+                              <p className="text-xs text-foreground mt-0.5">{a.answer}</p>
+                            </div>
+                          ))}
+                    </div>
+                  )}
+
                   {/* Reject inline form */}
                   {rejectingId === app.id && (
                     <div className="mt-3 border-t border-border pt-3 space-y-2">

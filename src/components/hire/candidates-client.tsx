@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { Search, Users, Linkedin, Phone } from "lucide-react";
+import { Search, Users, Linkedin, Phone, Plus } from "lucide-react";
 import type { Candidate, ApplicationStage } from "@/actions/hire";
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { AddCandidateDialog } from "./add-candidate-dialog";
 
 const STAGE_LABELS: Record<ApplicationStage, string> = {
   applied: "Applied",
@@ -44,6 +46,7 @@ interface Props {
 
 export function CandidatesClient({ candidates }: Props) {
   const [search, setSearch] = useState("");
+  const [addOpen, setAddOpen] = useState(false);
 
   const filtered = candidates.filter(
     (c) =>
@@ -59,6 +62,9 @@ export function CandidatesClient({ candidates }: Props) {
           <h1 className="text-xl font-bold">Candidates</h1>
           <p className="text-sm text-muted-foreground mt-0.5">{candidates.length} total</p>
         </div>
+        <Button onClick={() => setAddOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white">
+          <Plus className="h-4 w-4 mr-1.5" /> Add Candidate
+        </Button>
       </div>
 
       {/* Search */}
@@ -139,6 +145,7 @@ export function CandidatesClient({ candidates }: Props) {
           </table>
         </div>
       )}
+      <AddCandidateDialog open={addOpen} onClose={() => setAddOpen(false)} />
     </div>
   );
 }

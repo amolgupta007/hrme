@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import Anthropic from "@anthropic-ai/sdk";
 import { createAdminSupabase } from "@/lib/supabase/server";
-import { getCurrentUser, isAdmin } from "@/lib/current-user";
+import { getCurrentUser, isAdmin, isManagerOrAbove } from "@/lib/current-user";
 import type { ActionResult } from "@/types";
 
 // ---- Types ----
@@ -278,6 +278,45 @@ export async function listCandidates(): Promise<ActionResult<(Candidate & { appl
       applications: appsByCandidate.get(c.id) ?? [],
     })),
   };
+}
+
+export async function createCandidate(input: {
+  name: string;
+  email: string;
+  phone?: string;
+  linkedin_url?: string;
+  source?: string;
+}): Promise<ActionResult<{ id: string }>> {
+  const user = await getHireContext();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isManagerOrAbove(user.role)) return { success: false, error: "Unauthorized" };
+
+  const supabase = createAdminSupabase();
+
+  const source = ["direct", "referral", "linkedin", "naukri", "indeed", "other"].includes(input.source ?? "")
+    ? input.source!
+    : "direct";
+
+  const { data, error } = await supabase
+    .from("candidates")
+    .insert({
+      org_id: user.orgId,
+      name: input.name.trim(),
+      email: input.email.trim().toLowerCase(),
+      phone: input.phone?.trim() || null,
+      linkedin_url: input.linkedin_url?.trim() || null,
+      source,
+    })
+    .select("id")
+    .single();
+
+  if (error) {
+    if (error.code === "23505") return { success: false, error: "A candidate with this email already exists" };
+    return { success: false, error: error.message };
+  }
+
+  revalidatePath("/hire/candidates");
+  return { success: true, data: { id: (data as any).id } };
 }
 
 // ---- Applications ----

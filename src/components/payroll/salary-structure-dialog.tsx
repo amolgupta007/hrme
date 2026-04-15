@@ -76,6 +76,7 @@ export function SalaryStructureDialog({ open, onClose, employees, existing }: Pr
 
   async function handleDelete() {
     if (!existing) return;
+    if (!confirm(`Remove salary structure for ${existing.employee_name}? This cannot be undone.`)) return;
     setDeleting(true);
     try {
       const result = await deleteSalaryStructure(existing.employee_id);

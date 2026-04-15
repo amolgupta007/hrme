@@ -74,9 +74,21 @@ export async function listEmployees(): Promise<
     .order("created_at", { ascending: false });
   if (error) return { success: false, error: error.message };
 
+  const today = new Date().toISOString().split("T")[0];
+  const { data: onLeaveData } = await supabase
+    .from("leave_requests")
+    .select("employee_id")
+    .eq("org_id", orgId)
+    .eq("status", "approved")
+    .lte("start_date", today)
+    .gte("end_date", today);
+
+  const onLeaveSet = new Set((onLeaveData ?? []).map((r: any) => r.employee_id));
+
   const employees = (data ?? []).map((e: any) => ({
     ...e,
     department_name: e.departments?.name ?? null,
+    is_on_leave: onLeaveSet.has(e.id),
   }));
 
   return { success: true, data: employees };

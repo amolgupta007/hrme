@@ -810,6 +810,34 @@ export async function updateInterviewStatus(
   return { success: true, data: undefined };
 }
 
+export async function rescheduleInterview(
+  scheduleId: string,
+  input: {
+    scheduled_at: string;
+    interview_type?: "video" | "phone" | "in_person";
+    meeting_link?: string;
+  }
+): Promise<ActionResult<void>> {
+  const user = await getHireContext();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isManagerOrAbove(user.role)) return { success: false, error: "Unauthorized" };
+
+  const supabase = createAdminSupabase();
+  const { error } = await supabase
+    .from("interview_schedules")
+    .update({
+      scheduled_at: input.scheduled_at,
+      ...(input.interview_type && { interview_type: input.interview_type }),
+      ...(input.meeting_link !== undefined && { meeting_link: input.meeting_link || null }),
+    })
+    .eq("id", scheduleId)
+    .eq("org_id", user.orgId);
+
+  if (error) return { success: false, error: error.message };
+  revalidatePath("/hire/interviews");
+  return { success: true, data: undefined };
+}
+
 export async function submitInterviewFeedback(input: {
   schedule_id: string;
   technical_rating: number;

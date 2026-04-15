@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { ScheduleInterviewDialog } from "./schedule-interview-dialog";
 import { FeedbackDialog } from "./feedback-dialog";
 import { CalendarLinks } from "./calendar-links";
-import { updateInterviewStatus } from "@/actions/hire";
+import { updateInterviewStatus, rescheduleInterview } from "@/actions/hire";
 import type { InterviewSchedule, Application } from "@/actions/hire";
 
 const TYPE_ICON: Record<string, any> = { video: Video, phone: Phone, in_person: Building2 };
@@ -43,12 +43,37 @@ export function InterviewsClient({ interviews, applications, employees, isAdmin 
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [feedbackInterview, setFeedbackInterview] = useState<InterviewSchedule | null>(null);
   const [tab, setTab] = useState<"upcoming" | "past">("upcoming");
+  const [rescheduling, setRescheduling] = useState<InterviewSchedule | null>(null);
+  const [rescheduleData, setRescheduleData] = useState({
+    scheduled_at: "",
+    interview_type: "video" as "video" | "phone" | "in_person",
+    meeting_link: "",
+  });
+  const [rescheduleSaving, setRescheduleSaving] = useState(false);
 
   const now = new Date();
   const upcoming = interviews.filter((i) => new Date(i.scheduled_at) >= now && i.status === "scheduled");
   const past = interviews.filter((i) => new Date(i.scheduled_at) < now || i.status !== "scheduled");
 
   const displayed = tab === "upcoming" ? upcoming : past;
+
+  async function handleReschedule() {
+    if (!rescheduling || !rescheduleData.scheduled_at) return toast.error("Select a date and time");
+    setRescheduleSaving(true);
+    const result = await rescheduleInterview(rescheduling.id, {
+      scheduled_at: new Date(rescheduleData.scheduled_at).toISOString(),
+      interview_type: rescheduleData.interview_type,
+      meeting_link: rescheduleData.meeting_link || undefined,
+    });
+    setRescheduleSaving(false);
+    if (result.success) {
+      toast.success("Interview rescheduled");
+      setRescheduling(null);
+      router.refresh();
+    } else {
+      toast.error(result.error);
+    }
+  }
 
   async function handleStatusChange(id: string, status: "completed" | "cancelled" | "no_show") {
     const result = await updateInterviewStatus(id, status);
@@ -187,6 +212,19 @@ export function InterviewsClient({ interviews, applications, employees, isAdmin 
                       >
                         <XCircle className="h-3 w-3" /> Cancel
                       </button>
+                      <button
+                        onClick={() => {
+                          setRescheduling(interview);
+                          setRescheduleData({
+                            scheduled_at: interview.scheduled_at.slice(0, 16),
+                            interview_type: interview.interview_type as "video" | "phone" | "in_person",
+                            meeting_link: interview.meeting_link ?? "",
+                          });
+                        }}
+                        className="flex items-center gap-1 rounded-md border border-indigo-200 px-2 py-1 text-xs text-indigo-600 hover:bg-indigo-50 dark:border-indigo-800 dark:text-indigo-400"
+                      >
+                        Reschedule
+                      </button>
                     </>
                   )}
                   <button
@@ -197,6 +235,59 @@ export function InterviewsClient({ interviews, applications, employees, isAdmin 
                     {interview.feedback ? "Edit Feedback" : "Add Feedback"}
                   </button>
                 </div>
+
+                {rescheduling?.id === interview.id && (
+                  <div className="border-t border-border pt-3 space-y-3">
+                    <p className="text-xs font-semibold">Reschedule Interview</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs font-medium">New Date &amp; Time *</label>
+                        <input
+                          type="datetime-local"
+                          className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                          value={rescheduleData.scheduled_at}
+                          onChange={(e) => setRescheduleData((d) => ({ ...d, scheduled_at: e.target.value }))}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium">Type</label>
+                        <select
+                          className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                          value={rescheduleData.interview_type}
+                          onChange={(e) => setRescheduleData((d) => ({ ...d, interview_type: e.target.value as "video" | "phone" | "in_person" }))}
+                        >
+                          <option value="video">Video</option>
+                          <option value="phone">Phone</option>
+                          <option value="in_person">In Person</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium">Meeting Link</label>
+                      <input
+                        className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                        placeholder="https://meet.google.com/..."
+                        value={rescheduleData.meeting_link}
+                        onChange={(e) => setRescheduleData((d) => ({ ...d, meeting_link: e.target.value }))}
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleReschedule}
+                        disabled={rescheduleSaving}
+                        className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
+                      >
+                        {rescheduleSaving ? "Saving…" : "Confirm Reschedule"}
+                      </button>
+                      <button
+                        onClick={() => setRescheduling(null)}
+                        className="rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-muted"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}

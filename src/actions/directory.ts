@@ -31,6 +31,7 @@ export type DirectoryEmployee = {
   role: string;
   employment_type: string;
   status: string;
+  is_on_leave: boolean;
   department_name: string | null;
   reporting_manager_id: string | null;
   manager_name: string | null;
@@ -50,6 +51,17 @@ export async function listDirectoryEmployees(): Promise<ActionResult<DirectoryEm
 
   if (error) return { success: false, error: error.message };
 
+  const today = new Date().toISOString().split("T")[0];
+  const { data: onLeaveData } = await supabase
+    .from("leave_requests")
+    .select("employee_id")
+    .eq("org_id", orgId)
+    .eq("status", "approved")
+    .lte("start_date", today)
+    .gte("end_date", today);
+
+  const onLeaveSet = new Set((onLeaveData ?? []).map((r: any) => r.employee_id));
+
   // Build a lookup map for manager names
   const empMap = new Map<string, string>();
   for (const e of data ?? []) {
@@ -65,6 +77,7 @@ export async function listDirectoryEmployees(): Promise<ActionResult<DirectoryEm
     role: e.role,
     employment_type: e.employment_type,
     status: e.status,
+    is_on_leave: onLeaveSet.has(e.id),
     department_name: e.departments?.name ?? null,
     reporting_manager_id: e.reporting_manager_id,
     manager_name: e.reporting_manager_id ? (empMap.get(e.reporting_manager_id) ?? null) : null,

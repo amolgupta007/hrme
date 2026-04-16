@@ -1,0 +1,2 @@
+first_name,last_name,email,role,employment_type,date_of_joining,phone,department,designation,date_of_birth,reporting_manager_email
+Jane,Doe,jane.doe@company.com,employee,full_time,2026-01-15,9876543210,Engineering,Software Engineer,1995-06-20,manager@company.com

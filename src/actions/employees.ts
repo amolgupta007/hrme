@@ -60,36 +60,62 @@ const employeeSchema = z.object({
 // ---- Actions ----
 
 export async function listEmployees(): Promise<
-  ActionResult<(Employee & { department_name: string | null })[]>
+  ActionResult<(Employee & { department_name: string | null; is_on_leave: boolean; invite_status: "none" | "sent" | "expired" | null })[]>
 > {
   const orgId = await getOrgId();
   if (!orgId) return { success: false, error: "Not authenticated" };
 
   const supabase = createAdminSupabase();
-  const { data, error } = await supabase
-    .from("employees")
-    .select("*, departments!department_id(name)")
-    .eq("org_id", orgId)
-    .neq("status", "terminated")
-    .order("created_at", { ascending: false });
-  if (error) return { success: false, error: error.message };
-
   const today = new Date().toISOString().split("T")[0];
-  const { data: onLeaveData } = await supabase
-    .from("leave_requests")
-    .select("employee_id")
-    .eq("org_id", orgId)
-    .eq("status", "approved")
-    .lte("start_date", today)
-    .gte("end_date", today);
 
-  const onLeaveSet = new Set((onLeaveData ?? []).map((r: any) => r.employee_id));
+  const [empResult, leaveResult, inviteResult] = await Promise.all([
+    supabase
+      .from("employees")
+      .select("*, departments!department_id(name)")
+      .eq("org_id", orgId)
+      .neq("status", "terminated")
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("leave_requests")
+      .select("employee_id")
+      .eq("org_id", orgId)
+      .eq("status", "approved")
+      .lte("start_date", today)
+      .gte("end_date", today),
+    supabase
+      .from("employee_invites")
+      .select("employee_id, accepted_at, expires_at")
+      .eq("org_id", orgId),
+  ]);
 
-  const employees = (data ?? []).map((e: any) => ({
-    ...e,
-    department_name: e.departments?.name ?? null,
-    is_on_leave: onLeaveSet.has(e.id),
-  }));
+  if (empResult.error) return { success: false, error: empResult.error.message };
+
+  const onLeaveSet = new Set((leaveResult.data ?? []).map((r: any) => r.employee_id));
+
+  const now = new Date();
+  const inviteMap = new Map((inviteResult.data ?? []).map((r: any) => [r.employee_id, r]));
+
+  const employees = (empResult.data ?? []).map((e: any) => {
+    let invite_status: "none" | "sent" | "expired" | null = null;
+    if (!e.clerk_user_id) {
+      const invite = inviteMap.get(e.id);
+      if (!invite) {
+        invite_status = "none";
+      } else if (invite.accepted_at) {
+        invite_status = null;
+      } else if (new Date(invite.expires_at) <= now) {
+        invite_status = "expired";
+      } else {
+        invite_status = "sent";
+      }
+    }
+    return {
+      ...e,
+      department_name: e.departments?.name ?? null,
+      is_on_leave: onLeaveSet.has(e.id),
+      invite_status,
+    };
+  });
 
   return { success: true, data: employees };
 }
@@ -252,6 +278,31 @@ export async function terminateEmployee(id: string): Promise<ActionResult<void>>
     .eq("org_id", orgId);
 
   if (error) return { success: false, error: error.message };
+
+  // Revoke pending Clerk invitation if one exists (best-effort)
+  try {
+    const { orgId: clerkOrgId, userId } = auth();
+    const { data: invite } = await supabase
+      .from("employee_invites")
+      .select("clerk_invitation_id")
+      .eq("employee_id", id)
+      .is("accepted_at", null)
+      .single();
+
+    if (invite && (invite as any).clerk_invitation_id && clerkOrgId && userId) {
+      const client = await clerkClient();
+      await client.organizations.revokeOrganizationInvitation({
+        organizationId: clerkOrgId,
+        invitationId: (invite as any).clerk_invitation_id,
+        requestingUserId: userId,
+      });
+    }
+  } catch {
+    // Best-effort — don't fail termination if invite revocation fails
+  }
+
+  // Delete the invite record regardless
+  await supabase.from("employee_invites").delete().eq("employee_id", id);
 
   revalidatePath("/dashboard/employees");
   return { success: true, data: undefined };

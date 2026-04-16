@@ -390,6 +390,11 @@ export async function bulkImportEmployees(
       ? (managerEmailMap.get(row.reporting_manager_email.toLowerCase()) ?? null)
       : null;
 
+    if (row.date_of_birth && !/^\d{4}-\d{2}-\d{2}$/.test(row.date_of_birth)) {
+      errors.push({ row: rowNum, reason: "Invalid date_of_birth format (use YYYY-MM-DD)", data: row });
+      continue;
+    }
+
     toInsert.push({
       org_id: orgId,
       first_name: row.first_name.trim(),
@@ -401,12 +406,11 @@ export async function bulkImportEmployees(
       phone: row.phone?.trim() || null,
       department_id: departmentId,
       designation: row.designation?.trim() || null,
-      date_of_birth: row.date_of_birth && /^\d{4}-\d{2}-\d{2}$/.test(row.date_of_birth)
-        ? row.date_of_birth
-        : null,
+      date_of_birth: row.date_of_birth || null,
       reporting_manager_id: reportingManagerId,
       status: "active",
     });
+    existingEmailMap.set(emailLower, "active"); // prevent within-batch duplicate
   }
 
   if (toInsert.length > 0) {

@@ -256,3 +256,174 @@ export async function terminateEmployee(id: string): Promise<ActionResult<void>>
   revalidatePath("/dashboard/employees");
   return { success: true, data: undefined };
 }
+
+export type ImportRow = {
+  first_name: string;
+  last_name: string;
+  email: string;
+  role: "admin" | "manager" | "employee";
+  employment_type: "full_time" | "part_time" | "contract" | "intern";
+  date_of_joining: string;
+  phone?: string;
+  department?: string;
+  designation?: string;
+  date_of_birth?: string;
+  reporting_manager_email?: string;
+};
+
+export type ImportResult = {
+  imported: number;
+  skipped: number;
+  errors: { row: number; reason: string; data: ImportRow }[];
+};
+
+export async function bulkImportEmployees(
+  rows: ImportRow[]
+): Promise<ActionResult<ImportResult>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Unauthorized" };
+
+  const orgId = user.orgId;
+  if (!orgId) return { success: false, error: "Organization not found" };
+
+  const supabase = createAdminSupabase();
+
+  // Fetch plan limit
+  const { data: org } = await supabase
+    .from("organizations")
+    .select("max_employees")
+    .eq("id", orgId)
+    .single();
+  const maxEmployees = (org as any)?.max_employees ?? 10;
+
+  // Fetch current active count
+  const { count: currentCount } = await supabase
+    .from("employees")
+    .select("id", { count: "exact", head: true })
+    .eq("org_id", orgId)
+    .neq("status", "terminated");
+  const activeCount = currentCount ?? 0;
+
+  const remainingSlots = maxEmployees - activeCount;
+
+  // Fetch existing emails in org (for duplicate detection)
+  const { data: existingEmps } = await supabase
+    .from("employees")
+    .select("email, status")
+    .eq("org_id", orgId);
+  const existingEmailMap = new Map(
+    (existingEmps ?? []).map((e: any) => [e.email.toLowerCase(), e.status])
+  );
+
+  // Fetch departments (for name→id lookup)
+  const { data: depts } = await supabase
+    .from("departments")
+    .select("id, name")
+    .eq("org_id", orgId);
+  const deptMap = new Map(
+    (depts ?? []).map((d: any) => [d.name.toLowerCase(), d.id])
+  );
+
+  // Fetch existing employees for reporting_manager_email lookup
+  const { data: managers } = await supabase
+    .from("employees")
+    .select("id, email")
+    .eq("org_id", orgId)
+    .neq("status", "terminated");
+  const managerEmailMap = new Map(
+    (managers ?? []).map((m: any) => [m.email.toLowerCase(), m.id])
+  );
+
+  const errors: ImportResult["errors"] = [];
+  const toInsert: any[] = [];
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const rowNum = i + 1;
+
+    if (!row.first_name?.trim()) {
+      errors.push({ row: rowNum, reason: "Missing first_name", data: row });
+      continue;
+    }
+    if (!row.last_name?.trim()) {
+      errors.push({ row: rowNum, reason: "Missing last_name", data: row });
+      continue;
+    }
+    if (!row.email?.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)) {
+      errors.push({ row: rowNum, reason: "Missing or invalid email", data: row });
+      continue;
+    }
+    if (!["admin", "manager", "employee"].includes(row.role)) {
+      errors.push({ row: rowNum, reason: `Invalid role "${row.role}" — must be admin, manager, or employee`, data: row });
+      continue;
+    }
+    if (!["full_time", "part_time", "contract", "intern"].includes(row.employment_type)) {
+      errors.push({ row: rowNum, reason: `Invalid employment_type "${row.employment_type}"`, data: row });
+      continue;
+    }
+    if (!row.date_of_joining || !/^\d{4}-\d{2}-\d{2}$/.test(row.date_of_joining)) {
+      errors.push({ row: rowNum, reason: "Missing or invalid date_of_joining (use YYYY-MM-DD)", data: row });
+      continue;
+    }
+
+    const emailLower = row.email.toLowerCase();
+    const existingStatus = existingEmailMap.get(emailLower);
+    if (existingStatus === "terminated") {
+      errors.push({ row: rowNum, reason: "Email belongs to a terminated employee — re-activate manually", data: row });
+      continue;
+    }
+    if (existingStatus) {
+      errors.push({ row: rowNum, reason: "Email already exists in this organization", data: row });
+      continue;
+    }
+
+    if (toInsert.length >= remainingSlots) {
+      errors.push({ row: rowNum, reason: `Plan limit reached (${maxEmployees} employees). Upgrade to import more.`, data: row });
+      continue;
+    }
+
+    const departmentId = row.department
+      ? (deptMap.get(row.department.toLowerCase()) ?? null)
+      : null;
+    const reportingManagerId = row.reporting_manager_email
+      ? (managerEmailMap.get(row.reporting_manager_email.toLowerCase()) ?? null)
+      : null;
+
+    toInsert.push({
+      org_id: orgId,
+      first_name: row.first_name.trim(),
+      last_name: row.last_name.trim(),
+      email: row.email.toLowerCase().trim(),
+      role: row.role,
+      employment_type: row.employment_type,
+      date_of_joining: row.date_of_joining,
+      phone: row.phone?.trim() || null,
+      department_id: departmentId,
+      designation: row.designation?.trim() || null,
+      date_of_birth: row.date_of_birth && /^\d{4}-\d{2}-\d{2}$/.test(row.date_of_birth)
+        ? row.date_of_birth
+        : null,
+      reporting_manager_id: reportingManagerId,
+      status: "active",
+    });
+  }
+
+  if (toInsert.length > 0) {
+    const { error: insertError } = await supabase.from("employees").insert(toInsert);
+    if (insertError) {
+      return { success: false, error: insertError.message };
+    }
+  }
+
+  revalidatePath("/dashboard/employees");
+
+  return {
+    success: true,
+    data: {
+      imported: toInsert.length,
+      skipped: errors.length,
+      errors,
+    },
+  };
+}

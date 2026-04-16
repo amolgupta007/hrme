@@ -6,6 +6,8 @@ import { createAdminSupabase } from "@/lib/supabase/server";
 import { getCurrentUser, isAdmin } from "@/lib/current-user";
 import type { ActionResult } from "@/types";
 
+const INVITE_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
 // Helper: get org context for invite actions
 async function getOrgContext(): Promise<{
   internalOrgId: string;
@@ -73,7 +75,7 @@ export async function sendInvite(employeeId: string): Promise<ActionResult<void>
       clerk_invitation_id: clerkInvitationId,
       sent_at: new Date().toISOString(),
       accepted_at: null,
-      expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      expires_at: new Date(Date.now() + INVITE_EXPIRY_MS).toISOString(),
     },
     { onConflict: "employee_id" }
   );

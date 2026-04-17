@@ -2,15 +2,22 @@
 
 import * as React from "react";
 import * as Select from "@radix-ui/react-select";
-import { Search, UserPlus, ChevronDown } from "lucide-react";
+import { Search, UserPlus, ChevronDown, Upload, Mail, MailCheck } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { EmployeeTable, type SortField, type SortDir } from "./employee-table";
 import { EmployeeForm } from "./employee-form";
 import type { Employee, Department, UserRole } from "@/types";
 import { hasPermission } from "@/types";
+import { sendBulkInvites } from "@/actions/invites";
 
-type EmployeeWithDept = Employee & { department_name: string | null };
+type EmployeeWithDept = Employee & {
+  department_name: string | null;
+  is_on_leave?: boolean;
+  invite_status?: "none" | "sent" | "expired" | null;
+};
 
 interface EmployeesClientProps {
   employees: EmployeeWithDept[];
@@ -20,12 +27,17 @@ interface EmployeesClientProps {
 
 export function EmployeesClient({ employees, departments, role }: EmployeesClientProps) {
   const canManage = hasPermission(role, "admin");
+  const router = useRouter();
 
   // Search + filter state
   const [search, setSearch] = React.useState("");
   const [deptFilter, setDeptFilter] = React.useState("all");
   const [roleFilter, setRoleFilter] = React.useState("all");
   const [statusFilter, setStatusFilter] = React.useState("all");
+  const [activationFilter, setActivationFilter] = React.useState<"all" | "not_activated">("all");
+
+  // Invite state
+  const [sendingInvites, setSendingInvites] = React.useState(false);
 
   // Sort state
   const [sortField, setSortField] = React.useState<SortField>("name");
@@ -50,9 +62,10 @@ export function EmployeesClient({ employees, departments, role }: EmployeesClien
       if (deptFilter !== "all" && emp.department_name !== deptFilter) return false;
       if (roleFilter !== "all" && emp.role !== roleFilter) return false;
       if (statusFilter !== "all" && emp.status !== statusFilter) return false;
+      if (activationFilter === "not_activated" && (emp as EmployeeWithDept).clerk_user_id) return false;
       return true;
     });
-  }, [employees, search, deptFilter, roleFilter, statusFilter]);
+  }, [employees, search, deptFilter, roleFilter, statusFilter, activationFilter]);
 
   // Sort
   const sorted = React.useMemo(() => {
@@ -89,12 +102,35 @@ export function EmployeesClient({ employees, departments, role }: EmployeesClien
     return names;
   }, [employees]);
 
-  const hasActiveFilters = deptFilter !== "all" || roleFilter !== "all" || statusFilter !== "all";
+  const hasActiveFilters = deptFilter !== "all" || roleFilter !== "all" || statusFilter !== "all" || activationFilter !== "all";
 
   function clearFilters() {
     setDeptFilter("all");
     setRoleFilter("all");
     setStatusFilter("all");
+    setActivationFilter("all");
+  }
+
+  async function handleSendAllInvites() {
+    const unactivated = employees.filter((e) => !(e as EmployeeWithDept).clerk_user_id).map((e) => e.id);
+    if (unactivated.length === 0) {
+      toast.info("All employees already have active accounts");
+      return;
+    }
+    setSendingInvites(true);
+    try {
+      const result = await sendBulkInvites(unactivated);
+      if (result.success) {
+        toast.success(`${result.data.sent} invite${result.data.sent !== 1 ? "s" : ""} sent`);
+        if (result.data.failed.length > 0) {
+          toast.error(`${result.data.failed.length} invite(s) failed`);
+        }
+      } else {
+        toast.error(result.error);
+      }
+    } finally {
+      setSendingInvites(false);
+    }
   }
 
   function openAdd() {
@@ -150,6 +186,18 @@ export function EmployeesClient({ employees, departments, role }: EmployeesClien
               { value: "terminated", label: "Terminated" },
             ]}
           />
+          <button
+            onClick={() => setActivationFilter(activationFilter === "not_activated" ? "all" : "not_activated")}
+            className={cn(
+              "flex h-9 items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring",
+              activationFilter === "not_activated"
+                ? "border-amber-500 bg-amber-50 text-amber-700 font-medium dark:bg-amber-950 dark:text-amber-400"
+                : "border-input bg-background text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <MailCheck className="h-3.5 w-3.5" />
+            Not activated
+          </button>
           {hasActiveFilters && (
             <button
               onClick={clearFilters}
@@ -166,10 +214,20 @@ export function EmployeesClient({ employees, departments, role }: EmployeesClien
             {(search || hasActiveFilters) && employees.length !== sorted.length && ` of ${employees.length}`}
           </span>
           {canManage && (
-            <Button onClick={openAdd}>
-              <UserPlus className="mr-2 h-4 w-4" />
-              Add Employee
-            </Button>
+            <>
+              <Button variant="outline" onClick={() => router.push("/dashboard/employees/import")}>
+                <Upload className="mr-2 h-4 w-4" />
+                Import CSV
+              </Button>
+              <Button variant="outline" onClick={handleSendAllInvites} disabled={sendingInvites}>
+                <Mail className="mr-2 h-4 w-4" />
+                {sendingInvites ? "Sending…" : "Send Invites"}
+              </Button>
+              <Button onClick={openAdd}>
+                <UserPlus className="mr-2 h-4 w-4" />
+                Add Employee
+              </Button>
+            </>
           )}
         </div>
       </div>

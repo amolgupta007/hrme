@@ -225,6 +225,14 @@ export async function POST(req: Request) {
           .eq("email", memberEmail)
           .is("clerk_user_id", null); // only set if not already linked
 
+        // Stamp accepted_at on the employee_invites record
+        await supabase
+          .from("employee_invites")
+          .update({ accepted_at: new Date().toISOString() })
+          .eq("org_id", (org as { id: string }).id)
+          .eq("email", memberEmail)
+          .is("accepted_at", null);
+
         break;
       }
 

@@ -78,6 +78,9 @@ export interface Database {
           country: string | null;
           pan_number: string | null;
           aadhar_number: string | null;
+          emergency_contact_name: string | null;
+          emergency_contact_phone: string | null;
+          emergency_contact_relationship: string | null;
           communication_address: Json | null;
           permanent_address: Json | null;
           metadata: Json;
@@ -108,6 +111,9 @@ export interface Database {
           country?: string | null;
           pan_number?: string | null;
           aadhar_number?: string | null;
+          emergency_contact_name?: string | null;
+          emergency_contact_phone?: string | null;
+          emergency_contact_relationship?: string | null;
           communication_address?: Json | null;
           permanent_address?: Json | null;
           metadata?: Json;
@@ -138,6 +144,9 @@ export interface Database {
           country?: string | null;
           pan_number?: string | null;
           aadhar_number?: string | null;
+          emergency_contact_name?: string | null;
+          emergency_contact_phone?: string | null;
+          emergency_contact_relationship?: string | null;
           communication_address?: Json | null;
           permanent_address?: Json | null;
           metadata?: Json;

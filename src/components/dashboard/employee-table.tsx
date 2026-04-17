@@ -6,15 +6,21 @@ import * as AlertDialog from "@radix-ui/react-alert-dialog";
 import {
   MoreHorizontal, Pencil, UserX, Users,
   ChevronUp, ChevronDown as ChevronDownIcon, ChevronsUpDown,
+  Mail, MailCheck, MailX,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn, formatDate, getInitials } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { terminateEmployee } from "@/actions/employees";
+import { sendInvite, resendInvite } from "@/actions/invites";
 import type { Employee, Department } from "@/types";
 
-type EmployeeWithDept = Employee & { department_name: string | null };
+type EmployeeWithDept = Employee & {
+  department_name: string | null;
+  is_on_leave?: boolean;
+  invite_status?: "none" | "sent" | "expired" | null;
+};
 
 export type SortField = "name" | "department" | "joined";
 export type SortDir = "asc" | "desc";
@@ -35,6 +41,7 @@ export function EmployeeTable({
 }: EmployeeTableProps) {
   const [terminating, setTerminating] = React.useState<string | null>(null);
   const [confirmTarget, setConfirmTarget] = React.useState<{ id: string; name: string } | null>(null);
+  const [inviting, setInviting] = React.useState<string | null>(null);
 
   async function handleTerminate() {
     if (!confirmTarget) return;
@@ -46,6 +53,20 @@ export function EmployeeTable({
       toast.success(`${confirmTarget.name} has been terminated`);
     } else {
       toast.error(result.error);
+    }
+  }
+
+  async function handleSendInvite(employeeId: string, isResend: boolean) {
+    setInviting(employeeId);
+    try {
+      const result = isResend ? await resendInvite(employeeId) : await sendInvite(employeeId);
+      if (result.success) {
+        toast.success(isResend ? "Invite resent" : "Invite sent");
+      } else {
+        toast.error(result.error);
+      }
+    } finally {
+      setInviting(null);
     }
   }
 
@@ -119,7 +140,12 @@ export function EmployeeTable({
                   </td>
                   {/* Status */}
                   <td className="px-4 py-3">
-                    <StatusBadge status={emp.status} isOnLeave={(emp as any).is_on_leave} />
+                    <div className="flex flex-col gap-1">
+                      <StatusBadge status={emp.status} isOnLeave={(emp as any).is_on_leave} />
+                      {emp.status === "active" && (emp as EmployeeWithDept).invite_status && (
+                        <InviteBadge status={(emp as EmployeeWithDept).invite_status!} />
+                      )}
+                    </div>
                   </td>
                   {/* Actions */}
                   <td className="px-4 py-3">
@@ -142,6 +168,23 @@ export function EmployeeTable({
                               <Pencil className="h-3.5 w-3.5" />
                               Edit
                             </DropdownMenu.Item>
+                            {canManage && (emp as EmployeeWithDept).invite_status !== null && (emp as EmployeeWithDept).invite_status !== undefined && (
+                              <DropdownMenu.Item
+                                className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none hover:bg-accent data-[disabled]:opacity-50 data-[disabled]:pointer-events-none"
+                                onSelect={() => handleSendInvite(
+                                  emp.id,
+                                  (emp as EmployeeWithDept).invite_status === "sent" || (emp as EmployeeWithDept).invite_status === "expired"
+                                )}
+                                disabled={inviting === emp.id}
+                              >
+                                <Mail className="h-3.5 w-3.5" />
+                                {inviting === emp.id
+                                  ? "Sending…"
+                                  : (emp as EmployeeWithDept).invite_status === "none"
+                                  ? "Send Invite"
+                                  : "Resend Invite"}
+                              </DropdownMenu.Item>
+                            )}
                             <DropdownMenu.Separator className="my-1 h-px bg-border" />
                             <DropdownMenu.Item
                               className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm text-destructive outline-none hover:bg-destructive/10"
@@ -276,4 +319,32 @@ function StatusBadge({ status, isOnLeave }: { status: Employee["status"]; isOnLe
   };
   const { label, variant } = map[displayStatus] ?? { label: displayStatus, variant: "secondary" as const };
   return <Badge variant={variant}>{label}</Badge>;
+}
+
+// ---- Invite badge ----
+
+function InviteBadge({ status }: { status: "none" | "sent" | "expired" }) {
+  if (status === "sent") {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400">
+        <MailCheck className="h-3 w-3" />
+        Invite sent
+      </span>
+    );
+  }
+  if (status === "expired") {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs font-medium text-destructive">
+        <MailX className="h-3 w-3" />
+        Invite expired
+      </span>
+    );
+  }
+  // "none"
+  return (
+    <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400">
+      <Mail className="h-3 w-3" />
+      Not activated
+    </span>
+  );
 }

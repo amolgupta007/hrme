@@ -25,6 +25,9 @@ export type EmployeeProfile = Employee & {
   aadhar_number: string | null;
   communication_address: Address | null;
   permanent_address: Address | null;
+  emergency_contact_name: string | null;
+  emergency_contact_phone: string | null;
+  emergency_contact_relationship: string | null;
 };
 
 // ---- Helpers ----
@@ -153,6 +156,51 @@ export async function updateMyProfile(
       permanent_address: d.permanentAddress ?? null,
     })
     .eq("id", employeeId)
+    .eq("org_id", user.orgId);
+
+  if (error) return { success: false, error: error.message };
+
+  revalidatePath("/dashboard/profile");
+  return { success: true, data: undefined };
+}
+
+const emergencyContactSchema = z.object({
+  name: z.string().min(1, "Name is required"),
+  phone: z.string().min(1, "Phone is required"),
+  relationship: z.string().optional(),
+});
+
+export async function updateEmergencyContact(
+  formData: z.infer<typeof emergencyContactSchema>
+): Promise<ActionResult<void>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+
+  const validated = emergencyContactSchema.safeParse(formData);
+  if (!validated.success) return { success: false, error: validated.error.errors[0].message };
+
+  const d = validated.data;
+  const supabase = createAdminSupabase();
+
+  // Find employee record for this user
+  const { data: emp } = await supabase
+    .from("employees")
+    .select("id")
+    .eq("org_id", user.orgId)
+    .eq("clerk_user_id", user.clerkUserId)
+    .neq("status", "terminated")
+    .single();
+
+  if (!emp) return { success: false, error: "Employee record not found" };
+
+  const { error } = await supabase
+    .from("employees")
+    .update({
+      emergency_contact_name: d.name,
+      emergency_contact_phone: d.phone,
+      emergency_contact_relationship: d.relationship || null,
+    })
+    .eq("id", (emp as { id: string }).id)
     .eq("org_id", user.orgId);
 
   if (error) return { success: false, error: error.message };

@@ -6,6 +6,7 @@ import { z } from "zod";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { getCurrentUser, isAdmin } from "@/lib/current-user";
 import type { ActionResult, Organization, LeavePolicy } from "@/types";
+import type { OnboardingStepConfig } from "@/config/onboarding";
 
 // ---- Context helper ----
 
@@ -322,5 +323,33 @@ export async function toggleGrievances(enabled: boolean): Promise<ActionResult<v
 
   revalidatePath("/dashboard/settings");
   revalidatePath("/dashboard");
+  return { success: true, data: undefined };
+}
+
+export async function updateOnboardingSteps(
+  steps: OnboardingStepConfig[]
+): Promise<ActionResult<void>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can update onboarding settings" };
+
+  const supabase = createAdminSupabase();
+  const { data: org } = await supabase
+    .from("organizations")
+    .select("settings")
+    .eq("id", user.orgId)
+    .single();
+
+  const currentSettings = (org as any)?.settings ?? {};
+  const newSettings = { ...currentSettings, onboarding_steps: steps };
+
+  const { error } = await supabase
+    .from("organizations")
+    .update({ settings: newSettings })
+    .eq("id", user.orgId);
+
+  if (error) return { success: false, error: error.message };
+
+  revalidatePath("/dashboard/settings");
   return { success: true, data: undefined };
 }

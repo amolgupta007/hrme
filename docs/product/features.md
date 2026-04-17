@@ -164,8 +164,10 @@ Centralized employee database with full lifecycle management. Admins manage reco
 - Edit any employee record
 - Change employee status: Active → On Leave → Inactive → Terminated
 - Soft-terminate employees (status = Terminated; record preserved for history)
-- Filter by department, role, status
+- Filter by department, role, status, or activation state
 - Search by name, email, designation, or department
+- **Bulk import employees from CSV** — upload a spreadsheet to pre-populate the employee directory in one step (see Bulk Import section below)
+- **Send activation invites** — send Clerk-based email invites so employees can create their login accounts; send individually or in bulk
 
 **What managers and employees can do:**
 - View employee list (read-only)
@@ -176,16 +178,51 @@ Centralized employee database with full lifecycle management. Admins manage reco
 - `On Leave` — amber badge (automatically shown when employee has an approved leave covering today)
 - `Inactive` — gray badge
 - `Terminated` — red badge
+- `Not activated` — amber sub-badge shown below Active for employees who have no login account yet
+- `Invite sent` — amber sub-badge for employees with a pending invite (expires after 7 days)
+- `Invite expired` — red sub-badge for employees whose invite has expired
 
 > The "On Leave" status is derived dynamically from approved leave records — it does not require manual status updates by admins.
 
 **Plan availability:** All plans
 
 **Limitations:**
-- No bulk CSV import for employee records
 - No custom fields (structure is fixed)
 - No audit log of changes to employee records
 - Cannot assign multiple roles to a single user
+
+---
+
+## Bulk Employee Import
+
+Admins can import an entire team from a CSV file at `/dashboard/employees/import`.
+
+**How it works:**
+1. Download the CSV template (provided on the import page)
+2. Fill in employee data — required columns: `first_name`, `last_name`, `email`, `role`, `employment_type`, `date_of_joining`
+3. Optional columns: `phone`, `department`, `designation`, `date_of_birth`, `reporting_manager_email`
+4. Upload the CSV — rows are validated client-side before any data is sent
+5. Preview table shows every row: green for valid, red/greyed for skipped with the reason inline
+6. Confirm import — valid rows are created as employees; skipped rows can be downloaded as `errors.csv` for correction and re-import
+
+**Validation rules:**
+- `role` must be: `admin`, `manager`, or `employee`
+- `employment_type` must be: `full_time`, `part_time`, `contract`, or `intern`
+- Dates must be `YYYY-MM-DD` format
+- Duplicate emails (already in the org) are skipped — terminated employee emails flagged separately
+- Duplicate emails within the same CSV batch are caught and skipped
+- Rows that would exceed the plan's employee limit are skipped with a clear message
+
+**Department and manager resolution:**
+- `department` column is matched case-insensitively against existing departments — no match leaves the field blank (not an error)
+- `reporting_manager_email` is matched against existing active employees — no match leaves the field blank (not an error)
+
+**After import:**
+- All imported employees have `status: active` but no login account yet
+- Use the "Not activated" filter chip on the employees page to see them
+- Click "Send Invites" to bulk-send activation invite emails to all unactivated employees
+
+**Plan availability:** All plans (subject to the plan's employee limit)
 
 ---
 
@@ -945,7 +982,7 @@ The following are known gaps as of the current version. Each is actively being t
 
 ### Data & Reporting
 - No historical trend analytics or period-over-period comparison on dashboards
-- No bulk CSV import for employees, candidates, or salary structures
+- No bulk CSV import for candidates or salary structures (employee import is supported)
 - No export to Excel or PDF for any module other than payslips
 - No global search across all modules
 

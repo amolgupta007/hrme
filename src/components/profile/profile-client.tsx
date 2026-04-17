@@ -7,7 +7,7 @@ import { Pencil, X, ChevronDown, User, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { cn, getInitials, formatDate } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { updateMyProfile } from "@/actions/profile";
+import { updateMyProfile, updateEmergencyContact } from "@/actions/profile";
 import { maskPAN, maskAadhar, calcAge } from "@/lib/profile-utils";
 import type { EmployeeProfile, Address } from "@/actions/profile";
 
@@ -48,6 +48,9 @@ export function ProfileClient({ profile }: { profile: EmployeeProfile }) {
     phone: profile.phone ?? "",
     communicationAddress: toAddress(profile.communication_address),
     permanentAddress: toAddress(profile.permanent_address),
+    emergencyContactName: profile.emergency_contact_name ?? "",
+    emergencyContactPhone: profile.emergency_contact_phone ?? "",
+    emergencyContactRelationship: profile.emergency_contact_relationship ?? "",
   });
 
   function setField(field: keyof typeof form, value: string) {
@@ -71,17 +74,22 @@ export function ProfileClient({ profile }: { profile: EmployeeProfile }) {
 
   async function handleSave() {
     setLoading(true);
-    const result = await updateMyProfile(profile.id, {
-      ...form,
-      maritalStatus: form.maritalStatus,
-    });
+    const [profileRes, emergencyRes] = await Promise.all([
+      updateMyProfile(profile.id, {
+        ...form,
+        maritalStatus: form.maritalStatus,
+      }),
+      updateEmergencyContact(profile.id, {
+        name: form.emergencyContactName,
+        phone: form.emergencyContactPhone,
+        relationship: form.emergencyContactRelationship,
+      }),
+    ]);
     setLoading(false);
-    if (result.success) {
-      toast.success("Profile updated");
-      setEditing(false);
-    } else {
-      toast.error(result.error);
-    }
+    if (!profileRes.success) { toast.error(profileRes.error); return; }
+    if (!emergencyRes.success) { toast.error(emergencyRes.error); return; }
+    toast.success("Profile updated");
+    setEditing(false);
   }
 
   const fullName = `${profile.first_name} ${profile.last_name}`;
@@ -250,6 +258,25 @@ export function ProfileClient({ profile }: { profile: EmployeeProfile }) {
             ) : <Value>{profile.pronouns}</Value>}
           </Field>
         </div>
+      </Section>
+
+      {/* Emergency Contact */}
+      <Section title="Emergency Contact">
+        <Field label="Name">
+          {editing
+            ? <input className={inputCn} value={form.emergencyContactName} onChange={(e) => setField("emergencyContactName", e.target.value)} placeholder="Full name" />
+            : <Value>{profile.emergency_contact_name}</Value>}
+        </Field>
+        <Field label="Phone">
+          {editing
+            ? <input type="tel" className={inputCn} value={form.emergencyContactPhone} onChange={(e) => setField("emergencyContactPhone", e.target.value)} placeholder="+91 98765 43210" />
+            : <Value>{profile.emergency_contact_phone}</Value>}
+        </Field>
+        <Field label="Relationship">
+          {editing
+            ? <input className={inputCn} value={form.emergencyContactRelationship} onChange={(e) => setField("emergencyContactRelationship", e.target.value)} placeholder="e.g. Spouse, Parent, Sibling" />
+            : <Value>{profile.emergency_contact_relationship}</Value>}
+        </Field>
       </Section>
     </div>
   );

@@ -31,6 +31,7 @@ interface EmployeesClientProps {
 
 export function EmployeesClient({ employees, departments, role, onboardingData }: EmployeesClientProps) {
   const canManage = hasPermission(role, "admin");
+  const canSeeOnboarding = role === "admin" || role === "owner";
   const router = useRouter();
 
   // Search + filter state
@@ -150,7 +151,7 @@ export function EmployeesClient({ employees, departments, role, onboardingData }
   return (
     <Tabs defaultValue="directory">
       {/* Only admins/owners see the Onboarding tab */}
-      {(role === "admin" || role === "owner") && (
+      {canSeeOnboarding && (
         <TabsList className="mb-2">
           <TabsTrigger value="directory">Directory</TabsTrigger>
           <TabsTrigger value="onboarding">Onboarding</TabsTrigger>
@@ -268,7 +269,7 @@ export function EmployeesClient({ employees, departments, role, onboardingData }
         </div>
       </TabsContent>
 
-      {(role === "admin" || role === "owner") && (
+      {canSeeOnboarding && (
         <TabsContent value="onboarding">
           <OnboardingTracking data={onboardingData} search={search} />
         </TabsContent>

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import * as Select from "@radix-ui/react-select";
-import { Search, UserPlus, ChevronDown, Upload, Mail, MailCheck } from "lucide-react";
+import { Search, UserPlus, ChevronDown, Upload, Mail } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -39,8 +39,6 @@ export function EmployeesClient({ employees, departments, role, onboardingData }
   const [deptFilter, setDeptFilter] = React.useState("all");
   const [roleFilter, setRoleFilter] = React.useState("all");
   const [statusFilter, setStatusFilter] = React.useState("all");
-  const [activationFilter, setActivationFilter] = React.useState<"all" | "not_activated">("all");
-
   // Invite state
   const [sendingInvites, setSendingInvites] = React.useState(false);
 
@@ -67,10 +65,9 @@ export function EmployeesClient({ employees, departments, role, onboardingData }
       if (deptFilter !== "all" && emp.department_name !== deptFilter) return false;
       if (roleFilter !== "all" && emp.role !== roleFilter) return false;
       if (statusFilter !== "all" && emp.status !== statusFilter) return false;
-      if (activationFilter === "not_activated" && (emp as EmployeeWithDept).clerk_user_id) return false;
       return true;
     });
-  }, [employees, search, deptFilter, roleFilter, statusFilter, activationFilter]);
+  }, [employees, search, deptFilter, roleFilter, statusFilter]);
 
   // Sort
   const sorted = React.useMemo(() => {
@@ -107,13 +104,12 @@ export function EmployeesClient({ employees, departments, role, onboardingData }
     return names;
   }, [employees]);
 
-  const hasActiveFilters = deptFilter !== "all" || roleFilter !== "all" || statusFilter !== "all" || activationFilter !== "all";
+  const hasActiveFilters = deptFilter !== "all" || roleFilter !== "all" || statusFilter !== "all";
 
   function clearFilters() {
     setDeptFilter("all");
     setRoleFilter("all");
     setStatusFilter("all");
-    setActivationFilter("all");
   }
 
   async function handleSendAllInvites() {
@@ -201,18 +197,6 @@ export function EmployeesClient({ employees, departments, role, onboardingData }
               { value: "terminated", label: "Terminated" },
             ]}
           />
-          <button
-            onClick={() => setActivationFilter(activationFilter === "not_activated" ? "all" : "not_activated")}
-            className={cn(
-              "flex h-9 items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring",
-              activationFilter === "not_activated"
-                ? "border-amber-500 bg-amber-50 text-amber-700 font-medium dark:bg-amber-950 dark:text-amber-400"
-                : "border-input bg-background text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <MailCheck className="h-3.5 w-3.5" />
-            Not activated
-          </button>
           {hasActiveFilters && (
             <button
               onClick={clearFilters}
@@ -229,20 +213,10 @@ export function EmployeesClient({ employees, departments, role, onboardingData }
             {(search || hasActiveFilters) && employees.length !== sorted.length && ` of ${employees.length}`}
           </span>
           {canManage && (
-            <>
-              <Button variant="outline" onClick={() => router.push("/dashboard/employees/import")}>
-                <Upload className="mr-2 h-4 w-4" />
-                Import CSV
-              </Button>
-              <Button variant="outline" onClick={handleSendAllInvites} disabled={sendingInvites}>
-                <Mail className="mr-2 h-4 w-4" />
-                {sendingInvites ? "Sending…" : "Send Invites"}
-              </Button>
-              <Button onClick={openAdd}>
-                <UserPlus className="mr-2 h-4 w-4" />
-                Add Employee
-              </Button>
-            </>
+            <Button onClick={openAdd}>
+              <UserPlus className="mr-2 h-4 w-4" />
+              Add Employee
+            </Button>
           )}
         </div>
       </div>
@@ -271,6 +245,18 @@ export function EmployeesClient({ employees, departments, role, onboardingData }
 
       {canSeeOnboarding && (
         <TabsContent value="onboarding">
+          {canManage && (
+            <div className="mb-4 flex items-center gap-3">
+              <Button variant="outline" onClick={() => router.push("/dashboard/employees/import")}>
+                <Upload className="mr-2 h-4 w-4" />
+                Import CSV
+              </Button>
+              <Button variant="outline" onClick={handleSendAllInvites} disabled={sendingInvites}>
+                <Mail className="mr-2 h-4 w-4" />
+                {sendingInvites ? "Sending…" : "Send Invites"}
+              </Button>
+            </div>
+          )}
           <OnboardingTracking data={onboardingData} search={search} />
         </TabsContent>
       )}

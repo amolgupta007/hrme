@@ -6,6 +6,7 @@ import { resend, FROM_EMAIL, FOUNDER_EMAIL_FROM } from "@/lib/resend";
 import { render } from "@react-email/render";
 import { FounderAlertEmail } from "@/components/emails/founder-alert";
 import { WelcomeEmail } from "@/components/emails/welcome";
+import { DEFAULT_ONBOARDING_STEPS } from "@/config/onboarding";
 
 const FOUNDER_EMAIL = "amol@jambahr.com";
 
@@ -101,7 +102,7 @@ export async function POST(req: Request) {
             slug: slug || name.toLowerCase().replace(/\s+/g, "-"),
             plan: "starter",
             max_employees: 10,
-            settings: {},
+            settings: { onboarding_steps: DEFAULT_ONBOARDING_STEPS },
           })
           .select("id")
           .single();

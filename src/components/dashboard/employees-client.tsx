@@ -12,6 +12,9 @@ import { EmployeeForm } from "./employee-form";
 import type { Employee, Department, UserRole } from "@/types";
 import { hasPermission } from "@/types";
 import { sendBulkInvites } from "@/actions/invites";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { OnboardingTracking } from "./onboarding-tracking";
+import type { EmployeeOnboardingSummary } from "@/config/onboarding";
 
 type EmployeeWithDept = Employee & {
   department_name: string | null;
@@ -23,9 +26,10 @@ interface EmployeesClientProps {
   employees: EmployeeWithDept[];
   departments: Department[];
   role: UserRole;
+  onboardingData: EmployeeOnboardingSummary[];
 }
 
-export function EmployeesClient({ employees, departments, role }: EmployeesClientProps) {
+export function EmployeesClient({ employees, departments, role, onboardingData }: EmployeesClientProps) {
   const canManage = hasPermission(role, "admin");
   const router = useRouter();
 
@@ -144,7 +148,17 @@ export function EmployeesClient({ employees, departments, role }: EmployeesClien
   }
 
   return (
-    <>
+    <Tabs defaultValue="directory">
+      {/* Only admins/owners see the Onboarding tab */}
+      {(role === "admin" || role === "owner") && (
+        <TabsList className="mb-2">
+          <TabsTrigger value="directory">Directory</TabsTrigger>
+          <TabsTrigger value="onboarding">Onboarding</TabsTrigger>
+        </TabsList>
+      )}
+
+      <TabsContent value="directory">
+        <div className="space-y-4">
       {/* Toolbar */}
       <div className="flex items-center gap-3 flex-wrap">
         <div className="relative flex-1 min-w-[200px] max-w-sm">
@@ -251,7 +265,15 @@ export function EmployeesClient({ employees, departments, role }: EmployeesClien
           employees={employees}
         />
       )}
-    </>
+        </div>
+      </TabsContent>
+
+      {(role === "admin" || role === "owner") && (
+        <TabsContent value="onboarding">
+          <OnboardingTracking data={onboardingData} search={search} />
+        </TabsContent>
+      )}
+    </Tabs>
   );
 }
 

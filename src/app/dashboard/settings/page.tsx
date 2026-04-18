@@ -5,15 +5,18 @@ import { OrgProfileSection } from "@/components/settings/org-profile-section";
 import { LeavePoliciesSection } from "@/components/settings/leave-policies-section";
 import { BillingSection } from "@/components/settings/billing-section";
 import { ProductsSection } from "@/components/settings/products-section";
+import { OnboardingStepsSection } from "@/components/settings/onboarding-steps-section";
 import { getCurrentUser } from "@/lib/current-user";
 import { hasFeature } from "@/config/plans";
+import { getOrgOnboardingConfig } from "@/actions/onboarding";
 
 export default async function SettingsPage() {
-  const [departmentsResult, profileResult, policiesResult, userCtx] = await Promise.all([
+  const [departmentsResult, profileResult, policiesResult, userCtx, onboardingSteps] = await Promise.all([
     listDepartments(),
     getOrgProfile(),
     listSettingsPolicies(),
     getCurrentUser(),
+    getOrgOnboardingConfig(),
   ]);
 
   const departments = departmentsResult.success ? departmentsResult.data : [];
@@ -53,6 +56,8 @@ export default async function SettingsPage() {
         attendancePayrollEnabled={attendancePayrollEnabled}
         grievancesEnabled={grievancesEnabled}
       />
+
+      <OnboardingStepsSection initialSteps={onboardingSteps} />
     </div>
   );
 }

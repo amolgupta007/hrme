@@ -7,9 +7,12 @@ import {
   CheckSquare, Network,
 } from "lucide-react";
 import { getDashboardData } from "@/actions/dashboard";
+import { getMyOnboardingStatus } from "@/actions/onboarding";
 import { cn, formatDate, getInitials } from "@/lib/utils";
 import type { UserRole } from "@/types";
 import type { DashboardData } from "@/actions/dashboard";
+import { OnboardingCard } from "@/components/dashboard/onboarding-card";
+import type { OnboardingStatusResult } from "@/config/onboarding";
 
 // ---- Style maps ----
 
@@ -255,6 +258,13 @@ export default async function DashboardPage() {
   const quickActions = getQuickActions(userRole);
   const showLeaveBalance = (userRole === "employee" || userRole === "manager") && myLeaveBalances.length > 0;
 
+  // Fetch onboarding status for employee role only
+  let onboardingStatus: OnboardingStatusResult | null = null;
+  if (userRole === "employee") {
+    const onboardingResult = await getMyOnboardingStatus();
+    if (onboardingResult.success) onboardingStatus = onboardingResult.data;
+  }
+
   return (
     <div className="space-y-6">
 
@@ -285,6 +295,11 @@ export default async function DashboardPage() {
             </Link>
           ))}
         </div>
+      )}
+
+      {/* Onboarding card — employee only, shown until all required steps done */}
+      {onboardingStatus && !onboardingStatus.allRequiredComplete && (
+        <OnboardingCard status={onboardingStatus} />
       )}
 
       {/* Stat cards */}

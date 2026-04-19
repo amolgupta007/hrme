@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
-  const { password } = await req.json();
+  const body = await req.json().catch(() => ({}));
+  const { password } = body;
   const secret = process.env.SUPERADMIN_SECRET;
   const sessionToken = process.env.SUPERADMIN_SESSION_TOKEN ?? secret;
 

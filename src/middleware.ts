@@ -12,15 +12,34 @@ const isPublicRoute = createRouteMatcher([
   "/pricing",
 ]);
 
+const isSuperadminPublic = createRouteMatcher([
+  "/superadmin/login",
+  "/api/superadmin/login",
+]);
+
 export default clerkMiddleware((auth, request) => {
-  const { userId } = auth();
   const { pathname } = request.nextUrl;
 
-  // Redirect authenticated users away from marketing/auth pages to dashboard
+  // Superadmin routes bypass Clerk auth entirely
+  if (pathname.startsWith("/superadmin") || pathname.startsWith("/api/superadmin")) {
+    // Login page and login API are always public
+    if (isSuperadminPublic(request)) {
+      return NextResponse.next();
+    }
+    // All other superadmin routes require the session cookie
+    const cookie = request.cookies.get("superadmin_session");
+    const secret = process.env.SUPERADMIN_SECRET;
+    if (!secret || cookie?.value !== secret) {
+      return NextResponse.redirect(new URL("/superadmin/login", request.url));
+    }
+    return NextResponse.next();
+  }
+
+  // Existing Clerk logic
+  const { userId } = auth();
   if (userId && (pathname === "/" || pathname.startsWith("/sign-in") || pathname.startsWith("/sign-up"))) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
-
   if (!isPublicRoute(request)) {
     auth().protect();
   }

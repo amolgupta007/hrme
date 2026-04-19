@@ -1,11 +1,13 @@
 import { getAllOrgsWithStats, computeStats, getUpsellTargets } from "@/lib/superadmin-data";
+import type { OrgWithStats } from "@/lib/superadmin-data";
 import { StatsBar } from "@/components/superadmin/stats-bar";
 import { SignupsTable } from "@/components/superadmin/signups-table";
 import { UpsellTargetsTable } from "@/components/superadmin/upsell-targets-table";
 
 export const dynamic = "force-dynamic";
+export const metadata = { title: "JambaHR Admin — Dashboard" };
 
-async function LogoutButton() {
+function LogoutButton() {
   return (
     <form action="/api/superadmin/logout" method="POST">
       <button
@@ -19,7 +21,17 @@ async function LogoutButton() {
 }
 
 export default async function SuperadminDashboard() {
-  const orgs = await getAllOrgsWithStats();
+  let orgs: OrgWithStats[] = [];
+  try {
+    orgs = await getAllOrgsWithStats();
+  } catch {
+    return (
+      <div className="flex min-h-screen items-center justify-center text-red-600">
+        Failed to load data. Check SUPABASE_SERVICE_ROLE_KEY and try again.
+      </div>
+    );
+  }
+
   const stats = computeStats(orgs);
   const upsellTargets = getUpsellTargets(orgs);
 

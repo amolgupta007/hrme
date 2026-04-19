@@ -28,8 +28,8 @@ export default clerkMiddleware((auth, request) => {
     }
     // All other superadmin routes require the session cookie
     const cookie = request.cookies.get("superadmin_session");
-    const secret = process.env.SUPERADMIN_SECRET;
-    if (!secret || cookie?.value !== secret) {
+    const sessionToken = process.env.SUPERADMIN_SESSION_TOKEN ?? process.env.SUPERADMIN_SECRET;
+    if (!sessionToken || cookie?.value !== sessionToken) {
       return NextResponse.redirect(new URL("/superadmin/login", request.url));
     }
     return NextResponse.next();

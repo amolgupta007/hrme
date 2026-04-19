@@ -1,6 +1,7 @@
-import type { UpsellTarget } from "@/lib/superadmin-data";
+import type { UpsellTarget, UpsellReason } from "@/lib/superadmin-data";
+import { formatDateIST } from "@/lib/superadmin-data";
 
-const REASON_LABELS: Record<string, { label: string; style: string }> = {
+const REASON_LABELS: Record<UpsellReason, { label: string; style: string }> = {
   near_limit: {
     label: "Near limit",
     style: "bg-red-100 text-red-700",
@@ -10,15 +11,6 @@ const REASON_LABELS: Record<string, { label: string; style: string }> = {
     style: "bg-amber-100 text-amber-700",
   },
 };
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-IN", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    timeZone: "Asia/Kolkata",
-  });
-}
 
 export function UpsellTargetsTable({ targets }: { targets: UpsellTarget[] }) {
   if (targets.length === 0) {
@@ -62,12 +54,12 @@ export function UpsellTargetsTable({ targets }: { targets: UpsellTarget[] }) {
                         style={{ width: `${Math.min(pct, 100)}%` }}
                       />
                     </div>
-                    <span className="text-gray-700">
+                    <span className={org.employee_count > 10 ? "font-semibold text-red-600" : "text-gray-700"}>
                       {org.employee_count} / 10
                     </span>
                   </div>
                 </td>
-                <td className="px-4 py-3 text-gray-500">{formatDate(org.created_at)}</td>
+                <td className="px-4 py-3 text-gray-500">{formatDateIST(org.created_at)}</td>
                 <td className="px-4 py-3">
                   <span
                     className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${style}`}

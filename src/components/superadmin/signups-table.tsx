@@ -1,4 +1,5 @@
 import type { OrgWithStats } from "@/lib/superadmin-data";
+import { formatDateIST } from "@/lib/superadmin-data";
 
 const PLAN_STYLES: Record<string, string> = {
   starter: "bg-gray-100 text-gray-700",
@@ -16,14 +17,6 @@ function PlanBadge({ plan }: { plan: string }) {
   );
 }
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-IN", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    timeZone: "Asia/Kolkata",
-  });
-}
 
 export function SignupsTable({ orgs }: { orgs: OrgWithStats[] }) {
   if (orgs.length === 0) {
@@ -56,7 +49,7 @@ export function SignupsTable({ orgs }: { orgs: OrgWithStats[] }) {
                 <PlanBadge plan={org.plan} />
               </td>
               <td className="px-4 py-3 text-gray-700">{org.employee_count}</td>
-              <td className="px-4 py-3 text-gray-500">{formatDate(org.created_at)}</td>
+              <td className="px-4 py-3 text-gray-500">{formatDateIST(org.created_at)}</td>
             </tr>
           ))}
         </tbody>

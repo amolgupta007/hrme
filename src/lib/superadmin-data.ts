@@ -40,7 +40,8 @@ export async function getAllOrgsWithStats(): Promise<OrgWithStats[]> {
     .select("id, name, plan, created_at")
     .order("created_at", { ascending: false });
 
-  if (orgsError || !orgs || orgs.length === 0) return [];
+  if (orgsError) throw new Error(`[superadmin-data] orgs query failed: ${orgsError.message}`);
+  if (!orgs || orgs.length === 0) return [];
 
   const orgIds = orgs.map((o) => o.id);
 

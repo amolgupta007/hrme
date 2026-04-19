@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 
-export async function POST() {
+export async function POST(req: Request) {
   const response = NextResponse.redirect(
-    new URL("/superadmin/login", process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000")
+    new URL("/superadmin/login", req.url)
   );
   response.cookies.set("superadmin_session", "", {
     httpOnly: true,

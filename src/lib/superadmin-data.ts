@@ -31,24 +31,26 @@ export async function getAllOrgsWithStats(): Promise<OrgWithStats[]> {
     .select("id, name, plan, created_at")
     .order("created_at", { ascending: false });
 
-  if (orgsError || !orgs) return [];
+  if (orgsError || !orgs || orgs.length === 0) return [];
 
   const orgIds = orgs.map((o) => o.id);
 
   // Fetch active employee counts per org
-  const { data: employees } = await supabase
+  const { data: employees, error: empError } = await supabase
     .from("employees")
     .select("org_id")
     .eq("status", "active")
     .in("org_id", orgIds);
+  if (empError) console.error("[superadmin-data] employee count query failed:", empError.message);
 
   // Fetch one owner/admin email per org (earliest created)
-  const { data: adminEmployees } = await supabase
+  const { data: adminEmployees, error: adminError } = await supabase
     .from("employees")
     .select("org_id, email, role, created_at")
     .in("role", ["owner", "admin"])
     .in("org_id", orgIds)
     .order("created_at", { ascending: true });
+  if (adminError) console.error("[superadmin-data] owner email query failed:", adminError.message);
 
   // Build lookup maps
   const empCountMap: Record<string, number> = {};

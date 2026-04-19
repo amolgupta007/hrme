@@ -14,16 +14,21 @@ export default function SuperadminLoginPage() {
     setLoading(true);
     setError("");
 
-    const res = await fetch("/api/superadmin/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password }),
-    });
+    try {
+      const res = await fetch("/api/superadmin/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
 
-    if (res.ok) {
-      router.push("/superadmin/dashboard");
-    } else {
-      setError("Incorrect password");
+      if (res.ok) {
+        router.push("/superadmin/dashboard");
+      } else {
+        setError("Incorrect password");
+      }
+    } catch {
+      setError("Network error — please try again.");
+    } finally {
       setLoading(false);
     }
   }

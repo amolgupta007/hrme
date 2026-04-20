@@ -16,6 +16,8 @@ export type AttendanceRecord = {
   total_minutes: number | null;
   ip_address: string | null;
   notes: string | null;
+  source: "web" | "device";
+  device_id: string | null;
 };
 
 export type TodayStatus = {
@@ -62,6 +64,7 @@ export async function clockIn(ipAddress?: string): Promise<ActionResult<Attendan
       date: today,
       clock_in_at: now,
       ip_address: ipAddress ?? null,
+      source: "web" as const,
     })
     .select(`*, employees!employee_id(first_name, last_name)`)
     .single();
@@ -103,7 +106,7 @@ export async function clockOut(): Promise<ActionResult<AttendanceRecord>> {
 
   const { data, error } = await supabase
     .from("attendance_records")
-    .update({ clock_out_at: now, total_minutes: totalMinutes })
+    .update({ clock_out_at: now, total_minutes: totalMinutes, source: "web" as const })
     .eq("id", (existing as any).id)
     .select(`*, employees!employee_id(first_name, last_name)`)
     .single();
@@ -227,5 +230,7 @@ function formatRecord(raw: any): AttendanceRecord {
     total_minutes: raw.total_minutes ?? null,
     ip_address: raw.ip_address ?? null,
     notes: raw.notes ?? null,
+    source: (raw.source ?? "web") as "web" | "device",
+    device_id: raw.device_id ?? null,
   };
 }

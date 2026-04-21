@@ -4,31 +4,9 @@ import { auth, clerkClient } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createAdminSupabase } from "@/lib/supabase/server";
-import { getCurrentUser, isManagerOrAbove } from "@/lib/current-user";
+import { getCurrentUser, isManagerOrAbove, getOrgContext } from "@/lib/current-user";
 import type { ActionResult } from "@/types";
 
-async function getOrgContext() {
-  const { orgId: sessionOrgId, userId } = auth();
-  if (!userId) return null;
-
-  let clerkOrgId = sessionOrgId ?? null;
-  if (!clerkOrgId) {
-    const client = await clerkClient();
-    const memberships = await client.users.getOrganizationMembershipList({ userId });
-    clerkOrgId = memberships.data[0]?.organization.id ?? null;
-  }
-  if (!clerkOrgId) return null;
-
-  const supabase = createAdminSupabase();
-  const { data } = await supabase
-    .from("organizations")
-    .select("id")
-    .eq("clerk_org_id", clerkOrgId)
-    .single();
-
-  if (!data) return null;
-  return { orgId: (data as { id: string }).id, clerkUserId: userId };
-}
 
 // ---- Types ----
 
@@ -260,8 +238,9 @@ export async function updateObjectiveSet(
   id: string,
   formData: z.infer<typeof createSchema>
 ): Promise<ActionResult<void>> {
-  const ctx = await getOrgContext();
-  if (!ctx) return { success: false, error: "Not authenticated" };
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!user.employeeId) return { success: false, error: "No employee record" };
 
   const validated = createSchema.safeParse(formData);
   if (!validated.success) {
@@ -270,13 +249,23 @@ export async function updateObjectiveSet(
 
   const totalWeight = validated.data.items.reduce((s, i) => s + i.weight, 0);
   if (totalWeight !== 100) {
-    return {
-      success: false,
-      error: `Objective weights must sum to 100% (currently ${totalWeight}%)`,
-    };
+    return { success: false, error: `Objective weights must sum to 100% (currently ${totalWeight}%)` };
   }
 
   const supabase = createAdminSupabase();
+
+  // Ownership check
+  const { data: row } = await supabase
+    .from("objectives")
+    .select("employee_id")
+    .eq("id", id)
+    .eq("org_id", user.orgId)
+    .single();
+
+  if (!row || (row as any).employee_id !== user.employeeId) {
+    return { success: false, error: "Not authorised" };
+  }
+
   const { error } = await supabase
     .from("objectives")
     .update({
@@ -286,7 +275,7 @@ export async function updateObjectiveSet(
       status: "draft",
     })
     .eq("id", id)
-    .eq("org_id", ctx.orgId);
+    .eq("org_id", user.orgId);
 
   if (error) return { success: false, error: error.message };
 
@@ -295,15 +284,29 @@ export async function updateObjectiveSet(
 }
 
 export async function submitObjectives(objectiveId: string): Promise<ActionResult<void>> {
-  const ctx = await getOrgContext();
-  if (!ctx) return { success: false, error: "Not authenticated" };
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!user.employeeId) return { success: false, error: "No employee record" };
 
   const supabase = createAdminSupabase();
+
+  // Ownership check
+  const { data: row } = await supabase
+    .from("objectives")
+    .select("employee_id")
+    .eq("id", objectiveId)
+    .eq("org_id", user.orgId)
+    .single();
+
+  if (!row || (row as any).employee_id !== user.employeeId) {
+    return { success: false, error: "Not authorised" };
+  }
+
   const { error } = await supabase
     .from("objectives")
     .update({ status: "submitted", submitted_at: new Date().toISOString() })
     .eq("id", objectiveId)
-    .eq("org_id", ctx.orgId);
+    .eq("org_id", user.orgId);
 
   if (error) return { success: false, error: error.message };
 
@@ -381,15 +384,29 @@ export async function updateObjectiveItems(
 }
 
 export async function deleteObjectiveSet(objectiveId: string): Promise<ActionResult<void>> {
-  const ctx = await getOrgContext();
-  if (!ctx) return { success: false, error: "Not authenticated" };
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!user.employeeId) return { success: false, error: "No employee record" };
 
   const supabase = createAdminSupabase();
+
+  // Ownership check
+  const { data: row } = await supabase
+    .from("objectives")
+    .select("employee_id")
+    .eq("id", objectiveId)
+    .eq("org_id", user.orgId)
+    .single();
+
+  if (!row || (row as any).employee_id !== user.employeeId) {
+    return { success: false, error: "Not authorised" };
+  }
+
   const { error } = await supabase
     .from("objectives")
     .delete()
     .eq("id", objectiveId)
-    .eq("org_id", ctx.orgId);
+    .eq("org_id", user.orgId);
 
   if (error) return { success: false, error: error.message };
 

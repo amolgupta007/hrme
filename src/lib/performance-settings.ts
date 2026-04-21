@@ -14,7 +14,9 @@ export function getPerformanceSettings(orgSettings: Record<string, any> | null):
   const perf = orgSettings?.performance ?? {};
   return {
     rating_labels:
-      Array.isArray(perf.rating_labels) && perf.rating_labels.length === 5
+      Array.isArray(perf.rating_labels) &&
+      perf.rating_labels.length === 5 &&
+      (perf.rating_labels as unknown[]).every((l) => typeof l === "string" && l.length > 0)
         ? (perf.rating_labels as [string, string, string, string, string])
         : DEFAULTS.rating_labels,
     competencies: Array.isArray(perf.competencies) ? perf.competencies : DEFAULTS.competencies,
@@ -35,7 +37,15 @@ export type GoalsData = {
 export function normalizeGoalsData(raw: unknown): GoalsData {
   // Legacy: array of {title, status}
   if (Array.isArray(raw)) {
-    return { items: raw as GoalsData["items"], self_competency_ratings: {}, manager_competency_ratings: {} };
+    const VALID_STATUSES = new Set(["pending", "achieved", "missed"]);
+    const items = (raw as any[]).filter(
+      (i): i is GoalsData["items"][number] =>
+        i !== null &&
+        typeof i === "object" &&
+        typeof i.title === "string" &&
+        VALID_STATUSES.has(i.status)
+    );
+    return { items, self_competency_ratings: {}, manager_competency_ratings: {} };
   }
   if (raw && typeof raw === "object") {
     const obj = raw as any;

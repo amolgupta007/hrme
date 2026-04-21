@@ -10,6 +10,7 @@ const isPublicRoute = createRouteMatcher([
   "/offers(.*)",
   "/blog(.*)",
   "/pricing",
+  "/api/attendance/punch",
 ]);
 
 const isSuperadminPublic = createRouteMatcher([

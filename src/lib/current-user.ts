@@ -69,3 +69,30 @@ export function isAdmin(role: UserRole): boolean {
 export function isManagerOrAbove(role: UserRole): boolean {
   return role === "owner" || role === "admin" || role === "manager";
 }
+
+/**
+ * Lightweight org context — orgId + clerkUserId.
+ * Use getCurrentUser() when you also need role/plan/employeeId.
+ */
+export async function getOrgContext(): Promise<{ orgId: string; clerkUserId: string } | null> {
+  const { orgId: sessionOrgId, userId } = auth();
+  if (!userId) return null;
+
+  let clerkOrgId = sessionOrgId ?? null;
+  if (!clerkOrgId) {
+    const client = await clerkClient();
+    const memberships = await client.users.getOrganizationMembershipList({ userId });
+    clerkOrgId = memberships.data[0]?.organization.id ?? null;
+  }
+  if (!clerkOrgId) return null;
+
+  const supabase = createAdminSupabase();
+  const { data } = await supabase
+    .from("organizations")
+    .select("id")
+    .eq("clerk_org_id", clerkOrgId)
+    .single();
+
+  if (!data) return null;
+  return { orgId: (data as { id: string }).id, clerkUserId: userId };
+}

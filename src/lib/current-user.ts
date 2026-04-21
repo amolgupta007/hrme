@@ -15,14 +15,10 @@ export type UserContext = {
   grievancesEnabled: boolean;
 };
 
-/**
- * Returns the current user's org context including their role and plan.
- * Falls back to "admin" role and "starter" plan if no employee record found.
- */
-export async function getCurrentUser(): Promise<UserContext | null> {
-  const { orgId: sessionOrgId, userId } = auth();
-  if (!userId) return null;
-
+async function resolveClerkOrg(
+  userId: string,
+  sessionOrgId: string | null | undefined
+): Promise<{ orgId: string; clerkOrgId: string } | null> {
   let clerkOrgId = sessionOrgId ?? null;
   if (!clerkOrgId) {
     const client = await clerkClient();
@@ -32,14 +28,36 @@ export async function getCurrentUser(): Promise<UserContext | null> {
   if (!clerkOrgId) return null;
 
   const supabase = createAdminSupabase();
+  const { data } = await supabase
+    .from("organizations")
+    .select("id")
+    .eq("clerk_org_id", clerkOrgId)
+    .single();
+
+  if (!data) return null;
+  return { orgId: (data as { id: string }).id, clerkOrgId };
+}
+
+/**
+ * Returns the current user's org context including their role and plan.
+ * Falls back to "admin" role and "starter" plan if no employee record found.
+ */
+export async function getCurrentUser(): Promise<UserContext | null> {
+  const { orgId: sessionOrgId, userId } = auth();
+  if (!userId) return null;
+
+  const resolved = await resolveClerkOrg(userId, sessionOrgId);
+  if (!resolved) return null;
+
+  const supabase = createAdminSupabase();
   const { data: org } = await supabase
     .from("organizations")
     .select("id, plan, settings")
-    .eq("clerk_org_id", clerkOrgId)
+    .eq("clerk_org_id", resolved.clerkOrgId)
     .single();
   if (!org) return null;
 
-  const orgId = (org as any).id;
+  const orgId = resolved.orgId;
   const plan = ((org as any).plan as OrgPlan) ?? "starter";
   const settings = ((org as any).settings as any) ?? {};
   const jambaHireEnabled = !!settings?.jambahire_enabled;
@@ -78,21 +96,8 @@ export async function getOrgContext(): Promise<{ orgId: string; clerkUserId: str
   const { orgId: sessionOrgId, userId } = auth();
   if (!userId) return null;
 
-  let clerkOrgId = sessionOrgId ?? null;
-  if (!clerkOrgId) {
-    const client = await clerkClient();
-    const memberships = await client.users.getOrganizationMembershipList({ userId });
-    clerkOrgId = memberships.data[0]?.organization.id ?? null;
-  }
-  if (!clerkOrgId) return null;
+  const resolved = await resolveClerkOrg(userId, sessionOrgId);
+  if (!resolved) return null;
 
-  const supabase = createAdminSupabase();
-  const { data } = await supabase
-    .from("organizations")
-    .select("id")
-    .eq("clerk_org_id", clerkOrgId)
-    .single();
-
-  if (!data) return null;
-  return { orgId: (data as { id: string }).id, clerkUserId: userId };
+  return { orgId: resolved.orgId, clerkUserId: userId };
 }

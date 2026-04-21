@@ -3,7 +3,7 @@
 import React from "react";
 import { toast } from "sonner";
 import { Copy, Eye, EyeOff, RefreshCw, Fingerprint } from "lucide-react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import {
   toggleFingerprintEnabled,
   generateDeviceToken,
@@ -94,7 +94,7 @@ export function FingerprintSection({
   const maskedToken = token ? `dt_${"•".repeat(20)}` : "—";
 
   return (
-    <Card>
+    <>
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <Fingerprint className="h-4 w-4" />
@@ -291,6 +291,6 @@ Content-Type: application/json
           </div>
         </div>
       </CardContent>
-    </Card>
+    </>
   );
 }

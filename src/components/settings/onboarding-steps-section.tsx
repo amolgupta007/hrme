@@ -4,7 +4,7 @@ import React from "react";
 import { toast } from "sonner";
 import { updateOnboardingSteps } from "@/actions/settings";
 import { STEP_LABELS, DEFAULT_ONBOARDING_STEPS, type OnboardingStepConfig } from "@/config/onboarding";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 
 export function OnboardingStepsSection({
   initialSteps,
@@ -47,7 +47,7 @@ export function OnboardingStepsSection({
   }
 
   return (
-    <Card>
+    <>
       <CardHeader>
         <CardTitle>Employee Onboarding Checklist</CardTitle>
         <p className="text-sm text-muted-foreground mt-1">
@@ -94,6 +94,6 @@ export function OnboardingStepsSection({
           </button>
         </div>
       </CardContent>
-    </Card>
+    </>
   );
 }

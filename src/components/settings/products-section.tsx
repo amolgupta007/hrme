@@ -81,7 +81,7 @@ export function ProductsSection({ jambaHireEnabled, isPlanEligible, attendanceEn
   }
 
   return (
-    <div className="rounded-xl border border-border bg-card p-6">
+    <div className="p-6">
       <h2 className="text-lg font-semibold mb-1">Products & Features</h2>
       <p className="text-sm text-muted-foreground mb-5">
         Enable optional modules for your organization. Changes take effect immediately.

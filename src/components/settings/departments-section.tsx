@@ -62,7 +62,7 @@ export function DepartmentsSection({ departments }: DepartmentsSectionProps) {
   }
 
   return (
-    <div className="rounded-xl border border-border bg-card p-6">
+    <div className="p-6">
       <div className="flex items-center justify-between mb-4">
         <div>
           <h3 className="font-semibold">Departments</h3>

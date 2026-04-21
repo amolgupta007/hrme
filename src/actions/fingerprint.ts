@@ -23,6 +23,7 @@ export type EmployeeWithDeviceCode = {
 export async function getFingerprintConfig(): Promise<ActionResult<FingerprintConfig>> {
   const user = await getCurrentUser();
   if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Unauthorized" };
 
   const supabase = createAdminSupabase();
   const { data, error } = await supabase

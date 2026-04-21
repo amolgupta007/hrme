@@ -9,14 +9,21 @@ import { OnboardingStepsSection } from "@/components/settings/onboarding-steps-s
 import { getCurrentUser } from "@/lib/current-user";
 import { hasFeature } from "@/config/plans";
 import { getOrgOnboardingConfig } from "@/actions/onboarding";
+import { FingerprintSection } from "@/components/settings/fingerprint-section";
+import {
+  getFingerprintConfig,
+  listEmployeesWithDeviceCodes,
+} from "@/actions/fingerprint";
 
 export default async function SettingsPage() {
-  const [departmentsResult, profileResult, policiesResult, userCtx, onboardingSteps] = await Promise.all([
+  const [departmentsResult, profileResult, policiesResult, userCtx, onboardingSteps, fingerprintConfigResult, fingerprintEmployeesResult] = await Promise.all([
     listDepartments(),
     getOrgProfile(),
     listSettingsPolicies(),
     getCurrentUser(),
     getOrgOnboardingConfig(),
+    getFingerprintConfig(),
+    listEmployeesWithDeviceCodes(),
   ]);
 
   const departments = departmentsResult.success ? departmentsResult.data : [];
@@ -26,6 +33,12 @@ export default async function SettingsPage() {
   const attendanceEnabled = userCtx?.attendanceEnabled ?? false;
   const attendancePayrollEnabled = userCtx?.attendancePayrollEnabled ?? false;
   const grievancesEnabled = userCtx?.grievancesEnabled ?? false;
+  const fingerprintConfig = fingerprintConfigResult.success
+    ? fingerprintConfigResult.data
+    : { enabled: false, device_token: null };
+  const fingerprintEmployees = fingerprintEmployeesResult.success
+    ? fingerprintEmployeesResult.data
+    : [];
 
   return (
     <div className="space-y-6">
@@ -58,6 +71,13 @@ export default async function SettingsPage() {
       />
 
       <OnboardingStepsSection initialSteps={onboardingSteps} />
+
+      {attendanceEnabled && userCtx && userCtx.role !== "employee" && userCtx.role !== "manager" && (
+        <FingerprintSection
+          initialConfig={fingerprintConfig}
+          initialEmployees={fingerprintEmployees}
+        />
+      )}
     </div>
   );
 }

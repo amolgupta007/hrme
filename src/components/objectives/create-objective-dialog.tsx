@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { createObjectiveSet, updateObjectiveSet } from "@/actions/objectives";
 import type { ObjectiveSet, ObjectiveItem } from "@/actions/objectives";
+import { OBJECTIVE_TEMPLATES, type ObjectiveTemplate } from "@/config/objective-templates";
 
 const inputCn =
   "flex w-full rounded-lg border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2";
@@ -47,9 +48,10 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   editing?: ObjectiveSet;
+  template?: ObjectiveTemplate;
 }
 
-export function CreateObjectiveDialog({ open, onOpenChange, editing }: Props) {
+export function CreateObjectiveDialog({ open, onOpenChange, editing, template }: Props) {
   const [periodType, setPeriodType] = React.useState<"quarterly" | "yearly">(
     editing?.period_type ?? "quarterly"
   );
@@ -63,11 +65,31 @@ export function CreateObjectiveDialog({ open, onOpenChange, editing }: Props) {
 
   React.useEffect(() => {
     if (open) {
-      setPeriodType(editing?.period_type ?? "quarterly");
-      setPeriodLabel(editing?.period_label ?? "");
-      setItems(editing?.items && editing.items.length > 0 ? editing.items : [emptyItem()]);
+      if (editing) {
+        setPeriodType(editing.period_type ?? "quarterly");
+        setPeriodLabel(editing.period_label ?? "");
+        setItems(editing.items && editing.items.length > 0 ? editing.items : [emptyItem()]);
+      } else if (template) {
+        const year = new Date().getFullYear();
+        const q = Math.floor(new Date().getMonth() / 3) + 1;
+        setPeriodType("quarterly");
+        setPeriodLabel(`Q${q} ${year}`);
+        setItems(
+          template.items.map((ti) => ({
+            ...emptyItem(),
+            title: ti.title,
+            description: ti.description,
+            success_criteria: ti.success_criteria,
+            weight: ti.weight,
+          }))
+        );
+      } else {
+        setPeriodType("quarterly");
+        setPeriodLabel("");
+        setItems([emptyItem()]);
+      }
     }
-  }, [open, editing]);
+  }, [open, editing, template]);
 
   const totalWeight = items.reduce((s, i) => s + (Number(i.weight) || 0), 0);
   const weightOk = totalWeight === 100;
@@ -83,6 +105,15 @@ export function CreateObjectiveDialog({ open, onOpenChange, editing }: Props) {
   function removeItem(idx: number) {
     if (items.length === 1) return;
     setItems((prev) => prev.filter((_, i) => i !== idx));
+  }
+
+  function autoDistribute() {
+    const count = items.length;
+    const base = Math.floor(100 / count);
+    const remainder = 100 - base * count;
+    setItems((prev) =>
+      prev.map((item, i) => ({ ...item, weight: i === 0 ? base + remainder : base }))
+    );
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -115,7 +146,7 @@ export function CreateObjectiveDialog({ open, onOpenChange, editing }: Props) {
         <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-2xl -translate-x-1/2 -translate-y-1/2 rounded-xl bg-background p-6 shadow-lg data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 max-h-[90vh] overflow-y-auto">
           <div className="flex items-center justify-between mb-5">
             <Dialog.Title className="text-lg font-semibold">
-              {editing ? "Edit Objectives" : "Set Objectives"}
+              {editing ? "Edit Objectives" : template ? `Set Objectives — ${template.name}` : "Set Objectives"}
             </Dialog.Title>
             <Dialog.Close asChild>
               <Button variant="ghost" size="icon"><X className="h-4 w-4" /></Button>
@@ -152,16 +183,21 @@ export function CreateObjectiveDialog({ open, onOpenChange, editing }: Props) {
             </div>
 
             {/* Weight indicator */}
-            <div className={cn(
-              "flex items-center gap-2 rounded-lg px-3 py-2 text-sm",
-              weightOk ? "bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300"
-                       : "bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300"
-            )}>
-              {!weightOk && <AlertCircle className="h-4 w-4 shrink-0" />}
-              <span>
-                Total weight: <strong>{totalWeight}%</strong>
-                {!weightOk && ` — must equal 100% (${totalWeight < 100 ? `${100 - totalWeight}% remaining` : `${totalWeight - 100}% over`})`}
-              </span>
+            <div className="flex items-center gap-2">
+              <div className={cn(
+                "flex flex-1 items-center gap-2 rounded-lg px-3 py-2 text-sm",
+                weightOk ? "bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300"
+                         : "bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300"
+              )}>
+                {!weightOk && <AlertCircle className="h-4 w-4 shrink-0" />}
+                <span>
+                  Total weight: <strong>{totalWeight}%</strong>
+                  {!weightOk && ` — must equal 100%`}
+                </span>
+              </div>
+              <Button type="button" variant="outline" size="sm" onClick={autoDistribute}>
+                Auto-distribute
+              </Button>
             </div>
 
             {/* Objective items */}

@@ -286,8 +286,17 @@ export function AttendanceClient({ today, history, team, employees, isManager, a
                 <div key={rec.id} className="flex items-center justify-between px-5 py-3">
                   <div>
                     <p className="text-sm font-medium">{formatDate(rec.date)}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {formatTime(rec.clock_in_at)} → {formatTime(rec.clock_out_at)}
+                    <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1.5 flex-wrap">
+                      {rec.clock_in_at && !rec.clock_out_at ? (
+                        <>{formatTime(rec.clock_in_at)} · Still in</>
+                      ) : (
+                        <>{formatTime(rec.clock_in_at)} → {formatTime(rec.clock_out_at)}</>
+                      )}
+                      {rec.source === "device" && (
+                        <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                          via device
+                        </span>
+                      )}
                     </p>
                   </div>
                   <div className="text-right">

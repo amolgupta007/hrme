@@ -1,22 +1,26 @@
 import { listDepartments } from "@/actions/departments";
 import { getOrgProfile, listSettingsPolicies } from "@/actions/settings";
-import { DepartmentsSection } from "@/components/settings/departments-section";
 import { OrgProfileSection } from "@/components/settings/org-profile-section";
-import { LeavePoliciesSection } from "@/components/settings/leave-policies-section";
 import { BillingSection } from "@/components/settings/billing-section";
-import { ProductsSection } from "@/components/settings/products-section";
-import { OnboardingStepsSection } from "@/components/settings/onboarding-steps-section";
+import { SettingsContent } from "@/components/settings/settings-content";
 import { getCurrentUser } from "@/lib/current-user";
 import { hasFeature } from "@/config/plans";
 import { getOrgOnboardingConfig } from "@/actions/onboarding";
-import { FingerprintSection } from "@/components/settings/fingerprint-section";
 import {
   getFingerprintConfig,
   listEmployeesWithDeviceCodes,
 } from "@/actions/fingerprint";
 
 export default async function SettingsPage() {
-  const [departmentsResult, profileResult, policiesResult, userCtx, onboardingSteps, fingerprintConfigResult, fingerprintEmployeesResult] = await Promise.all([
+  const [
+    departmentsResult,
+    profileResult,
+    policiesResult,
+    userCtx,
+    onboardingSteps,
+    fingerprintConfigResult,
+    fingerprintEmployeesResult,
+  ] = await Promise.all([
     listDepartments(),
     getOrgProfile(),
     listSettingsPolicies(),
@@ -58,26 +62,19 @@ export default async function SettingsPage() {
         )}
       </div>
 
-      <LeavePoliciesSection policies={policies} />
-
-      <DepartmentsSection departments={departments} />
-
-      <ProductsSection
+      <SettingsContent
+        policies={policies}
+        departments={departments}
         jambaHireEnabled={jambaHireEnabled}
         isPlanEligible={hasFeature(plan, "ats")}
         attendanceEnabled={attendanceEnabled}
         attendancePayrollEnabled={attendancePayrollEnabled}
         grievancesEnabled={grievancesEnabled}
+        onboardingSteps={onboardingSteps}
+        fingerprintConfig={fingerprintConfig}
+        fingerprintEmployees={fingerprintEmployees}
+        userCtx={userCtx}
       />
-
-      <OnboardingStepsSection initialSteps={onboardingSteps} />
-
-      {attendanceEnabled && userCtx && userCtx.role !== "employee" && userCtx.role !== "manager" && (
-        <FingerprintSection
-          initialConfig={fingerprintConfig}
-          initialEmployees={fingerprintEmployees}
-        />
-      )}
     </div>
   );
 }

@@ -3,11 +3,12 @@
 import * as React from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import * as Label from "@radix-ui/react-label";
-import { X, Plus } from "lucide-react";
+import { X, Plus, Calendar } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { createReviewCycle } from "@/actions/reviews";
+import { CYCLE_TEMPLATES } from "@/config/review-cycle-templates";
 import type { Employee } from "@/types";
 
 const inputCn =
@@ -47,6 +48,15 @@ export function CreateCycleDialog({ open, onOpenChange, employees }: CreateCycle
     setSelectedIds(employees.map((e) => e.id));
   }
 
+  function applyTemplate(templateId: string) {
+    const tmpl = CYCLE_TEMPLATES.find((t) => t.id === templateId);
+    if (!tmpl) return;
+    setName(tmpl.getName());
+    setDescription(tmpl.description);
+    setStartDate(tmpl.getStartDate());
+    setEndDate(tmpl.getEndDate());
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (selectedIds.length === 0) {
@@ -83,6 +93,33 @@ export function CreateCycleDialog({ open, onOpenChange, employees }: CreateCycle
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Template picker */}
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Start from template</p>
+              <div className="grid grid-cols-3 gap-2">
+                {CYCLE_TEMPLATES.map((tmpl) => (
+                  <button
+                    key={tmpl.id}
+                    type="button"
+                    onClick={() => applyTemplate(tmpl.id)}
+                    className="rounded-lg border border-border bg-muted/30 p-3 text-left hover:border-primary hover:bg-primary/5 transition-colors"
+                  >
+                    <Calendar className="h-4 w-4 text-primary mb-1.5" />
+                    <p className="text-xs font-medium">{tmpl.name}</p>
+                    <p className="text-xs text-muted-foreground">{tmpl.description}</p>
+                  </button>
+                ))}
+              </div>
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t border-border" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-background px-2 text-muted-foreground">or fill manually</span>
+                </div>
+              </div>
+            </div>
+
             <div className="space-y-1.5">
               <Label.Root className="text-sm font-medium">Cycle Name <span className="text-destructive">*</span></Label.Root>
               <input

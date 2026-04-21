@@ -1,38 +1,12 @@
 "use server";
 
-import { auth, clerkClient } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createAdminSupabase } from "@/lib/supabase/server";
-import { getCurrentUser, isAdmin, isManagerOrAbove } from "@/lib/current-user";
+import { getCurrentUser, isAdmin, isManagerOrAbove, getOrgContext } from "@/lib/current-user";
 import { getApprovedObjectivesForEmployees } from "@/actions/objectives";
 import type { ObjectiveSet } from "@/actions/objectives";
 import type { ActionResult } from "@/types";
-
-// ---- Context helper ----
-
-async function getOrgContext(): Promise<{ orgId: string; clerkUserId: string } | null> {
-  const { orgId: sessionOrgId, userId } = auth();
-  if (!userId) return null;
-
-  let clerkOrgId = sessionOrgId ?? null;
-  if (!clerkOrgId) {
-    const client = await clerkClient();
-    const memberships = await client.users.getOrganizationMembershipList({ userId });
-    clerkOrgId = memberships.data[0]?.organization.id ?? null;
-  }
-  if (!clerkOrgId) return null;
-
-  const supabase = createAdminSupabase();
-  const { data } = await supabase
-    .from("organizations")
-    .select("id")
-    .eq("clerk_org_id", clerkOrgId)
-    .single();
-
-  if (!data) return null;
-  return { orgId: (data as { id: string }).id, clerkUserId: userId };
-}
 
 // ---- Types ----
 
@@ -235,18 +209,32 @@ export async function deleteReviewCycle(cycleId: string): Promise<ActionResult<v
 
 // ---- Review (assessment) actions ----
 
-export async function listCycleReviews(cycleId: string): Promise<ActionResult<ReviewWithDetails[]>> {
+export async function listCycleReviews(
+  cycleId: string,
+  roleFilter?: { role: string; employeeId: string | null }
+): Promise<ActionResult<ReviewWithDetails[]>> {
   const ctx = await getOrgContext();
   if (!ctx) return { success: false, error: "Not authenticated" };
 
   const supabase = createAdminSupabase();
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("reviews")
     .select("*, employees!employee_id(first_name, last_name), reviewers:employees!reviewer_id(first_name, last_name)")
     .eq("cycle_id", cycleId)
     .eq("org_id", ctx.orgId)
     .order("created_at");
+
+  if (roleFilter && roleFilter.employeeId) {
+    if (roleFilter.role === "employee") {
+      query = query.eq("employee_id", roleFilter.employeeId);
+    } else if (roleFilter.role === "manager") {
+      query = query.eq("reviewer_id", roleFilter.employeeId);
+    }
+    // admin/owner: no filter — sees all
+  }
+
+  const { data, error } = await query;
 
   if (error) return { success: false, error: error.message };
 
@@ -267,7 +255,6 @@ export async function listCycleReviews(cycleId: string): Promise<ActionResult<Re
     created_at: r.created_at,
   }));
 
-  // Attach approved objectives per employee
   const employeeIds = [...new Set(baseReviews.map((r) => r.employee_id))];
   const allObjectives = await getApprovedObjectivesForEmployees(ctx.orgId, employeeIds);
   const objMap: Record<string, ObjectiveSet[]> = {};
@@ -279,6 +266,52 @@ export async function listCycleReviews(cycleId: string): Promise<ActionResult<Re
   const reviews = baseReviews.map((r) => ({
     ...r,
     objectives: objMap[r.employee_id] ?? [],
+  }));
+
+  return { success: true, data: reviews };
+}
+
+export type MyReviewWithCycle = ReviewWithDetails & {
+  cycle_name: string;
+  cycle_start_date: string;
+  cycle_end_date: string;
+};
+
+export async function listMyReviews(): Promise<ActionResult<MyReviewWithCycle[]>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!user.employeeId) return { success: false, error: "No employee record" };
+
+  const supabase = createAdminSupabase();
+
+  const { data, error } = await supabase
+    .from("reviews")
+    .select("*, review_cycles(name, start_date, end_date), employees!employee_id(first_name, last_name), reviewers:employees!reviewer_id(first_name, last_name)")
+    .eq("employee_id", user.employeeId)
+    .eq("org_id", user.orgId)
+    .order("created_at", { ascending: false });
+
+  if (error) return { success: false, error: error.message };
+
+  const reviews = (data ?? []).map((r: any) => ({
+    id: r.id,
+    cycle_id: r.cycle_id,
+    cycle_name: r.review_cycles?.name ?? "",
+    cycle_start_date: r.review_cycles?.start_date ?? "",
+    cycle_end_date: r.review_cycles?.end_date ?? "",
+    employee_id: r.employee_id,
+    reviewer_id: r.reviewer_id,
+    employee_name: `${r.employees?.first_name ?? ""} ${r.employees?.last_name ?? ""}`.trim(),
+    reviewer_name: `${r.reviewers?.first_name ?? ""} ${r.reviewers?.last_name ?? ""}`.trim(),
+    self_rating: r.self_rating,
+    manager_rating: r.manager_rating,
+    self_comments: r.self_comments,
+    manager_comments: r.manager_comments,
+    goals: Array.isArray(r.goals) ? r.goals : [],
+    status: r.status,
+    completed_at: r.completed_at,
+    created_at: r.created_at,
+    objectives: [],
   }));
 
   return { success: true, data: reviews };
@@ -354,6 +387,19 @@ export async function submitManagerReview(
   }
 
   const supabase = createAdminSupabase();
+
+  // Verify the caller is the assigned reviewer
+  const { data: review } = await supabase
+    .from("reviews")
+    .select("reviewer_id")
+    .eq("id", reviewId)
+    .eq("org_id", user.orgId)
+    .single();
+
+  if (!review || (review as any).reviewer_id !== user.employeeId) {
+    return { success: false, error: "You are not the assigned reviewer for this review" };
+  }
+
   const { error } = await supabase
     .from("reviews")
     .update({

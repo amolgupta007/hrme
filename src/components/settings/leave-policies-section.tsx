@@ -103,7 +103,7 @@ export function LeavePoliciesSection({ policies }: LeavePoliciesSectionProps) {
   }
 
   return (
-    <div className="rounded-xl border border-border bg-card p-6">
+    <div className="p-6">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <CalendarDays className="h-5 w-5 text-muted-foreground" />

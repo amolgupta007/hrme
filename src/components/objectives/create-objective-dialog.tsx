@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { createObjectiveSet, updateObjectiveSet } from "@/actions/objectives";
 import type { ObjectiveSet, ObjectiveItem } from "@/actions/objectives";
-import { OBJECTIVE_TEMPLATES, type ObjectiveTemplate } from "@/config/objective-templates";
+import type { ObjectiveTemplate } from "@/config/objective-templates";
 
 const inputCn =
   "flex w-full rounded-lg border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2";

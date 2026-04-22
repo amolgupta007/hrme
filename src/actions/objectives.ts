@@ -166,17 +166,38 @@ export async function listAllObjectives(): Promise<ActionResult<ObjectiveSet[]>>
 
 export async function getApprovedObjectivesForEmployees(
   orgId: string,
-  employeeIds: string[]
+  employeeIds: string[],
+  periodLabels?: string[]
 ): Promise<ObjectiveSet[]> {
   if (employeeIds.length === 0) return [];
+  if (periodLabels !== undefined && periodLabels.length === 0) return [];
   const supabase = createAdminSupabase();
-  const { data } = await supabase
+  let query = supabase
     .from("objectives")
     .select(OBJ_SELECT)
     .in("employee_id", employeeIds)
     .eq("org_id", orgId)
     .eq("status", "approved");
+  if (periodLabels !== undefined && periodLabels.length > 0) {
+    query = query.in("period_label", periodLabels);
+  }
+  const { data } = await query;
   return mapObjectives(data ?? []);
+}
+
+export async function listObjectivePeriodLabels(): Promise<ActionResult<string[]>> {
+  const ctx = await getOrgContext();
+  if (!ctx) return { success: false, error: "Not authenticated" };
+  const supabase = createAdminSupabase();
+  const { data, error } = await supabase
+    .from("objectives")
+    .select("period_label")
+    .eq("org_id", ctx.orgId)
+    .order("period_label", { ascending: true })
+    .limit(1000);
+  if (error) return { success: false, error: error.message };
+  const labels = [...new Set((data ?? []).map((r: { period_label: string }) => r.period_label))];
+  return { success: true, data: labels };
 }
 
 // ---- Mutation actions ----

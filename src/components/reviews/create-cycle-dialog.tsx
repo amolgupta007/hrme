@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { createReviewCycle } from "@/actions/reviews";
+import { listObjectivePeriodLabels } from "@/actions/objectives";
 import { CYCLE_TEMPLATES } from "@/config/review-cycle-templates";
 import type { Employee } from "@/types";
 
@@ -27,6 +28,8 @@ export function CreateCycleDialog({ open, onOpenChange, employees }: CreateCycle
   const [endDate, setEndDate] = React.useState("");
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
   const [ratingScale, setRatingScale] = React.useState<3 | 5 | 10>(5);
+  const [availablePeriods, setAvailablePeriods] = React.useState<string[]>([]);
+  const [selectedPeriods, setSelectedPeriods] = React.useState<string[]>([]);
   const [loading, setLoading] = React.useState(false);
 
   React.useEffect(() => {
@@ -37,6 +40,11 @@ export function CreateCycleDialog({ open, onOpenChange, employees }: CreateCycle
       setEndDate("");
       setSelectedIds([]);
       setRatingScale(5);
+      setAvailablePeriods([]);
+      setSelectedPeriods([]);
+      listObjectivePeriodLabels().then((result) => {
+        setAvailablePeriods(result.success ? result.data : []);
+      });
     }
   }, [open]);
 
@@ -73,7 +81,7 @@ export function CreateCycleDialog({ open, onOpenChange, employees }: CreateCycle
       end_date: endDate,
       employee_ids: selectedIds,
       rating_scale: ratingScale,
-      objective_period_labels: [],
+      objective_period_labels: selectedPeriods,
     });
     setLoading(false);
     if (result.success) {
@@ -165,6 +173,55 @@ export function CreateCycleDialog({ open, onOpenChange, employees }: CreateCycle
                 placeholder="Optional"
               />
             </div>
+
+            {availablePeriods.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label.Root className="text-sm font-medium">
+                    Objective periods
+                    {selectedPeriods.length > 0 && (
+                      <span className="ml-2 font-normal text-muted-foreground">
+                        ({selectedPeriods.length} selected)
+                      </span>
+                    )}
+                  </Label.Root>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPeriods([...availablePeriods])}
+                    className="text-xs text-primary hover:underline"
+                  >
+                    Select all
+                  </button>
+                </div>
+                <div className="max-h-40 overflow-y-auto rounded-lg border border-input divide-y divide-border">
+                  {availablePeriods.map((period) => (
+                    <label
+                      key={period}
+                      className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-muted/40 transition-colors"
+                    >
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-input accent-primary"
+                        checked={selectedPeriods.includes(period)}
+                        onChange={() =>
+                          setSelectedPeriods((prev) =>
+                            prev.includes(period)
+                              ? prev.filter((p) => p !== period)
+                              : [...prev, period]
+                          )
+                        }
+                      />
+                      <span className="text-sm font-medium">{period}</span>
+                    </label>
+                  ))}
+                </div>
+                {selectedPeriods.length === 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    No periods selected — objectives won&apos;t appear in reviews for this cycle.
+                  </p>
+                )}
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">

@@ -10,6 +10,8 @@ import {
   getFingerprintConfig,
   listEmployeesWithDeviceCodes,
 } from "@/actions/fingerprint";
+import { getPerformanceSettings } from "@/lib/performance-settings";
+import { createAdminSupabase } from "@/lib/supabase/server";
 
 export default async function SettingsPage() {
   const [
@@ -44,6 +46,12 @@ export default async function SettingsPage() {
     ? fingerprintEmployeesResult.data
     : [];
 
+  const supabase = createAdminSupabase();
+  const orgSettingsResult = userCtx
+    ? await supabase.from("organizations").select("settings").eq("id", userCtx.orgId).single()
+    : { data: null };
+  const performanceSettings = getPerformanceSettings((orgSettingsResult.data as any)?.settings ?? null);
+
   return (
     <div className="space-y-6">
       <div>
@@ -74,6 +82,7 @@ export default async function SettingsPage() {
         fingerprintConfig={fingerprintConfig}
         fingerprintEmployees={fingerprintEmployees}
         userCtx={userCtx}
+        performanceSettings={performanceSettings}
       />
     </div>
   );

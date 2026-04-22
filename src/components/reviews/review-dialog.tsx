@@ -29,43 +29,56 @@ const SELF_STATUS_OPTIONS: { value: ObjectiveItem["self_status"]; label: string;
   { value: "missed", label: "Missed", color: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300" },
 ];
 
-function StarRating({
+function NumberRating({
   value,
   onChange,
+  scale,
   labels,
 }: {
   value: number;
   onChange?: (v: number) => void;
-  labels?: [string, string, string, string, string];
+  scale: 3 | 5 | 10;
+  labels: string[];
 }) {
-  const [hovered, setHovered] = React.useState(0);
-  const LABELS = labels ?? (["Poor", "Fair", "Good", "Great", "Excellent"] as [string, string, string, string, string]);
+  const chips = Array.from({ length: scale }, (_, i) => i + 1);
+
+  function getLabelBelow(n: number): string | null {
+    if (scale === 10) {
+      if (n === 1) return labels[0] ?? null;
+      if (n === 5) return labels[1] ?? null;
+      if (n === 10) return labels[2] ?? null;
+      return null;
+    }
+    return value === n ? (labels[n - 1] ?? null) : null;
+  }
+
   return (
-    <div className="flex gap-1">
-      {[1, 2, 3, 4, 5].map((star) => (
-        <button
-          key={star}
-          type="button"
-          onClick={() => onChange?.(star)}
-          onMouseEnter={() => onChange && setHovered(star)}
-          onMouseLeave={() => onChange && setHovered(0)}
-          disabled={!onChange}
-          className={cn("transition-colors", onChange ? "cursor-pointer" : "cursor-default")}
-        >
-          <Star
-            className={cn(
-              "h-6 w-6",
-              (hovered || value) >= star
-                ? "fill-amber-400 text-amber-400"
-                : "fill-none text-muted-foreground/40"
-            )}
-          />
-        </button>
-      ))}
-      {value > 0 && (
-        <span className="ml-2 text-sm font-medium text-muted-foreground self-center">
-          {LABELS[value - 1]}
-        </span>
+    <div className="space-y-1">
+      <div className="flex flex-wrap gap-1.5">
+        {chips.map((n) => (
+          <div key={n} className="flex flex-col items-center gap-0.5">
+            <button
+              type="button"
+              onClick={() => onChange?.(n)}
+              disabled={!onChange}
+              className={cn(
+                "h-9 min-w-[2.25rem] rounded-md border px-2 text-sm font-medium transition-colors",
+                onChange ? "cursor-pointer" : "cursor-default",
+                value === n
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border bg-background hover:bg-muted/50 text-foreground"
+              )}
+            >
+              {n}
+            </button>
+            <span className="text-[10px] text-muted-foreground h-3 leading-none">
+              {scale === 10 ? (getLabelBelow(n) ?? "") : ""}
+            </span>
+          </div>
+        ))}
+      </div>
+      {scale !== 10 && value > 0 && labels[value - 1] && (
+        <p className="text-xs font-medium text-muted-foreground">{labels[value - 1]}</p>
       )}
     </div>
   );
@@ -80,9 +93,10 @@ interface ReviewDialogProps {
   review: ReviewWithDetails;
   mode: "self" | "manager" | "view";
   performanceSettings: PerformanceSettings;
+  rating_scale?: 3 | 5 | 10;
 }
 
-export function ReviewDialog({ open, onOpenChange, review, mode, performanceSettings }: ReviewDialogProps) {
+export function ReviewDialog({ open, onOpenChange, review, mode, performanceSettings, rating_scale = 5 }: ReviewDialogProps) {
   const [rating, setRating] = React.useState(
     mode === "self" ? (review.self_rating ?? 0) : (review.manager_rating ?? 0)
   );
@@ -162,6 +176,13 @@ export function ReviewDialog({ open, onOpenChange, review, mode, performanceSett
   }
 
   const isReadOnly = mode === "view";
+  const scale = rating_scale;
+  const ratingLabels: string[] =
+    scale === 3
+      ? performanceSettings.rating_labels_3
+      : scale === 10
+        ? performanceSettings.rating_labels_10_anchors
+        : performanceSettings.rating_labels;
   const title = mode === "self" ? "Self Assessment" : mode === "manager" ? "Manager Review" : "Review Details";
   const hasObjectives = (review.objectives ?? []).length > 0;
 
@@ -187,7 +208,7 @@ export function ReviewDialog({ open, onOpenChange, review, mode, performanceSett
                 {mode === "self" ? "Overall Self Rating" : "Overall Manager Rating"}
                 {!isReadOnly && <span className="text-destructive ml-0.5">*</span>}
               </Label.Root>
-              <StarRating value={rating} onChange={isReadOnly ? undefined : setRating} labels={performanceSettings.rating_labels} />
+              <NumberRating value={rating} onChange={isReadOnly ? undefined : setRating} scale={scale} labels={ratingLabels} />
             </div>
 
             {/* Competency ratings */}
@@ -206,9 +227,10 @@ export function ReviewDialog({ open, onOpenChange, review, mode, performanceSett
                     return (
                       <div key={competency} className="space-y-1.5">
                         <p className="text-sm text-muted-foreground">{competency}</p>
-                        <StarRating
+                        <NumberRating
                           value={currentRating}
-                          labels={performanceSettings.rating_labels}
+                          scale={scale}
+                          labels={ratingLabels}
                           onChange={
                             isManagerMode
                               ? (v) => setManagerCompetencyRatings((prev) => ({ ...prev, [competency]: v }))
@@ -229,11 +251,11 @@ export function ReviewDialog({ open, onOpenChange, review, mode, performanceSett
               <div className="grid grid-cols-2 gap-4 rounded-lg border border-border p-4 bg-muted/30">
                 <div>
                   <p className="text-xs text-muted-foreground mb-1">Self Rating</p>
-                  <StarRating value={review.self_rating ?? 0} labels={performanceSettings.rating_labels} />
+                  <NumberRating value={review.self_rating ?? 0} scale={scale} labels={ratingLabels} />
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground mb-1">Manager Rating</p>
-                  <StarRating value={review.manager_rating ?? 0} labels={performanceSettings.rating_labels} />
+                  <NumberRating value={review.manager_rating ?? 0} scale={scale} labels={ratingLabels} />
                 </div>
               </div>
             )}

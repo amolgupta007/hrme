@@ -11,6 +11,8 @@ import { submitSelfReview, submitManagerReview } from "@/actions/reviews";
 import { updateObjectiveItems } from "@/actions/objectives";
 import type { ReviewWithDetails } from "@/actions/reviews";
 import type { ObjectiveItem } from "@/actions/objectives";
+import type { PerformanceSettings } from "@/lib/performance-settings";
+import { normalizeGoalsData } from "@/lib/performance-settings";
 
 type Goal = { title: string; status: "pending" | "achieved" | "missed" };
 
@@ -27,8 +29,17 @@ const SELF_STATUS_OPTIONS: { value: ObjectiveItem["self_status"]; label: string;
   { value: "missed", label: "Missed", color: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300" },
 ];
 
-function StarRating({ value, onChange }: { value: number; onChange?: (v: number) => void }) {
+function StarRating({
+  value,
+  onChange,
+  labels,
+}: {
+  value: number;
+  onChange?: (v: number) => void;
+  labels?: [string, string, string, string, string];
+}) {
   const [hovered, setHovered] = React.useState(0);
+  const LABELS = labels ?? (["Poor", "Fair", "Good", "Great", "Excellent"] as [string, string, string, string, string]);
   return (
     <div className="flex gap-1">
       {[1, 2, 3, 4, 5].map((star) => (
@@ -53,7 +64,7 @@ function StarRating({ value, onChange }: { value: number; onChange?: (v: number)
       ))}
       {value > 0 && (
         <span className="ml-2 text-sm font-medium text-muted-foreground self-center">
-          {["", "Poor", "Fair", "Good", "Great", "Excellent"][value]}
+          {LABELS[value - 1]}
         </span>
       )}
     </div>
@@ -68,9 +79,10 @@ interface ReviewDialogProps {
   onOpenChange: (open: boolean) => void;
   review: ReviewWithDetails;
   mode: "self" | "manager" | "view";
+  performanceSettings: PerformanceSettings;
 }
 
-export function ReviewDialog({ open, onOpenChange, review, mode }: ReviewDialogProps) {
+export function ReviewDialog({ open, onOpenChange, review, mode, performanceSettings }: ReviewDialogProps) {
   const [rating, setRating] = React.useState(
     mode === "self" ? (review.self_rating ?? 0) : (review.manager_rating ?? 0)
   );
@@ -80,6 +92,15 @@ export function ReviewDialog({ open, onOpenChange, review, mode }: ReviewDialogP
   const [goals, setGoals] = React.useState<Goal[]>(review.goals ?? []);
   const [newGoal, setNewGoal] = React.useState("");
   const [loading, setLoading] = React.useState(false);
+
+  const goalsData = normalizeGoalsData(review.goals);
+  const [selfCompetencyRatings, setSelfCompetencyRatings] = React.useState<Record<string, number>>(
+    goalsData.self_competency_ratings
+  );
+  const [managerCompetencyRatings, setManagerCompetencyRatings] = React.useState<Record<string, number>>(
+    goalsData.manager_competency_ratings
+  );
+  const competencies = performanceSettings.competencies;
 
   // Objective evaluations: objectiveId -> items array
   const [objEvals, setObjEvals] = React.useState<Record<string, ObjectiveItem[]>>(() => {
@@ -109,7 +130,11 @@ export function ReviewDialog({ open, onOpenChange, review, mode }: ReviewDialogP
     const reviewAction =
       mode === "self"
         ? submitSelfReview(review.id, { self_rating: rating, self_comments: comments, goals })
-        : submitManagerReview(review.id, { manager_rating: rating, manager_comments: comments });
+        : submitManagerReview(review.id, {
+            manager_rating: rating,
+            manager_comments: comments,
+            manager_competency_ratings: managerCompetencyRatings,
+          });
 
     const [reviewResult] = await Promise.all([reviewAction, ...objUpdates]);
 
@@ -162,19 +187,53 @@ export function ReviewDialog({ open, onOpenChange, review, mode }: ReviewDialogP
                 {mode === "self" ? "Overall Self Rating" : "Overall Manager Rating"}
                 {!isReadOnly && <span className="text-destructive ml-0.5">*</span>}
               </Label.Root>
-              <StarRating value={rating} onChange={isReadOnly ? undefined : setRating} />
+              <StarRating value={rating} onChange={isReadOnly ? undefined : setRating} labels={performanceSettings.rating_labels} />
             </div>
+
+            {/* Competency ratings */}
+            {competencies.length > 0 && (
+              <div className="space-y-3">
+                <p className="text-sm font-medium">Competency Ratings</p>
+                <div className="space-y-4">
+                  {competencies.map((competency) => {
+                    const isManagerMode = mode === "manager";
+                    const isSelfMode = mode === "self";
+                    const currentRating = isManagerMode
+                      ? (managerCompetencyRatings[competency] ?? 0)
+                      : isSelfMode
+                      ? (selfCompetencyRatings[competency] ?? 0)
+                      : (goalsData.manager_competency_ratings[competency] ?? goalsData.self_competency_ratings[competency] ?? 0);
+                    return (
+                      <div key={competency} className="space-y-1.5">
+                        <p className="text-sm text-muted-foreground">{competency}</p>
+                        <StarRating
+                          value={currentRating}
+                          labels={performanceSettings.rating_labels}
+                          onChange={
+                            isManagerMode
+                              ? (v) => setManagerCompetencyRatings((prev) => ({ ...prev, [competency]: v }))
+                              : isSelfMode
+                              ? (v) => setSelfCompetencyRatings((prev) => ({ ...prev, [competency]: v }))
+                              : undefined
+                          }
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* View mode: both ratings */}
             {mode === "view" && (
               <div className="grid grid-cols-2 gap-4 rounded-lg border border-border p-4 bg-muted/30">
                 <div>
                   <p className="text-xs text-muted-foreground mb-1">Self Rating</p>
-                  <StarRating value={review.self_rating ?? 0} />
+                  <StarRating value={review.self_rating ?? 0} labels={performanceSettings.rating_labels} />
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground mb-1">Manager Rating</p>
-                  <StarRating value={review.manager_rating ?? 0} />
+                  <StarRating value={review.manager_rating ?? 0} labels={performanceSettings.rating_labels} />
                 </div>
               </div>
             )}

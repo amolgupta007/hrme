@@ -387,6 +387,7 @@ export function ReviewsClient({ cycles, employees, cycleReviews, activeCycleId: 
           review={reviewDialog.review}
           mode={reviewDialog.mode}
           performanceSettings={performanceSettings}
+          rating_scale={activeCycle?.rating_scale ?? 5}
         />
       )}
     </>

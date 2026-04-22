@@ -7,6 +7,7 @@ import {
   Settings,
   ClipboardList,
   Fingerprint,
+  BarChart3,
 } from "lucide-react";
 import { CollapsibleSection } from "@/components/settings/collapsible-section";
 import { LeavePoliciesSection } from "@/components/settings/leave-policies-section";
@@ -14,9 +15,11 @@ import { DepartmentsSection } from "@/components/settings/departments-section";
 import { ProductsSection } from "@/components/settings/products-section";
 import { OnboardingStepsSection } from "@/components/settings/onboarding-steps-section";
 import { FingerprintSection } from "@/components/settings/fingerprint-section";
+import { PerformanceSection } from "@/components/settings/performance-section";
 import type { LeavePolicy, Department } from "@/types";
 import type { OnboardingStepConfig } from "@/config/onboarding";
 import type { FingerprintConfig, EmployeeWithDeviceCode } from "@/actions/fingerprint";
+import type { PerformanceSettings } from "@/lib/performance-settings";
 
 type UserCtx = {
   role: string;
@@ -34,6 +37,7 @@ type SettingsContentProps = {
   fingerprintConfig: FingerprintConfig;
   fingerprintEmployees: EmployeeWithDeviceCode[];
   userCtx: UserCtx;
+  performanceSettings: PerformanceSettings;
 };
 
 function pluralise(count: number, singular: string, plural: string): string {
@@ -52,6 +56,7 @@ export function SettingsContent({
   fingerprintConfig,
   fingerprintEmployees,
   userCtx,
+  performanceSettings,
 }: SettingsContentProps) {
   const [openSection, setOpenSection] = React.useState<string | null>(null);
 
@@ -154,6 +159,18 @@ export function SettingsContent({
             initialConfig={fingerprintConfig}
             initialEmployees={fingerprintEmployees}
           />
+        </CollapsibleSection>
+      )}
+
+      {isAdmin && (
+        <CollapsibleSection
+          title="Performance & Reviews"
+          icon={<BarChart3 className="h-5 w-5 text-muted-foreground" />}
+          summary={`${performanceSettings.competencies.length} competencies · ${performanceSettings.rating_labels.join(", ")}`}
+          isOpen={openSection === "performance"}
+          onToggle={() => toggle("performance")}
+        >
+          <PerformanceSection initialSettings={performanceSettings} />
         </CollapsibleSection>
       )}
     </div>

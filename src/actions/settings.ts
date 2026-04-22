@@ -7,6 +7,7 @@ import { createAdminSupabase } from "@/lib/supabase/server";
 import { getCurrentUser, isAdmin } from "@/lib/current-user";
 import type { ActionResult, Organization, LeavePolicy } from "@/types";
 import type { OnboardingStepConfig } from "@/config/onboarding";
+import { getPerformanceSettings, type PerformanceSettings } from "@/lib/performance-settings";
 
 // ---- Context helper ----
 
@@ -342,6 +343,52 @@ export async function updateOnboardingSteps(
 
   const currentSettings = (org as any)?.settings ?? {};
   const newSettings = { ...currentSettings, onboarding_steps: steps };
+
+  const { error } = await supabase
+    .from("organizations")
+    .update({ settings: newSettings })
+    .eq("id", user.orgId);
+
+  if (error) return { success: false, error: error.message };
+
+  revalidatePath("/dashboard/settings");
+  return { success: true, data: undefined };
+}
+
+const performanceSettingsSchema = z.object({
+  rating_labels: z.tuple([
+    z.string().min(1),
+    z.string().min(1),
+    z.string().min(1),
+    z.string().min(1),
+    z.string().min(1),
+  ]),
+  competencies: z.array(z.string().min(1)).max(8),
+  self_review_required: z.boolean(),
+});
+
+export async function updatePerformanceSettings(
+  data: PerformanceSettings
+): Promise<ActionResult<void>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can update performance settings" };
+
+  const validated = performanceSettingsSchema.safeParse(data);
+  if (!validated.success) {
+    return { success: false, error: validated.error.errors[0]?.message ?? "Validation failed" };
+  }
+
+  const supabase = createAdminSupabase();
+
+  const { data: org } = await supabase
+    .from("organizations")
+    .select("settings")
+    .eq("id", user.orgId)
+    .single();
+
+  const currentSettings = ((org as any)?.settings ?? {}) as Record<string, any>;
+  const newSettings = { ...currentSettings, performance: validated.data };
 
   const { error } = await supabase
     .from("organizations")

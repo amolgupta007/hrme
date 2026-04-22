@@ -26,6 +26,7 @@ export function CreateCycleDialog({ open, onOpenChange, employees }: CreateCycle
   const [startDate, setStartDate] = React.useState("");
   const [endDate, setEndDate] = React.useState("");
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
+  const [ratingScale, setRatingScale] = React.useState<3 | 5 | 10>(5);
   const [loading, setLoading] = React.useState(false);
 
   React.useEffect(() => {
@@ -35,6 +36,7 @@ export function CreateCycleDialog({ open, onOpenChange, employees }: CreateCycle
       setStartDate("");
       setEndDate("");
       setSelectedIds([]);
+      setRatingScale(5);
     }
   }, [open]);
 
@@ -70,6 +72,7 @@ export function CreateCycleDialog({ open, onOpenChange, employees }: CreateCycle
       start_date: startDate,
       end_date: endDate,
       employee_ids: selectedIds,
+      rating_scale: ratingScale,
     });
     setLoading(false);
     if (result.success) {
@@ -129,6 +132,27 @@ export function CreateCycleDialog({ open, onOpenChange, employees }: CreateCycle
                 placeholder="e.g. Q1 2025 Performance Review"
                 required
               />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label.Root className="text-sm font-medium">Rating Scale</Label.Root>
+              <div className="flex gap-2">
+                {([3, 5, 10] as const).map((scale) => (
+                  <button
+                    key={scale}
+                    type="button"
+                    onClick={() => setRatingScale(scale)}
+                    className={cn(
+                      "flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors",
+                      ratingScale === scale
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border bg-background hover:bg-muted/50"
+                    )}
+                  >
+                    {scale}-point
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="space-y-1.5">

@@ -91,6 +91,7 @@ const createSchema = z.object({
   period_type: z.enum(["quarterly", "yearly"]),
   period_label: z.string().min(1),
   items: z.array(itemSchema).min(1, "Add at least one objective"),
+  target_employee_ids: z.array(z.string().uuid()).optional(),
 });
 
 // ---- List actions ----
@@ -182,7 +183,7 @@ export async function getApprovedObjectivesForEmployees(
 
 export async function createObjectiveSet(
   formData: z.infer<typeof createSchema>
-): Promise<ActionResult<{ id: string }>> {
+): Promise<ActionResult<{ id: string } | { created: number }>> {
   const ctx = await getOrgContext();
   if (!ctx) return { success: false, error: "Not authenticated" };
 
@@ -201,6 +202,43 @@ export async function createObjectiveSet(
 
   const supabase = createAdminSupabase();
 
+  const user = await getCurrentUser();
+
+  // Bulk-create for admin/owner targeting specific employees
+  if (
+    user &&
+    (user.role === "admin" || user.role === "owner") &&
+    validated.data.target_employee_ids &&
+    validated.data.target_employee_ids.length > 0
+  ) {
+    const { data: targetEmps, error: empError } = await supabase
+      .from("employees")
+      .select("id, reporting_manager_id")
+      .in("id", validated.data.target_employee_ids)
+      .eq("org_id", ctx.orgId);
+
+    if (empError) return { success: false, error: empError.message };
+
+    const inserts = (targetEmps ?? []).map((e: any) => ({
+      org_id: ctx.orgId,
+      employee_id: e.id,
+      manager_id: e.reporting_manager_id ?? null,
+      period_type: validated.data.period_type,
+      period_label: validated.data.period_label,
+      items: validated.data.items,
+      status: "draft" as const,
+    }));
+
+    if (inserts.length === 0) return { success: false, error: "No valid employees found" };
+
+    const { error: insertError } = await supabase.from("objectives").insert(inserts);
+    if (insertError) return { success: false, error: insertError.message };
+
+    revalidatePath("/dashboard/objectives");
+    return { success: true, data: { created: inserts.length } };
+  }
+
+  // Self-set path (unchanged)
   const { data: emp } = await supabase
     .from("employees")
     .select("id, reporting_manager_id")

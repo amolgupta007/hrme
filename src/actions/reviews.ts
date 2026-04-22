@@ -20,6 +20,7 @@ export type ReviewCycleWithStats = {
   end_date: string;
   created_at: string;
   rating_scale: 3 | 5 | 10;
+  objective_period_labels: string[];
   total_reviews: number;
   completed_reviews: number;
 };
@@ -53,6 +54,7 @@ const cycleSchema = z.object({
   end_date: z.string().min(1, "End date is required"),
   employee_ids: z.array(z.string().uuid()).min(1, "Select at least one employee"),
   rating_scale: z.union([z.literal(3), z.literal(5), z.literal(10)]).default(5),
+  objective_period_labels: z.array(z.string()).default([]),
 });
 
 export async function listReviewCycles(): Promise<ActionResult<ReviewCycleWithStats[]>> {
@@ -86,6 +88,7 @@ export async function listReviewCycles(): Promise<ActionResult<ReviewCycleWithSt
   const result = (cycles ?? []).map((c: any) => ({
     ...c,
     rating_scale: (c.rating_scale as 3 | 5 | 10) ?? 5,
+    objective_period_labels: (c.objective_period_labels as string[]) ?? [],
     total_reviews: statsMap[c.id]?.total ?? 0,
     completed_reviews: statsMap[c.id]?.completed ?? 0,
   }));
@@ -120,6 +123,7 @@ export async function createReviewCycle(
       end_date: validated.data.end_date,
       status: "draft",
       rating_scale: validated.data.rating_scale,
+      objective_period_labels: validated.data.objective_period_labels,
     })
     .select("id")
     .single();
@@ -260,7 +264,15 @@ export async function listCycleReviews(
   }));
 
   const employeeIds = [...new Set(baseReviews.map((r) => r.employee_id))];
-  const allObjectives = await getApprovedObjectivesForEmployees(ctx.orgId, employeeIds);
+
+  const { data: cycleRow } = await supabase
+    .from("review_cycles")
+    .select("objective_period_labels")
+    .eq("id", cycleId)
+    .single();
+  const periodLabels: string[] = (cycleRow as any)?.objective_period_labels ?? [];
+
+  const allObjectives = await getApprovedObjectivesForEmployees(ctx.orgId, employeeIds, periodLabels);
   const objMap: Record<string, ObjectiveSet[]> = {};
   for (const obj of allObjectives) {
     if (!objMap[obj.employee_id]) objMap[obj.employee_id] = [];

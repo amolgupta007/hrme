@@ -73,6 +73,7 @@ export function CreateCycleDialog({ open, onOpenChange, employees }: CreateCycle
       end_date: endDate,
       employee_ids: selectedIds,
       rating_scale: ratingScale,
+      objective_period_labels: [],
     });
     setLoading(false);
     if (result.success) {

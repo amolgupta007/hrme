@@ -445,7 +445,7 @@ export function ReviewDialog({ open, onOpenChange, review, mode, performanceSett
                                 )}
                                 {item.manager_rating !== null && (
                                   <div className="flex items-center gap-1.5">
-                                    <span>Manager: {item.manager_rating}/5</span>
+                                    <span>Manager: {item.manager_rating}/{scale}</span>
                                     {item.manager_comment && <span>· &quot;{item.manager_comment}&quot;</span>}
                                   </div>
                                 )}

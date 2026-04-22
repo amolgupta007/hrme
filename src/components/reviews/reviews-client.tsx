@@ -348,10 +348,10 @@ export function ReviewsClient({ cycles, employees, cycleReviews, activeCycleId: 
 
                 <div className="flex items-center gap-3">
                   {review.self_rating && (
-                    <span className="text-xs text-muted-foreground">Self: {review.self_rating}/5</span>
+                    <span className="text-xs text-muted-foreground">Self: {review.self_rating}/{activeCycle?.rating_scale ?? 5}</span>
                   )}
                   {review.manager_rating && (
-                    <span className="text-xs text-muted-foreground">Manager: {review.manager_rating}/5</span>
+                    <span className="text-xs text-muted-foreground">Manager: {review.manager_rating}/{activeCycle?.rating_scale ?? 5}</span>
                   )}
                   <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium", REVIEW_STATUS_STYLES[review.status])}>
                     {REVIEW_STATUS_LABELS[review.status]}

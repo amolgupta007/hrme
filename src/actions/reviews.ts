@@ -324,7 +324,7 @@ export async function listMyReviews(): Promise<ActionResult<MyReviewWithCycle[]>
 }
 
 const selfReviewSchema = z.object({
-  self_rating: z.number().min(1).max(5),
+  self_rating: z.number().min(1).max(10),
   self_comments: z.string().min(1, "Please add your comments"),
   goals: z.array(z.object({
     title: z.string().min(1),
@@ -375,7 +375,7 @@ export async function submitSelfReview(
 }
 
 const managerReviewSchema = z.object({
-  manager_rating: z.number().min(1).max(5),
+  manager_rating: z.number().min(1).max(10),
   manager_comments: z.string().min(1, "Please add your comments"),
   manager_competency_ratings: z.record(z.number()).optional(),
 });

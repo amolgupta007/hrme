@@ -363,6 +363,8 @@ const performanceSettingsSchema = z.object({
     z.string().min(1),
     z.string().min(1),
   ]),
+  rating_labels_3: z.tuple([z.string().min(1), z.string().min(1), z.string().min(1)]),
+  rating_labels_10_anchors: z.tuple([z.string().min(1), z.string().min(1), z.string().min(1)]),
   competencies: z.array(z.string().min(1)).max(8),
   self_review_required: z.boolean(),
 });

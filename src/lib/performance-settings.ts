@@ -1,11 +1,15 @@
 export type PerformanceSettings = {
   rating_labels: [string, string, string, string, string];
+  rating_labels_3: [string, string, string];
+  rating_labels_10_anchors: [string, string, string];
   competencies: string[];
   self_review_required: boolean;
 };
 
 const DEFAULTS: PerformanceSettings = {
   rating_labels: ["Poor", "Fair", "Good", "Great", "Excellent"],
+  rating_labels_3: ["Needs Improvement", "Meets Expectations", "Exceeds Expectations"],
+  rating_labels_10_anchors: ["Poor", "Average", "Excellent"],
   competencies: [],
   self_review_required: true,
 };
@@ -19,6 +23,18 @@ export function getPerformanceSettings(orgSettings: Record<string, any> | null):
       (perf.rating_labels as unknown[]).every((l) => typeof l === "string" && l.length > 0)
         ? (perf.rating_labels as [string, string, string, string, string])
         : DEFAULTS.rating_labels,
+    rating_labels_3:
+      Array.isArray(perf.rating_labels_3) &&
+      perf.rating_labels_3.length === 3 &&
+      (perf.rating_labels_3 as unknown[]).every((l) => typeof l === "string" && l.length > 0)
+        ? (perf.rating_labels_3 as [string, string, string])
+        : DEFAULTS.rating_labels_3,
+    rating_labels_10_anchors:
+      Array.isArray(perf.rating_labels_10_anchors) &&
+      perf.rating_labels_10_anchors.length === 3 &&
+      (perf.rating_labels_10_anchors as unknown[]).every((l) => typeof l === "string" && l.length > 0)
+        ? (perf.rating_labels_10_anchors as [string, string, string])
+        : DEFAULTS.rating_labels_10_anchors,
     competencies: Array.isArray(perf.competencies) ? perf.competencies : DEFAULTS.competencies,
     self_review_required:
       typeof perf.self_review_required === "boolean"
@@ -35,7 +51,6 @@ export type GoalsData = {
 };
 
 export function normalizeGoalsData(raw: unknown): GoalsData {
-  // Legacy: array of {title, status}
   if (Array.isArray(raw)) {
     const VALID_STATUSES = new Set(["pending", "achieved", "missed"]);
     const items = (raw as any[]).filter(

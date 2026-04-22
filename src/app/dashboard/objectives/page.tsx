@@ -1,4 +1,5 @@
 import { listMyObjectives, listPendingApprovals, listAllObjectives } from "@/actions/objectives";
+import { listEmployees } from "@/actions/employees";
 import { ObjectivesClient } from "@/components/objectives/objectives-client";
 import { getCurrentUser } from "@/lib/current-user";
 import { UpgradeGate } from "@/components/layout/upgrade-gate";
@@ -13,15 +14,17 @@ export default async function ObjectivesPage() {
     return <UpgradeGate feature="Objectives & OKRs" requiredPlan="growth" currentPlan={plan} />;
   }
 
-  const [myResult, approvalsResult, allResult] = await Promise.all([
+  const [myResult, approvalsResult, allResult, employeesResult] = await Promise.all([
     listMyObjectives(),
     listPendingApprovals(),
     listAllObjectives(),
+    listEmployees(),
   ]);
 
   const myObjectives = myResult.success ? myResult.data : [];
   const pendingApprovals = approvalsResult.success ? approvalsResult.data : [];
   const allObjectives = allResult.success ? allResult.data : [];
+  const employees = employeesResult.success ? employeesResult.data : [];
   const isAdminUser = userCtx?.role === "admin" || userCtx?.role === "owner";
 
   // Check if employee has direct reports
@@ -44,6 +47,7 @@ export default async function ObjectivesPage() {
         allObjectives={allObjectives}
         isAdmin={isAdminUser}
         hasDirectReports={hasDirectReports}
+        employees={employees}
       />
     </div>
   );

@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { createObjectiveSet, updateObjectiveSet } from "@/actions/objectives";
 import type { ObjectiveSet, ObjectiveItem } from "@/actions/objectives";
 import type { ObjectiveTemplate } from "@/config/objective-templates";
+import type { Employee } from "@/types";
 
 const inputCn =
   "flex w-full rounded-lg border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2";
@@ -49,9 +50,11 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   editing?: ObjectiveSet;
   template?: ObjectiveTemplate;
+  employees?: Employee[];
+  role?: string;
 }
 
-export function CreateObjectiveDialog({ open, onOpenChange, editing, template }: Props) {
+export function CreateObjectiveDialog({ open, onOpenChange, editing, template, employees, role }: Props) {
   const [periodType, setPeriodType] = React.useState<"quarterly" | "yearly">(
     editing?.period_type ?? "quarterly"
   );
@@ -62,6 +65,7 @@ export function CreateObjectiveDialog({ open, onOpenChange, editing, template }:
       : [emptyItem()]
   );
   const [loading, setLoading] = React.useState(false);
+  const [selectedEmployeeIds, setSelectedEmployeeIds] = React.useState<string[]>([]);
 
   React.useEffect(() => {
     if (open) {
@@ -88,6 +92,7 @@ export function CreateObjectiveDialog({ open, onOpenChange, editing, template }:
         setPeriodLabel("");
         setItems([emptyItem()]);
       }
+      setSelectedEmployeeIds([]);
     }
   }, [open, editing, template]);
 
@@ -123,14 +128,33 @@ export function CreateObjectiveDialog({ open, onOpenChange, editing, template }:
     if (items.some((i) => !i.title.trim())) { toast.error("All objectives need a title"); return; }
 
     setLoading(true);
-    const payload = { period_type: periodType, period_label: periodLabel, items };
+    const isAdminBulk = !editing && (role === "admin" || role === "owner") && selectedEmployeeIds.length > 0;
+    const payload = {
+      period_type: periodType,
+      period_label: periodLabel,
+      items,
+      ...(isAdminBulk ? { target_employee_ids: selectedEmployeeIds } : {}),
+    };
     const result = editing
-      ? await updateObjectiveSet(editing.id, payload)
+      ? await updateObjectiveSet(editing.id, { period_type: periodType, period_label: periodLabel, items })
       : await createObjectiveSet(payload);
     setLoading(false);
 
     if (result.success) {
-      toast.success(editing ? "Objectives updated" : "Objectives saved as draft");
+      if (editing) {
+        toast.success("Objectives updated");
+      } else if (isAdminBulk && result.data && "created" in result.data) {
+        const n = result.data.created;
+        if (n === 1 && employees) {
+          const emp = employees.find((e) => e.id === selectedEmployeeIds[0]);
+          const name = emp ? `${emp.first_name} ${emp.last_name}` : "1 employee";
+          toast.success(`Objectives created for ${name}`);
+        } else {
+          toast.success(`Objectives created for ${n} employees`);
+        }
+      } else {
+        toast.success("Objectives saved as draft");
+      }
       onOpenChange(false);
     } else {
       toast.error(result.error);
@@ -154,6 +178,59 @@ export function CreateObjectiveDialog({ open, onOpenChange, editing, template }:
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
+            {/* Admin: set objectives for other employees */}
+            {!editing && employees && employees.length > 0 && (role === "admin" || role === "owner") && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label.Root className="text-sm font-medium">
+                    For employees
+                    {selectedEmployeeIds.length > 0 && (
+                      <span className="ml-2 font-normal text-muted-foreground">
+                        ({selectedEmployeeIds.length} selected)
+                      </span>
+                    )}
+                  </Label.Root>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedEmployeeIds(employees.map((e) => e.id))}
+                    className="text-xs text-primary hover:underline"
+                  >
+                    Select all
+                  </button>
+                </div>
+                <div className="max-h-40 overflow-y-auto rounded-lg border border-input divide-y divide-border">
+                  {employees.map((emp) => (
+                    <label
+                      key={emp.id}
+                      className="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-muted/40 transition-colors"
+                    >
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-input accent-primary"
+                        checked={selectedEmployeeIds.includes(emp.id)}
+                        onChange={() =>
+                          setSelectedEmployeeIds((prev) =>
+                            prev.includes(emp.id)
+                              ? prev.filter((id) => id !== emp.id)
+                              : [...prev, emp.id]
+                          )
+                        }
+                      />
+                      <div>
+                        <p className="text-sm font-medium">{emp.first_name} {emp.last_name}</p>
+                        {emp.designation && (
+                          <p className="text-xs text-muted-foreground">{emp.designation}</p>
+                        )}
+                      </div>
+                    </label>
+                  ))}
+                </div>
+                {selectedEmployeeIds.length === 0 && (
+                  <p className="text-xs text-muted-foreground">No employees selected — objectives will be saved for yourself.</p>
+                )}
+              </div>
+            )}
+
             {/* Period selection */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">

@@ -371,6 +371,7 @@ export async function submitSelfReview(
 const managerReviewSchema = z.object({
   manager_rating: z.number().min(1).max(5),
   manager_comments: z.string().min(1, "Please add your comments"),
+  manager_competency_ratings: z.record(z.number()).optional(),
 });
 
 export async function submitManagerReview(
@@ -400,6 +401,20 @@ export async function submitManagerReview(
     return { success: false, error: "You are not the assigned reviewer for this review" };
   }
 
+  let goalsUpdate: Record<string, any> | undefined;
+  if (validated.data.manager_competency_ratings && Object.keys(validated.data.manager_competency_ratings).length > 0) {
+    const { data: existingReview } = await supabase
+      .from("reviews")
+      .select("goals")
+      .eq("id", reviewId)
+      .eq("org_id", user.orgId)
+      .single();
+
+    const raw = (existingReview as any)?.goals;
+    const existing = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+    goalsUpdate = { ...existing, manager_competency_ratings: validated.data.manager_competency_ratings };
+  }
+
   const { error } = await supabase
     .from("reviews")
     .update({
@@ -407,6 +422,7 @@ export async function submitManagerReview(
       manager_comments: validated.data.manager_comments,
       status: "completed",
       completed_at: new Date().toISOString(),
+      ...(goalsUpdate ? { goals: goalsUpdate } : {}),
     })
     .eq("id", reviewId)
     .eq("org_id", user.orgId);

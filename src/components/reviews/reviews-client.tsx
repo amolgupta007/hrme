@@ -4,7 +4,7 @@ import * as React from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
   Plus, MoreHorizontal, PlayCircle, CheckCircle2, Trash2,
-  ClipboardList, Users, ChevronRight, ArrowLeft, AlertTriangle,
+  ClipboardList, Users, ChevronRight, ArrowLeft,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn, formatDate } from "@/lib/utils";

@@ -19,6 +19,7 @@ export type ReviewCycleWithStats = {
   start_date: string;
   end_date: string;
   created_at: string;
+  rating_scale: 3 | 5 | 10;
   total_reviews: number;
   completed_reviews: number;
 };
@@ -51,6 +52,7 @@ const cycleSchema = z.object({
   start_date: z.string().min(1, "Start date is required"),
   end_date: z.string().min(1, "End date is required"),
   employee_ids: z.array(z.string().uuid()).min(1, "Select at least one employee"),
+  rating_scale: z.union([z.literal(3), z.literal(5), z.literal(10)]).default(5),
 });
 
 export async function listReviewCycles(): Promise<ActionResult<ReviewCycleWithStats[]>> {
@@ -83,6 +85,7 @@ export async function listReviewCycles(): Promise<ActionResult<ReviewCycleWithSt
 
   const result = (cycles ?? []).map((c: any) => ({
     ...c,
+    rating_scale: (c.rating_scale as 3 | 5 | 10) ?? 5,
     total_reviews: statsMap[c.id]?.total ?? 0,
     completed_reviews: statsMap[c.id]?.completed ?? 0,
   }));
@@ -116,6 +119,7 @@ export async function createReviewCycle(
       start_date: validated.data.start_date,
       end_date: validated.data.end_date,
       status: "draft",
+      rating_scale: validated.data.rating_scale,
     })
     .select("id")
     .single();
@@ -275,6 +279,7 @@ export type MyReviewWithCycle = ReviewWithDetails & {
   cycle_name: string;
   cycle_start_date: string;
   cycle_end_date: string;
+  cycle_rating_scale: 3 | 5 | 10;
 };
 
 export async function listMyReviews(): Promise<ActionResult<MyReviewWithCycle[]>> {
@@ -286,7 +291,7 @@ export async function listMyReviews(): Promise<ActionResult<MyReviewWithCycle[]>
 
   const { data, error } = await supabase
     .from("reviews")
-    .select("*, review_cycles(name, start_date, end_date), employees!employee_id(first_name, last_name), reviewers:employees!reviewer_id(first_name, last_name)")
+    .select("*, review_cycles(name, start_date, end_date, rating_scale), employees!employee_id(first_name, last_name), reviewers:employees!reviewer_id(first_name, last_name)")
     .eq("employee_id", user.employeeId)
     .eq("org_id", user.orgId)
     .order("created_at", { ascending: false });
@@ -299,6 +304,7 @@ export async function listMyReviews(): Promise<ActionResult<MyReviewWithCycle[]>
     cycle_name: r.review_cycles?.name ?? "",
     cycle_start_date: r.review_cycles?.start_date ?? "",
     cycle_end_date: r.review_cycles?.end_date ?? "",
+    cycle_rating_scale: (r.review_cycles?.rating_scale as 3 | 5 | 10) ?? 5,
     employee_id: r.employee_id,
     reviewer_id: r.reviewer_id,
     employee_name: `${r.employees?.first_name ?? ""} ${r.employees?.last_name ?? ""}`.trim(),

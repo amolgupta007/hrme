@@ -15,6 +15,7 @@ import { CreateObjectiveDialog } from "./create-objective-dialog";
 import { ApproveDialog } from "./approve-dialog";
 import type { ObjectiveSet } from "@/actions/objectives";
 import { OBJECTIVE_TEMPLATES, type ObjectiveTemplate } from "@/config/objective-templates";
+import type { Employee } from "@/types";
 
 type Tab = "mine" | "approvals" | "all";
 
@@ -281,6 +282,7 @@ interface ObjectivesClientProps {
   allObjectives: ObjectiveSet[];
   isAdmin: boolean;
   hasDirectReports: boolean;
+  employees?: Employee[];
 }
 
 export function ObjectivesClient({
@@ -289,6 +291,7 @@ export function ObjectivesClient({
   allObjectives,
   isAdmin,
   hasDirectReports,
+  employees,
 }: ObjectivesClientProps) {
   const [tab, setTab] = React.useState<Tab>("mine");
   const [createOpen, setCreateOpen] = React.useState(false);
@@ -416,6 +419,8 @@ export function ObjectivesClient({
         onOpenChange={(v) => { setCreateOpen(v); if (!v) { setEditingObj(undefined); setSelectedTemplate(undefined); } }}
         editing={editingObj}
         template={selectedTemplate}
+        employees={isAdmin ? employees : undefined}
+        role={isAdmin ? "admin" : undefined}
       />
 
       {approvingObj && (

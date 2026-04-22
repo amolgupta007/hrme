@@ -69,6 +69,7 @@ export function ReviewsClient({ cycles, employees, cycleReviews, activeCycleId: 
   const [reviewDialog, setReviewDialog] = React.useState<{
     review: ReviewWithDetails;
     mode: "self" | "manager" | "view";
+    rating_scale?: 3 | 5 | 10;
   } | null>(null);
 
   const activeCycle = cycles.find((c) => c.id === activeCycleId) ?? null;
@@ -152,7 +153,7 @@ export function ReviewsClient({ cycles, employees, cycleReviews, activeCycleId: 
                   {r.status !== "pending" && (
                     <button
                       className="mt-1 text-xs text-primary hover:underline"
-                      onClick={() => setReviewDialog({ review: r, mode: r.status === "self_review" ? "self" : "view" })}
+                      onClick={() => setReviewDialog({ review: r, mode: r.status === "self_review" ? "self" : "view", rating_scale: (r as any).cycle_rating_scale ?? 5 })}
                     >
                       {r.status === "self_review" ? "Complete self-review" : "View"}
                     </button>
@@ -387,7 +388,7 @@ export function ReviewsClient({ cycles, employees, cycleReviews, activeCycleId: 
           review={reviewDialog.review}
           mode={reviewDialog.mode}
           performanceSettings={performanceSettings}
-          rating_scale={activeCycle?.rating_scale ?? 5}
+          rating_scale={reviewDialog.rating_scale ?? activeCycle?.rating_scale ?? 5}
         />
       )}
     </>

@@ -20,6 +20,12 @@ export function PerformanceSection({ initialSettings }: PerformanceSectionProps)
   const [labels, setLabels] = React.useState<[string, string, string, string, string]>(
     initialSettings.rating_labels
   );
+  const [labels3, setLabels3] = React.useState<[string, string, string]>(
+    initialSettings.rating_labels_3
+  );
+  const [labels10, setLabels10] = React.useState<[string, string, string]>(
+    initialSettings.rating_labels_10_anchors
+  );
   const [competencies, setCompetencies] = React.useState<string[]>(initialSettings.competencies);
   const [newCompetency, setNewCompetency] = React.useState("");
   const [selfReviewRequired, setSelfReviewRequired] = React.useState(initialSettings.self_review_required);
@@ -28,6 +34,22 @@ export function PerformanceSection({ initialSettings }: PerformanceSectionProps)
   function updateLabel(idx: number, value: string) {
     setLabels((prev) => {
       const next = [...prev] as [string, string, string, string, string];
+      next[idx] = value;
+      return next;
+    });
+  }
+
+  function updateLabel3(idx: number, value: string) {
+    setLabels3((prev) => {
+      const next = [...prev] as [string, string, string];
+      next[idx] = value;
+      return next;
+    });
+  }
+
+  function updateLabel10(idx: number, value: string) {
+    setLabels10((prev) => {
+      const next = [...prev] as [string, string, string];
       next[idx] = value;
       return next;
     });
@@ -47,10 +69,15 @@ export function PerformanceSection({ initialSettings }: PerformanceSectionProps)
   }
 
   async function handleSave() {
-    if (labels.some((l) => !l.trim())) { toast.error("All rating labels must be non-empty"); return; }
+    if (labels.some((l) => !l.trim()) || labels3.some((l) => !l.trim()) || labels10.some((l) => !l.trim())) {
+      toast.error("All rating labels must be filled in");
+      return;
+    }
     setLoading(true);
     const result = await updatePerformanceSettings({
       rating_labels: labels,
+      rating_labels_3: labels3,
+      rating_labels_10_anchors: labels10,
       competencies,
       self_review_required: selfReviewRequired,
     });
@@ -61,21 +88,63 @@ export function PerformanceSection({ initialSettings }: PerformanceSectionProps)
 
   return (
     <div className="space-y-6">
-      {/* Rating Labels */}
+      {/* 5-Point Rating Labels */}
       <div className="space-y-3">
         <div>
-          <p className="text-sm font-medium">Rating Labels</p>
-          <p className="text-xs text-muted-foreground mt-0.5">Customise the 5-star rating labels shown in reviews.</p>
+          <p className="text-sm font-medium">5-Point Rating Labels</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Labels for each position in the 5-point scale.</p>
         </div>
         <div className="grid grid-cols-5 gap-2">
           {labels.map((label, idx) => (
             <div key={idx} className="space-y-1">
-              <Label.Root className="text-xs text-muted-foreground">Star {idx + 1}</Label.Root>
+              <Label.Root className="text-xs text-muted-foreground">Point {idx + 1}</Label.Root>
               <input
                 className={cn(inputCn, "h-9 text-xs")}
                 value={label}
                 onChange={(e) => updateLabel(idx, e.target.value)}
                 placeholder={`Label ${idx + 1}`}
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 3-Point Rating Labels */}
+      <div className="space-y-3">
+        <div>
+          <p className="text-sm font-medium">3-Point Rating Labels</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Labels for each position in the 3-point scale.</p>
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          {labels3.map((label, idx) => (
+            <div key={idx} className="space-y-1">
+              <Label.Root className="text-xs text-muted-foreground">Point {idx + 1}</Label.Root>
+              <input
+                className={cn(inputCn, "h-9 text-xs")}
+                value={label}
+                onChange={(e) => updateLabel3(idx, e.target.value)}
+                placeholder={`Label ${idx + 1}`}
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 10-Point Anchor Labels */}
+      <div className="space-y-3">
+        <div>
+          <p className="text-sm font-medium">10-Point Anchor Labels</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Shown at positions 1, 5, and 10 on the 10-point scale.</p>
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          {(["Position 1", "Position 5", "Position 10"] as const).map((pos, idx) => (
+            <div key={idx} className="space-y-1">
+              <Label.Root className="text-xs text-muted-foreground">{pos}</Label.Root>
+              <input
+                className={cn(inputCn, "h-9 text-xs")}
+                value={labels10[idx]}
+                onChange={(e) => updateLabel10(idx, e.target.value)}
+                placeholder={pos}
               />
             </div>
           ))}

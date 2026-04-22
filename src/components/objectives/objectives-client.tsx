@@ -2,9 +2,10 @@
 
 import * as React from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import * as Dialog from "@radix-ui/react-dialog";
 import {
   Target, Plus, MoreHorizontal, Send, Trash2, CheckCircle2,
-  XCircle, Clock, ChevronDown, ChevronRight, Edit2, RotateCcw,
+  XCircle, Clock, ChevronDown, ChevronRight, Edit2, RotateCcw, Sliders,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -13,6 +14,7 @@ import { submitObjectives, deleteObjectiveSet } from "@/actions/objectives";
 import { CreateObjectiveDialog } from "./create-objective-dialog";
 import { ApproveDialog } from "./approve-dialog";
 import type { ObjectiveSet } from "@/actions/objectives";
+import { OBJECTIVE_TEMPLATES, type ObjectiveTemplate } from "@/config/objective-templates";
 
 type Tab = "mine" | "approvals" | "all";
 
@@ -56,6 +58,7 @@ function ObjectiveCard({
   onEdit: (obj: ObjectiveSet) => void;
 }) {
   const [expanded, setExpanded] = React.useState(false);
+  const [deleteOpen, setDeleteOpen] = React.useState(false);
   const totalWeight = obj.items.reduce((s, i) => s + i.weight, 0);
 
   async function handleSubmit() {
@@ -65,10 +68,10 @@ function ObjectiveCard({
   }
 
   async function handleDelete() {
-    if (!confirm(`Delete objectives for ${obj.period_label}?`)) return;
     const result = await deleteObjectiveSet(obj.id);
     if (result.success) toast.success("Deleted");
     else toast.error(result.error);
+    setDeleteOpen(false);
   }
 
   return (
@@ -97,6 +100,18 @@ function ObjectiveCard({
         <span className={cn("rounded-full px-2.5 py-0.5 text-xs font-medium shrink-0", STATUS_STYLES[obj.status])}>
           {STATUS_LABELS[obj.status]}
         </span>
+        {(() => {
+          if (obj.status !== "approved") return null;
+          const ratedItems = obj.items.filter((i) => i.manager_rating !== null);
+          if (ratedItems.length === 0) return null;
+          const totalW = ratedItems.reduce((s, i) => s + i.weight, 0);
+          const score = ratedItems.reduce((s, i) => s + i.weight * (i.manager_rating ?? 0), 0) / totalW;
+          return (
+            <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground shrink-0">
+              {score.toFixed(1)}/5
+            </span>
+          );
+        })()}
 
         {/* Actions */}
         {tab !== "approvals" && (
@@ -138,10 +153,11 @@ function ObjectiveCard({
                 {(obj.status === "draft" || obj.status === "rejected") && (
                   <DropdownMenu.Item
                     className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm cursor-pointer hover:bg-accent outline-none text-destructive"
-                    onClick={handleDelete}
+                    onClick={() => setDeleteOpen(true)}
                   >
                     <Trash2 className="h-4 w-4" /> Delete
                   </DropdownMenu.Item>
+
                 )}
               </DropdownMenu.Content>
             </DropdownMenu.Portal>
@@ -237,6 +253,24 @@ function ObjectiveCard({
           </div>
         </div>
       )}
+
+      <Dialog.Root open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-50 bg-black/50 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-xl bg-background p-6 shadow-lg data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95">
+            <Dialog.Title className="text-base font-semibold">Delete Objectives</Dialog.Title>
+            <Dialog.Description className="mt-2 text-sm text-muted-foreground">
+              Delete objectives for <strong>{obj.period_label}</strong>? This cannot be undone.
+            </Dialog.Description>
+            <div className="mt-5 flex justify-end gap-3">
+              <Dialog.Close asChild>
+                <Button variant="outline" size="sm">Cancel</Button>
+              </Dialog.Close>
+              <Button variant="destructive" size="sm" onClick={handleDelete}>Delete</Button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </div>
   );
 }
@@ -260,6 +294,7 @@ export function ObjectivesClient({
   const [createOpen, setCreateOpen] = React.useState(false);
   const [editingObj, setEditingObj] = React.useState<ObjectiveSet | undefined>();
   const [approvingObj, setApprovingObj] = React.useState<ObjectiveSet | undefined>();
+  const [selectedTemplate, setSelectedTemplate] = React.useState<ObjectiveTemplate | undefined>();
 
   const showApprovals = hasDirectReports || pendingApprovals.length > 0;
 
@@ -279,7 +314,7 @@ export function ObjectivesClient({
           <p className="mt-1 text-muted-foreground">Set, track, and review quarterly and annual goals.</p>
         </div>
         {tab === "mine" && (
-          <Button onClick={() => { setEditingObj(undefined); setCreateOpen(true); }}>
+          <Button onClick={() => { setEditingObj(undefined); setSelectedTemplate(undefined); setCreateOpen(true); }}>
             <Plus className="mr-2 h-4 w-4" />
             Set Objectives
           </Button>
@@ -313,23 +348,53 @@ export function ObjectivesClient({
 
       {/* Content */}
       {currentList.length === 0 ? (
-        <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border py-16 text-center">
-          <Target className="h-10 w-10 text-muted-foreground/40" />
-          <div>
-            <p className="font-medium text-sm">
-              {tab === "mine" ? "No objectives yet" :
-               tab === "approvals" ? "No pending approvals" :
-               "No objectives in this org yet"}
-            </p>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              {tab === "mine" ? "Set your objectives for the current quarter or year." : ""}
-            </p>
-          </div>
-          {tab === "mine" && (
-            <Button variant="outline" size="sm" onClick={() => { setEditingObj(undefined); setCreateOpen(true); }}>
-              <Plus className="mr-2 h-4 w-4" />
-              Set Objectives
-            </Button>
+        <div className="space-y-4">
+          {tab === "mine" ? (
+            <>
+              <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-border py-8 text-center">
+                <Target className="h-10 w-10 text-muted-foreground/40" />
+                <div>
+                  <p className="font-medium text-sm">No objectives yet</p>
+                  <p className="text-sm text-muted-foreground mt-0.5">Start from a template or create from scratch.</p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => { setEditingObj(undefined); setSelectedTemplate(undefined); setCreateOpen(true); }}
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Start from scratch
+                </Button>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3">Or start from a template</p>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  {OBJECTIVE_TEMPLATES.map((tmpl) => (
+                    <button
+                      key={tmpl.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedTemplate(tmpl);
+                        setEditingObj(undefined);
+                        setCreateOpen(true);
+                      }}
+                      className="rounded-xl border border-border bg-card p-4 text-left hover:border-primary hover:bg-primary/5 transition-colors group"
+                    >
+                      <Sliders className="h-5 w-5 text-primary mb-2" />
+                      <p className="text-sm font-medium">{tmpl.name}</p>
+                      <p className="text-xs text-muted-foreground mt-1">{tmpl.description}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border py-16 text-center">
+              <Target className="h-10 w-10 text-muted-foreground/40" />
+              <p className="font-medium text-sm">
+                {tab === "approvals" ? "No pending approvals" : "No objectives in this org yet"}
+              </p>
+            </div>
           )}
         </div>
       ) : (
@@ -348,8 +413,9 @@ export function ObjectivesClient({
 
       <CreateObjectiveDialog
         open={createOpen}
-        onOpenChange={(v) => { setCreateOpen(v); if (!v) setEditingObj(undefined); }}
+        onOpenChange={(v) => { setCreateOpen(v); if (!v) { setEditingObj(undefined); setSelectedTemplate(undefined); } }}
         editing={editingObj}
+        template={selectedTemplate}
       />
 
       {approvingObj && (

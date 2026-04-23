@@ -378,8 +378,12 @@ export default async function DashboardPage() {
             <div className="divide-y divide-border">
               {whoIsOut.map((person) => (
                 <div key={person.id} className="flex items-center gap-3 px-4 py-2.5">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold text-muted-foreground">
-                    {getInitials(person.name)}
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold text-muted-foreground overflow-hidden">
+                    {person.avatar_url ? (
+                      <img src={person.avatar_url} alt={person.name} className="h-8 w-8 object-cover rounded-full" />
+                    ) : (
+                      getInitials(person.name)
+                    )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{person.name}</p>

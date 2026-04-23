@@ -56,6 +56,7 @@ export type WhoIsOut = {
   name: string;
   leave_type: string;
   until: string; // end_date
+  avatar_url: string | null;
 };
 
 export type LatestAnnouncement = {
@@ -201,7 +202,7 @@ export async function getDashboardData(): Promise<DashboardData | null> {
     // Who's out today
     supabase
       .from("leave_requests")
-      .select("id, leave_type, end_date, employees!employee_id(first_name, last_name)")
+      .select("id, leave_type, end_date, employees!employee_id(first_name, last_name, avatar_url)")
       .eq("org_id", orgId)
       .eq("status", "approved")
       .lte("start_date", today)
@@ -309,6 +310,7 @@ export async function getDashboardData(): Promise<DashboardData | null> {
     name: `${r.employees?.first_name ?? ""} ${r.employees?.last_name ?? ""}`.trim(),
     leave_type: r.leave_type,
     until: r.end_date,
+    avatar_url: r.employees?.avatar_url ?? null,
   }));
 
   // Latest announcements

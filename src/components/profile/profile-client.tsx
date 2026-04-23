@@ -99,8 +99,12 @@ export function ProfileClient({ profile }: { profile: EmployeeProfile }) {
       {/* Header card */}
       <div className="rounded-xl border border-border bg-card p-6 flex items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 text-primary text-xl font-bold shrink-0">
-            {getInitials(fullName)}
+          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 text-primary text-xl font-bold shrink-0 overflow-hidden">
+            {profile.avatar_url ? (
+              <img src={profile.avatar_url} alt={fullName} className="h-16 w-16 object-cover rounded-full" />
+            ) : (
+              getInitials(fullName)
+            )}
           </div>
           <div>
             <h2 className="text-xl font-bold">{fullName}</h2>

@@ -139,10 +139,14 @@ function EmployeeCard({ employee: e }: { employee: DirectoryEmployee }) {
       <div className="flex items-center gap-3">
         <div className="relative shrink-0">
           <div className={cn(
-            "flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-base ring-2",
+            "flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-base ring-2 overflow-hidden",
             deptRingColor(e.department_name)
           )}>
-            {getInitials(fullName)}
+            {e.avatar_url ? (
+              <img src={e.avatar_url} alt={fullName} className="h-16 w-16 object-cover rounded-full" />
+            ) : (
+              getInitials(fullName)
+            )}
           </div>
           {/* Status dot */}
           <span className={cn(

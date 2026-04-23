@@ -224,10 +224,14 @@ function EmployeeNodeCard({
     )}>
       {/* Avatar */}
       <div className={cn(
-        "shrink-0 flex items-center justify-center rounded-full bg-primary/10 text-primary font-bold",
+        "shrink-0 flex items-center justify-center rounded-full bg-primary/10 text-primary font-bold overflow-hidden",
         isRoot ? "h-11 w-11 text-sm" : "h-9 w-9 text-xs"
       )}>
-        {getInitials(fullName)}
+        {node.avatar_url ? (
+          <img src={node.avatar_url} alt={fullName} className={cn("object-cover rounded-full", isRoot ? "h-11 w-11" : "h-9 w-9")} />
+        ) : (
+          getInitials(fullName)
+        )}
       </div>
 
       {/* Info */}

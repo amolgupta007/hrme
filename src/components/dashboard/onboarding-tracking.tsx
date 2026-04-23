@@ -95,8 +95,12 @@ export function OnboardingTracking({
                   <tr key={emp.id} className="hover:bg-muted/30 transition-colors">
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-semibold shrink-0">
-                          {getInitials(`${emp.first_name} ${emp.last_name}`)}
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-semibold shrink-0 overflow-hidden">
+                          {emp.avatar_url ? (
+                            <img src={emp.avatar_url} alt={`${emp.first_name} ${emp.last_name}`} className="h-8 w-8 object-cover rounded-full" />
+                          ) : (
+                            getInitials(`${emp.first_name} ${emp.last_name}`)
+                          )}
                         </div>
                         <span className="font-medium">
                           {emp.first_name} {emp.last_name}

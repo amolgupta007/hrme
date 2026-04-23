@@ -114,8 +114,12 @@ export function EmployeeTable({
                   {/* Employee: avatar + name + email + role badge */}
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-semibold">
-                        {getInitials(fullName)}
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-semibold overflow-hidden">
+                        {emp.avatar_url ? (
+                          <img src={emp.avatar_url} alt={fullName} className="h-9 w-9 object-cover rounded-full" />
+                        ) : (
+                          getInitials(fullName)
+                        )}
                       </div>
                       <div>
                         <div className="flex items-center gap-2 flex-wrap">

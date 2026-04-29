@@ -8,6 +8,7 @@ import { PostHogProvider } from "@/components/layout/posthog-provider";
 import "./globals.css";
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://jambahr.com"),
   title: {
     default: "JambaHR — HR Management for Growing Teams",
     template: "%s | JambaHR",

@@ -27,6 +27,9 @@ export const metadata: Metadata = {
     icon: "/Jamba.png",
     apple: "/Jamba.png",
   },
+  verification: {
+    google: "GM2nCMjkhoEhVgyioiWxGN842WiznpbwFMGsuym00UQ",
+  },
 };
 
 export default function RootLayout({

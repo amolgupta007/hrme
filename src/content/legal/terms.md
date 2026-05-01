@@ -12,23 +12,23 @@ version: 2026-05-01
 
 Welcome to __JambaHR__ \("Platform", "Service", "we", "our", "us"\)\.
 
-These Terms of Service \("Terms"\) govern your access to and use of JambaHR’s software platform, website, applications, and related services\.
+These Terms of Service \("Terms"\) govern your access to and use of JambaHR's software platform, website, applications, and related services\.
 
 By accessing or using JambaHR, you agree to be legally bound by these Terms\.
 
 If you do not agree, you must not use the platform\.
 
-__1\. Definitions__
+## 1. Definitions
 
-__“Company”__
+### "Company"
 
 Refers to the organization/business purchasing or subscribing to JambaHR\.
 
-__“Authorized Users”__
+### "Authorized Users"
 
 Employees, HR personnel, administrators, recruiters, managers, contractors, or representatives authorized by the Company\.
 
-__“Employee Data”__
+### "Employee Data"
 
 Includes:
 
@@ -42,11 +42,11 @@ Includes:
 - Recruitment information 
 - Uploaded files 
 
-__“Services”__
+### "Services"
 
 Refers to all software, products, applications, APIs, dashboards, and services offered by JambaHR\.
 
-__2\. Eligibility__
+## 2. Eligibility
 
 You must:
 
@@ -54,7 +54,7 @@ You must:
 - Have authority to bind your organization 
 - Use the platform for lawful business purposes only 
 
-__3\. Account Registration__
+## 3. Account Registration
 
 To use JambaHR:
 
@@ -65,7 +65,7 @@ To use JambaHR:
 
 You must immediately notify us of unauthorized access\.
 
-__4\. Subscription Plans & Billing__
+## 4. Subscription Plans & Billing
 
 JambaHR may offer:
 
@@ -82,7 +82,7 @@ Failure to pay may result in:
 - Account restriction 
 - Termination 
 
-__5\. Free Trials / Demo Accounts__
+## 5. Free Trials / Demo Accounts
 
 We may provide:
 
@@ -98,7 +98,7 @@ These may have:
 
 We may revoke trial access anytime\.
 
-__6\. Customer Responsibilities__
+## 6. Customer Responsibilities
 
 Customers are solely responsible for:
 
@@ -112,7 +112,7 @@ JambaHR provides software tools only\.
 
 We do not act as your employer, payroll provider, legal advisor, or HR consultant\.
 
-__7\. Acceptable Use Policy__
+## 7. Acceptable Use Policy
 
 You agree NOT to:
 
@@ -125,7 +125,7 @@ You agree NOT to:
 - Violate privacy laws 
 - Use the platform fraudulently 
 
-__8\. Employee Data Ownership__
+## 8. Employee Data Ownership
 
 Your company retains ownership of all employee data uploaded to JambaHR\.
 
@@ -133,7 +133,7 @@ We do not claim ownership\.
 
 We only process data to provide platform services\.
 
-__9\. Data Security__
+## 9. Data Security
 
 JambaHR implements reasonable security measures including:
 
@@ -153,7 +153,7 @@ We do not disclose employee data to unrelated third parties unless:
 - Required for service infrastructure providers 
 - Authorized by customer 
 
-__10\. Confidentiality__
+## 10. Confidentiality
 
 Both parties agree to maintain confidentiality regarding:
 
@@ -165,7 +165,7 @@ Both parties agree to maintain confidentiality regarding:
 
 This obligation survives termination\.
 
-__11\. Intellectual Property Rights__
+## 11. Intellectual Property Rights
 
 All rights related to:
 
@@ -180,7 +180,7 @@ Remain solely owned by JambaHR\.
 
 Customers receive a limited license to use the software\.
 
-__12\. Third\-Party Integrations__
+## 12. Third-Party Integrations
 
 JambaHR may integrate with third\-party providers such as:
 
@@ -193,7 +193,7 @@ We are not responsible for third\-party outages or policies\.
 
 Examples may include Google Workspace, Microsoft, or Slack Technologies integrations if enabled\.
 
-__13\. Platform Availability__
+## 13. Platform Availability
 
 We aim for high uptime but do not guarantee uninterrupted service\.
 
@@ -204,7 +204,7 @@ Service may be impacted by:
 - Infrastructure failures 
 - Third\-party outages 
 
-__14\. Service Modifications__
+## 14. Service Modifications
 
 We may:
 
@@ -215,7 +215,7 @@ We may:
 
 We will provide reasonable notice where required\.
 
-__15\. Compliance With Laws__
+## 15. Compliance With Laws
 
 Customers must comply with:
 
@@ -226,7 +226,7 @@ Customers must comply with:
 
 For India, this may include evolving requirements under the Ministry of Electronics and Information Technology and applicable digital privacy regulations\.
 
-__16\. Limitation of Liability__
+## 16. Limitation of Liability
 
 To the maximum extent allowed by law:
 
@@ -241,7 +241,7 @@ JambaHR shall not be liable for:
 
 Our total liability shall not exceed fees paid in the previous 12 months\.
 
-__17\. Indemnification__
+## 17. Indemnification
 
 Customers agree to indemnify JambaHR against claims arising from:
 
@@ -251,7 +251,7 @@ Customers agree to indemnify JambaHR against claims arising from:
 - Unauthorized employee data collection 
 - Breach of customer obligations 
 
-__18\. Termination by Customer__
+## 18. Termination by Customer
 
 Customers may terminate subscription by:
 
@@ -259,7 +259,7 @@ Customers may terminate subscription by:
 - Providing required notice 
 - Paying outstanding dues 
 
-__19\. Termination by JambaHR__
+## 19. Termination by JambaHR
 
 We may suspend or terminate accounts for:
 
@@ -268,7 +268,7 @@ We may suspend or terminate accounts for:
 - Security threats 
 - Abuse of platform 
 
-__20\. Data Retention After Termination__
+## 20. Data Retention After Termination
 
 After termination:
 
@@ -277,13 +277,13 @@ After termination:
 
 Customers should export records before termination\.
 
-__21\. Backup & Disaster Recovery__
+## 21. Backup & Disaster Recovery
 
 While we maintain backups, customers are encouraged to maintain copies of critical records\.
 
 We are not liable for catastrophic events beyond reasonable control\.
 
-__22\. Beta Features__
+## 22. Beta Features
 
 Beta features are provided:
 
@@ -291,11 +291,11 @@ Beta features are provided:
 - Without guarantees 
 - Subject to change/removal 
 
-__23\. Governing Law__
+## 23. Governing Law
 
 These Terms shall be governed by the laws of India\.
 
-__24\. Dispute Resolution__
+## 24. Dispute Resolution
 
 Any disputes shall first attempt informal resolution\.
 
@@ -307,7 +307,7 @@ Jurisdiction: Pune, Maharashtra, India\.
 
 Pune
 
-__25\. Force Majeure__
+## 25. Force Majeure
 
 We are not liable for delays caused by:
 
@@ -318,22 +318,21 @@ We are not liable for delays caused by:
 - Cyber attacks 
 - Infrastructure failures 
 
-__26\. Changes to Terms__
+## 26. Changes to Terms
 
 We may update these Terms periodically\.
 
 Continued use means acceptance of updated Terms\.
 
-__27\. Entire Agreement__
+## 27. Entire Agreement
 
 These Terms, Privacy Policy, and service agreements constitute the full agreement between parties\.
 
-__28\. Contact Information__
+## 28. Contact Information
 
 For legal inquiries:
 
-__JambaHR__  
+**JambaHR**  
 Email: support@jambahr\.com  
 Website: www\.jambahr\.com  
 Location: Pune
-

@@ -1,8 +1,8 @@
 ---
 title: Privacy Policy
 slug: privacy
-effective: 2026-05-01
-version: 2026-05-01
+effective: "2026-05-01"
+version: "2026-05-01"
 ---
 
 # JambaHR Privacy Policy

@@ -1,8 +1,8 @@
 ---
 title: Terms of Service
 slug: terms
-effective: 2026-05-01
-version: 2026-05-01
+effective: "2026-05-01"
+version: "2026-05-01"
 ---
 
 # Terms of Service

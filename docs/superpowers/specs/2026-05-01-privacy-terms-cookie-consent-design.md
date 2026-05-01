@@ -79,13 +79,22 @@ src/app/terms/page.tsx                 ← public routes
 `organizations` table gets three new columns:
 
 ```sql
-ALTER TABLE organizations
-  ADD COLUMN privacy_policy_accepted_at TIMESTAMPTZ,
-  ADD COLUMN terms_accepted_at TIMESTAMPTZ,
-  ADD COLUMN policy_version_accepted TEXT;
+alter table organizations
+  add column if not exists privacy_policy_accepted_at timestamptz,
+  add column if not exists terms_accepted_at timestamptz,
+  add column if not exists policy_version_accepted text;
 ```
 
 `policy_version_accepted` is a single string like `"2026-05-01"` matching the `effective` date frontmatter on the markdown docs. One field covers both docs since they version together.
+
+**Data type rationale** (per Supabase Postgres best practices):
+- `timestamptz` (not `timestamp`) so consent timestamps are timezone-aware — matters for legal audit across regions.
+- `text` (not `varchar(n)`) for the version string — same performance, no artificial length limit.
+- Lowercase snake_case identifiers — consistent with the rest of the schema, no quoting required.
+
+**No index needed.** These columns are written once at org creation and read at most once per dashboard request (only if we add re-prompting later, which is v2). Postgres can sequential-scan the `organizations` table cheaply since it has very few rows. Adding an index now would be premature optimization.
+
+**`if not exists`** keeps the `ALTER TABLE` idempotent — safe to re-run if a partial migration occurs. Postgres ≥ 9.6 supports this clause.
 
 Run via Supabase Dashboard SQL Editor (per the project's migration convention — new tables/columns are not in `001_initial_schema.sql`).
 

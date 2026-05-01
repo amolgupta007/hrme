@@ -37,6 +37,16 @@ export function hasPermission(
   return ROLE_HIERARCHY[userRole] >= ROLE_HIERARCHY[requiredRole];
 }
 
+// ---- Billing ----
+export type BillingCycle = "monthly" | "annual";
+
+export type SubscriptionStatus =
+  | "active"
+  | "paused"
+  | "halted"
+  | "pending"
+  | "cancelled";
+
 // ---- Navigation ----
 export interface NavItem {
   title: string;

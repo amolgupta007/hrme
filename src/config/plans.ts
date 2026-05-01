@@ -1,4 +1,4 @@
-export type OrgPlan = "starter" | "growth" | "business";
+export type OrgPlan = "starter" | "growth" | "business" | "custom";
 
 export type PlanFeature =
   | "documents"
@@ -45,6 +45,8 @@ export const PLAN_FEATURES: Record<OrgPlan, PlanFeature[]> = {
     "offer_letters",
     "onboarding_workflows",
   ],
+  // Phase 3: per-org feature set read at runtime from custom_features JSONB column
+  custom: [],
 };
 
 export function hasFeature(plan: OrgPlan, feature: PlanFeature): boolean {
@@ -55,12 +57,14 @@ export const PLAN_LABELS: Record<OrgPlan, string> = {
   starter: "Starter",
   growth: "Growth",
   business: "Business",
+  custom: "Custom",
 };
 
 export const PLAN_COLORS: Record<OrgPlan, string> = {
   starter: "bg-gray-100 text-gray-700",
   growth: "bg-teal-100 text-teal-700",
   business: "bg-amber-100 text-amber-700",
+  custom: "bg-amber-100 text-amber-700",
 };
 
 // What each paid plan unlocks — shown in the upgrade gate

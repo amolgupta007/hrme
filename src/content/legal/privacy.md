@@ -10,19 +10,19 @@ version: 2026-05-01
 **Effective Date:** 2026-05-01  
 **Last Updated:** 2026-05-01
 
-Welcome to JambaHR \(“__JambaHR__,” “__we__,” “our,” or “us”\)\.
+Welcome to JambaHR \("__JambaHR__," "__we__," "our," or "us"\)\.
 
-JambaHR is a Software\-as\-a\-Service \(“SaaS”\) platform designed to help businesses manage human resource functions including but not limited to employee records, attendance tracking, leave management, payroll integrations, performance management, recruitment, onboarding, document storage, compliance workflows, and other HR\-related operations\.
+JambaHR is a Software\-as\-a\-Service \("SaaS"\) platform designed to help businesses manage human resource functions including but not limited to employee records, attendance tracking, leave management, payroll integrations, performance management, recruitment, onboarding, document storage, compliance workflows, and other HR\-related operations\.
 
 This Privacy Policy explains how we collect, use, store, process, and protect personal information when organizations use JambaHR\.
 
 By accessing or using JambaHR, you agree to the practices described in this Privacy Policy\.
 
-__1\. INFORMATION WE COLLECT__
+## 1. Information We Collect
 
 We may collect the following categories of information:
 
-__A\. Organization Information__
+### A. Organization Information
 
 When a company signs up for JambaHR, we may collect:
 
@@ -33,7 +33,7 @@ When a company signs up for JambaHR, we may collect:
 - Billing details 
 - Subscription/payment information 
 
-__B\. Employee Information \(Uploaded by Client Organizations\)__
+### B. Employee Information (Uploaded by Client Organizations)
 
 Organizations using JambaHR may upload employee\-related information including:
 
@@ -54,7 +54,7 @@ Organizations using JambaHR may upload employee\-related information including:
 
 This employee data is uploaded and controlled by the client organization\.
 
-__C\. Usage Information__
+### C. Usage Information
 
 We may automatically collect:
 
@@ -66,11 +66,11 @@ We may automatically collect:
 - Audit logs 
 - Cookies/session data 
 
-__2\. OUR ROLE AS A DATA PROCESSOR__
+## 2. Our Role as a Data Processor
 
 JambaHR primarily acts as a __data processor/service provider__\.
 
-The organization using JambaHR \(“Client Organization”\) acts as the __data controller/data fiduciary__, and determines:
+The organization using JambaHR \("Client Organization"\) acts as the __data controller/data fiduciary__, and determines:
 
 - What employee data is uploaded 
 - Who can access employee data 
@@ -79,7 +79,7 @@ The organization using JambaHR \(“Client Organization”\) acts as the __data 
 
 JambaHR processes employee data only based on instructions provided by the client organization\.
 
-__3\. HOW WE USE INFORMATION__
+## 3. How We Use Information
 
 We use information to:
 
@@ -99,11 +99,11 @@ We do __not__ monetize employee information\.
 
 We do __not__ share employee information with unrelated third parties for marketing purposes\.
 
-__4\. STRICT DATA ACCESS LIMITATIONS__
+## 4. Strict Data Access Limitations
 
-One of JambaHR’s core privacy commitments is strict internal data isolation\.
+One of JambaHR's core privacy commitments is strict internal data isolation\.
 
-__Employee Data Visibility__
+### Employee Data Visibility
 
 Employee data remains private within the client organization\.
 
@@ -120,7 +120,7 @@ A recruiter may only see hiring\-related data\.
 A payroll administrator may only see compensation data\.  
 Managers may only view team\-specific information\.
 
-__JambaHR Internal Team Access Restrictions__
+### JambaHR Internal Team Access Restrictions
 
 JambaHR employees, contractors, founders, and administrators do __not__ have unrestricted access to employee data\.
 
@@ -138,7 +138,7 @@ Such access, if ever granted:
 - Is audited 
 - Is minimized to the least amount necessary 
 
-__5\. DATA SECURITY__
+## 5. Data Security
 
 We take security seriously and implement industry\-standard protections including:
 
@@ -156,11 +156,11 @@ We take security seriously and implement industry\-standard protections includin
 
 While no digital system is 100% immune to risks, we continuously work to maintain high security standards\.
 
-__6\. DATA SHARING__
+## 6. Data Sharing
 
 We may share limited information only with:
 
-__Service Providers__
+### Service Providers
 
 Third\-party vendors that help us operate our platform, such as:
 
@@ -171,7 +171,7 @@ Third\-party vendors that help us operate our platform, such as:
 
 These providers are contractually obligated to maintain confidentiality\.
 
-__Legal Requirements__
+### Legal Requirements
 
 We may disclose information if required by:
 
@@ -180,11 +180,11 @@ We may disclose information if required by:
 - Legal investigations 
 - Regulatory obligations 
 
-__Business Transfers__
+### Business Transfers
 
 If JambaHR undergoes merger, acquisition, or restructuring, user data may be transferred subject to confidentiality obligations\.
 
-__7\. CLIENT RESPONSIBILITIES__
+## 7. Client Responsibilities
 
 Organizations using JambaHR are responsible for:
 
@@ -197,9 +197,9 @@ Organizations using JambaHR are responsible for:
 
 Client organizations must ensure that employee information remains confidential within their own internal teams\.
 
-Improper internal sharing by client employees is outside JambaHR’s liability\.
+Improper internal sharing by client employees is outside JambaHR's liability\.
 
-__8\. DATA RETENTION__
+## 8. Data Retention
 
 We retain data:
 
@@ -213,7 +213,7 @@ Upon account termination:
 - Data may be deleted after a defined retention period 
 - Certain records may be retained where legally required 
 
-__9\. EMPLOYEE RIGHTS__
+## 9. Employee Rights
 
 Where applicable under law, employees may have rights to:
 
@@ -238,17 +238,17 @@ JambaHR uses cookies and similar tracking technologies for the following purpose
 
 You can change your cookie preference at any time using the **Cookie settings** link in the footer of the site. You may also manage or delete cookies through your browser settings; note that disabling session cookies will prevent you from signing in.
 
-__11\. INTERNATIONAL DATA TRANSFERS__
+## 11. International Data Transfers
 
-If data is processed outside the user’s country, we ensure reasonable safeguards are in place consistent with applicable law\.
+If data is processed outside the user's country, we ensure reasonable safeguards are in place consistent with applicable law\.
 
-__12\. CHILDREN’S PRIVACY__
+## 12. Children's Privacy
 
 JambaHR is not intended for individuals under 18 years of age\.
 
 We do not knowingly collect data from minors\.
 
-__13\. LIMITATION OF LIABILITY__
+## 13. Limitation of Liability
 
 JambaHR shall not be liable for privacy breaches caused by:
 
@@ -259,7 +259,7 @@ JambaHR shall not be liable for privacy breaches caused by:
 
 Clients are responsible for properly managing their internal HR privacy workflows\.
 
-__14\. CHANGES TO THIS POLICY__
+## 14. Changes to This Policy
 
 We may update this Privacy Policy periodically\.
 
@@ -269,11 +269,10 @@ We will notify users of material changes via:
 - Platform notifications 
 - Website updates 
 
-__15\. CONTACT INFORMATION__
+## 15. Contact Information
 
 For privacy\-related concerns, contact:
 
-__JambaHR Privacy Team__  
+**JambaHR Privacy Team**  
 Email: support@jambahr\.com  
 Website: jambahr\.com
-

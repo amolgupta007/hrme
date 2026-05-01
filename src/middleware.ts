@@ -13,6 +13,8 @@ const isPublicRoute = createRouteMatcher([
   "/api/attendance/punch",
   "/sitemap.xml",
   "/robots.txt",
+  "/privacy",
+  "/terms",
 ]);
 
 const isSuperadminPublic = createRouteMatcher([

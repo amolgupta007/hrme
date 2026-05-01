@@ -96,7 +96,9 @@ alter table organizations
 
 **`if not exists`** keeps the `ALTER TABLE` idempotent — safe to re-run if a partial migration occurs. Postgres ≥ 9.6 supports this clause.
 
-Run via Supabase Dashboard SQL Editor (per the project's migration convention — new tables/columns are not in `001_initial_schema.sql`).
+**RLS posture is unchanged.** `organizations` already has RLS enabled. Adding columns to an existing RLS-enabled table does not change the policy surface — no new policies required. The admin Supabase client used in `syncOrgToSupabase` bypasses RLS for the write, which is the project's documented server-action pattern.
+
+Run via Supabase Dashboard SQL Editor (per the project's migration convention — the Supabase CLI does not install globally on Windows, and new tables/columns since the initial migration are not in `001_initial_schema.sql`).
 
 ### UI change
 `src/app/onboarding/page.tsx`, step 2, above the "Launch JambaHR" button:

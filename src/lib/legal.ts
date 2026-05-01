@@ -16,6 +16,12 @@ export type LegalDoc = {
   content: string;
 };
 
+function toIsoDateString(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (value instanceof Date) return value.toISOString().split("T")[0];
+  return "";
+}
+
 export async function getLegalDoc(slug: LegalSlug): Promise<LegalDoc | null> {
   const filePath = path.join(LEGAL_DIR, `${slug}.md`);
   if (!fs.existsSync(filePath)) return null;
@@ -30,9 +36,9 @@ export async function getLegalDoc(slug: LegalSlug): Promise<LegalDoc | null> {
 
   return {
     slug,
-    title: data.title ?? "",
-    effective: data.effective ?? "",
-    version: data.version ?? "",
+    title: typeof data.title === "string" ? data.title : "",
+    effective: toIsoDateString(data.effective),
+    version: toIsoDateString(data.version),
     content: processed.toString(),
   };
 }

@@ -29,8 +29,8 @@ async function main() {
       `---\n` +
       `title: ${s.title}\n` +
       `slug: ${s.slug}\n` +
-      `effective: ${VERSION}\n` +
-      `version: ${VERSION}\n` +
+      `effective: "${VERSION}"\n` +
+      `version: "${VERSION}"\n` +
       `---\n\n`;
     const outPath = path.join(OUT_DIR, `${s.slug}.md`);
     fs.writeFileSync(outPath, frontmatter + markdown);

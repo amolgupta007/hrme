@@ -51,7 +51,7 @@ function loadRazorpayScript(): Promise<boolean> {
 
 export function BillingSection({ profile }: BillingSectionProps) {
   const [loading, setLoading] = useState<"growth" | "business" | null>(null);
-  const plan = PLAN_INFO[profile.plan] ?? PLAN_INFO.starter;
+  const plan = (PLAN_INFO as Record<string, typeof PLAN_INFO.starter | undefined>)[profile.plan] ?? PLAN_INFO.starter;
   const usagePct = Math.min(100, Math.round((profile.employee_count / profile.max_employees) * 100));
   const nearLimit = usagePct >= 80;
 

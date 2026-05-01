@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { AnimateIn } from "@/components/ui/animate-in";
+import { CookieSettingsButton } from "@/components/layout/cookie-settings-button";
 
 const features = [
   {
@@ -495,6 +496,14 @@ export default function HomePage() {
                 <div className="space-y-1.5 text-muted-foreground">
                   <a href="mailto:support@jambahr.com" className="block hover:text-foreground transition-colors">Contact</a>
                   <a href="https://www.linkedin.com/company/jambahr" target="_blank" rel="noopener noreferrer" className="block hover:text-foreground transition-colors">LinkedIn</a>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <p className="font-semibold text-foreground">Legal</p>
+                <div className="space-y-1.5 text-muted-foreground">
+                  <Link href="/privacy" className="block hover:text-foreground transition-colors">Privacy Policy</Link>
+                  <Link href="/terms" className="block hover:text-foreground transition-colors">Terms of Service</Link>
+                  <CookieSettingsButton />
                 </div>
               </div>
             </div>

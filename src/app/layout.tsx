@@ -5,6 +5,7 @@ import { ClerkProvider } from "@clerk/nextjs";
 import { Toaster } from "sonner";
 import { Suspense } from "react";
 import { PostHogProvider } from "@/components/layout/posthog-provider";
+import { CookieBanner } from "@/components/layout/cookie-banner";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -63,6 +64,7 @@ export default function RootLayout({
                   className: "font-sans",
                 }}
               />
+              <CookieBanner />
             </PostHogProvider>
           </Suspense>
         </body>

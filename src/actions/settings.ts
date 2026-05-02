@@ -38,6 +38,8 @@ async function getOrgContext(): Promise<{ orgId: string } | null> {
 
 export type OrgProfile = Pick<Organization, "id" | "name" | "slug" | "plan" | "max_employees"> & {
   employee_count: number;
+  billing_cycle: "monthly" | "annual" | null;
+  platform_fee_paid: number;
 };
 
 export async function getOrgProfile(): Promise<ActionResult<OrgProfile>> {
@@ -48,7 +50,7 @@ export async function getOrgProfile(): Promise<ActionResult<OrgProfile>> {
 
   const { data: org, error } = await supabase
     .from("organizations")
-    .select("id, name, slug, plan, max_employees")
+    .select("id, name, slug, plan, max_employees, billing_cycle, platform_fee_paid")
     .eq("id", ctx.orgId)
     .single();
 
@@ -60,9 +62,23 @@ export async function getOrgProfile(): Promise<ActionResult<OrgProfile>> {
     .eq("org_id", ctx.orgId)
     .eq("status", "active");
 
+  const orgRow = org as unknown as Organization & {
+    billing_cycle: "monthly" | "annual" | null;
+    platform_fee_paid: number | null;
+  };
+
   return {
     success: true,
-    data: { ...org, employee_count: count ?? 0 },
+    data: {
+      id: orgRow.id,
+      name: orgRow.name,
+      slug: orgRow.slug,
+      plan: orgRow.plan,
+      max_employees: orgRow.max_employees,
+      employee_count: count ?? 0,
+      billing_cycle: orgRow.billing_cycle ?? null,
+      platform_fee_paid: orgRow.platform_fee_paid ?? 0,
+    },
   };
 }
 

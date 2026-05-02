@@ -5,6 +5,7 @@ import { createAdminSupabase } from "@/lib/supabase/server";
 import { render } from "@react-email/render";
 import { resend, FROM_EMAIL } from "@/lib/resend";
 import { PaymentFailedEmail } from "@/components/emails/payment-failed";
+import { SubscriptionPausedEmail } from "@/components/emails/subscription-paused";
 
 export async function POST(req: Request) {
   const body = await req.text();
@@ -44,15 +45,29 @@ export async function POST(req: Request) {
         const subscription = event.payload.subscription.entity;
         const orgId = subscription.notes?.org_id;
         const planKey = subscription.notes?.plan;
+        const cycle = subscription.notes?.cycle ?? "monthly";
+        const platformFeeDelta = Number(subscription.notes?.platform_fee_delta ?? 0);
 
         if (orgId && planKey) {
+          const { data: row } = await supabase
+            .from("organizations")
+            .select("platform_fee_paid")
+            .eq("id", orgId)
+            .single();
+          const currentPaid =
+            (row as { platform_fee_paid: number } | null)?.platform_fee_paid ?? 0;
+
           await supabase
             .from("organizations")
             .update({
               stripe_subscription_id: subscription.id,
               plan: planKey,
+              billing_cycle: cycle,
+              subscription_status: "active",
               max_employees: planKey === "business" ? 500 : 200,
-            })
+              platform_fee_paid: currentPaid + platformFeeDelta,
+              subscription_paused_at: null,
+            } as any)
             .eq("id", orgId);
         }
         break;
@@ -74,7 +89,10 @@ export async function POST(req: Request) {
             max_employees: 10,
             stripe_subscription_id: null,
             stripe_customer_id: null,
-          })
+            billing_cycle: null,
+            subscription_status: "cancelled",
+            subscription_paused_at: null,
+          } as any)
           .eq("stripe_subscription_id", subscription.id);
         break;
       }
@@ -83,7 +101,14 @@ export async function POST(req: Request) {
         const subscription = event.payload.subscription.entity;
         console.warn(`Subscription ${subscription.id} paused`);
 
-        // Look up org to get admin email
+        await supabase
+          .from("organizations")
+          .update({
+            subscription_status: "paused",
+            subscription_paused_at: new Date().toISOString(),
+          } as any)
+          .eq("stripe_subscription_id", subscription.id);
+
         const { data: org } = await supabase
           .from("organizations")
           .select("id, name")
@@ -101,10 +126,8 @@ export async function POST(req: Request) {
 
           if (admins && admins.length > 0) {
             const html = await render(
-              PaymentFailedEmail({
+              SubscriptionPausedEmail({
                 orgName: orgData.name,
-                planName: "subscription",
-                paymentId: subscription.id,
                 dashboardUrl: "https://jambahr.com/dashboard/settings",
               })
             );
@@ -112,11 +135,44 @@ export async function POST(req: Request) {
             await resend.emails.send({
               from: FROM_EMAIL,
               to: (admins as { email: string; first_name: string }[]).map((a) => a.email),
-              subject: "JambaHR – Your subscription has been paused",
+              subject: "JambaHR – Your subscription is paused",
               html,
             });
           }
         }
+        break;
+      }
+
+      case "subscription.halted": {
+        const subscription = event.payload.subscription.entity;
+        await supabase
+          .from("organizations")
+          .update({
+            subscription_status: "halted",
+            subscription_paused_at: new Date().toISOString(),
+          } as any)
+          .eq("stripe_subscription_id", subscription.id);
+        break;
+      }
+
+      case "subscription.resumed": {
+        const subscription = event.payload.subscription.entity;
+        await supabase
+          .from("organizations")
+          .update({
+            subscription_status: "active",
+            subscription_paused_at: null,
+          } as any)
+          .eq("stripe_subscription_id", subscription.id);
+        break;
+      }
+
+      case "subscription.pending": {
+        const subscription = event.payload.subscription.entity;
+        await supabase
+          .from("organizations")
+          .update({ subscription_status: "pending" } as any)
+          .eq("stripe_subscription_id", subscription.id);
         break;
       }
 

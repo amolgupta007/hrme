@@ -110,7 +110,7 @@ export function Sidebar({ badges, role, plan, features }: { badges: PendingCount
 
             const badgeKey = BADGE_MAP[item.href];
             const badgeCount = badgeKey ? badges[badgeKey] : 0;
-            const PLAN_RANK: Record<OrgPlan, number> = { starter: 0, growth: 1, business: 2 };
+            const PLAN_RANK: Record<OrgPlan, number> = { starter: 0, growth: 1, business: 2, custom: 2 };
             const isLocked = !!item.requiredPlan && PLAN_RANK[plan] < PLAN_RANK[item.requiredPlan];
 
             return (

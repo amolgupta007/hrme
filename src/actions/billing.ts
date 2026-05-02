@@ -3,6 +3,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { clerkClient } from "@clerk/nextjs/server";
 import { createAdminSupabase } from "@/lib/supabase/server";
+import { getCurrentUser, isAdmin } from "@/lib/current-user";
 import { razorpay, PLANS, type PlanKey } from "@/lib/razorpay";
 import type { ActionResult } from "@/types";
 
@@ -36,6 +37,10 @@ async function getOrgContext() {
 export async function createSubscription(
   planKey: "growth" | "business"
 ): Promise<ActionResult<{ subscriptionId: string; keyId: string }>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only owners and admins can manage billing" };
+
   const org = await getOrgContext();
   if (!org) return { success: false, error: "Not authenticated" };
 
@@ -65,6 +70,10 @@ export async function createSubscription(
 }
 
 export async function cancelSubscription(): Promise<ActionResult> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only owners and admins can manage billing" };
+
   const org = await getOrgContext();
   if (!org) return { success: false, error: "Not authenticated" };
   if (!org.stripe_customer_id) return { success: false, error: "No active subscription" };

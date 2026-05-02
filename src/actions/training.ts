@@ -199,7 +199,7 @@ export async function createCourse(
   const user = await getCurrentUser();
   if (!user) return { success: false, error: "Not authenticated" };
   if (!isAdmin(user.role)) return { success: false, error: "Only admins can create courses" };
-  if (!hasFeature(user.plan, "training")) {
+  if (!hasFeature(user.plan, "training", user.customFeatures)) {
     return { success: false, error: "Training module requires Growth plan or above" };
   }
   const ctx = await getOrgContext();
@@ -239,7 +239,7 @@ export async function updateCourse(
   const user = await getCurrentUser();
   if (!user) return { success: false, error: "Not authenticated" };
   if (!isAdmin(user.role)) return { success: false, error: "Only admins can update courses" };
-  if (!hasFeature(user.plan, "training")) {
+  if (!hasFeature(user.plan, "training", user.customFeatures)) {
     return { success: false, error: "Training module requires Growth plan or above" };
   }
   const ctx = await getOrgContext();
@@ -275,7 +275,7 @@ export async function deleteCourse(courseId: string): Promise<ActionResult<void>
   const user = await getCurrentUser();
   if (!user) return { success: false, error: "Not authenticated" };
   if (!isAdmin(user.role)) return { success: false, error: "Only admins can delete courses" };
-  if (!hasFeature(user.plan, "training")) {
+  if (!hasFeature(user.plan, "training", user.customFeatures)) {
     return { success: false, error: "Training module requires Growth plan or above" };
   }
   const ctx = await getOrgContext();
@@ -303,7 +303,7 @@ export async function enrollEmployees(
   const user = await getCurrentUser();
   if (!user) return { success: false, error: "Not authenticated" };
   if (!isAdmin(user.role)) return { success: false, error: "Only admins can enroll employees" };
-  if (!hasFeature(user.plan, "training")) {
+  if (!hasFeature(user.plan, "training", user.customFeatures)) {
     return { success: false, error: "Training module requires Growth plan or above" };
   }
   const ctx = await getOrgContext();
@@ -348,7 +348,7 @@ export async function unenrollEmployee(
   const user = await getCurrentUser();
   if (!user) return { success: false, error: "Not authenticated" };
   if (!isAdmin(user.role)) return { success: false, error: "Only admins can unenroll employees" };
-  if (!hasFeature(user.plan, "training")) {
+  if (!hasFeature(user.plan, "training", user.customFeatures)) {
     return { success: false, error: "Training module requires Growth plan or above" };
   }
   const ctx = await getOrgContext();

@@ -49,7 +49,14 @@ export const PLAN_FEATURES: Record<OrgPlan, PlanFeature[]> = {
   custom: [],
 };
 
-export function hasFeature(plan: OrgPlan, feature: PlanFeature): boolean {
+export function hasFeature(
+  plan: OrgPlan,
+  feature: PlanFeature,
+  customFeatures?: string[] | null
+): boolean {
+  if (plan === "custom") {
+    return Array.isArray(customFeatures) && customFeatures.includes(feature);
+  }
   return PLAN_FEATURES[plan].includes(feature);
 }
 

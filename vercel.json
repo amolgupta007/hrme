@@ -16,6 +16,10 @@
     {
       "path": "/api/cron/onboarding-nudges",
       "schedule": "30 3 * * *"
+    },
+    {
+      "path": "/api/cron/billing-grace-period",
+      "schedule": "0 4 * * *"
     }
   ]
 }

@@ -226,3 +226,91 @@ export async function pollBillingActivation(args: {
     },
   };
 }
+
+export type InvoiceSummary = {
+  id: string;
+  amount: number;
+  status: string;
+  date: string;
+  url: string | null;
+};
+
+export async function listInvoices(): Promise<ActionResult<InvoiceSummary[]>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only owners and admins can view invoices" };
+
+  const org = await getOrgContext();
+  if (!org) return { success: false, error: "Organization not found" };
+  if (!org.stripe_subscription_id) return { success: true, data: [] };
+
+  try {
+    const invoices = await razorpay.invoices.all({
+      subscription_id: org.stripe_subscription_id,
+      count: 24,
+    } as any);
+
+    const items = ((invoices.items ?? []) as any[]).map((inv) => ({
+      id: inv.id as string,
+      amount: (inv.amount as number) ?? 0,
+      status: (inv.status as string) ?? "unknown",
+      date: new Date(((inv.issued_at as number) ?? Date.now() / 1000) * 1000).toISOString(),
+      url: (inv.short_url as string) ?? null,
+    }));
+
+    return { success: true, data: items };
+  } catch (e: any) {
+    console.error("listInvoices failed", e);
+    return { success: false, error: e?.message ?? "Failed to fetch invoices" };
+  }
+}
+
+export async function updateGSTIN(gstin: string): Promise<ActionResult> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only owners and admins can update billing details" };
+
+  const org = await getOrgContext();
+  if (!org) return { success: false, error: "Organization not found" };
+
+  if (gstin.trim() === "") {
+    const supabase = createAdminSupabase();
+    await supabase
+      .from("organizations")
+      .update({ gstin: null } as any)
+      .eq("id", org.id);
+    return { success: true, data: undefined };
+  }
+
+  const { isValidGSTIN, normalizeGSTIN } = await import("@/lib/gstin");
+  if (!isValidGSTIN(gstin)) {
+    return { success: false, error: "Invalid GSTIN format" };
+  }
+
+  const normalized = normalizeGSTIN(gstin);
+  if (!normalized) return { success: false, error: "Invalid GSTIN format" };
+
+  const supabase = createAdminSupabase();
+  const { error } = await supabase
+    .from("organizations")
+    .update({ gstin: normalized } as any)
+    .eq("id", org.id);
+  if (error) return { success: false, error: error.message };
+
+  return { success: true, data: undefined };
+}
+
+export async function getBillingDetails(): Promise<ActionResult<{ gstin: string | null }>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+
+  const org = await getOrgContext();
+  if (!org) return { success: false, error: "Organization not found" };
+
+  const supabase = createAdminSupabase();
+  const { data } = await supabase.from("organizations").select("gstin").eq("id", org.id).single();
+  return {
+    success: true,
+    data: { gstin: (data as { gstin: string | null } | null)?.gstin ?? null },
+  };
+}

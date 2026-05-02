@@ -3,6 +3,8 @@ import type { OrgWithStats } from "@/lib/superadmin-data";
 import { StatsBar } from "@/components/superadmin/stats-bar";
 import { SignupsTable } from "@/components/superadmin/signups-table";
 import { UpsellTargetsTable } from "@/components/superadmin/upsell-targets-table";
+import { CustomPlansTable } from "@/components/superadmin/custom-plans-table";
+import { listCustomPlanRequests } from "@/actions/superadmin-custom-plan";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "JambaHR Admin — Dashboard" };
@@ -34,6 +36,8 @@ export default async function SuperadminDashboard() {
 
   const stats = computeStats(orgs);
   const upsellTargets = getUpsellTargets(orgs);
+  const customResult = await listCustomPlanRequests();
+  const customRequests = customResult.success ? customResult.data : [];
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -54,6 +58,17 @@ export default async function SuperadminDashboard() {
             Overview
           </h2>
           <StatsBar stats={stats} />
+        </section>
+
+        {/* Custom plan requests */}
+        <section>
+          <h2 className="mb-1 text-base font-semibold text-gray-900">
+            Custom Plan Queue
+          </h2>
+          <p className="mb-4 text-sm text-gray-500">
+            Active requests awaiting founder review. {customRequests.length} pending.
+          </p>
+          <CustomPlansTable requests={customRequests} />
         </section>
 
         {/* Upsell targets */}

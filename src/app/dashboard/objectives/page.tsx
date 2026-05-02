@@ -10,7 +10,7 @@ export default async function ObjectivesPage() {
   const userCtx = await getCurrentUser();
   const plan = userCtx?.plan ?? "starter";
 
-  if (!hasFeature(plan, "objectives")) {
+  if (!hasFeature(plan, "objectives", userCtx?.customFeatures ?? null)) {
     return <UpgradeGate feature="Objectives & OKRs" requiredPlan="growth" currentPlan={plan} />;
   }
 

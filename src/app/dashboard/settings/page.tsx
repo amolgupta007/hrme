@@ -74,7 +74,7 @@ export default async function SettingsPage() {
         policies={policies}
         departments={departments}
         jambaHireEnabled={jambaHireEnabled}
-        isPlanEligible={hasFeature(plan, "ats")}
+        isPlanEligible={hasFeature(plan, "ats", userCtx?.customFeatures ?? null)}
         attendanceEnabled={attendanceEnabled}
         attendancePayrollEnabled={attendancePayrollEnabled}
         grievancesEnabled={grievancesEnabled}

@@ -20,6 +20,10 @@
     {
       "path": "/api/cron/billing-grace-period",
       "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/cron/webhook-events-cleanup",
+      "schedule": "0 5 * * 0"
     }
   ]
 }

@@ -47,6 +47,7 @@ export async function POST(req: Request) {
         const planKey = subscription.notes?.plan;
         const cycle = subscription.notes?.cycle ?? "monthly";
         const platformFeeDelta = Number(subscription.notes?.platform_fee_delta ?? 0);
+        const customRequestId = subscription.notes?.custom_request_id;
 
         if (orgId && planKey) {
           const { data: row } = await supabase
@@ -57,18 +58,37 @@ export async function POST(req: Request) {
           const currentPaid =
             (row as { platform_fee_paid: number } | null)?.platform_fee_paid ?? 0;
 
-          await supabase
-            .from("organizations")
-            .update({
-              stripe_subscription_id: subscription.id,
-              plan: planKey,
-              billing_cycle: cycle,
-              subscription_status: "active",
-              max_employees: planKey === "business" ? 500 : 200,
-              platform_fee_paid: currentPaid + platformFeeDelta,
-              subscription_paused_at: null,
-            } as any)
-            .eq("id", orgId);
+          const baseUpdate: Record<string, unknown> = {
+            stripe_subscription_id: subscription.id,
+            plan: planKey,
+            billing_cycle: cycle,
+            subscription_status: "active",
+            max_employees: planKey === "business" ? 500 : planKey === "growth" ? 200 : 200,
+            platform_fee_paid: currentPaid + platformFeeDelta,
+            subscription_paused_at: null,
+          };
+
+          if (planKey === "custom" && customRequestId) {
+            const { data: req } = await supabase
+              .from("custom_plan_requests")
+              .select("requested_features, founder_per_feature_rate, founder_platform_fee, founder_max_employees, requested_employees")
+              .eq("id", customRequestId)
+              .single();
+            if (req) {
+              const reqRow = req as any;
+              baseUpdate.custom_features = reqRow.requested_features ?? [];
+              baseUpdate.custom_per_feature_rate = reqRow.founder_per_feature_rate ?? 12000;
+              baseUpdate.custom_platform_fee = reqRow.founder_platform_fee ?? 499900;
+              baseUpdate.custom_max_employees = reqRow.founder_max_employees ?? reqRow.requested_employees;
+              baseUpdate.max_employees = reqRow.founder_max_employees ?? reqRow.requested_employees;
+            }
+            await supabase
+              .from("custom_plan_requests")
+              .update({ activated_at: new Date().toISOString() } as any)
+              .eq("id", customRequestId);
+          }
+
+          await supabase.from("organizations").update(baseUpdate as any).eq("id", orgId);
         }
         break;
       }

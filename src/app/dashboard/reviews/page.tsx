@@ -11,7 +11,7 @@ export default async function ReviewsPage() {
   const userCtx = await getCurrentUser();
   const plan = userCtx?.plan ?? "starter";
 
-  if (!hasFeature(plan, "reviews")) {
+  if (!hasFeature(plan, "reviews", userCtx?.customFeatures ?? null)) {
     return <UpgradeGate feature="Performance Reviews" requiredPlan="growth" currentPlan={plan} />;
   }
 

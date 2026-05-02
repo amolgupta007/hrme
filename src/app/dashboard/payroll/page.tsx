@@ -15,7 +15,7 @@ export default async function PayrollPage() {
   const userCtx = await getCurrentUser();
   const plan = userCtx?.plan ?? "starter";
 
-  if (!hasFeature(plan, "payroll")) {
+  if (!hasFeature(plan, "payroll", userCtx?.customFeatures ?? null)) {
     return <UpgradeGate feature="Payroll & Compensation" requiredPlan="business" currentPlan={plan} />;
   }
 

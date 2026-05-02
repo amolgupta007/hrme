@@ -9,7 +9,7 @@ export default async function DocumentsPage() {
   const userCtx = await getCurrentUser();
   const plan = userCtx?.plan ?? "starter";
 
-  if (!hasFeature(plan, "documents")) {
+  if (!hasFeature(plan, "documents", userCtx?.customFeatures ?? null)) {
     return <UpgradeGate feature="Documents" requiredPlan="growth" currentPlan={plan} />;
   }
 

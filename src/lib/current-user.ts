@@ -9,6 +9,7 @@ export type UserContext = {
   role: UserRole;
   employeeId: string | null;
   plan: OrgPlan;
+  customFeatures: string[] | null;
   jambaHireEnabled: boolean;
   attendanceEnabled: boolean;
   attendancePayrollEnabled: boolean;
@@ -52,7 +53,7 @@ export async function getCurrentUser(): Promise<UserContext | null> {
   const supabase = createAdminSupabase();
   const { data: org } = await supabase
     .from("organizations")
-    .select("id, plan, settings")
+    .select("id, plan, settings, custom_features")
     .eq("clerk_org_id", resolved.clerkOrgId)
     .single();
   if (!org) return null;
@@ -60,6 +61,10 @@ export async function getCurrentUser(): Promise<UserContext | null> {
   const orgId = resolved.orgId;
   const plan = ((org as any).plan as OrgPlan) ?? "starter";
   const settings = ((org as any).settings as any) ?? {};
+  const rawCustomFeatures = (org as any).custom_features;
+  const customFeatures: string[] | null = Array.isArray(rawCustomFeatures)
+    ? (rawCustomFeatures as string[])
+    : null;
   const jambaHireEnabled = !!settings?.jambahire_enabled;
   const attendanceEnabled = !!settings?.attendance_enabled;
   const attendancePayrollEnabled = !!settings?.attendance_payroll_enabled;
@@ -77,7 +82,7 @@ export async function getCurrentUser(): Promise<UserContext | null> {
     : "admin";
   const employeeId = emp ? (emp as { id: string; role: string }).id : null;
 
-  return { orgId, clerkUserId: userId, role, employeeId, plan, jambaHireEnabled, attendanceEnabled, attendancePayrollEnabled, grievancesEnabled };
+  return { orgId, clerkUserId: userId, role, employeeId, plan, customFeatures, jambaHireEnabled, attendanceEnabled, attendancePayrollEnabled, grievancesEnabled };
 }
 
 export function isAdmin(role: UserRole): boolean {

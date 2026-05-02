@@ -42,7 +42,7 @@ export default async function TrainingPage() {
   const userCtx = await getCurrentUser();
   const plan = userCtx?.plan ?? "starter";
 
-  if (!hasFeature(plan, "training")) {
+  if (!hasFeature(plan, "training", userCtx?.customFeatures ?? null)) {
     return <UpgradeGate feature="Training & Compliance" requiredPlan="growth" currentPlan={plan} />;
   }
 

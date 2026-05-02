@@ -23,6 +23,21 @@ export async function POST(req: Request) {
   const event = JSON.parse(body);
   const supabase = createAdminSupabase();
 
+  // Dedupe: skip if we've already processed this event id.
+  // Razorpay retries failed deliveries; without this, duplicate emails fire.
+  const eventId = event.id as string | undefined;
+  if (eventId) {
+    const { error: dedupeError } = await supabase
+      .from("webhook_events")
+      .insert({ id: eventId, event_type: event.event });
+    if (dedupeError && dedupeError.code === "23505") {
+      return NextResponse.json({ received: true, deduped: true });
+    }
+    if (dedupeError) {
+      console.error("webhook_events insert failed:", dedupeError);
+    }
+  }
+
   try {
     switch (event.event) {
       case "subscription.activated": {

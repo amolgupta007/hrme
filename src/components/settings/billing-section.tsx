@@ -64,7 +64,11 @@ export function BillingSection({ profile }: BillingSectionProps) {
         return;
       }
 
-      const result = await createSubscription(planKey);
+      const result = await createSubscription({
+        planKey,
+        billingCycle: "monthly",
+        employeeCount: profile.employee_count,
+      });
       if (!result.success) {
         toast.error(result.error);
         return;

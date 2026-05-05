@@ -9,6 +9,16 @@ import type { ActionResult } from "@/types";
 
 // ---- Types ----
 
+export type MyCompensation = {
+  ctc: number;
+  state: string;
+  is_metro: boolean;
+  include_hra: boolean;
+  effective_from: string;
+  designation: string | null;
+  department: string | null;
+};
+
 export type SalaryStructureRow = {
   id: string;
   employee_id: string;
@@ -106,6 +116,7 @@ const PayrollRunSchema = z.object({
 export async function getSalaryStructures(): Promise<ActionResult<SalaryStructureRow[]>> {
   const user = await getCurrentUser();
   if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can view salary structures" };
 
   const supabase = createAdminSupabase();
 
@@ -156,6 +167,54 @@ export async function getSalaryStructures(): Promise<ActionResult<SalaryStructur
   });
 
   return { success: true, data: rows };
+}
+
+export async function getMyCompensation(): Promise<ActionResult<MyCompensation | null>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!user.employeeId) return { success: true, data: null };
+
+  const supabase = createAdminSupabase();
+
+  const { data: structure } = await supabase
+    .from("salary_structures")
+    .select("ctc, state, is_metro, include_hra, effective_from")
+    .eq("org_id", user.orgId)
+    .eq("employee_id", user.employeeId)
+    .maybeSingle();
+
+  if (!structure) return { success: true, data: null };
+
+  const { data: emp } = await supabase
+    .from("employees")
+    .select("designation, department_id")
+    .eq("id", user.employeeId)
+    .eq("org_id", user.orgId)
+    .single();
+
+  let department: string | null = null;
+  const departmentId = (emp as any)?.department_id ?? null;
+  if (departmentId) {
+    const { data: dept } = await supabase
+      .from("departments")
+      .select("name")
+      .eq("id", departmentId)
+      .single();
+    department = (dept as any)?.name ?? null;
+  }
+
+  return {
+    success: true,
+    data: {
+      ctc: (structure as any).ctc,
+      state: (structure as any).state,
+      is_metro: (structure as any).is_metro,
+      include_hra: (structure as any).include_hra ?? true,
+      effective_from: (structure as any).effective_from,
+      designation: (emp as any)?.designation ?? null,
+      department,
+    },
+  };
 }
 
 export async function upsertSalaryStructure(

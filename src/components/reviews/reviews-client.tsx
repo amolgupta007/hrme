@@ -9,7 +9,7 @@ import {
 import { toast } from "sonner";
 import { cn, formatDate } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { updateCycleStatus, deleteReviewCycle } from "@/actions/reviews";
+import { updateCycleStatus, deleteReviewCycle, listCycleReviews } from "@/actions/reviews";
 import { CreateCycleDialog } from "./create-cycle-dialog";
 import { ReviewDialog } from "./review-dialog";
 import type { ReviewCycleWithStats, ReviewWithDetails, MyReviewWithCycle } from "@/actions/reviews";
@@ -66,6 +66,8 @@ export function ReviewsClient({ cycles, employees, cycleReviews, activeCycleId: 
   const canManageCycles = hasPermission(role, "admin");
   const [createOpen, setCreateOpen] = React.useState(false);
   const [activeCycleId, setActiveCycleId] = React.useState<string | null>(initialCycleId);
+  const [reviews, setReviews] = React.useState<ReviewWithDetails[]>(cycleReviews);
+  const [reviewsLoading, setReviewsLoading] = React.useState(false);
   const [reviewDialog, setReviewDialog] = React.useState<{
     review: ReviewWithDetails;
     mode: "self" | "manager" | "view";
@@ -73,6 +75,26 @@ export function ReviewsClient({ cycles, employees, cycleReviews, activeCycleId: 
   } | null>(null);
 
   const activeCycle = cycles.find((c) => c.id === activeCycleId) ?? null;
+
+  const loadReviews = React.useCallback(async (cycleId: string) => {
+    setReviewsLoading(true);
+    const result = await listCycleReviews(
+      cycleId,
+      employeeId ? { role, employeeId } : undefined
+    );
+    if (result.success) {
+      setReviews(result.data);
+    } else {
+      toast.error(result.error);
+    }
+    setReviewsLoading(false);
+  }, [role, employeeId]);
+
+  // Refetch reviews whenever the active cycle changes (fixes stale-cycle bug)
+  React.useEffect(() => {
+    if (!activeCycleId) return;
+    loadReviews(activeCycleId);
+  }, [activeCycleId, loadReviews]);
 
   const isEmployee = role === "employee";
   const [activeTab, setActiveTab] = React.useState<"cycles" | "my-reviews">(
@@ -139,27 +161,40 @@ export function ReviewsClient({ cycles, employees, cycleReviews, activeCycleId: 
                 <p className="text-sm text-muted-foreground">Your review history will appear here.</p>
               </div>
             ) : (
-              myReviews.map((r) => (
-                <div key={r.id} className="rounded-xl border border-border bg-card px-4 py-3 space-y-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="font-medium text-sm">{r.cycle_name}</p>
-                    <span className={cn("rounded-full px-2.5 py-0.5 text-xs font-medium", REVIEW_STATUS_STYLES[r.status])}>
-                      {REVIEW_STATUS_LABELS[r.status]}
-                    </span>
+              myReviews.map((r) => {
+                const canStartSelf =
+                  r.cycle_status === "active" && (r.status === "pending" || r.status === "self_review");
+                const canView = r.status === "manager_review" || r.status === "completed";
+                return (
+                  <div key={r.id} className="rounded-xl border border-border bg-card px-4 py-3 space-y-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-medium text-sm">{r.cycle_name}</p>
+                      <span className={cn("rounded-full px-2.5 py-0.5 text-xs font-medium", REVIEW_STATUS_STYLES[r.status])}>
+                        {REVIEW_STATUS_LABELS[r.status]}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {formatDate(r.cycle_start_date)} – {formatDate(r.cycle_end_date)}
+                    </p>
+                    {canStartSelf && (
+                      <button
+                        className="mt-1 text-xs text-primary hover:underline"
+                        onClick={() => setReviewDialog({ review: r, mode: "self", rating_scale: r.cycle_rating_scale ?? 5 })}
+                      >
+                        Start self review
+                      </button>
+                    )}
+                    {!canStartSelf && canView && (
+                      <button
+                        className="mt-1 text-xs text-primary hover:underline"
+                        onClick={() => setReviewDialog({ review: r, mode: "view", rating_scale: r.cycle_rating_scale ?? 5 })}
+                      >
+                        View
+                      </button>
+                    )}
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    {formatDate(r.cycle_start_date)} – {formatDate(r.cycle_end_date)}
-                  </p>
-                  {r.status !== "pending" && (
-                    <button
-                      className="mt-1 text-xs text-primary hover:underline"
-                      onClick={() => setReviewDialog({ review: r, mode: r.status === "self_review" ? "self" : "view", rating_scale: (r as any).cycle_rating_scale ?? 5 })}
-                    >
-                      {r.status === "self_review" ? "Complete self-review" : "View"}
-                    </button>
-                  )}
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         )}
@@ -331,7 +366,12 @@ export function ReviewsClient({ cycles, employees, cycleReviews, activeCycleId: 
         )}
       </div>
 
-      {cycleReviews.length === 0 ? (
+      {reviewsLoading && reviews.length === 0 ? (
+        <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-border py-16 text-center">
+          <ClipboardList className="h-10 w-10 text-muted-foreground/40 animate-pulse" />
+          <p className="text-sm text-muted-foreground">Loading reviews…</p>
+        </div>
+      ) : reviews.length === 0 ? (
         <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-border py-16 text-center">
           <ClipboardList className="h-10 w-10 text-muted-foreground/40" />
           <p className="text-sm text-muted-foreground">No reviews in this cycle.</p>
@@ -339,7 +379,7 @@ export function ReviewsClient({ cycles, employees, cycleReviews, activeCycleId: 
       ) : (
         <div className="rounded-xl border border-border bg-card overflow-hidden">
           <div className="divide-y divide-border">
-            {cycleReviews.map((review) => (
+            {reviews.map((review) => (
               <div key={review.id} className="flex items-center gap-4 px-4 py-3 hover:bg-muted/30 transition-colors">
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-sm">{review.employee_name}</p>
@@ -389,6 +429,7 @@ export function ReviewsClient({ cycles, employees, cycleReviews, activeCycleId: 
           mode={reviewDialog.mode}
           performanceSettings={performanceSettings}
           rating_scale={reviewDialog.rating_scale ?? activeCycle?.rating_scale ?? 5}
+          onSuccess={() => { if (activeCycleId) loadReviews(activeCycleId); }}
         />
       )}
     </>

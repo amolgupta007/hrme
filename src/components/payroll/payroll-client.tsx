@@ -14,6 +14,7 @@ import { SalaryStructureDialog } from "./salary-structure-dialog";
 import { PayrollRunDialog } from "./payroll-run-dialog";
 import { EntryEditDialog } from "./entry-edit-dialog";
 import { PayslipDialog } from "./payslip-dialog";
+import { CTCBreakdownCard } from "./ctc-breakdown-card";
 import {
   processPayrollRun,
   markPayrollPaid,
@@ -25,6 +26,7 @@ import type {
   PayrollRun,
   PayrollEntry,
   MyPayslip,
+  MyCompensation,
 } from "@/actions/payroll";
 
 interface Employee {
@@ -41,6 +43,7 @@ interface Props {
   salaryStructures: SalaryStructureRow[];
   payrollRuns: PayrollRun[];
   myPayslips: MyPayslip[];
+  myCompensation: MyCompensation | null;
   orgName: string;
   currentEmployeeName: string;
 }
@@ -67,13 +70,14 @@ export function PayrollClient({
   salaryStructures,
   payrollRuns,
   myPayslips,
+  myCompensation,
   orgName,
   currentEmployeeName,
 }: Props) {
   const router = useRouter();
   const tabs = isAdmin
-    ? ["Salary Structures", "Payroll Runs", "My Payslips"]
-    : ["My Payslips"];
+    ? ["Salary Structures", "Payroll Runs", "My Payslips", "My Compensation"]
+    : ["My Compensation", "My Payslips"];
   const [activeTab, setActiveTab] = useState(tabs[0]);
 
   // Dialogs
@@ -528,6 +532,63 @@ export function PayrollClient({
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ─── My Compensation Tab ─── */}
+      {activeTab === "My Compensation" && (
+        <div className="max-w-3xl">
+          {myCompensation ? (
+            <div className="space-y-4">
+              <div className="rounded-xl border border-border bg-card p-5 flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Annual CTC</p>
+                  <p className="text-3xl font-bold mt-1">{formatINR(myCompensation.ctc)}</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Effective from{" "}
+                    {new Date(myCompensation.effective_from).toLocaleDateString("en-IN", {
+                      day: "numeric",
+                      month: "short",
+                      year: "numeric",
+                    })}
+                  </p>
+                </div>
+                <div className="text-right text-xs text-muted-foreground space-y-0.5">
+                  {myCompensation.designation && (
+                    <p><span className="font-medium text-foreground">{myCompensation.designation}</span></p>
+                  )}
+                  {myCompensation.department && (
+                    <p>{myCompensation.department}</p>
+                  )}
+                  <p>
+                    {myCompensation.state}
+                    {myCompensation.is_metro ? " · Metro" : ""}
+                  </p>
+                </div>
+              </div>
+
+              <CTCBreakdownCard
+                ctc={myCompensation.ctc}
+                state={myCompensation.state}
+                isMetro={myCompensation.is_metro}
+                includeHra={myCompensation.include_hra}
+              />
+
+              <p className="text-xs text-muted-foreground">
+                This is your current compensation structure. Figures are computed using Indian tax slabs (FY 2025-26, New Regime).
+                For questions about any component, contact your HR admin.
+              </p>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-dashed border-border p-12 text-center">
+              <IndianRupee className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+              <p className="font-medium">Compensation not set up yet</p>
+              <p className="text-sm text-muted-foreground mt-1 max-w-md mx-auto">
+                Your salary structure hasn&apos;t been configured by your HR admin yet.
+                It will appear here once it&apos;s set up.
+              </p>
             </div>
           )}
         </div>

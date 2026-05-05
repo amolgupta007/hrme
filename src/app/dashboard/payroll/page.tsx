@@ -7,6 +7,7 @@ import {
   getSalaryStructures,
   getPayrollRuns,
   getMyPayslips,
+  getMyCompensation,
 } from "@/actions/payroll";
 import { PayrollClient } from "@/components/payroll/payroll-client";
 import { createAdminSupabase } from "@/lib/supabase/server";
@@ -21,17 +22,19 @@ export default async function PayrollPage() {
 
   const adminUser = userCtx ? isAdmin(userCtx.role) : false;
 
-  const [empResult, salaryResult, runsResult, mySlipsResult] = await Promise.all([
+  const [empResult, salaryResult, runsResult, mySlipsResult, myCompResult] = await Promise.all([
     listEmployees(),
-    getSalaryStructures(),
-    getPayrollRuns(),
+    adminUser ? getSalaryStructures() : Promise.resolve({ success: true as const, data: [] }),
+    adminUser ? getPayrollRuns() : Promise.resolve({ success: true as const, data: [] }),
     getMyPayslips(),
+    getMyCompensation(),
   ]);
 
   const employees = empResult.success ? empResult.data : [];
   const salaryStructures = salaryResult.success ? salaryResult.data : [];
   const payrollRuns = runsResult.success ? runsResult.data : [];
   const myPayslips = mySlipsResult.success ? mySlipsResult.data : [];
+  const myCompensation = myCompResult.success ? myCompResult.data : null;
 
   // Get org name
   let orgName = "Your Company";
@@ -59,6 +62,7 @@ export default async function PayrollPage() {
       salaryStructures={salaryStructures}
       payrollRuns={payrollRuns}
       myPayslips={myPayslips}
+      myCompensation={myCompensation}
       orgName={orgName}
       currentEmployeeName={currentEmployeeName}
     />

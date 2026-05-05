@@ -6,6 +6,7 @@ import { createAdminSupabase } from "@/lib/supabase/server";
 import { getCurrentUser, isAdmin, isManagerOrAbove, getOrgContext } from "@/lib/current-user";
 import { getApprovedObjectivesForEmployees } from "@/actions/objectives";
 import type { ObjectiveSet } from "@/actions/objectives";
+import { normalizeGoalsData } from "@/lib/performance-settings";
 import type { ActionResult } from "@/types";
 
 // ---- Types ----
@@ -292,6 +293,7 @@ export type MyReviewWithCycle = ReviewWithDetails & {
   cycle_start_date: string;
   cycle_end_date: string;
   cycle_rating_scale: 3 | 5 | 10;
+  cycle_status: "draft" | "active" | "completed";
 };
 
 export async function listMyReviews(): Promise<ActionResult<MyReviewWithCycle[]>> {
@@ -303,7 +305,7 @@ export async function listMyReviews(): Promise<ActionResult<MyReviewWithCycle[]>
 
   const { data, error } = await supabase
     .from("reviews")
-    .select("*, review_cycles(name, start_date, end_date, rating_scale), employees!employee_id(first_name, last_name), reviewers:employees!reviewer_id(first_name, last_name)")
+    .select("*, review_cycles(name, start_date, end_date, rating_scale, status), employees!employee_id(first_name, last_name), reviewers:employees!reviewer_id(first_name, last_name)")
     .eq("employee_id", user.employeeId)
     .eq("org_id", user.orgId)
     .order("created_at", { ascending: false });
@@ -317,6 +319,7 @@ export async function listMyReviews(): Promise<ActionResult<MyReviewWithCycle[]>
     cycle_start_date: r.review_cycles?.start_date ?? "",
     cycle_end_date: r.review_cycles?.end_date ?? "",
     cycle_rating_scale: (r.review_cycles?.rating_scale as 3 | 5 | 10) ?? 5,
+    cycle_status: (r.review_cycles?.status as "draft" | "active" | "completed") ?? "draft",
     employee_id: r.employee_id,
     reviewer_id: r.reviewer_id,
     employee_name: `${r.employees?.first_name ?? ""} ${r.employees?.last_name ?? ""}`.trim(),
@@ -342,6 +345,7 @@ const selfReviewSchema = z.object({
     title: z.string().min(1),
     status: z.enum(["pending", "achieved", "missed"]),
   })),
+  self_competency_ratings: z.record(z.number()).optional(),
 });
 
 export async function submitSelfReview(
@@ -358,10 +362,10 @@ export async function submitSelfReview(
 
   const supabase = createAdminSupabase();
 
-  // Verify this review belongs to the calling employee
+  // Verify ownership; fetch existing goals to preserve any manager-side state
   const { data: review } = await supabase
     .from("reviews")
-    .select("employee_id")
+    .select("employee_id, goals")
     .eq("id", reviewId)
     .eq("org_id", user.orgId)
     .single();
@@ -369,12 +373,19 @@ export async function submitSelfReview(
     return { success: false, error: "You can only submit your own self-review" };
   }
 
+  const existing = normalizeGoalsData((review as any).goals);
+  const goalsPayload = {
+    items: validated.data.goals,
+    self_competency_ratings: validated.data.self_competency_ratings ?? {},
+    manager_competency_ratings: existing.manager_competency_ratings,
+  };
+
   const { error } = await supabase
     .from("reviews")
     .update({
       self_rating: validated.data.self_rating,
       self_comments: validated.data.self_comments,
-      goals: validated.data.goals,
+      goals: goalsPayload,
       status: "manager_review",
     })
     .eq("id", reviewId)
@@ -407,10 +418,10 @@ export async function submitManagerReview(
 
   const supabase = createAdminSupabase();
 
-  // Verify the caller is the assigned reviewer
+  // Verify the caller is the assigned reviewer; pull existing goals to preserve self state
   const { data: review } = await supabase
     .from("reviews")
-    .select("reviewer_id")
+    .select("reviewer_id, goals")
     .eq("id", reviewId)
     .eq("org_id", user.orgId)
     .single();
@@ -419,19 +430,13 @@ export async function submitManagerReview(
     return { success: false, error: "You are not the assigned reviewer for this review" };
   }
 
-  let goalsUpdate: Record<string, any> | undefined;
-  if (validated.data.manager_competency_ratings && Object.keys(validated.data.manager_competency_ratings).length > 0) {
-    const { data: existingReview } = await supabase
-      .from("reviews")
-      .select("goals")
-      .eq("id", reviewId)
-      .eq("org_id", user.orgId)
-      .single();
-
-    const raw = (existingReview as any)?.goals;
-    const existing = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
-    goalsUpdate = { ...existing, manager_competency_ratings: validated.data.manager_competency_ratings };
-  }
+  const existing = normalizeGoalsData((review as any).goals);
+  const goalsPayload = {
+    items: existing.items,
+    self_competency_ratings: existing.self_competency_ratings,
+    manager_competency_ratings:
+      validated.data.manager_competency_ratings ?? existing.manager_competency_ratings,
+  };
 
   const { error } = await supabase
     .from("reviews")
@@ -440,7 +445,7 @@ export async function submitManagerReview(
       manager_comments: validated.data.manager_comments,
       status: "completed",
       completed_at: new Date().toISOString(),
-      ...(goalsUpdate ? { goals: goalsUpdate } : {}),
+      goals: goalsPayload,
     })
     .eq("id", reviewId)
     .eq("org_id", user.orgId);

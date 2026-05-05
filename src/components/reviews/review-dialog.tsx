@@ -94,20 +94,21 @@ interface ReviewDialogProps {
   mode: "self" | "manager" | "view";
   performanceSettings: PerformanceSettings;
   rating_scale?: 3 | 5 | 10;
+  onSuccess?: () => void;
 }
 
-export function ReviewDialog({ open, onOpenChange, review, mode, performanceSettings, rating_scale = 5 }: ReviewDialogProps) {
+export function ReviewDialog({ open, onOpenChange, review, mode, performanceSettings, rating_scale = 5, onSuccess }: ReviewDialogProps) {
+  const goalsData = normalizeGoalsData(review.goals);
+
   const [rating, setRating] = React.useState(
-    mode === "self" ? (review.self_rating ?? 0) : (review.manager_rating ?? 0)
+    mode === "self" ? (review.self_rating ?? 0) : mode === "manager" ? (review.manager_rating ?? 0) : 0
   );
   const [comments, setComments] = React.useState(
-    mode === "self" ? (review.self_comments ?? "") : (review.manager_comments ?? "")
+    mode === "self" ? (review.self_comments ?? "") : mode === "manager" ? (review.manager_comments ?? "") : ""
   );
-  const [goals, setGoals] = React.useState<Goal[]>(review.goals ?? []);
+  const [goals, setGoals] = React.useState<Goal[]>(goalsData.items);
   const [newGoal, setNewGoal] = React.useState("");
   const [loading, setLoading] = React.useState(false);
-
-  const goalsData = normalizeGoalsData(review.goals);
   const [selfCompetencyRatings, setSelfCompetencyRatings] = React.useState<Record<string, number>>(
     goalsData.self_competency_ratings
   );
@@ -143,7 +144,12 @@ export function ReviewDialog({ open, onOpenChange, review, mode, performanceSett
 
     const reviewAction =
       mode === "self"
-        ? submitSelfReview(review.id, { self_rating: rating, self_comments: comments, goals })
+        ? submitSelfReview(review.id, {
+            self_rating: rating,
+            self_comments: comments,
+            goals,
+            self_competency_ratings: selfCompetencyRatings,
+          })
         : submitManagerReview(review.id, {
             manager_rating: rating,
             manager_comments: comments,
@@ -155,6 +161,7 @@ export function ReviewDialog({ open, onOpenChange, review, mode, performanceSett
     setLoading(false);
     if (reviewResult.success) {
       toast.success(mode === "self" ? "Self review submitted" : "Manager review submitted");
+      onSuccess?.();
       onOpenChange(false);
     } else {
       toast.error(reviewResult.error);
@@ -202,52 +209,40 @@ export function ReviewDialog({ open, onOpenChange, review, mode, performanceSett
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Overall Rating */}
-            <div className="space-y-2">
-              <Label.Root className="text-sm font-medium">
-                {mode === "self" ? "Overall Self Rating" : "Overall Manager Rating"}
-                {!isReadOnly && <span className="text-destructive ml-0.5">*</span>}
-              </Label.Root>
-              <NumberRating value={rating} onChange={isReadOnly ? undefined : setRating} scale={scale} labels={ratingLabels} />
-            </div>
-
-            {/* Competency ratings */}
-            {competencies.length > 0 && (
-              <div className="space-y-3">
-                <p className="text-sm font-medium">Competency Ratings</p>
-                <div className="space-y-4">
-                  {competencies.map((competency) => {
-                    const isManagerMode = mode === "manager";
-                    const isSelfMode = mode === "self";
-                    const currentRating = isManagerMode
-                      ? (managerCompetencyRatings[competency] ?? 0)
-                      : isSelfMode
-                      ? (selfCompetencyRatings[competency] ?? 0)
-                      : (goalsData.manager_competency_ratings[competency] ?? goalsData.self_competency_ratings[competency] ?? 0);
-                    return (
-                      <div key={competency} className="space-y-1.5">
-                        <p className="text-sm text-muted-foreground">{competency}</p>
-                        <NumberRating
-                          value={currentRating}
-                          scale={scale}
-                          labels={ratingLabels}
-                          onChange={
-                            isManagerMode
-                              ? (v) => setManagerCompetencyRatings((prev) => ({ ...prev, [competency]: v }))
-                              : isSelfMode
-                              ? (v) => setSelfCompetencyRatings((prev) => ({ ...prev, [competency]: v }))
-                              : undefined
-                          }
-                        />
-                      </div>
-                    );
-                  })}
-                </div>
+            {/* Manager mode: show employee's self review at the top */}
+            {mode === "manager" && (review.self_rating !== null || review.self_comments) && (
+              <div className="rounded-lg border border-amber-200 dark:border-amber-900/40 bg-amber-50/50 dark:bg-amber-950/20 p-4 space-y-3">
+                <p className="text-sm font-semibold flex items-center gap-1.5">
+                  <Star className="h-4 w-4 text-amber-500" />
+                  Employee&apos;s Self Review
+                </p>
+                {review.self_rating !== null && (
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground">Self Rating</p>
+                    <NumberRating value={review.self_rating} scale={scale} labels={ratingLabels} />
+                  </div>
+                )}
+                {review.self_comments && (
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground">Self Comments</p>
+                    <p className="text-sm whitespace-pre-wrap rounded-md bg-background/70 border border-border px-3 py-2">
+                      {review.self_comments}
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 
-            {/* View mode: both ratings */}
-            {mode === "view" && (
+            {/* Overall Rating — editable in self/manager, side-by-side display in view */}
+            {mode !== "view" ? (
+              <div className="space-y-2">
+                <Label.Root className="text-sm font-medium">
+                  {mode === "self" ? "Overall Self Rating" : "Overall Manager Rating"}
+                  <span className="text-destructive ml-0.5">*</span>
+                </Label.Root>
+                <NumberRating value={rating} onChange={setRating} scale={scale} labels={ratingLabels} />
+              </div>
+            ) : (
               <div className="grid grid-cols-2 gap-4 rounded-lg border border-border p-4 bg-muted/30">
                 <div>
                   <p className="text-xs text-muted-foreground mb-1">Self Rating</p>
@@ -260,33 +255,108 @@ export function ReviewDialog({ open, onOpenChange, review, mode, performanceSett
               </div>
             )}
 
-            {/* Comments */}
-            <div className="space-y-1.5">
-              <Label.Root className="text-sm font-medium">
-                {mode === "view" ? "Self Comments" : "Comments"}
-                {!isReadOnly && <span className="text-destructive ml-0.5">*</span>}
-              </Label.Root>
-              <textarea
-                className={cn(inputCn, "min-h-[90px] resize-none")}
-                value={comments}
-                onChange={(e) => setComments(e.target.value)}
-                placeholder={
-                  mode === "self"
-                    ? "Describe your achievements, challenges, and growth..."
-                    : "Share your assessment of this employee's performance..."
-                }
-                disabled={isReadOnly}
-                required={!isReadOnly}
-              />
-            </div>
+            {/* Competency ratings */}
+            {competencies.length > 0 && (
+              <div className="space-y-3">
+                <p className="text-sm font-medium">Competency Ratings</p>
+                <div className="space-y-4">
+                  {competencies.map((competency) => {
+                    const isManagerMode = mode === "manager";
+                    const isSelfMode = mode === "self";
+                    const isViewMode = mode === "view";
+                    const selfVal = goalsData.self_competency_ratings[competency] ?? 0;
+                    const managerVal = goalsData.manager_competency_ratings[competency] ?? 0;
+                    const currentRating = isManagerMode
+                      ? (managerCompetencyRatings[competency] ?? 0)
+                      : isSelfMode
+                      ? (selfCompetencyRatings[competency] ?? 0)
+                      : managerVal || selfVal;
 
-            {/* Manager comments in view mode */}
-            {mode === "view" && review.manager_comments && (
-              <div className="space-y-1.5">
-                <Label.Root className="text-sm font-medium">Manager Comments</Label.Root>
-                <div className="rounded-lg border border-border bg-muted/30 p-3 text-sm">
-                  {review.manager_comments}
+                    if (isViewMode) {
+                      return (
+                        <div key={competency} className="space-y-1.5">
+                          <p className="text-sm text-muted-foreground">{competency}</p>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="rounded-md border border-border bg-muted/30 p-2 space-y-1">
+                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Self</p>
+                              <NumberRating value={selfVal} scale={scale} labels={ratingLabels} />
+                            </div>
+                            <div className="rounded-md border border-border bg-muted/30 p-2 space-y-1">
+                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Manager</p>
+                              <NumberRating value={managerVal} scale={scale} labels={ratingLabels} />
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div key={competency} className="space-y-1.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-sm text-muted-foreground">{competency}</p>
+                          {isManagerMode && selfVal > 0 && (
+                            <p className="text-xs text-muted-foreground">
+                              Self: <span className="font-medium text-foreground">{selfVal}/{scale}</span>
+                            </p>
+                          )}
+                        </div>
+                        <NumberRating
+                          value={currentRating}
+                          scale={scale}
+                          labels={ratingLabels}
+                          onChange={
+                            isManagerMode
+                              ? (v) => setManagerCompetencyRatings((prev) => ({ ...prev, [competency]: v }))
+                              : (v) => setSelfCompetencyRatings((prev) => ({ ...prev, [competency]: v }))
+                          }
+                        />
+                      </div>
+                    );
+                  })}
                 </div>
+              </div>
+            )}
+
+            {/* Comments — editable in self/manager modes */}
+            {mode !== "view" && (
+              <div className="space-y-1.5">
+                <Label.Root className="text-sm font-medium">
+                  {mode === "self" ? "Your Comments" : "Your Manager Comments"}
+                  <span className="text-destructive ml-0.5">*</span>
+                </Label.Root>
+                <textarea
+                  className={cn(inputCn, "min-h-[90px] resize-none")}
+                  value={comments}
+                  onChange={(e) => setComments(e.target.value)}
+                  placeholder={
+                    mode === "self"
+                      ? "Describe your achievements, challenges, and growth..."
+                      : "Share your assessment of this employee's performance..."
+                  }
+                  required
+                />
+              </div>
+            )}
+
+            {/* View mode: both comments side by side */}
+            {mode === "view" && (
+              <div className="space-y-3">
+                {review.self_comments && (
+                  <div className="space-y-1.5">
+                    <Label.Root className="text-sm font-medium">Self Comments</Label.Root>
+                    <div className="rounded-lg border border-border bg-muted/30 p-3 text-sm whitespace-pre-wrap">
+                      {review.self_comments}
+                    </div>
+                  </div>
+                )}
+                {review.manager_comments && (
+                  <div className="space-y-1.5">
+                    <Label.Root className="text-sm font-medium">Manager Comments</Label.Root>
+                    <div className="rounded-lg border border-border bg-muted/30 p-3 text-sm whitespace-pre-wrap">
+                      {review.manager_comments}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -460,16 +530,18 @@ export function ReviewDialog({ open, onOpenChange, review, mode, performanceSett
               </div>
             )}
 
-            {/* Ad-hoc Goals (self review only) */}
-            {(mode === "self" || (mode === "view" && goals.length > 0)) && (
+            {/* Ad-hoc Goals — editable in self mode, read-only in manager/view */}
+            {(mode === "self" || goals.length > 0) && (
               <div className="space-y-2">
-                <Label.Root className="text-sm font-medium">Additional Goals</Label.Root>
+                <Label.Root className="text-sm font-medium">
+                  {mode === "manager" ? "Employee's Additional Goals" : "Additional Goals"}
+                </Label.Root>
                 {goals.length > 0 && (
                   <div className="space-y-2">
                     {goals.map((goal, idx) => (
                       <div key={idx} className="flex items-center gap-2 rounded-lg border border-border p-2.5">
                         <p className="flex-1 text-sm">{goal.title}</p>
-                        {!isReadOnly ? (
+                        {mode === "self" ? (
                           <div className="flex items-center gap-1">
                             {(["pending", "achieved", "missed"] as const).map((s) => (
                               <button
@@ -499,7 +571,7 @@ export function ReviewDialog({ open, onOpenChange, review, mode, performanceSett
                     ))}
                   </div>
                 )}
-                {!isReadOnly && (
+                {mode === "self" && (
                   <div className="flex gap-2">
                     <input
                       className={cn(inputCn, "h-9 flex-1")}

@@ -74,6 +74,31 @@ export type MyLeaveBalance = {
   remaining: number;
 };
 
+export type MyActiveObjectives = {
+  id: string;
+  period_label: string;
+  period_type: string;
+  total_items: number;
+  achieved_items: number;
+};
+
+export type MyLatestReview = {
+  id: string;
+  cycle_name: string;
+  status: "pending" | "self_review" | "manager_review" | "completed";
+  self_rating: number | null;
+  manager_rating: number | null;
+  completed_at: string | null;
+  rating_scale: 3 | 5 | 10;
+};
+
+export type UpcomingHoliday = {
+  id: string;
+  name: string;
+  date: string;
+  is_optional: boolean;
+};
+
 export type DashboardData = {
   stats: DashboardStats;
   recentLeaves: RecentLeave[];
@@ -89,6 +114,9 @@ export type DashboardData = {
   myPendingLeavesCount: number;
   myOverdueTrainingCount: number;
   grievancesCount: number;
+  myActiveObjectives: MyActiveObjectives | null;
+  myLatestReview: MyLatestReview | null;
+  upcomingHolidays: UpcomingHoliday[];
 };
 
 // ---- Main action ----
@@ -232,6 +260,8 @@ export async function getDashboardData(): Promise<DashboardData | null> {
   let myPendingLeavesCount = 0;
   let myOverdueTrainingCount = 0;
   let userFirstName = "";
+  let myActiveObjectives: MyActiveObjectives | null = null;
+  let myLatestReview: MyLatestReview | null = null;
 
   if (employeeId) {
     const [
@@ -239,6 +269,8 @@ export async function getDashboardData(): Promise<DashboardData | null> {
       leaveBalancesResult,
       myPendingResult,
       myOverdueResult,
+      myObjectivesResult,
+      myReviewResult,
     ] = await Promise.all([
       supabase
         .from("employees")
@@ -263,6 +295,23 @@ export async function getDashboardData(): Promise<DashboardData | null> {
         .eq("org_id", orgId)
         .eq("employee_id", employeeId)
         .eq("status", "overdue"),
+      supabase
+        .from("objectives")
+        .select("id, period_label, period_type, items")
+        .eq("org_id", orgId)
+        .eq("employee_id", employeeId)
+        .eq("status", "approved")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from("reviews")
+        .select("id, status, self_rating, manager_rating, completed_at, review_cycles(name, rating_scale)")
+        .eq("org_id", orgId)
+        .eq("employee_id", employeeId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
     ]);
 
     userFirstName = (empResult.data as any)?.first_name ?? "";
@@ -279,7 +328,48 @@ export async function getDashboardData(): Promise<DashboardData | null> {
         remaining: Math.max(0, total - used),
       };
     });
+
+    const objRow = myObjectivesResult.data as any;
+    if (objRow) {
+      const items = Array.isArray(objRow.items) ? objRow.items : [];
+      myActiveObjectives = {
+        id: objRow.id,
+        period_label: objRow.period_label,
+        period_type: objRow.period_type,
+        total_items: items.length,
+        achieved_items: items.filter((i: any) => i.self_status === "achieved").length,
+      };
+    }
+
+    const revRow = myReviewResult.data as any;
+    if (revRow) {
+      myLatestReview = {
+        id: revRow.id,
+        cycle_name: revRow.review_cycles?.name ?? "Review",
+        status: revRow.status,
+        self_rating: revRow.self_rating,
+        manager_rating: revRow.manager_rating,
+        completed_at: revRow.completed_at,
+        rating_scale: (revRow.review_cycles?.rating_scale as 3 | 5 | 10) ?? 5,
+      };
+    }
   }
+
+  // Upcoming holidays (next 3) — relevant for everyone but cheap to always fetch
+  const today_ymd = today;
+  const { data: holidaysData } = await supabase
+    .from("holidays")
+    .select("id, name, date, is_optional")
+    .eq("org_id", orgId)
+    .gte("date", today_ymd)
+    .order("date", { ascending: true })
+    .limit(3);
+  const upcomingHolidays: UpcomingHoliday[] = (holidaysData ?? []).map((h: any) => ({
+    id: h.id,
+    name: h.name,
+    date: h.date,
+    is_optional: !!h.is_optional,
+  }));
 
   const trainingPct =
     (totalEnrollments ?? 0) > 0
@@ -399,5 +489,8 @@ export async function getDashboardData(): Promise<DashboardData | null> {
     myPendingLeavesCount,
     myOverdueTrainingCount,
     grievancesCount: isAdmin(role) ? (grievancesResult.count ?? 0) : 0,
+    myActiveObjectives,
+    myLatestReview,
+    upcomingHolidays,
   };
 }

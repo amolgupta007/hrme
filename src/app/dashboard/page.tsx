@@ -4,7 +4,7 @@ import {
   Clock, ChevronRight, Target,
   ClipboardList, UserCheck, Megaphone, Pin,
   TrendingUp, BookOpen, FileText, UserPlus,
-  CheckSquare, Network,
+  CheckSquare, Network, PartyPopper, Star,
 } from "lucide-react";
 import { getDashboardData } from "@/actions/dashboard";
 import { getMyOnboardingStatus } from "@/actions/onboarding";
@@ -253,7 +253,8 @@ export default async function DashboardPage() {
     );
   }
 
-  const { userRole, userFirstName, whoIsOut, latestAnnouncements, activeReviewCycles, myLeaveBalances } = data;
+  const { userRole, userFirstName, whoIsOut, latestAnnouncements, activeReviewCycles, myLeaveBalances, myActiveObjectives, myLatestReview, upcomingHolidays } = data;
+  const isEmployeeRole = userRole === "employee";
   const statCards = buildStatCards(data);
   const quickActions = getQuickActions(userRole);
   const showLeaveBalance = (userRole === "employee" || userRole === "manager") && myLeaveBalances.length > 0;
@@ -457,8 +458,8 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      {/* Active Review Cycles */}
-      {activeReviewCycles.length > 0 && (
+      {/* Active Review Cycles — admin/manager only (employees see "My Latest Review") */}
+      {!isEmployeeRole && activeReviewCycles.length > 0 && (
         <div className="rounded-xl border border-border bg-card overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-border">
             <p className="text-sm font-semibold">Active Review Cycles</p>
@@ -490,6 +491,98 @@ export default async function DashboardPage() {
               );
             })}
           </div>
+        </div>
+      )}
+
+      {/* Employee personal cards: My Latest Review + My Objectives + Upcoming Holidays */}
+      {isEmployeeRole && (myLatestReview || myActiveObjectives || upcomingHolidays.length > 0) && (
+        <div className="grid gap-6 lg:grid-cols-3">
+          {/* My Latest Review */}
+          {myLatestReview && (
+            <Link
+              href="/dashboard/reviews"
+              className="rounded-xl border border-border bg-card p-5 hover:border-primary/30 transition-colors block"
+            >
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-sm font-semibold">My Latest Review</p>
+                <Star className="h-4 w-4 text-amber-500" />
+              </div>
+              <p className="text-sm font-medium truncate">{myLatestReview.cycle_name}</p>
+              <p className="text-xs text-muted-foreground capitalize mt-0.5">
+                {myLatestReview.status === "pending"        ? "Awaiting your self-review"
+                 : myLatestReview.status === "self_review"  ? "Awaiting your self-review"
+                 : myLatestReview.status === "manager_review" ? "Awaiting manager review"
+                 : "Completed"}
+              </p>
+              {myLatestReview.status === "completed" && (myLatestReview.manager_rating || myLatestReview.self_rating) && (
+                <div className="mt-3 flex items-center gap-3 text-xs text-muted-foreground">
+                  {myLatestReview.self_rating !== null && (
+                    <span>Self: <span className="font-semibold text-foreground">{myLatestReview.self_rating}/{myLatestReview.rating_scale}</span></span>
+                  )}
+                  {myLatestReview.manager_rating !== null && (
+                    <span>Manager: <span className="font-semibold text-foreground">{myLatestReview.manager_rating}/{myLatestReview.rating_scale}</span></span>
+                  )}
+                </div>
+              )}
+            </Link>
+          )}
+
+          {/* My Active Objectives */}
+          {myActiveObjectives && (
+            <Link
+              href="/dashboard/objectives"
+              className="rounded-xl border border-border bg-card p-5 hover:border-primary/30 transition-colors block"
+            >
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-sm font-semibold">My Objectives</p>
+                <Target className="h-4 w-4 text-primary" />
+              </div>
+              <p className="text-sm font-medium">
+                {myActiveObjectives.period_label}
+                <span className="text-muted-foreground font-normal capitalize"> · {myActiveObjectives.period_type}</span>
+              </p>
+              <div className="mt-3 flex items-center gap-3">
+                <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-primary transition-all"
+                    style={{
+                      width: `${myActiveObjectives.total_items > 0
+                        ? Math.round((myActiveObjectives.achieved_items / myActiveObjectives.total_items) * 100)
+                        : 0}%`,
+                    }}
+                  />
+                </div>
+                <span className="text-xs text-muted-foreground shrink-0">
+                  {myActiveObjectives.achieved_items}/{myActiveObjectives.total_items} achieved
+                </span>
+              </div>
+            </Link>
+          )}
+
+          {/* Upcoming Holidays */}
+          {upcomingHolidays.length > 0 && (
+            <div className="rounded-xl border border-border bg-card p-5">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-sm font-semibold">Upcoming Holidays</p>
+                <PartyPopper className="h-4 w-4 text-accent" />
+              </div>
+              <ul className="space-y-2">
+                {upcomingHolidays.map((h) => (
+                  <li key={h.id} className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{h.name}</p>
+                      <p className="text-xs text-muted-foreground">{formatDate(h.date)}</p>
+                    </div>
+                    {h.is_optional && (
+                      <span className="rounded-full bg-muted text-muted-foreground text-[10px] font-medium px-2 py-0.5 shrink-0">
+                        Optional
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
 

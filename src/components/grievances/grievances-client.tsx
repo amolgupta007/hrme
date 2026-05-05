@@ -450,14 +450,17 @@ export function GrievancesClient({ grievances, stats, isManager, employeeId }: P
             >
               Track Status
             </button>
-            {grievances.length > 0 && (
-              <button
-                onClick={() => setActiveTab("inbox")}
-                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === "inbox" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
-              >
-                My Submissions
-              </button>
-            )}
+            <button
+              onClick={() => setActiveTab("inbox")}
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === "inbox" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+            >
+              My Submissions
+              {grievances.length > 0 && (
+                <span className="ml-1.5 inline-flex items-center justify-center rounded-full bg-muted px-1.5 text-[10px] font-semibold text-muted-foreground">
+                  {grievances.length}
+                </span>
+              )}
+            </button>
           </>
         )}
         {isManager && (
@@ -587,6 +590,20 @@ export function GrievancesClient({ grievances, stats, isManager, employeeId }: P
               <p className="text-sm text-muted-foreground">
                 {grievances.length === 0 ? "No submissions yet." : "No results match your filters."}
               </p>
+              {grievances.length === 0 && !isManager && (
+                <p className="text-xs text-muted-foreground/80 mt-2 max-w-md mx-auto">
+                  Submissions you raise without checking &ldquo;Submit anonymously&rdquo; will appear here.
+                  Anonymous submissions can only be looked up via their tracking token in the{" "}
+                  <button
+                    type="button"
+                    className="underline text-primary hover:no-underline"
+                    onClick={() => setActiveTab("track")}
+                  >
+                    Track Status
+                  </button>{" "}
+                  tab.
+                </p>
+              )}
             </div>
           ) : (
             <div className="divide-y divide-border">

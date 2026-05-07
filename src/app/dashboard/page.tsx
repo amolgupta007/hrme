@@ -298,8 +298,8 @@ export default async function DashboardPage() {
         </div>
       )}
 
-      {/* Onboarding card — employee only, shown until all required steps done */}
-      {onboardingStatus && !onboardingStatus.allRequiredComplete && (
+      {/* Onboarding card — employee only, shown until ALL enabled steps are done (required + optional) */}
+      {onboardingStatus && onboardingStatus.totalComplete < onboardingStatus.totalEnabled && (
         <OnboardingCard status={onboardingStatus} />
       )}
 

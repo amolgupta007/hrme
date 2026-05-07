@@ -24,6 +24,10 @@
     {
       "path": "/api/cron/webhook-events-cleanup",
       "schedule": "0 5 * * 0"
+    },
+    {
+      "path": "/api/cron/attendance-auto-clockout",
+      "schedule": "30 18 * * *"
     }
   ]
 }

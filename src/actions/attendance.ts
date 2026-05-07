@@ -2,8 +2,83 @@
 
 import { revalidatePath } from "next/cache";
 import { createAdminSupabase } from "@/lib/supabase/server";
-import { getCurrentUser, isManagerOrAbove } from "@/lib/current-user";
+import { getCurrentUser, isAdmin, isManagerOrAbove } from "@/lib/current-user";
 import type { ActionResult } from "@/types";
+
+export type AttendanceSettings = {
+  standardWorkdayHours: number;
+};
+
+const DEFAULT_STANDARD_WORKDAY_HOURS = 8;
+
+export async function getAttendanceSettings(): Promise<ActionResult<AttendanceSettings>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+
+  const supabase = createAdminSupabase();
+  const { data, error } = await supabase
+    .from("organizations")
+    .select("settings")
+    .eq("id", user.orgId)
+    .single();
+
+  if (error) return { success: false, error: error.message };
+
+  const raw = (data as any)?.settings?.attendance?.standard_workday_hours;
+  const parsed = typeof raw === "number" && Number.isFinite(raw) ? raw : DEFAULT_STANDARD_WORKDAY_HOURS;
+  const standardWorkdayHours = Math.max(1, Math.min(16, Math.round(parsed * 10) / 10));
+
+  return { success: true, data: { standardWorkdayHours } };
+}
+
+export async function updateAttendanceSettings(input: {
+  standardWorkdayHours: number;
+}): Promise<ActionResult<void>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can update attendance settings" };
+
+  const raw = Number(input.standardWorkdayHours);
+  if (!Number.isFinite(raw)) {
+    return { success: false, error: "Working hours must be a number." };
+  }
+  if (raw < 1) {
+    return { success: false, error: "Working hours must be at least 1." };
+  }
+  if (raw > 16) {
+    return { success: false, error: "Working hours cannot exceed 16." };
+  }
+  const standardWorkdayHours = Math.round(raw * 10) / 10;
+
+  const supabase = createAdminSupabase();
+  const { data: orgRow, error: readErr } = await supabase
+    .from("organizations")
+    .select("settings")
+    .eq("id", user.orgId)
+    .single();
+
+  if (readErr) return { success: false, error: readErr.message };
+
+  const existing = ((orgRow as any)?.settings ?? {}) as Record<string, any>;
+  const existingAttendance = (existing.attendance && typeof existing.attendance === "object" ? existing.attendance : {}) as Record<string, any>;
+  const nextSettings = {
+    ...existing,
+    attendance: {
+      ...existingAttendance,
+      standard_workday_hours: standardWorkdayHours,
+    },
+  };
+
+  const { error: writeErr } = await supabase
+    .from("organizations")
+    .update({ settings: nextSettings })
+    .eq("id", user.orgId);
+
+  if (writeErr) return { success: false, error: writeErr.message };
+
+  revalidatePath("/dashboard/attendance");
+  return { success: true, data: undefined };
+}
 
 export type AttendanceRecord = {
   id: string;
@@ -16,8 +91,9 @@ export type AttendanceRecord = {
   total_minutes: number | null;
   ip_address: string | null;
   notes: string | null;
-  source: "web" | "device";
+  source: "web" | "device" | "auto_close";
   device_id: string | null;
+  auto_closed: boolean;
 };
 
 export type TodayStatus = {
@@ -230,7 +306,8 @@ function formatRecord(raw: any): AttendanceRecord {
     total_minutes: raw.total_minutes ?? null,
     ip_address: raw.ip_address ?? null,
     notes: raw.notes ?? null,
-    source: (raw.source ?? "web") as "web" | "device",
+    source: (raw.source ?? "web") as "web" | "device" | "auto_close",
     device_id: raw.device_id ?? null,
+    auto_closed: !!raw.auto_closed,
   };
 }

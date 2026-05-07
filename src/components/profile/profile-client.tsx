@@ -3,7 +3,7 @@
 import * as React from "react";
 import * as Label from "@radix-ui/react-label";
 import * as Select from "@radix-ui/react-select";
-import { Pencil, X, ChevronDown, User, Copy } from "lucide-react";
+import { Pencil, X, ChevronDown, User, Copy, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { cn, getInitials, formatDate } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -11,8 +11,10 @@ import { updateMyProfile, updateEmergencyContact } from "@/actions/profile";
 import { maskPAN, maskAadhar, calcAge } from "@/lib/profile-utils";
 import type { EmployeeProfile, Address } from "@/actions/profile";
 
-const inputCn =
-  "flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:opacity-50";
+const inputCnBase =
+  "flex h-10 w-full rounded-lg border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50";
+const inputCn = cn(inputCnBase, "border-input focus:ring-ring");
+const inputErrCn = cn(inputCnBase, "border-destructive focus:ring-destructive");
 
 const EMPTY_ADDRESS: Address = { line1: "", line2: "", city: "", state: "", pincode: "" };
 
@@ -32,6 +34,8 @@ export function ProfileClient({ profile }: { profile: EmployeeProfile }) {
   const [editing, setEditing] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const [sameAddress, setSameAddress] = React.useState(false);
+
+  const [fieldErrors, setFieldErrors] = React.useState<Record<string, string>>({});
 
   const [form, setForm] = React.useState({
     firstName: profile.first_name,
@@ -53,8 +57,19 @@ export function ProfileClient({ profile }: { profile: EmployeeProfile }) {
     emergencyContactRelationship: profile.emergency_contact_relationship ?? "",
   });
 
+  function clearError(...keys: string[]) {
+    setFieldErrors((prev) => {
+      if (keys.every((k) => !(k in prev)) && !("_form" in prev)) return prev;
+      const next = { ...prev };
+      for (const k of keys) delete next[k];
+      delete next._form;
+      return next;
+    });
+  }
+
   function setField(field: keyof typeof form, value: string) {
     setForm((f) => ({ ...f, [field]: value }));
+    clearError(field as string);
   }
 
   function setAddr(type: "communicationAddress" | "permanentAddress", field: keyof Address, value: string) {
@@ -65,6 +80,7 @@ export function ProfileClient({ profile }: { profile: EmployeeProfile }) {
         ? { permanentAddress: { ...(f.communicationAddress as Address), [field]: value } }
         : {}),
     }));
+    clearError(`${type}.${field}`, type);
   }
 
   function handleSameAddress(checked: boolean) {
@@ -74,6 +90,7 @@ export function ProfileClient({ profile }: { profile: EmployeeProfile }) {
 
   async function handleSave() {
     setLoading(true);
+    setFieldErrors({});
     const [profileRes, emergencyRes] = await Promise.all([
       updateMyProfile(profile.id, {
         ...form,
@@ -86,10 +103,20 @@ export function ProfileClient({ profile }: { profile: EmployeeProfile }) {
       }),
     ]);
     setLoading(false);
-    if (!profileRes.success) { toast.error(profileRes.error); return; }
-    if (!emergencyRes.success) { toast.error(emergencyRes.error); return; }
-    toast.success("Profile updated");
-    setEditing(false);
+
+    if (profileRes.success && emergencyRes.success) {
+      toast.success("Profile updated");
+      setEditing(false);
+      return;
+    }
+
+    const merged: Record<string, string> = {};
+    if (!profileRes.success && profileRes.fieldErrors) Object.assign(merged, profileRes.fieldErrors);
+    if (!emergencyRes.success && emergencyRes.fieldErrors) Object.assign(merged, emergencyRes.fieldErrors);
+    setFieldErrors(merged);
+
+    const summary = !profileRes.success ? profileRes.error : !emergencyRes.success ? emergencyRes.error : "Validation failed";
+    toast.error(summary);
   }
 
   const fullName = `${profile.first_name} ${profile.last_name}`;
@@ -128,17 +155,32 @@ export function ProfileClient({ profile }: { profile: EmployeeProfile }) {
         )}
       </div>
 
+      {/* Top-level validation banner (form-level errors that don't map to a single field) */}
+      {editing && Object.keys(fieldErrors).length > 0 && (
+        <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 flex items-start gap-3">
+          <AlertCircle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
+          <div className="space-y-1 text-sm text-destructive">
+            <p className="font-medium">Please fix {Object.keys(fieldErrors).length === 1 ? "this issue" : "these issues"}:</p>
+            <ul className="list-disc list-inside space-y-0.5 text-xs">
+              {Object.entries(fieldErrors).map(([k, v]) => (
+                <li key={k}>{v}</li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+
       {/* Name */}
       <Section title="Name">
         <div className="grid grid-cols-3 gap-4">
-          <Field label="First Name">
-            {editing ? <input className={inputCn} value={form.firstName} onChange={(e) => setField("firstName", e.target.value)} /> : <Value>{profile.first_name}</Value>}
+          <Field label="First Name" error={fieldErrors.firstName}>
+            {editing ? <input className={fieldErrors.firstName ? inputErrCn : inputCn} value={form.firstName} onChange={(e) => setField("firstName", e.target.value)} /> : <Value>{profile.first_name}</Value>}
           </Field>
-          <Field label="Last Name">
-            {editing ? <input className={inputCn} value={form.lastName} onChange={(e) => setField("lastName", e.target.value)} /> : <Value>{profile.last_name}</Value>}
+          <Field label="Last Name" error={fieldErrors.lastName}>
+            {editing ? <input className={fieldErrors.lastName ? inputErrCn : inputCn} value={form.lastName} onChange={(e) => setField("lastName", e.target.value)} /> : <Value>{profile.last_name}</Value>}
           </Field>
-          <Field label="Title / Designation">
-            {editing ? <input className={inputCn} value={form.designation} onChange={(e) => setField("designation", e.target.value)} placeholder="e.g. Software Engineer" /> : <Value>{profile.designation}</Value>}
+          <Field label="Title / Designation" error={fieldErrors.designation}>
+            {editing ? <input className={fieldErrors.designation ? inputErrCn : inputCn} value={form.designation} onChange={(e) => setField("designation", e.target.value)} placeholder="e.g. Software Engineer" /> : <Value>{profile.designation}</Value>}
           </Field>
         </div>
       </Section>
@@ -146,15 +188,15 @@ export function ProfileClient({ profile }: { profile: EmployeeProfile }) {
       {/* Demographic */}
       <Section title="Demographic Information">
         <div className="grid grid-cols-3 gap-4">
-          <Field label="Country">
-            {editing ? <input className={inputCn} value={form.country} onChange={(e) => setField("country", e.target.value)} placeholder="India" /> : <Value>{profile.country ?? "India"}</Value>}
+          <Field label="Country" error={fieldErrors.country}>
+            {editing ? <input className={fieldErrors.country ? inputErrCn : inputCn} value={form.country} onChange={(e) => setField("country", e.target.value)} placeholder="India" /> : <Value>{profile.country ?? "India"}</Value>}
           </Field>
-          <Field label="Marital Status">
+          <Field label="Marital Status" error={fieldErrors.maritalStatus}>
             {editing ? (
               <SimpleSelect value={form.maritalStatus} onChange={(v) => setField("maritalStatus", v)} placeholder="Select" options={["Single", "Married", "Divorced", "Widowed", "Prefer not to say"]} />
             ) : <Value>{profile.marital_status}</Value>}
           </Field>
-          <Field label="Gender">
+          <Field label="Gender" error={fieldErrors.gender}>
             {editing ? (
               <SimpleSelect value={form.gender} onChange={(v) => setField("gender", v)} placeholder="Select" options={["Male", "Female", "Non-binary", "Prefer not to say", "Other"]} />
             ) : <Value>{profile.gender}</Value>}
@@ -165,9 +207,9 @@ export function ProfileClient({ profile }: { profile: EmployeeProfile }) {
       {/* National Identifiers */}
       <Section title="National Identifiers">
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Permanent Account Number (PAN)">
+          <Field label="Permanent Account Number (PAN)" error={fieldErrors.panNumber}>
             {editing ? (
-              <input className={inputCn} value={form.panNumber} onChange={(e) => setField("panNumber", e.target.value.toUpperCase())} placeholder="ABCDE1234F" maxLength={10} />
+              <input className={fieldErrors.panNumber ? inputErrCn : inputCn} value={form.panNumber} onChange={(e) => setField("panNumber", e.target.value.toUpperCase())} placeholder="ABCDE1234F" maxLength={10} />
             ) : (
               <div className="flex items-center gap-2">
                 <Value className="font-mono">{maskPAN(profile.pan_number)}</Value>
@@ -180,9 +222,9 @@ export function ProfileClient({ profile }: { profile: EmployeeProfile }) {
               </div>
             )}
           </Field>
-          <Field label="Aadhar Number">
+          <Field label="Aadhar Number" error={fieldErrors.aadharNumber}>
             {editing ? (
-              <input className={inputCn} value={form.aadharNumber} onChange={(e) => setField("aadharNumber", e.target.value.replace(/\D/g, "").slice(0, 12))} placeholder="12-digit Aadhar number" maxLength={12} />
+              <input className={fieldErrors.aadharNumber ? inputErrCn : inputCn} value={form.aadharNumber} onChange={(e) => setField("aadharNumber", e.target.value.replace(/\D/g, "").slice(0, 12))} placeholder="12-digit Aadhar number" maxLength={12} />
             ) : (
               <div className="flex items-center gap-2">
                 <Value className="font-mono">{maskAadhar(profile.aadhar_number)}</Value>
@@ -205,14 +247,14 @@ export function ProfileClient({ profile }: { profile: EmployeeProfile }) {
           <Field label="Company Email">
             <Value className="text-muted-foreground">{profile.email}</Value>
           </Field>
-          <Field label="Personal Email">
+          <Field label="Personal Email" error={fieldErrors.personalEmail}>
             {editing
-              ? <input type="email" className={inputCn} value={form.personalEmail} onChange={(e) => setField("personalEmail", e.target.value)} placeholder="personal@example.com" />
+              ? <input type="email" className={fieldErrors.personalEmail ? inputErrCn : inputCn} value={form.personalEmail} onChange={(e) => setField("personalEmail", e.target.value)} placeholder="personal@example.com" />
               : <Value>{profile.personal_email}</Value>}
           </Field>
-          <Field label="Mobile Number">
+          <Field label="Mobile Number" error={fieldErrors.phone}>
             {editing
-              ? <input type="tel" className={inputCn} value={form.phone} onChange={(e) => setField("phone", e.target.value)} placeholder="+91 98765 43210" />
+              ? <input type="tel" className={fieldErrors.phone ? inputErrCn : inputCn} value={form.phone} onChange={(e) => setField("phone", e.target.value)} placeholder="+91 98765 43210" />
               : <Value>{profile.phone}</Value>}
           </Field>
         </div>
@@ -223,6 +265,14 @@ export function ProfileClient({ profile }: { profile: EmployeeProfile }) {
             address={editing ? form.communicationAddress : toAddress(profile.communication_address)}
             editing={editing}
             onChange={(f, v) => setAddr("communicationAddress", f, v)}
+            sectionError={fieldErrors.communicationAddress}
+            errors={{
+              line1: fieldErrors["communicationAddress.line1"],
+              line2: fieldErrors["communicationAddress.line2"],
+              city: fieldErrors["communicationAddress.city"],
+              state: fieldErrors["communicationAddress.state"],
+              pincode: fieldErrors["communicationAddress.pincode"],
+            }}
           />
         </div>
 
@@ -241,6 +291,14 @@ export function ProfileClient({ profile }: { profile: EmployeeProfile }) {
             address={editing ? form.permanentAddress : toAddress(profile.permanent_address)}
             editing={editing && !sameAddress}
             onChange={(f, v) => setAddr("permanentAddress", f, v)}
+            sectionError={fieldErrors.permanentAddress}
+            errors={{
+              line1: fieldErrors["permanentAddress.line1"],
+              line2: fieldErrors["permanentAddress.line2"],
+              city: fieldErrors["permanentAddress.city"],
+              state: fieldErrors["permanentAddress.state"],
+              pincode: fieldErrors["permanentAddress.pincode"],
+            }}
           />
         </div>
       </Section>
@@ -248,17 +306,17 @@ export function ProfileClient({ profile }: { profile: EmployeeProfile }) {
       {/* Biographical */}
       <Section title="Biographical Information">
         <div className="grid grid-cols-3 gap-4">
-          <Field label="Date of Birth">
+          <Field label="Date of Birth" error={fieldErrors.dateOfBirth}>
             {editing ? (
-              <input type="date" className={inputCn} value={form.dateOfBirth} onChange={(e) => setField("dateOfBirth", e.target.value)} />
+              <input type="date" className={fieldErrors.dateOfBirth ? inputErrCn : inputCn} value={form.dateOfBirth} onChange={(e) => setField("dateOfBirth", e.target.value)} />
             ) : <Value>{profile.date_of_birth ? formatDate(profile.date_of_birth) : null}</Value>}
           </Field>
           <Field label="Age">
             <Value>{calcAge(profile.date_of_birth)}</Value>
           </Field>
-          <Field label="Pronouns">
+          <Field label="Pronouns" error={fieldErrors.pronouns}>
             {editing ? (
-              <input className={inputCn} value={form.pronouns} onChange={(e) => setField("pronouns", e.target.value)} placeholder="e.g. he/him, she/her, they/them" />
+              <input className={fieldErrors.pronouns ? inputErrCn : inputCn} value={form.pronouns} onChange={(e) => setField("pronouns", e.target.value)} placeholder="e.g. he/him, she/her, they/them" />
             ) : <Value>{profile.pronouns}</Value>}
           </Field>
         </div>
@@ -266,19 +324,19 @@ export function ProfileClient({ profile }: { profile: EmployeeProfile }) {
 
       {/* Emergency Contact */}
       <Section title="Emergency Contact">
-        <Field label="Name">
+        <Field label="Name" error={fieldErrors["emergency.name"]}>
           {editing
-            ? <input className={inputCn} value={form.emergencyContactName} onChange={(e) => setField("emergencyContactName", e.target.value)} placeholder="Full name" />
+            ? <input className={fieldErrors["emergency.name"] ? inputErrCn : inputCn} value={form.emergencyContactName} onChange={(e) => { setField("emergencyContactName", e.target.value); clearError("emergency.name"); }} placeholder="Full name" />
             : <Value>{profile.emergency_contact_name}</Value>}
         </Field>
-        <Field label="Phone">
+        <Field label="Phone" error={fieldErrors["emergency.phone"]}>
           {editing
-            ? <input type="tel" className={inputCn} value={form.emergencyContactPhone} onChange={(e) => setField("emergencyContactPhone", e.target.value)} placeholder="+91 98765 43210" />
+            ? <input type="tel" className={fieldErrors["emergency.phone"] ? inputErrCn : inputCn} value={form.emergencyContactPhone} onChange={(e) => { setField("emergencyContactPhone", e.target.value); clearError("emergency.phone"); }} placeholder="+91 98765 43210" />
             : <Value>{profile.emergency_contact_phone}</Value>}
         </Field>
-        <Field label="Relationship">
+        <Field label="Relationship" error={fieldErrors["emergency.relationship"]}>
           {editing
-            ? <input className={inputCn} value={form.emergencyContactRelationship} onChange={(e) => setField("emergencyContactRelationship", e.target.value)} placeholder="e.g. Spouse, Parent, Sibling" />
+            ? <input className={fieldErrors["emergency.relationship"] ? inputErrCn : inputCn} value={form.emergencyContactRelationship} onChange={(e) => { setField("emergencyContactRelationship", e.target.value); clearError("emergency.relationship"); }} placeholder="e.g. Spouse, Parent, Sibling" />
             : <Value>{profile.emergency_contact_relationship}</Value>}
         </Field>
       </Section>
@@ -297,11 +355,18 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, children, error }: { label: string; children: React.ReactNode; error?: string }) {
   return (
     <div className="space-y-1.5">
-      <Label.Root className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</Label.Root>
+      <Label.Root className={cn(
+        "text-xs font-medium uppercase tracking-wide flex items-center gap-1.5",
+        error ? "text-destructive" : "text-muted-foreground"
+      )}>
+        {label}
+        {error && <AlertCircle className="h-3 w-3" />}
+      </Label.Root>
       {children}
+      {error && <p className="text-xs text-destructive">{error}</p>}
     </div>
   );
 }
@@ -314,30 +379,39 @@ function Value({ children, className }: { children?: React.ReactNode; className?
   );
 }
 
-function AddressFields({ address, editing, onChange }: {
+function AddressFields({ address, editing, onChange, errors, sectionError }: {
   address: Address;
   editing: boolean;
   onChange: (field: keyof Address, value: string) => void;
+  errors?: { line1?: string; line2?: string; city?: string; state?: string; pincode?: string };
+  sectionError?: string;
 }) {
+  const e = errors ?? {};
   return (
     <div className="space-y-3">
+      {sectionError && (
+        <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2">
+          <AlertCircle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
+          <p className="text-xs text-destructive">{sectionError}</p>
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-4">
-        <Field label="Address Line 1">
-          {editing ? <input className={inputCn} value={address.line1} onChange={(e) => onChange("line1", e.target.value)} placeholder="Street / Flat no." /> : <Value>{address.line1}</Value>}
+        <Field label="Address Line 1" error={e.line1}>
+          {editing ? <input className={e.line1 ? inputErrCn : inputCn} value={address.line1} onChange={(ev) => onChange("line1", ev.target.value)} placeholder="Street / Flat no." /> : <Value>{address.line1}</Value>}
         </Field>
-        <Field label="Address Line 2">
-          {editing ? <input className={inputCn} value={address.line2} onChange={(e) => onChange("line2", e.target.value)} placeholder="Area / Landmark" /> : <Value>{address.line2}</Value>}
+        <Field label="Address Line 2" error={e.line2}>
+          {editing ? <input className={e.line2 ? inputErrCn : inputCn} value={address.line2} onChange={(ev) => onChange("line2", ev.target.value)} placeholder="Area / Landmark" /> : <Value>{address.line2}</Value>}
         </Field>
       </div>
       <div className="grid grid-cols-3 gap-4">
-        <Field label="City">
-          {editing ? <input className={inputCn} value={address.city} onChange={(e) => onChange("city", e.target.value)} placeholder="City" /> : <Value>{address.city}</Value>}
+        <Field label="City" error={e.city}>
+          {editing ? <input className={e.city ? inputErrCn : inputCn} value={address.city} onChange={(ev) => onChange("city", ev.target.value)} placeholder="City" /> : <Value>{address.city}</Value>}
         </Field>
-        <Field label="State">
-          {editing ? <input className={inputCn} value={address.state} onChange={(e) => onChange("state", e.target.value)} placeholder="State" /> : <Value>{address.state}</Value>}
+        <Field label="State" error={e.state}>
+          {editing ? <input className={e.state ? inputErrCn : inputCn} value={address.state} onChange={(ev) => onChange("state", ev.target.value)} placeholder="State" /> : <Value>{address.state}</Value>}
         </Field>
-        <Field label="Pincode">
-          {editing ? <input className={inputCn} value={address.pincode} onChange={(e) => onChange("pincode", e.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="6-digit pincode" maxLength={6} /> : <Value>{address.pincode}</Value>}
+        <Field label="Pincode" error={e.pincode}>
+          {editing ? <input className={e.pincode ? inputErrCn : inputCn} value={address.pincode} onChange={(ev) => onChange("pincode", ev.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="6-digit pincode" maxLength={6} /> : <Value>{address.pincode}</Value>}
         </Field>
       </div>
     </div>

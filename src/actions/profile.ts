@@ -31,27 +31,44 @@ const FIELD_LABELS: Record<string, string> = {
   pincode: "PIN code",
 };
 
-function formatZodError(error: z.ZodError): string {
-  const issue = error.errors[0];
-  if (!issue) return "Validation failed";
+function fieldKeyFromPath(path: (string | number)[]): string {
+  if (path.length === 0) return "_form";
+  return path.map((p) => p.toString()).join(".");
+}
 
-  const path = issue.path.filter((p) => typeof p === "string" || typeof p === "number");
-  const fieldKey = path[0]?.toString() ?? "";
-  const subKey = path[1]?.toString();
-  const label = FIELD_LABELS[fieldKey] ?? fieldKey;
-  const subLabel = subKey ? FIELD_LABELS[subKey] ?? subKey : null;
-  const fullLabel = subLabel ? `${label} → ${subLabel}` : label;
+function labelForField(fieldKey: string): string {
+  if (fieldKey === "_form") return "Form";
+  const parts = fieldKey.split(".");
+  return parts
+    .map((p) => FIELD_LABELS[p] ?? p)
+    .join(" → ");
+}
 
+function describeIssue(issue: z.ZodIssue): string {
   if (issue.code === "invalid_type") {
-    return `${fullLabel}: expected ${issue.expected}, received ${issue.received}. Please check this field.`;
+    return `Expected ${issue.expected}, received ${issue.received}.`;
   }
-  if (issue.code === "too_small") {
-    return `${fullLabel}: ${issue.message}`;
+  return issue.message;
+}
+
+export type ProfileFieldErrors = Record<string, string>;
+
+function buildValidationFailure(error: z.ZodError): { error: string; fieldErrors: ProfileFieldErrors } {
+  const fieldErrors: ProfileFieldErrors = {};
+  for (const issue of error.errors) {
+    const key = fieldKeyFromPath(issue.path as (string | number)[]);
+    if (!fieldErrors[key]) {
+      fieldErrors[key] = `${labelForField(key)}: ${describeIssue(issue)}`;
+    }
   }
-  if (issue.code === "invalid_string") {
-    return `${fullLabel}: ${issue.message}`;
-  }
-  return fullLabel ? `${fullLabel}: ${issue.message}` : issue.message;
+
+  // Build a summary that lists each offending field, not just the first one
+  const summary =
+    Object.values(fieldErrors).length === 1
+      ? Object.values(fieldErrors)[0]
+      : `Fix ${Object.keys(fieldErrors).length} fields: ${Object.values(fieldErrors).join("; ")}`;
+
+  return { error: summary, fieldErrors };
 }
 
 export type Address = {
@@ -168,17 +185,22 @@ const profileSchema = z.object({
   permanentAddress: addressSchema.optional(),
 });
 
+export type ProfileSaveResult =
+  | { success: true; data: undefined }
+  | { success: false; error: string; fieldErrors?: ProfileFieldErrors };
+
 export async function updateMyProfile(
   employeeId: string,
   formData: z.infer<typeof profileSchema>
-): Promise<ActionResult<void>> {
+): Promise<ProfileSaveResult> {
   const user = await getCurrentUser();
   if (!user) return { success: false, error: "Not authenticated" };
   if (user.employeeId !== employeeId) return { success: false, error: "Forbidden" };
 
   const validated = profileSchema.safeParse(formData);
   if (!validated.success) {
-    return { success: false, error: formatZodError(validated.error) };
+    const { error, fieldErrors } = buildValidationFailure(validated.error);
+    return { success: false, error, fieldErrors };
   }
 
   const d = validated.data;
@@ -219,13 +241,19 @@ const emergencyContactSchema = z.object({
 
 export async function updateEmergencyContact(
   formData: z.infer<typeof emergencyContactSchema>
-): Promise<ActionResult<void>> {
+): Promise<ProfileSaveResult> {
   const user = await getCurrentUser();
   if (!user) return { success: false, error: "Not authenticated" };
 
   const validated = emergencyContactSchema.safeParse(formData);
   if (!validated.success) {
-    return { success: false, error: formatZodError(validated.error) };
+    const { error, fieldErrors: rawFieldErrors } = buildValidationFailure(validated.error);
+    // Namespace emergency-contact field keys so they don't collide with profile keys
+    const fieldErrors: ProfileFieldErrors = {};
+    for (const [k, v] of Object.entries(rawFieldErrors)) {
+      fieldErrors[`emergency.${k}`] = v;
+    }
+    return { success: false, error, fieldErrors };
   }
 
   const d = validated.data;

@@ -79,7 +79,7 @@ export function ProfileClient({ profile }: { profile: EmployeeProfile }) {
         ...form,
         maritalStatus: form.maritalStatus,
       }),
-      updateEmergencyContact(profile.id, {
+      updateEmergencyContact({
         name: form.emergencyContactName,
         phone: form.emergencyContactPhone,
         relationship: form.emergencyContactRelationship,

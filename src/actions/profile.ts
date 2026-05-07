@@ -7,6 +7,53 @@ import { createAdminSupabase } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/current-user";
 import type { ActionResult, Employee } from "@/types";
 
+const FIELD_LABELS: Record<string, string> = {
+  firstName: "First name",
+  lastName: "Last name",
+  designation: "Designation",
+  personalEmail: "Personal email",
+  phone: "Phone",
+  gender: "Gender",
+  pronouns: "Pronouns",
+  maritalStatus: "Marital status",
+  country: "Country",
+  dateOfBirth: "Date of birth",
+  panNumber: "PAN number",
+  aadharNumber: "Aadhar number",
+  communicationAddress: "Communication address",
+  permanentAddress: "Permanent address",
+  name: "Emergency contact name",
+  relationship: "Emergency contact relationship",
+  line1: "Address line 1",
+  line2: "Address line 2",
+  city: "City",
+  state: "State",
+  pincode: "PIN code",
+};
+
+function formatZodError(error: z.ZodError): string {
+  const issue = error.errors[0];
+  if (!issue) return "Validation failed";
+
+  const path = issue.path.filter((p) => typeof p === "string" || typeof p === "number");
+  const fieldKey = path[0]?.toString() ?? "";
+  const subKey = path[1]?.toString();
+  const label = FIELD_LABELS[fieldKey] ?? fieldKey;
+  const subLabel = subKey ? FIELD_LABELS[subKey] ?? subKey : null;
+  const fullLabel = subLabel ? `${label} → ${subLabel}` : label;
+
+  if (issue.code === "invalid_type") {
+    return `${fullLabel}: expected ${issue.expected}, received ${issue.received}. Please check this field.`;
+  }
+  if (issue.code === "too_small") {
+    return `${fullLabel}: ${issue.message}`;
+  }
+  if (issue.code === "invalid_string") {
+    return `${fullLabel}: ${issue.message}`;
+  }
+  return fullLabel ? `${fullLabel}: ${issue.message}` : issue.message;
+}
+
 export type Address = {
   line1: string;
   line2: string;
@@ -131,7 +178,7 @@ export async function updateMyProfile(
 
   const validated = profileSchema.safeParse(formData);
   if (!validated.success) {
-    return { success: false, error: validated.error.errors[0]?.message ?? "Validation failed" };
+    return { success: false, error: formatZodError(validated.error) };
   }
 
   const d = validated.data;
@@ -177,7 +224,9 @@ export async function updateEmergencyContact(
   if (!user) return { success: false, error: "Not authenticated" };
 
   const validated = emergencyContactSchema.safeParse(formData);
-  if (!validated.success) return { success: false, error: validated.error.errors[0].message };
+  if (!validated.success) {
+    return { success: false, error: formatZodError(validated.error) };
+  }
 
   const d = validated.data;
   const supabase = createAdminSupabase();

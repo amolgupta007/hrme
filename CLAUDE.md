@@ -112,10 +112,11 @@ All tables have `org_id` (FK → organizations) for multi-tenant RLS isolation.
 | `interview_feedback` | schedule_id, interviewer_id, technical/communication/culture_fit/overall rating, recommendation; unique(schedule_id, interviewer_id) |
 | `offers` | application_id, ctc, joining_date, status (draft/sent/accepted/declined), offer_token (unique UUID) |
 | `grievances` | employee_id (null if anonymous), type, severity (low/medium/high/urgent), is_anonymous, tracking_token (unique), status (open/in_review/resolved/closed) |
+| `attendance_records` | employee_id, date, clock_in_at, clock_out_at, total_minutes, source (`web`/`device`/`auto_close`), auto_closed (bool), ip_address, device_id |
 
 ### Tables added post-initial-migration (via SQL Editor — NOT in 001_initial_schema.sql)
-`objectives`, `announcements`, `document_acknowledgments`, `salary_structures`, `payroll_runs`, `payroll_entries`, `jobs`, `candidates`, `applications`, `interview_schedules`, `interview_feedback`, `offers`, `grievances`
-Also: `reviews.objectives_id` added via ALTER TABLE
+`objectives`, `announcements`, `document_acknowledgments`, `salary_structures`, `payroll_runs`, `payroll_entries`, `jobs`, `candidates`, `applications`, `interview_schedules`, `interview_feedback`, `offers`, `grievances`, `attendance_records`
+Also: `reviews.objectives_id` added via ALTER TABLE; `attendance_records.auto_closed` (BOOLEAN, default false) and `'auto_close'` value in `attendance_records_source_check` were added 2026-05-08 to support the auto-clockout cron
 
 ### Multi-tenancy
 - RLS enabled on ALL tables; admin Supabase client (`SUPABASE_SERVICE_ROLE_KEY`) bypasses RLS — used in all server actions
@@ -227,6 +228,23 @@ Feature-flagged via `organizations.settings.grievances_enabled`. Three tabs:
 
 Anonymous submissions: `employee_id = null`, never recoverable. Only managers/employees (not admins) see own submissions in "My Submissions" — RBAC exception vs other modules.
 
+The "My Submissions" tab is **always visible** for non-admins (renders empty state when no submissions). Empty state explicitly tells the user that anonymous submissions only appear via Track Status token lookup.
+
+---
+
+## Attendance Module (`/dashboard/attendance`)
+
+Feature-flagged via `organizations.settings.attendance_enabled`. Optional payroll integration via `attendance_payroll_enabled`.
+
+- **Clock in / clock out** by an employee themselves (web). Each click writes a row in `attendance_records` (one row per `(employee_id, date)`).
+- **Team Today** tab for managers (`isManagerOrAbove`) showing org-wide presence.
+- **Working Hours setting** (admin-only card at top of page): `organizations.settings.attendance.standard_workday_hours` (1–16 hours, default 8). Edited inline via `updateAttendanceSettings`.
+- **Auto Clock-Out cron** (`/api/cron/attendance-auto-clockout`) at `30 18 * * *` UTC = 00:00 IST. Closes any prior-IST-day shift where `clock_in_at IS NOT NULL AND clock_out_at IS NULL`:
+  - `clock_out_at = min(clock_in_at + standard_workday_hours, end_of_date_IST)`
+  - `auto_closed = true`, `source = 'auto_close'`
+  - Skips orgs with `attendance_enabled = false`
+  - Idempotent (re-checks `clock_out_at IS NULL` at update time)
+
 ---
 
 ## Payroll Module (`/dashboard/payroll`) — Business+
@@ -235,6 +253,8 @@ Anonymous submissions: `employee_id = null`, never recoverable. Only managers/em
 - Salary structure config per employee → auto-computes components
 - Monthly run: draft → process → mark paid. LOP from approved unpaid leaves.
 - Printable payslip (browser Print → PDF). Employee self-service "My Payslips" tab.
+- **My Compensation tab** (employee-facing, always visible): reads the caller's salary_structure via `getMyCompensation` and renders CTC headline + full breakdown via `CTCBreakdownCard`. Empty state shown when admin hasn't configured the structure.
+- `getSalaryStructures` is **admin-guarded** — non-admins receive `Unauthorized`. Use `getMyCompensation()` for employee-facing reads.
 
 ---
 
@@ -280,27 +300,33 @@ Primary: teal `172 50% 36%`. Accent: warm orange `32 95% 52%`. Use CSS variables
 
 ## Cron Jobs (Vercel)
 
-| Route | Schedule | Purpose |
-|-------|----------|---------|
-| `/api/cron/doc-reminders` | `0 9 * * 1` (Mon 9am IST) | Email employees with unacknowledged required docs |
-| `/api/cron/onboarding-nudges` | `30 3 * * *` (9:30am IST) | Day 1/3/5/7 nudge emails for new orgs |
+| Route | Schedule (UTC) | IST | Purpose |
+|-------|----------------|-----|---------|
+| `/api/cron/doc-reminders` | `0 9 * * 1` | Mon 2:30pm | Email employees with unacknowledged required docs |
+| `/api/cron/training-reminders` | `0 9 * * 3` | Wed 2:30pm | Overdue training nudges |
+| `/api/cron/onboarding-nudges` | `30 3 * * *` | 9:00am | Day 1/3/5/7 nudge emails for new orgs |
+| `/api/cron/billing-grace-period` | `0 4 * * *` | 9:30am | Subscription grace-period downgrade sweep |
+| `/api/cron/webhook-events-cleanup` | `0 5 * * 0` | Sun 10:30am | Drop `webhook_events` rows older than 30 days |
+| `/api/cron/attendance-auto-clockout` | `30 18 * * *` | 12:00am | Close attendance shifts where employee forgot to clock out (uses per-org `standard_workday_hours`, capped at 23:59 of the same date; sets `auto_closed=true`, `source='auto_close'`) |
 
-Both require `Authorization: Bearer CRON_SECRET` header. `CRON_SECRET` env var must be set in Vercel.
+All cron routes require `Authorization: Bearer CRON_SECRET` header. `CRON_SECRET` env var must be set in Vercel.
 
 ---
 
 ## Pending Work
 
 ### ❌ Not yet built
-- **Training deadline reminder cron** — Vercel Cron for overdue training alerts (same pattern as doc-reminders)
 - **Blog SEO articles** — more posts in `src/content/blog/` (ESI, gratuity, HR software comparison)
 - **Marketing** — SoftwareSuggest, Capterra, G2, Techjockey listings; LinkedIn company page; Google Ads
 - **Phase 4 AI** (Business tier): semantic search (pgvector), smart review summaries, attrition risk
 - **JambaHire**: onboarding workflows (post-hire)
 - **Training LMS Auto-Sync** (shown as Coming Soon): Coursera, LinkedIn Learning, TalentLMS
+- **Per-org workday-hours per day-of-week** (e.g., Sat = 5h) — current attendance setting is a single value
+- **Auto-closed attendance badge** on history rows in the UI (data is there via `auto_closed`, not yet rendered)
+- **Email notification to employee on auto-closed shift** (intentionally deferred)
 
 ### ❌ Infrastructure
-- Background jobs (Trigger.dev or Inngest) for training reminders, compliance alerts
+- Background jobs (Trigger.dev or Inngest) for compliance alerts
 
 ---
 
@@ -351,7 +377,17 @@ npm run db:push       # Push migrations (needs CLI)
 31. **Grievances RBAC**: `manager` falls through to employee path — only sees own submissions. Different from other modules where managers have elevated access.
 32. **Blog table rendering**: Tables wrapped in `.table-wrapper` via custom remark plugin. `border-radius` doesn't work with `border-collapse: collapse` — wrapper div carries the rounded border.
 33. **Employee page visibility**: Sidebar requires `manager`+ role. Route itself is not middleware-blocked.
-34. **RBAC fallback**: No employee record → defaults to `admin` role in `getCurrentUser()`.
+34. **RBAC fallback**: If lookup by `clerk_user_id` misses, `getCurrentUser()` retries by **email** within the same org (filters out terminated rows), back-fills `clerk_user_id` synchronously, and returns that role. Only if no employee row matches at all does it default to `admin` (org creator). This fixes the historical race where the dashboard rendered the admin sidebar to a freshly-invited employee until Clerk's `organizationMembership.created` webhook caught up. See `src/lib/current-user.ts`.
+35. **Profile field-level errors**: `updateMyProfile` / `updateEmergencyContact` return `ProfileSaveResult` with optional `fieldErrors: Record<path, message>`. Emergency-contact keys are namespaced (`emergency.name`, etc.). The client renders red border + AlertCircle on each input that's in the map. Pattern reusable for other forms.
+36. **Reviews `goals` JSONB shape**: Two formats coexist — legacy array `[{title,status}]` (from old self-review submits) and new object `{items, self_competency_ratings, manager_competency_ratings}`. Always pass through `normalizeGoalsData()` before reading or writing. `submitSelfReview` and `submitManagerReview` both write the unified object format and preserve the other side's competency ratings + ad-hoc goals (do NOT overwrite the entire `goals` column).
+37. **Reviews list view-mode comments**: The dialog's `comments` state must initialize to `self_comments` in view mode (was previously `manager_comments`, which made it look like the self review was overwritten). The view dialog renders Self Comments and Manager Comments as two separate read-only blocks.
+38. **Reviews stale data on cycle switch**: `reviews-client` refetches `listCycleReviews(activeCycleId)` via `useEffect` whenever the active cycle changes (and after successful dialog submit via `onSuccess`). Don't rely on the server-rendered `cycleReviews` prop for the cycle the user navigates to.
+39. **Onboarding card visibility**: Hide the dashboard onboarding card only when `totalComplete === totalEnabled`. Do **not** hide on `allRequiredComplete` alone — orgs may configure 0 required steps (then `[].every()` is true), or have remaining optional steps.
+40. **Attendance `auto_close` source value**: `attendance_records_source_check` originally only allowed `'web'` and `'device'`. The auto-clockout cron writes `'auto_close'` — drop and recreate the constraint to include it before the cron runs (see commit `6168d2c`).
+41. **Attendance `auto_closed` column**: Add via `ALTER TABLE attendance_records ADD COLUMN IF NOT EXISTS auto_closed BOOLEAN NOT NULL DEFAULT FALSE` before deploying the auto-clockout cron. Used by the cron to mark system-closed shifts; UI badge not yet implemented.
+42. **Attendance auto-clockout timestamp policy**: `clock_out_at = min(clock_in_at + standard_workday_hours, end_of_clock_in_date_IST)`. Hours come from `organizations.settings.attendance.standard_workday_hours` (default 8). Total minutes recomputed accordingly. Does NOT use 23:59 wall-clock unless that is sooner than clock_in + N hours.
+43. **Attendance settings JSONB path**: Working hours live at `organizations.settings.attendance.standard_workday_hours`. Read via `getAttendanceSettings()` (any authed user — used by cron and UI). Write via `updateAttendanceSettings({ standardWorkdayHours })` — admin-only, validates 1–16, rounds to one decimal.
+44. **Employee dashboard cards**: For `role === "employee"`, `getDashboardData` populates `myActiveObjectives`, `myLatestReview`, `upcomingHolidays`. The page renders three personalised cards and hides the org-wide "Active Review Cycles" list. Stat cards remain role-aware (no Total Employees for employees).
 
 ---
 

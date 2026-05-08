@@ -258,6 +258,28 @@ Feature-flagged via `organizations.settings.attendance_enabled`. Optional payrol
 
 ---
 
+## Social Agent (`/superadmin/social`) — Single-Tenant LinkedIn
+
+Founder-only LinkedIn content automation for JambaHR's own company page. Lives under `/superadmin` (cookie-auth via `SUPERADMIN_SECRET`), not `/dashboard`. Disabled by default — set `SOCIAL_AGENT_ENABLED=true` in env to activate.
+
+**Pipeline**: cron → Claude generates caption + image prompt → Cloudflare Flux Schnell renders image → upload to `social-media-images` Supabase Storage bucket → row inserted in `social_posts` with `status='pending_approval'` → email digest to `amol@jambahr.com` → founder reviews/edits in `/superadmin/social/<id>` → on approve, post pushed to Buffer queue → publish-check cron transitions `scheduled` → `published` (or `failed`).
+
+**Tables** (migration `008_social_agent.sql`): `social_themes` (6 seeded topics, oldest-`last_used_at` rotation), `social_posts` (lifecycle: `pending_approval`/`approved`/`scheduled`/`publishing`/`published`/`failed`/`rejected`), `social_agent_runs` (forensics + theme rotation guard).
+
+**Storage bucket**: `social-media-images` (public-read, JPEG, one image per post id).
+
+**Buffer integration**: `src/lib/social/buffer.ts` calls Buffer GraphQL at `https://api.buffer.com/graphql` with `BUFFER_ACCESS_TOKEN`. Mutations: `createPost`, `deletePost`. Queries: `post`, `posts`. The Buffer MCP at `https://mcp.buffer.com/mcp` is a dev-time tool only — Vercel runtime uses the GraphQL endpoint directly.
+
+**Buffer free-tier guard**: `approveAndSchedule` checks `getQueuedPostsCount` and rejects if ≥9 (cap is 10) to prevent silent failures.
+
+**Caption rules** (Claude system prompt, `src/lib/social/anthropic.ts`): hook ≤80 chars, 600-1200 char body, 3-6 lowercase camelCase hashtags, JSON-mode output `{caption, hashtags, imagePrompt, imageAltText}`, one retry on parse failure.
+
+**Approval modes**: `addToQueue` (Buffer fills next available slot) or `customScheduled` (datetime picker, IST default). Channel posting schedule: 14 slots/week, Asia/Kolkata. Default cadence: 3 generations/week (Mon/Wed/Fri).
+
+**Env vars required**: `SOCIAL_AGENT_ENABLED`, `ANTHROPIC_API_KEY`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_AI_TOKEN`, `BUFFER_ACCESS_TOKEN`, `BUFFER_ORG_ID`, `BUFFER_LINKEDIN_CHANNEL_ID`. Optional: `BUFFER_GRAPHQL_URL` override.
+
+---
+
 ## Key Architecture Patterns
 
 ### Server Action pattern
@@ -308,6 +330,8 @@ Primary: teal `172 50% 36%`. Accent: warm orange `32 95% 52%`. Use CSS variables
 | `/api/cron/billing-grace-period` | `0 4 * * *` | 9:30am | Subscription grace-period downgrade sweep |
 | `/api/cron/webhook-events-cleanup` | `0 5 * * 0` | Sun 10:30am | Drop `webhook_events` rows older than 30 days |
 | `/api/cron/attendance-auto-clockout` | `30 18 * * *` | 12:00am | Close attendance shifts where employee forgot to clock out (uses per-org `standard_workday_hours`, capped at 23:59 of the same date; sets `auto_closed=true`, `source='auto_close'`) |
+| `/api/cron/social-agent-generate` | `0 4 * * 1,3,5` | Mon/Wed/Fri 9:30am | Generate one LinkedIn draft via Claude + Cloudflare Flux. Gated on `SOCIAL_AGENT_ENABLED=true`. |
+| `/api/cron/social-agent-publish-check` | `*/30 * * * *` | every 30 min | Reconcile Buffer post statuses → DB; mark `published`/`failed` and email on failure. |
 
 All cron routes require `Authorization: Bearer CRON_SECRET` header. `CRON_SECRET` env var must be set in Vercel.
 

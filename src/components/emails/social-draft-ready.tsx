@@ -32,7 +32,7 @@ export function SocialDraftReadyEmail({
 
           <Text style={textStyle}>
             The agent generated a draft. Open it to review the caption, edit anything, regenerate
-            the image if needed, then approve to push it to Buffer's queue.
+            the image if needed, then approve to push it to Buffer&apos;s queue.
           </Text>
 
           <Text style={previewStyle}>{captionPreview}…</Text>

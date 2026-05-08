@@ -307,7 +307,7 @@ function ApproveModal({
           />
           <span>
             <span className="font-medium">Queue</span> — Buffer fills its next available slot per the
-            channel's posting schedule.
+            channel&apos;s posting schedule.
           </span>
         </label>
         <label className="flex items-start gap-2 text-sm">

@@ -129,6 +129,7 @@ export function SettingsContent({
         onToggle={() => toggle("products")}
       >
         <ProductsSection
+          isAdmin={isAdmin}
           jambaHireEnabled={jambaHireEnabled}
           isPlanEligible={isPlanEligible}
           attendanceEnabled={attendanceEnabled}

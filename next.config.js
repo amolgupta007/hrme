@@ -16,7 +16,11 @@ const nextConfig = {
       bodySizeLimit: "10mb",
     },
     instrumentationHook: true,
-    serverComponentsExternalPackages: ["@react-email/render", "@react-email/components", "@anthropic-ai/sdk"],
+    serverComponentsExternalPackages: ["@react-email/render", "@react-email/components", "@anthropic-ai/sdk", "sharp"],
+    outputFileTracingIncludes: {
+      "/api/cron/social-agent-generate": ["./public/Jamba-s.png"],
+      "/superadmin/social/**": ["./public/Jamba-s.png"],
+    },
   },
 };
 

@@ -1,8 +1,14 @@
+import fs from "node:fs/promises";
+import path from "node:path";
+import sharp from "sharp";
 import type { ActionResult } from "@/types";
 import { createAdminSupabase } from "@/lib/supabase/server";
 
 const BUCKET = "social-media-images";
 const CF_MODEL = "@cf/black-forest-labs/flux-1-schnell";
+const LOGO_RELATIVE_PATH = ["public", "Jamba-s.png"];
+const LOGO_WIDTH_RATIO = 0.12; // 12% of image width
+const LOGO_PADDING_RATIO = 0.04; // 4% padding from edges
 
 interface RenderInput {
   postId: string;
@@ -26,8 +32,47 @@ export async function renderAndUpload(
   const cfRes = await callCloudflare(accountId, token, input.prompt);
   if (!cfRes.success) return cfRes;
 
-  const upload = await uploadToStorage(input.postId, cfRes.data);
+  const branded = await applyLogoOverlay(cfRes.data);
+  const upload = await uploadToStorage(input.postId, branded);
   return upload;
+}
+
+async function applyLogoOverlay(rawBytes: Buffer): Promise<Buffer> {
+  try {
+    const baseImage = sharp(rawBytes);
+    const meta = await baseImage.metadata();
+    const width = meta.width ?? 1024;
+    const height = meta.height ?? 1024;
+
+    const logoWidth = Math.max(64, Math.round(width * LOGO_WIDTH_RATIO));
+    const padding = Math.round(width * LOGO_PADDING_RATIO);
+
+    const logoPath = path.join(process.cwd(), ...LOGO_RELATIVE_PATH);
+    const logoBuffer = await fs.readFile(logoPath);
+    const resizedLogo = await sharp(logoBuffer)
+      .resize({ width: logoWidth })
+      .png()
+      .toBuffer();
+
+    const resizedMeta = await sharp(resizedLogo).metadata();
+    const logoHeight = resizedMeta.height ?? logoWidth;
+
+    return await baseImage
+      .composite([
+        {
+          input: resizedLogo,
+          top: Math.max(0, height - logoHeight - padding),
+          left: Math.max(0, width - logoWidth - padding),
+        },
+      ])
+      .jpeg({ quality: 90 })
+      .toBuffer();
+  } catch {
+    // If overlay fails for any reason, fall back to the raw image rather
+    // than dropping the post entirely. The founder can spot the missing
+    // logo at review time and regenerate.
+    return rawBytes;
+  }
 }
 
 async function callCloudflare(

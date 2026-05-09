@@ -1,12 +1,15 @@
 import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/current-user";
+import { requireJambaHireAccess } from "@/lib/jambahire-access";
 import { HireNav } from "@/components/hire/hire-nav";
 
 export default async function HireLayout({ children }: { children: React.ReactNode }) {
-  const user = await getCurrentUser();
+  const access = await requireJambaHireAccess();
 
-  if (!user) redirect("/sign-in");
-  if (!user.jambaHireEnabled) redirect("/dashboard/settings");
+  if (!access.allowed) {
+    if (access.reason === "no_user") redirect("/sign-in");
+    if (access.reason === "feature_disabled") redirect("/dashboard/settings");
+    redirect("/dashboard");
+  }
 
   return (
     <div className="min-h-screen bg-[#f5f4ff] dark:bg-[#0e0c1a]">

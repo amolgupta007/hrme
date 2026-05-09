@@ -20,6 +20,9 @@ export default async function DashboardLayout({
     attendance: userCtx?.attendanceEnabled ?? false,
     grievances: userCtx?.grievancesEnabled ?? false,
     jambahire: userCtx?.jambaHireEnabled ?? false,
+    referrals:
+      (userCtx?.jambaHireEnabled ?? false) &&
+      process.env.JAMBAHIRE_REFERRALS_ENABLED === "true",
   };
 
   return (

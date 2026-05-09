@@ -99,7 +99,10 @@ async function uploadToStorage(
   }
 
   const { data } = supabase.storage.from(BUCKET).getPublicUrl(path);
-  return { success: true, data: { publicUrl: data.publicUrl, storagePath: path } };
+  // Append a cache-bust so regenerations show fresh in the UI and
+  // Buffer/LinkedIn re-fetch the latest bytes (Supabase ignores extra query params).
+  const publicUrl = `${data.publicUrl}?v=${Date.now()}`;
+  return { success: true, data: { publicUrl, storagePath: path } };
 }
 
 async function safeText(res: Response): Promise<string> {

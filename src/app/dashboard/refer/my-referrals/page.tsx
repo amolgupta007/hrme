@@ -3,6 +3,7 @@ import Link from "next/link";
 import { isReferralsEnabled } from "@/lib/feature-flags";
 import { listMyReferrals } from "@/actions/referrals";
 import { COARSE_LABEL, type CoarseStatus } from "@/lib/referrals/status";
+import { MyReferralRowActions } from "@/components/dashboard/my-referral-row-actions";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "My referrals — JambaHR" };
@@ -53,6 +54,7 @@ export default async function MyReferralsPage() {
                 <th className="px-4 py-2.5 text-left font-semibold">Candidate</th>
                 <th className="px-4 py-2.5 text-left font-semibold">Role</th>
                 <th className="px-4 py-2.5 text-left font-semibold">Status</th>
+                <th className="px-4 py-2.5 text-left font-semibold"></th>
               </tr>
             </thead>
             <tbody>
@@ -67,6 +69,13 @@ export default async function MyReferralsPage() {
                     >
                       {COARSE_LABEL[r.coarse_status]}
                     </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <MyReferralRowActions
+                      referralId={r.id}
+                      candidateName={r.candidate_name}
+                      coarseStatus={r.coarse_status}
+                    />
                   </td>
                 </tr>
               ))}

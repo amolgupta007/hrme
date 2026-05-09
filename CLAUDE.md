@@ -213,7 +213,15 @@ Business-tier, toggled per-org via `organizations.settings.jambahire_enabled`. R
 
 **Features**: Job postings with custom questions, candidate directory, 7-stage Kanban pipeline (Applied → Screening → Interview 1 → Interview 2 → Final Round → Offer → Hired), bulk stage moves, funnel analytics, interview scheduling (video/phone/in-person), structured feedback (4 rating scales + recommendation), Google/Outlook/ICS calendar links, offer letters with accept/decline token flow, AI job description generator via `@anthropic-ai/sdk`.
 
-**Public pages** (no auth): `/careers/[org-slug]`, `/offers/[token]`, `/hire/jobs/[id]/apply`
+**Public pages** (no auth): `/careers/[org-slug]`, `/offers/[token]`. (Note: an `/hire/jobs/[id]/apply` route was referenced in earlier docs but never built; the first tokenised public apply is planned for the referrals module.)
+
+**Access gate** (`src/lib/jambahire-access.ts`):
+- `requireJambaHireAccess()` → admin/owner only, gated on `organizations.settings.jambahire_enabled`. Used by the `/hire/*` layout, every admin page, and `getHireAdminContext()` inside `src/actions/hire.ts` for read actions.
+- `requireInterviewerAccess(scheduleId?)` → admins always; non-admins only if they have at least one assigned interview (or `scheduleId` matches their `employee_id`).
+- All `/hire/*` reads (`listJobs`, `getJob`, `listCandidates`, `listApplications`, `listAllApplications`, `listInterviews`, `listOffers`) call `getHireAdminContext` → return `Unauthorized` for managers/employees. Mutations keep their existing `isAdmin`/`isManagerOrAbove` guards.
+- RLS migration `009_jambahire_rls.sql` adds defense-in-depth policies on `jobs / candidates / applications / interview_schedules / interview_feedback / offers`. Activates if/when Clerk-JWT-to-Supabase wiring lands; currently advisory (service-role bypasses RLS by design).
+
+**Interviewer view** (`/dashboard/my-interviews`): any role with `interview_schedules.interviewer_id = me` sees a slim list of their interviews + a feedback modal. Powered by `listMyInterviews()` which projects to a tight `MyInterview` shape (no salary, no other candidates, no other interviewers' feedback). Sidebar entry hides via `featureFlag: "jambahire"`.
 
 All actions in `src/actions/hire.ts`.
 

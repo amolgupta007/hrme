@@ -59,19 +59,19 @@ Open the invite email (or copy the `tracking_token` from Supabase and visit `/ap
 5. Try the same token again → "This link has already been used".
 6. Move the underlying job to `status='paused'` and try a fresh token → "This role is no longer accepting applications".
 
-## F. Coarse status mapping
+## F. Coarse status mapping (auto-sync — v2)
 
-As `admin`, change the application's `stage` in `/hire/jobs/<id>` (drag candidate to `interview_1`, then `offer`, then `hired`).
+As `admin`, drag the application through stages in `/hire/pipeline` (or `/hire/jobs/<id>`):
+1. Move from `applied` → `interview_1`. Reload `/dashboard/refer/my-referrals` as the referrer → row shows "Progressing".
+2. Move to `offer`. Reload → still "Progressing".
+3. Move to `hired`. Reload → "Hired".
+4. From a fresh referral, click "Reject" with a reason. Referrer view → "Closed — no match".
 
-Note: today the admin moving stages does NOT auto-update `candidate_referrals.status` — that's a future enhancement (the action would call `applicationStageToReferralStatus` from `src/lib/referrals/status.ts`). For acceptance now, manually update the status in the DB:
-
-```sql
-UPDATE candidate_referrals SET status='interview' WHERE id='<row id>';
-```
-
-Then sign in as the original referrer and load `/dashboard/refer/my-referrals` — the row should show "Progressing" pill (the COARSE label, never "interview").
+Bulk move (`bulkUpdateApplicationStage`) also syncs — verify by selecting multiple referred candidates in the pipeline and dragging the column. All linked referrals update.
 
 Spot-check: open the Network tab on `/dashboard/refer/my-referrals` and inspect the response. It MUST contain only `{id, candidate_name, candidate_email, job_id, job_title, coarse_status, created_at, updated_at}`. No `status` (fine-grained), no `application_id`, no salary, no other applicant data.
+
+The fine→coarse map is enforced by `src/lib/referrals/status.ts::toCoarse`. Auto-sync from application stage uses `applicationStageToReferralStatus` in the same file, called from `syncReferralFromApplicationStage` (`src/lib/referrals/sync.ts`).
 
 ## G. Admin inbox (`/hire/referrals`)
 
@@ -82,23 +82,37 @@ Sign in as `admin`:
 3. Click "View" → `/hire/referrals/<id>` detail page with all candidate fields, referrer name, note, application link if applied.
 4. Sign in as `manager` and try `/hire/referrals` directly → redirect to `/dashboard` (PR1 admin-only gate).
 
-## H. Withdraw flow
+## H. Withdraw flow (UI — v2)
 
-As referrer, before the candidate hits `interview` status:
-- (UI for withdraw is admin-only in this PR; referrer-side withdraw button is a future enhancement.)
-- Test from server-action POST or admin: `withdrawReferral(id)` → status becomes `withdrawn`.
+Sign in as the original referrer and open `/dashboard/refer/my-referrals`:
 
-After interview/offer/hired, referrer cannot withdraw. Admin can always withdraw except for `hired`.
+1. For a row in "Submitted" or "Being reviewed" → "Withdraw" link visible.
+2. Click → confirmation modal "Withdraw referral? You're about to withdraw the referral for <name>…".
+3. Confirm → toast "Referral withdrawn". Row updates: pill flips to "Closed — no match".
+4. For a row in "Progressing" / "Hired" / "Closed" → no Withdraw link rendered (admins only past that point).
 
-## I. Sign-off
+Admin side: the same `withdrawReferral` is callable from server context for any row except `hired`. Admin UI button to withdraw from `/hire/referrals/<id>` is still a future enhancement.
+
+## I. Admin notification email (v2)
+
+When an employee submits a referral via `/dashboard/refer/jobs/<id>`:
+
+1. Inspect Resend's send log. Two emails should fire:
+   - To the candidate, from `noreply@jambahr.com`, subject `<Referrer> referred you for <Job> at <Org>`.
+   - To every admin/owner of the org (looked up via `employees.role IN ('owner','admin')` and `status != 'terminated'`), from `support@jambahr.com`, subject `New referral: <Candidate> for <Job>`.
+2. The admin email body shows candidate name, email, job, referrer name, and the optional note. Has a "Review in inbox →" button → `https://jambahr.com/hire/referrals`.
+3. Edge cases: org with zero admins → no admin email sent (function early-returns). RESEND_API_KEY missing → both emails skipped (function early-returns; row insert still succeeds).
+
+## J. Sign-off
 
 - [ ] A — sidebar visibility
 - [ ] B — employee submit + email send
 - [ ] C — self-referral block
 - [ ] D — duplicate block
 - [ ] E — public apply flow
-- [ ] F — coarse status only on referrer side
+- [ ] F — coarse status auto-sync
 - [ ] G — admin inbox
-- [ ] H — withdraw
+- [ ] H — referrer-side withdraw UI
+- [ ] I — admin notification email
 
 Signed off by: ______________ on ______________.

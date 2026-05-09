@@ -331,7 +331,7 @@ Primary: teal `172 50% 36%`. Accent: warm orange `32 95% 52%`. Use CSS variables
 | `/api/cron/webhook-events-cleanup` | `0 5 * * 0` | Sun 10:30am | Drop `webhook_events` rows older than 30 days |
 | `/api/cron/attendance-auto-clockout` | `30 18 * * *` | 12:00am | Close attendance shifts where employee forgot to clock out (uses per-org `standard_workday_hours`, capped at 23:59 of the same date; sets `auto_closed=true`, `source='auto_close'`) |
 | `/api/cron/social-agent-generate` | `0 4 * * 1,3,5` | Mon/Wed/Fri 9:30am | Generate one LinkedIn draft via Claude + Cloudflare Flux. Gated on `SOCIAL_AGENT_ENABLED=true`. |
-| `/api/cron/social-agent-publish-check` | `*/30 * * * *` | every 30 min | Reconcile Buffer post statuses → DB; mark `published`/`failed` and email on failure. |
+| `/api/cron/social-agent-publish-check` | `0 5 * * *` | 10:30am | Reconcile Buffer post statuses → DB; mark `published`/`failed` and email on failure. (Daily — Vercel Hobby plan limits crons to once-per-day; inline reconciliation on page-load is a future improvement.) |
 
 All cron routes require `Authorization: Bearer CRON_SECRET` header. `CRON_SECRET` env var must be set in Vercel.
 

@@ -72,8 +72,8 @@ export function Header({ jambaHireEnabled = false, badges, role = "employee" }: 
 
       {/* Actions */}
       <div className="flex items-center gap-2 ml-4">
-        {/* JambaHire switcher */}
-        {jambaHireEnabled && (
+        {/* JambaHire switcher — admin-only */}
+        {jambaHireEnabled && (role === "owner" || role === "admin") && (
           <Link
             href="/hire"
             className="flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 transition-colors hover:bg-indigo-100 dark:border-indigo-800 dark:bg-indigo-950/50 dark:text-indigo-400 dark:hover:bg-indigo-950"

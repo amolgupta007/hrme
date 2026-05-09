@@ -12,6 +12,7 @@ interface Props {
   attendanceEnabled: boolean;
   attendancePayrollEnabled: boolean;
   grievancesEnabled: boolean;
+  isAdmin?: boolean;
 }
 
 function Toggle({ enabled, onChange, disabled }: { enabled: boolean; onChange: () => void; disabled?: boolean }) {
@@ -34,7 +35,7 @@ function Toggle({ enabled, onChange, disabled }: { enabled: boolean; onChange: (
   );
 }
 
-export function ProductsSection({ jambaHireEnabled, isPlanEligible, attendanceEnabled, attendancePayrollEnabled, grievancesEnabled }: Props) {
+export function ProductsSection({ jambaHireEnabled, isPlanEligible, attendanceEnabled, attendancePayrollEnabled, grievancesEnabled, isAdmin = false }: Props) {
   const [jhEnabled, setJhEnabled] = useState(jambaHireEnabled);
   const [attEnabled, setAttEnabled] = useState(attendanceEnabled);
   const [attPayrollEnabled, setAttPayrollEnabled] = useState(attendancePayrollEnabled);
@@ -105,7 +106,7 @@ export function ProductsSection({ jambaHireEnabled, isPlanEligible, attendanceEn
               <p className="text-sm text-muted-foreground mt-0.5">
                 Full hiring suite — job postings, candidate pipeline, interviews, and offer letters.
               </p>
-              {jhEnabled && (
+              {jhEnabled && isAdmin && (
                 <a href="/hire" className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-indigo-600 hover:underline dark:text-indigo-400">
                   Open JambaHire <ExternalLink className="h-3 w-3" />
                 </a>

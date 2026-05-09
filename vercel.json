@@ -35,7 +35,7 @@
     },
     {
       "path": "/api/cron/social-agent-publish-check",
-      "schedule": "*/30 * * * *"
+      "schedule": "0 5 * * *"
     }
   ]
 }

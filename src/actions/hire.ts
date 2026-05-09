@@ -95,11 +95,25 @@ async function getHireContext() {
   return user;
 }
 
+/**
+ * Admin-only variant. Use for read actions that should never be callable
+ * by managers/employees (jobs, candidates, applications, interviews,
+ * offers — full org pipeline). Mutations keep using getHireContext +
+ * their existing isAdmin/isManagerOrAbove guard so manager-eligible
+ * operations (e.g. interviewer feedback) still work.
+ */
+async function getHireAdminContext() {
+  const user = await getHireContext();
+  if (!user) return null;
+  if (!isAdmin(user.role)) return null;
+  return user;
+}
+
 // ---- Jobs ----
 
 export async function listJobs(): Promise<ActionResult<Job[]>> {
-  const user = await getHireContext();
-  if (!user) return { success: false, error: "Not authenticated" };
+  const user = await getHireAdminContext();
+  if (!user) return { success: false, error: "Unauthorized" };
 
   const supabase = createAdminSupabase();
 
@@ -129,8 +143,8 @@ export async function listJobs(): Promise<ActionResult<Job[]>> {
 }
 
 export async function getJob(id: string): Promise<ActionResult<Job>> {
-  const user = await getHireContext();
-  if (!user) return { success: false, error: "Not authenticated" };
+  const user = await getHireAdminContext();
+  if (!user) return { success: false, error: "Unauthorized" };
 
   const supabase = createAdminSupabase();
   const [{ data: job, error }, { data: depts }, { count }] = await Promise.all([
@@ -248,8 +262,8 @@ export async function deleteJob(id: string): Promise<ActionResult<void>> {
 // ---- Candidates ----
 
 export async function listCandidates(): Promise<ActionResult<(Candidate & { applications: { job_title: string; stage: ApplicationStage }[] })[]>> {
-  const user = await getHireContext();
-  if (!user) return { success: false, error: "Not authenticated" };
+  const user = await getHireAdminContext();
+  if (!user) return { success: false, error: "Unauthorized" };
 
   const supabase = createAdminSupabase();
   const [{ data: candidates, error }, { data: apps }, { data: jobs }] = await Promise.all([
@@ -322,8 +336,8 @@ export async function createCandidate(input: {
 // ---- Applications ----
 
 export async function listApplications(jobId: string): Promise<ActionResult<Application[]>> {
-  const user = await getHireContext();
-  if (!user) return { success: false, error: "Not authenticated" };
+  const user = await getHireAdminContext();
+  if (!user) return { success: false, error: "Unauthorized" };
 
   const supabase = createAdminSupabase();
   const [{ data: apps, error }, { data: candidates }, { data: job }] = await Promise.all([
@@ -353,8 +367,8 @@ export async function listApplications(jobId: string): Promise<ActionResult<Appl
 }
 
 export async function listAllApplications(): Promise<ActionResult<Application[]>> {
-  const user = await getHireContext();
-  if (!user) return { success: false, error: "Not authenticated" };
+  const user = await getHireAdminContext();
+  if (!user) return { success: false, error: "Unauthorized" };
 
   const supabase = createAdminSupabase();
   const [{ data: apps, error }, { data: candidates }, { data: jobs }] = await Promise.all([
@@ -715,8 +729,8 @@ export type Offer = {
 // ---- Interview Schedules ----
 
 export async function listInterviews(): Promise<ActionResult<InterviewSchedule[]>> {
-  const user = await getHireContext();
-  if (!user) return { success: false, error: "Not authenticated" };
+  const user = await getHireAdminContext();
+  if (!user) return { success: false, error: "Unauthorized" };
 
   const supabase = createAdminSupabase();
   const [{ data: schedules, error }, { data: apps }, { data: candidates }, { data: jobs }, { data: employees }, { data: feedbacks }] = await Promise.all([
@@ -890,8 +904,8 @@ export async function submitInterviewFeedback(input: {
 // ---- Offers ----
 
 export async function listOffers(): Promise<ActionResult<Offer[]>> {
-  const user = await getHireContext();
-  if (!user) return { success: false, error: "Not authenticated" };
+  const user = await getHireAdminContext();
+  if (!user) return { success: false, error: "Unauthorized" };
 
   const supabase = createAdminSupabase();
   const [{ data: offers, error }, { data: apps }, { data: candidates }, { data: jobs }, { data: depts }, { data: employees }] = await Promise.all([

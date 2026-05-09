@@ -60,6 +60,12 @@ export const sidebarNav: NavItem[] = [
     featureFlag: "jambahire",
   },
   {
+    title: "Refer",
+    href: "/dashboard/refer",
+    icon: "UserPlus",
+    featureFlag: "referrals",
+  },
+  {
     title: "Grievances",
     href: "/dashboard/grievances",
     icon: "MessageSquareWarning",

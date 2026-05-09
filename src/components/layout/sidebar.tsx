@@ -20,6 +20,7 @@ import {
   Megaphone,
   Clock,
   MessageSquareWarning,
+  UserPlus,
   Lock,
   type LucideIcon,
 } from "lucide-react";
@@ -46,6 +47,7 @@ const iconMap: Record<string, LucideIcon> = {
   Megaphone,
   Clock,
   MessageSquareWarning,
+  UserPlus,
 };
 
 // Map nav href to badge key

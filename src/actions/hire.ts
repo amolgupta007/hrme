@@ -728,6 +728,83 @@ export type Offer = {
 
 // ---- Interview Schedules ----
 
+export type MyInterview = {
+  schedule_id: string;
+  scheduled_at: string;
+  type: string;
+  status: string;
+  duration_minutes: number | null;
+  candidate_name: string;
+  job_title: string;
+  feedback_submitted: boolean;
+};
+
+/**
+ * Slim interviewer-side feed. Returns only interviews where the caller
+ * is the assigned interviewer, projected to the minimal fields they
+ * need to do their job. Never returns: salary, offer details, other
+ * candidates' info, or other interviewers' feedback.
+ */
+export async function listMyInterviews(): Promise<ActionResult<MyInterview[]>> {
+  const user = await getHireContext();
+  if (!user) return { success: false, error: "Unauthorized" };
+  if (!user.employeeId) return { success: true, data: [] };
+
+  const supabase = createAdminSupabase();
+  const { data: schedules, error } = await supabase
+    .from("interview_schedules")
+    .select("id, scheduled_at, interview_type, status, duration_minutes, application_id")
+    .eq("org_id", user.orgId)
+    .eq("interviewer_id", user.employeeId)
+    .order("scheduled_at", { ascending: false });
+  if (error) return { success: false, error: error.message };
+  if (!schedules || schedules.length === 0) return { success: true, data: [] };
+
+  const appIds = (schedules as any[]).map((s) => s.application_id);
+  const scheduleIds = (schedules as any[]).map((s) => s.id);
+
+  const [{ data: apps }, { data: feedbacks }] = await Promise.all([
+    supabase
+      .from("applications")
+      .select("id, candidate_id, job_id")
+      .in("id", appIds),
+    supabase
+      .from("interview_feedback")
+      .select("schedule_id")
+      .in("schedule_id", scheduleIds)
+      .eq("interviewer_id", user.employeeId),
+  ]);
+
+  const candidateIds = Array.from(new Set((apps ?? []).map((a: any) => a.candidate_id)));
+  const jobIds = Array.from(new Set((apps ?? []).map((a: any) => a.job_id)));
+
+  const [{ data: candidates }, { data: jobs }] = await Promise.all([
+    supabase.from("candidates").select("id, name").in("id", candidateIds.length ? candidateIds : [""]),
+    supabase.from("jobs").select("id, title").in("id", jobIds.length ? jobIds : [""]),
+  ]);
+
+  const appMap = new Map<string, any>((apps ?? []).map((a: any) => [a.id, a]));
+  const candidateMap = new Map<string, string>((candidates ?? []).map((c: any) => [c.id, c.name]));
+  const jobMap = new Map<string, string>((jobs ?? []).map((j: any) => [j.id, j.title]));
+  const submittedSet = new Set<string>((feedbacks ?? []).map((f: any) => f.schedule_id));
+
+  const result: MyInterview[] = (schedules as any[]).map((s) => {
+    const app = appMap.get(s.application_id);
+    return {
+      schedule_id: s.id,
+      scheduled_at: s.scheduled_at,
+      type: s.interview_type,
+      status: s.status,
+      duration_minutes: s.duration_minutes ?? null,
+      candidate_name: app ? (candidateMap.get(app.candidate_id) ?? "—") : "—",
+      job_title: app ? (jobMap.get(app.job_id) ?? "—") : "—",
+      feedback_submitted: submittedSet.has(s.id),
+    };
+  });
+
+  return { success: true, data: result };
+}
+
 export async function listInterviews(): Promise<ActionResult<InterviewSchedule[]>> {
   const user = await getHireAdminContext();
   if (!user) return { success: false, error: "Unauthorized" };

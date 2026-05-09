@@ -19,6 +19,7 @@ export default async function DashboardLayout({
   const features = {
     attendance: userCtx?.attendanceEnabled ?? false,
     grievances: userCtx?.grievancesEnabled ?? false,
+    jambahire: userCtx?.jambaHireEnabled ?? false,
   };
 
   return (

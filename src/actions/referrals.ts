@@ -10,6 +10,7 @@ import { getCurrentUser, isAdmin } from "@/lib/current-user";
 import { isReferralsEnabled } from "@/lib/feature-flags";
 import { resend, NOREPLY_EMAIL, FROM_EMAIL } from "@/lib/resend";
 import { ReferralInviteEmail } from "@/components/emails/referral-invite";
+import { ReferralReceivedEmail } from "@/components/emails/referral-received";
 import {
   type ReferralStatus,
   type CoarseStatus,
@@ -427,6 +428,16 @@ export async function submitReferral(
     // swallow; admins can resend from the inbox if needed (future)
   });
 
+  // Notify org admins (best-effort)
+  await notifyAdminsOfReferral({
+    candidateName: data.candidate_name,
+    candidateEmail: data.candidate_email,
+    jobId: data.jobId,
+    referrerEmployeeId: user.employeeId,
+    noteToRecruiter: data.note_to_recruiter ?? null,
+    orgId: user.orgId,
+  }).catch(() => {});
+
   revalidatePath("/dashboard/refer");
   revalidatePath("/dashboard/refer/my-referrals");
   revalidatePath("/hire/referrals");
@@ -476,6 +487,64 @@ async function sendReferralInvite(args: {
     replyTo: FROM_EMAIL,
     to: args.candidateEmail,
     subject: `${referrerFirstName} referred you for ${jobTitle} at ${orgName}`,
+    html,
+  });
+}
+
+async function notifyAdminsOfReferral(args: {
+  candidateName: string;
+  candidateEmail: string;
+  jobId: string;
+  referrerEmployeeId: string | null;
+  noteToRecruiter: string | null;
+  orgId: string;
+}) {
+  if (!process.env.RESEND_API_KEY) return;
+  const supabase = createAdminSupabase();
+
+  const [{ data: admins }, { data: job }, referrer] = await Promise.all([
+    supabase
+      .from("employees")
+      .select("email")
+      .eq("org_id", args.orgId)
+      .in("role", ["owner", "admin"])
+      .neq("status", "terminated"),
+    supabase.from("jobs").select("title").eq("id", args.jobId).single(),
+    args.referrerEmployeeId
+      ? supabase
+          .from("employees")
+          .select("first_name, last_name")
+          .eq("id", args.referrerEmployeeId)
+          .single()
+      : Promise.resolve({ data: null as any }),
+  ]);
+
+  const adminEmails = ((admins ?? []) as { email: string | null }[])
+    .map((a) => a.email)
+    .filter((e): e is string => typeof e === "string" && e.length > 0);
+  if (adminEmails.length === 0) return;
+
+  const referrerData = (referrer as any)?.data;
+  const referrerName = referrerData
+    ? `${referrerData.first_name ?? ""} ${referrerData.last_name ?? ""}`.trim()
+    : "An employee";
+  const jobTitle = (job as any)?.title ?? "an open role";
+
+  const html = await render(
+    ReferralReceivedEmail({
+      candidateName: args.candidateName,
+      candidateEmail: args.candidateEmail,
+      jobTitle,
+      referrerName: referrerName || "An employee",
+      noteToRecruiter: args.noteToRecruiter,
+      inboxUrl: "https://jambahr.com/hire/referrals",
+    }),
+  );
+
+  await resend.emails.send({
+    from: FROM_EMAIL,
+    to: adminEmails,
+    subject: `New referral: ${args.candidateName} for ${jobTitle}`,
     html,
   });
 }

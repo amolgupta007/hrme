@@ -1,4 +1,6 @@
+import { redirect } from "next/navigation";
 import { Briefcase, FileText, Users, Kanban, CalendarDays, FileSignature } from "lucide-react";
+import { requireJambaHireAccess } from "@/lib/jambahire-access";
 
 const MODULES = [
   {
@@ -38,7 +40,11 @@ const MODULES = [
   },
 ];
 
-export default function HirePage() {
+export default async function HirePage() {
+  const access = await requireJambaHireAccess();
+  if (!access.allowed) redirect("/dashboard");
+
+
   return (
     <div className="space-y-8">
       {/* Header */}

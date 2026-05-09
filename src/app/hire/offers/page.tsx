@@ -1,23 +1,27 @@
+import { redirect } from "next/navigation";
 import { listOffers, listAllApplications } from "@/actions/hire";
-import { getCurrentUser, isAdmin } from "@/lib/current-user";
+import { isAdmin } from "@/lib/current-user";
+import { requireJambaHireAccess } from "@/lib/jambahire-access";
 import { listDepartments } from "@/actions/departments";
 import { listEmployees } from "@/actions/employees";
 import { OffersClient } from "@/components/hire/offers-client";
 
 export default async function OffersPage() {
-  const [offersResult, appsResult, deptsResult, empsResult, user] = await Promise.all([
+  const access = await requireJambaHireAccess();
+  if (!access.allowed) redirect("/dashboard");
+
+  const [offersResult, appsResult, deptsResult, empsResult] = await Promise.all([
     listOffers(),
     listAllApplications(),
     listDepartments(),
     listEmployees(),
-    getCurrentUser(),
   ]);
 
   const offers = offersResult.success ? offersResult.data : [];
   const applications = appsResult.success ? appsResult.data : [];
   const departments = deptsResult.success ? deptsResult.data : [];
   const employees = empsResult.success ? empsResult.data : [];
-  const admin = user ? isAdmin(user.role) : false;
+  const admin = isAdmin(access.user.role);
 
   return (
     <OffersClient

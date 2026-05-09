@@ -223,6 +223,17 @@ Business-tier, toggled per-org via `organizations.settings.jambahire_enabled`. R
 
 **Interviewer view** (`/dashboard/my-interviews`): any role with `interview_schedules.interviewer_id = me` sees a slim list of their interviews + a feedback modal. Powered by `listMyInterviews()` which projects to a tight `MyInterview` shape (no salary, no other candidates, no other interviewers' feedback). Sidebar entry hides via `featureFlag: "jambahire"`.
 
+**Referrals module** (env-flagged on `JAMBAHIRE_REFERRALS_ENABLED=true`):
+- Migration `010_candidate_referrals.sql` adds `candidate_referrals` (status enum: `pending_apply | applied | in_review | interview | offer | hired | rejected | withdrawn`) + RLS policies (referrer SELECT/INSERT-own, admin full).
+- Employee surface at `/dashboard/refer/*`: landing → `jobs` (open roles) → `jobs/[id]` (referral form) → `my-referrals` (own history with COARSE status only).
+- Admin inbox at `/hire/referrals` (locked behind `requireJambaHireAccess`).
+- Public token-scoped apply at `/apply/r/[token]` — pre-fills name/email from the referral row, creates `applications` row + links back to referral on submit.
+- Coarse status mapping (`src/lib/referrals/status.ts`) is the single source of truth — referrers NEVER see fine-grained `pipeline.stage`, salary, other candidates, or other interviewers' feedback. Map: `pending_apply → submitted`, `applied/in_review → being_reviewed`, `interview/offer → progressing`, `hired → closed_hired`, `rejected/withdrawn → closed_no_match`.
+- Self-referral check: candidate email matched against referrer's employee email. Duplicate-active check via partial unique index on `(org_id, job_id, lower(candidate_email)) WHERE status NOT IN ('rejected','withdrawn')`.
+- Email: `ReferralInviteEmail` sent via `NOREPLY_EMAIL` with replyTo `FROM_EMAIL` on submit. Admin-side "referral received" email deferred to v2.
+- Tokens: 32-byte URL-safe random via `crypto.randomBytes(32).toString('base64url')`. Stored in `candidate_referrals.tracking_token` (UNIQUE).
+- Sidebar entry "Refer" gated on `referrals` feature flag, which is `jambaHireEnabled && JAMBAHIRE_REFERRALS_ENABLED === 'true'` (env+org compound).
+
 All actions in `src/actions/hire.ts`.
 
 ---

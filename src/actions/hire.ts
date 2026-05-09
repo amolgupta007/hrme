@@ -5,6 +5,10 @@ import { z } from "zod";
 import Anthropic from "@anthropic-ai/sdk";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { getCurrentUser, isAdmin, isManagerOrAbove } from "@/lib/current-user";
+import {
+  syncReferralFromApplicationStage,
+  markReferralRejectedByApplication,
+} from "@/lib/referrals/sync";
 import type { ActionResult } from "@/types";
 
 // ---- Types ----
@@ -413,8 +417,12 @@ export async function updateApplicationStage(
 
   if (error) return { success: false, error: error.message };
 
+  await syncReferralFromApplicationStage(id, stage);
+
   revalidatePath("/hire/pipeline");
   revalidatePath("/hire/candidates");
+  revalidatePath("/hire/referrals");
+  revalidatePath("/dashboard/refer/my-referrals");
   return { success: true, data: undefined };
 }
 
@@ -432,8 +440,12 @@ export async function rejectApplication(id: string, reason: string): Promise<Act
 
   if (error) return { success: false, error: error.message };
 
+  await markReferralRejectedByApplication(id);
+
   revalidatePath("/hire/pipeline");
   revalidatePath("/hire/candidates");
+  revalidatePath("/hire/referrals");
+  revalidatePath("/dashboard/refer/my-referrals");
   return { success: true, data: undefined };
 }
 
@@ -451,7 +463,12 @@ export async function bulkUpdateApplicationStage(ids: string[], stage: Applicati
     .eq("org_id", user.orgId);
 
   if (error) return { success: false, error: error.message };
+
+  await Promise.all(ids.map((id) => syncReferralFromApplicationStage(id, stage)));
+
   revalidatePath("/hire/pipeline");
+  revalidatePath("/hire/referrals");
+  revalidatePath("/dashboard/refer/my-referrals");
   return { success: true, data: undefined };
 }
 

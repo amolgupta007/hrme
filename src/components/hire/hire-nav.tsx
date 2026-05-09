@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Briefcase, LayoutDashboard, FileText, Users, Kanban, CalendarDays, FileSignature, ArrowLeft } from "lucide-react";
+import { Briefcase, LayoutDashboard, FileText, Users, Kanban, CalendarDays, FileSignature, ArrowLeft, UserPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
@@ -14,7 +14,10 @@ const NAV_ITEMS = [
   { label: "Offers", href: "/hire/offers", icon: FileSignature },
 ];
 
-export function HireNav() {
+const REFERRALS_NAV_ITEM = { label: "Referrals", href: "/hire/referrals", icon: UserPlus };
+
+export function HireNav({ referralsEnabled = false }: { referralsEnabled?: boolean } = {}) {
+  const navItems = referralsEnabled ? [...NAV_ITEMS, REFERRALS_NAV_ITEM] : NAV_ITEMS;
   const pathname = usePathname();
 
   return (
@@ -33,8 +36,8 @@ export function HireNav() {
 
           {/* Nav links */}
           <div className="hidden items-center gap-1 md:flex">
-            {NAV_ITEMS.map((item) => {
-              const active = item.exact
+            {navItems.map((item) => {
+              const active = "exact" in item && item.exact
                 ? pathname === item.href
                 : pathname.startsWith(item.href);
               return (

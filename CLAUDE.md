@@ -132,7 +132,9 @@ Also: `reviews.objectives_id` added via ALTER TABLE; `attendance_records.auto_cl
 - `ROLE_HIERARCHY` + `hasPermission()` in types
 
 ### Route protection (`middleware.ts`)
-Public: `/`, `/sign-in(.*)`, `/sign-up(.*)`, `/api/webhooks(.*)`, `/blog(.*)`, `/careers(.*)`, `/offers(.*)`
+Public: `/`, `/sign-in(.*)`, `/sign-up(.*)`, `/api/webhooks(.*)`, `/api/cron(.*)`, `/blog(.*)`, `/careers(.*)`, `/offers(.*)`, `/apply/r(.*)`, `/pricing`, `/api/attendance/punch`, `/sitemap.xml`, `/robots.txt`, `/privacy`, `/terms`
+
+> `/api/cron(.*)` is exempted from Clerk so Vercel-Cron requests reach the route handlers — each handler still enforces `Bearer ${CRON_SECRET}`. Before this exemption (added 2026-05-09), Clerk silently rewrote cron requests to `/_not-found` and ALL crons failed silently. `/apply/r(.*)` is exempted to support the public referral apply flow.
 
 ### RBAC — `src/lib/current-user.ts`
 - `getCurrentUser()` → `{ orgId, clerkUserId, role, employeeId, plan, jambaHireEnabled, attendanceEnabled, grievancesEnabled }`

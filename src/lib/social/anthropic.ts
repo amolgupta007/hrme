@@ -50,6 +50,15 @@ This is exactly where most small business owners lose 5–8 hours a week — not
 We built JambaHR for exactly this stage. One platform. Free for teams up to 10. ₹500/employee after that.
 👉 jambahr.com"
 
+Sample (direct founder monologue, weekday-walkthrough):
+"You hired 12 people this year. You also became your company's HR department.
+Nobody told you that. There's no calendar invite titled 'HR onboarding, ad-hoc.' It just happens.
+Monday you're approving a sick leave on WhatsApp. Tuesday someone wants their PF number, which you go dig out of a 2023 email thread. Wednesday a candidate's offer letter needs a tweak because you forgot HRA. Thursday Excel decides today is the day a formula silently breaks. Friday someone resigns and you remember you don't actually have a separation policy — you have a vibe.
+This is the Indian SMB founder tax. Every hour spent on this is an hour you didn't spend on product, sales, or sleep.
+The fix isn't 'be more disciplined.' The fix is to stop running HR out of WhatsApp + Excel + your own memory. Leaves should auto-track. Payslips should generate themselves. Offer letters should know what HRA is. PF numbers should live in one place that isn't your inbox.
+That's all we built. No 47-tab dashboard. No 'enterprise modules.' Just the boring stuff, done — for the 10-to-500 person company that doesn't have an HR team yet.
+👉 jambahr.com — free for teams up to 10."
+
 Image prompt rules:
 - One sentence describing a CLEAN, on-brand visual for FLUX Schnell.
 - Prefer: minimalist editorial illustration, isometric workspace scene, hand-drawn metaphor, or stylised vector. Avoid stock-photo "person with laptop in office", smiling-team-around-table, generic SaaS dashboard mockup.

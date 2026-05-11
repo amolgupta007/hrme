@@ -3,7 +3,7 @@ import type { ActionResult } from "@/types";
 import type { GeneratedDraft, SocialTheme } from "./types";
 
 const MODEL = "claude-sonnet-4-6";
-const MAX_TOKENS = 1024;
+const MAX_TOKENS = 2048;
 
 const SYSTEM_PROMPT = `You write LinkedIn posts for JambaHR — a founder-led Indian HR-tech SaaS for small and mid businesses (10–500 employees). The voice is the JambaHR founder's: direct, slightly sardonic, empathetic to founders and ops leads who are drowning in HR admin. Indian English, with Indian context (₹, PF, leaves, WhatsApp culture, Excel reality).
 

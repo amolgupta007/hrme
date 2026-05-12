@@ -35,18 +35,21 @@ export function FeedbackDialog() {
   const [description, setDescription] = useState("");
   const [screenshot, setScreenshot] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [pageUrlSnapshot, setPageUrlSnapshot] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Reset state when dialog closes
+  // Snapshot pathname when dialog opens; reset state when it closes
   useEffect(() => {
-    if (!open) {
-      setType("bug");
-      setSeverity("medium");
-      setTitle("");
-      setDescription("");
-      setScreenshot(null);
+    if (open) {
+      setPageUrlSnapshot(pathname);
+      return;
     }
-  }, [open]);
+    setType("bug");
+    setSeverity("medium");
+    setTitle("");
+    setDescription("");
+    setScreenshot(null);
+  }, [open, pathname]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -80,7 +83,7 @@ export function FeedbackDialog() {
       title: title.trim(),
       description: description.trim(),
       severity: type === "bug" ? severity : null,
-      pageUrl: pathname,
+      pageUrl: pageUrlSnapshot,
       userAgent: navigator.userAgent.slice(0, 512),
       screenshotPath,
     });

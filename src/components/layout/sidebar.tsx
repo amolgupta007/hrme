@@ -22,10 +22,13 @@ import {
   MessageSquareWarning,
   UserPlus,
   Lock,
+  MessageCircle,
+  Bug,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { sidebarNav, APP_NAME } from "@/config/navigation";
+import { OPEN_FEEDBACK_EVENT } from "@/components/feedback/report-feedback-trigger";
 import { useState } from "react";
 import type { PendingCounts } from "@/actions/notifications";
 import { hasPermission } from "@/types";
@@ -169,6 +172,16 @@ export function Sidebar({ badges, role, plan, features }: { badges: PendingCount
                 label="My Profile"
                 labelIcon={<UserCircle className="h-4 w-4" />}
                 href="/dashboard/profile"
+              />
+              <UserButton.Link
+                label="My Feedback"
+                labelIcon={<MessageCircle className="h-4 w-4" />}
+                href="/dashboard/feedback"
+              />
+              <UserButton.Action
+                label="Send feedback"
+                labelIcon={<Bug className="h-4 w-4" />}
+                onClick={() => window.dispatchEvent(new Event(OPEN_FEEDBACK_EVENT))}
               />
             </UserButton.MenuItems>
           </UserButton>

@@ -309,6 +309,31 @@ export async function getFeedbackForSuperadmin(
   };
 }
 
+interface CountFilters {
+  status?: FeedbackStatus | "all";
+}
+
+export async function countFeedback(
+  filters: CountFilters = {},
+): Promise<ActionResult<number>> {
+  if (!isSuperadminAuthenticated()) {
+    return { success: false, error: "Unauthorized" };
+  }
+
+  const supabase = createAdminSupabase();
+  let query = supabase
+    .from("feedback_reports")
+    .select("id", { count: "exact", head: true });
+
+  if (filters.status && filters.status !== "all") {
+    query = query.eq("status", filters.status);
+  }
+
+  const { count, error } = await query;
+  if (error) return { success: false, error: error.message };
+  return { success: true, data: count ?? 0 };
+}
+
 export async function updateFeedbackTriage(
   id: string,
   input: z.infer<typeof triageSchema>,

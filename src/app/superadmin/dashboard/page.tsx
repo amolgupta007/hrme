@@ -6,7 +6,7 @@ import { UpsellTargetsTable } from "@/components/superadmin/upsell-targets-table
 import { CustomPlansTable } from "@/components/superadmin/custom-plans-table";
 import { listCustomPlanRequests } from "@/actions/superadmin-custom-plan";
 import { listPosts } from "@/actions/social";
-import { listAllFeedback } from "@/actions/feedback";
+import { countFeedback } from "@/actions/feedback";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -52,12 +52,12 @@ export default async function SuperadminDashboard() {
   };
 
   const [feedbackNewResult, feedbackTriagedResult] = await Promise.all([
-    listAllFeedback({ status: "new" }),
-    listAllFeedback({ status: "triaged" }),
+    countFeedback({ status: "new" }),
+    countFeedback({ status: "triaged" }),
   ]);
   const feedbackCounts = {
-    new: feedbackNewResult.success ? feedbackNewResult.data.length : 0,
-    triaged: feedbackTriagedResult.success ? feedbackTriagedResult.data.length : 0,
+    new: feedbackNewResult.success ? feedbackNewResult.data : 0,
+    triaged: feedbackTriagedResult.success ? feedbackTriagedResult.data : 0,
   };
 
   return (

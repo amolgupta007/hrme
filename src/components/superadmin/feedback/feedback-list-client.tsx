@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { formatDistanceToNow } from "date-fns";
 import { Bug, Sparkles, MessageCircle, FileText, ChevronRight } from "lucide-react";
 import type { FeedbackReportWithContext } from "@/types";
@@ -27,13 +27,15 @@ export function FeedbackListClient({
   filters: { status: string; type: string; severity: string };
 }) {
   const router = useRouter();
-  const searchParams = useSearchParams();
 
-  function updateFilter(key: string, value: string) {
-    const params = new URLSearchParams(searchParams.toString());
-    if (value === "all") params.delete(key);
-    else params.set(key, value);
-    router.push(`/superadmin/feedback?${params.toString()}`);
+  function updateFilter(key: "status" | "type" | "severity", value: string) {
+    const next = { ...filters, [key]: value };
+    const params = new URLSearchParams();
+    for (const [k, v] of Object.entries(next)) {
+      if (v !== "all") params.set(k, v);
+    }
+    const qs = params.toString();
+    router.push(qs ? `/superadmin/feedback?${qs}` : "/superadmin/feedback");
   }
 
   return (

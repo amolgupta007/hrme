@@ -33,6 +33,10 @@ CREATE TRIGGER feedback_reports_updated_at
   BEFORE UPDATE ON feedback_reports
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+-- RLS policies below are ADVISORY ONLY.
+-- All server actions use createAdminSupabase() (service-role) which bypasses RLS.
+-- These policies become enforceable if/when Clerk → Supabase JWT wiring is configured.
+-- See: src/actions/feedback.ts for the actual auth checks (getCurrentUser, isSuperadminAuthenticated).
 ALTER TABLE feedback_reports ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY feedback_reporter_select_own ON feedback_reports

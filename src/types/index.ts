@@ -62,3 +62,38 @@ export interface NavItem {
 export type ActionResult<T = void> =
   | { success: true; data: T }
   | { success: false; error: string };
+
+// ---- Feedback ----
+export type FeedbackType = "bug" | "feature_request" | "feedback" | "other";
+export type FeedbackStatus = "new" | "triaged" | "in_progress" | "resolved" | "wontfix";
+export type FeedbackSeverity = "low" | "medium" | "high" | "critical";
+export type FeedbackPriority = "low" | "medium" | "high" | "critical";
+
+export interface FeedbackReport {
+  id: string;
+  org_id: string;
+  reporter_user_id: string;
+  reporter_employee_id: string | null;
+  reporter_role: UserRole;
+  type: FeedbackType;
+  title: string;
+  description: string;
+  severity: FeedbackSeverity | null;
+  screenshot_url: string | null;
+  page_url: string | null;
+  user_agent: string | null;
+  status: FeedbackStatus;
+  priority: FeedbackPriority | null;
+  admin_notes: string | null;
+  resolved_at: string | null;
+  resolved_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FeedbackReportWithContext extends FeedbackReport {
+  org_slug: string | null;
+  org_name: string | null;
+  reporter_name: string | null;
+  reporter_email: string | null;
+}

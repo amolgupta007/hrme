@@ -43,12 +43,14 @@ export async function submitFeedback(
 
   const parsed = submitSchema.safeParse(input);
   if (!parsed.success) {
+    await deleteOrphanScreenshot(input.screenshotPath ?? null);
     return { success: false, error: parsed.error.errors[0]?.message ?? "Invalid input" };
   }
   const data = parsed.data;
 
   // Severity is only valid for bug reports
   if (data.type !== "bug" && data.severity) {
+    await deleteOrphanScreenshot(input.screenshotPath ?? null);
     return { success: false, error: "Severity only applies to bug reports" };
   }
 
@@ -64,6 +66,7 @@ export async function submitFeedback(
     .gte("created_at", windowStart);
 
   if ((count ?? 0) >= RATE_LIMIT_MAX) {
+    await deleteOrphanScreenshot(input.screenshotPath ?? null);
     return { success: false, error: "Too many reports — please wait a few minutes." };
   }
 
@@ -98,6 +101,7 @@ export async function submitFeedback(
     .single();
 
   if (insertErr || !row) {
+    await deleteOrphanScreenshot(input.screenshotPath ?? null);
     return { success: false, error: insertErr?.message ?? "Insert failed" };
   }
 
@@ -339,4 +343,14 @@ export async function updateFeedbackTriage(
   revalidatePath("/superadmin/feedback");
   revalidatePath(`/superadmin/feedback/${id}`);
   return { success: true, data: undefined };
+}
+
+async function deleteOrphanScreenshot(path: string | null | undefined): Promise<void> {
+  if (!path) return;
+  try {
+    const supabase = createAdminSupabase();
+    await supabase.storage.from(SCREENSHOT_BUCKET).remove([path]);
+  } catch (err) {
+    console.error("[feedback] orphan cleanup failed:", err);
+  }
 }

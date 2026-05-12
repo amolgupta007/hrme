@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
 import { getPendingCounts } from "@/actions/notifications";
@@ -9,20 +10,21 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const [badges, userCtx] = await Promise.all([
-    getPendingCounts(),
-    getCurrentUser(),
-  ]);
+  const userCtx = await getCurrentUser();
+  if (!userCtx) {
+    redirect("/onboarding");
+  }
 
-  const role = userCtx?.role ?? "employee";
-  const plan = userCtx?.plan ?? "starter";
-  const jambaHireEnabled = userCtx?.jambaHireEnabled ?? false;
+  const badges = await getPendingCounts();
+  const role = userCtx.role;
+  const plan = userCtx.plan;
+  const jambaHireEnabled = userCtx.jambaHireEnabled;
   const features = {
-    attendance: userCtx?.attendanceEnabled ?? false,
-    grievances: userCtx?.grievancesEnabled ?? false,
-    jambahire: userCtx?.jambaHireEnabled ?? false,
+    attendance: userCtx.attendanceEnabled,
+    grievances: userCtx.grievancesEnabled,
+    jambahire: userCtx.jambaHireEnabled,
     referrals:
-      (userCtx?.jambaHireEnabled ?? false) &&
+      userCtx.jambaHireEnabled &&
       process.env.JAMBAHIRE_REFERRALS_ENABLED === "true",
   };
 

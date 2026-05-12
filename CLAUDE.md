@@ -115,7 +115,7 @@ All tables have `org_id` (FK → organizations) for multi-tenant RLS isolation.
 | `attendance_records` | employee_id, date, clock_in_at, clock_out_at, total_minutes, source (`web`/`device`/`auto_close`), auto_closed (bool), ip_address, device_id |
 
 ### Tables added post-initial-migration (via SQL Editor — NOT in 001_initial_schema.sql)
-`objectives`, `announcements`, `document_acknowledgments`, `salary_structures`, `payroll_runs`, `payroll_entries`, `jobs`, `candidates`, `applications`, `interview_schedules`, `interview_feedback`, `offers`, `grievances`, `attendance_records`
+`objectives`, `announcements`, `document_acknowledgments`, `salary_structures`, `payroll_runs`, `payroll_entries`, `jobs`, `candidates`, `applications`, `interview_schedules`, `interview_feedback`, `offers`, `grievances`, `attendance_records`, `feedback_reports`
 Also: `reviews.objectives_id` added via ALTER TABLE; `attendance_records.auto_closed` (BOOLEAN, default false) and `'auto_close'` value in `attendance_records_source_check` were added 2026-05-08 to support the auto-clockout cron
 
 ### Multi-tenancy
@@ -252,6 +252,27 @@ Feature-flagged via `organizations.settings.grievances_enabled`. Three tabs:
 Anonymous submissions: `employee_id = null`, never recoverable. Only managers/employees (not admins) see own submissions in "My Submissions" — RBAC exception vs other modules.
 
 The "My Submissions" tab is **always visible** for non-admins (renders empty state when no submissions). Empty state explicitly tells the user that anonymous submissions only appear via Track Status token lookup.
+
+---
+
+## Feedback Module (`/dashboard/feedback`)
+
+Available to **all roles**. Users send bug reports, feature requests, or freeform feedback via a single dialog reachable from:
+- the **avatar dropdown** (Clerk `<UserButton.Action>` mounted in `src/components/layout/sidebar.tsx`)
+- the **`Cmd/Ctrl+/` keyboard shortcut** (listener in `src/components/feedback/report-feedback-trigger.tsx`)
+
+The dialog auto-captures `page_url`, `user_agent`, and snapshots the reporter's role. Optional screenshot upload goes to public Supabase bucket `feedback-screenshots`.
+
+On submit:
+- Row inserted into `feedback_reports` (org-scoped)
+- Best-effort founder alert email via `FOUNDER_EMAIL_FROM` (`amol@jambahr.com`), template `feedback-received.tsx`
+- Rate-limited to 5 submissions per 15 minutes per user
+
+Triage happens at **`/superadmin/feedback`** — founder-only, gated by `SUPERADMIN_SESSION_TOKEN`/`SUPERADMIN_SECRET` cookie via `isSuperadminAuthenticated()`. Org admins do NOT have a per-org feedback inbox in v1.
+
+Lifecycle: `new → triaged → in_progress → resolved | wontfix`. Reporter sees `admin_notes` on their `/dashboard/feedback` row.
+
+Anonymous submissions are explicitly **not** supported (use the grievances module for that flow).
 
 ---
 
@@ -435,6 +456,9 @@ npm run db:push       # Push migrations (needs CLI)
 42. **Attendance auto-clockout timestamp policy**: `clock_out_at = min(clock_in_at + standard_workday_hours, end_of_clock_in_date_IST)`. Hours come from `organizations.settings.attendance.standard_workday_hours` (default 8). Total minutes recomputed accordingly. Does NOT use 23:59 wall-clock unless that is sooner than clock_in + N hours.
 43. **Attendance settings JSONB path**: Working hours live at `organizations.settings.attendance.standard_workday_hours`. Read via `getAttendanceSettings()` (any authed user — used by cron and UI). Write via `updateAttendanceSettings({ standardWorkdayHours })` — admin-only, validates 1–16, rounds to one decimal.
 44. **Employee dashboard cards**: For `role === "employee"`, `getDashboardData` populates `myActiveObjectives`, `myLatestReview`, `upcomingHolidays`. The page renders three personalised cards and hides the org-wide "Active Review Cycles" list. Stat cards remain role-aware (no Total Employees for employees).
+45. **`feedback-screenshots` bucket**: Must be created via `INSERT INTO storage.buckets (id, name, public) VALUES ('feedback-screenshots', 'feedback-screenshots', true)` before deploying — not in migration 011 because storage DDL is environment-specific.
+46. **Feedback dialog mounting**: `<ReportFeedbackTriggerRoot>` is mounted at the dashboard layout. It does NOT exist on public pages (`/`, `/sign-in`, `/blog`, `/careers`, `/offers`, `/apply/r`). Feedback can only be submitted from inside `/dashboard/*`.
+47. **Feedback Cmd+/ inside form fields**: To avoid hijacking text-input shortcuts, the listener requires `Shift+Cmd/Ctrl+/` when focus is inside an `<input>` or `<textarea>`. Outside text fields, plain `Cmd/Ctrl+/` works.
 
 ---
 

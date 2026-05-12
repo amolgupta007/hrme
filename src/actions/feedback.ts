@@ -59,6 +59,7 @@ export async function submitFeedback(
   const { count } = await supabase
     .from("feedback_reports")
     .select("id", { count: "exact", head: true })
+    .eq("org_id", user.orgId)
     .eq("reporter_user_id", user.clerkUserId)
     .gte("created_at", windowStart);
 
@@ -66,9 +67,14 @@ export async function submitFeedback(
     return { success: false, error: "Too many reports — please wait a few minutes." };
   }
 
-  // Resolve screenshot public URL if path provided
+  // Resolve screenshot public URL if path provided.
+  // Validate the path belongs to the caller's org to prevent attaching
+  // another org's screenshot to this feedback row.
   let screenshotUrl: string | null = null;
   if (data.screenshotPath) {
+    if (!data.screenshotPath.startsWith(`${user.orgId}/`)) {
+      return { success: false, error: "Invalid screenshot path" };
+    }
     const { data: urlData } = supabase.storage.from(SCREENSHOT_BUCKET).getPublicUrl(data.screenshotPath);
     screenshotUrl = urlData.publicUrl;
   }
@@ -158,6 +164,23 @@ export async function uploadFeedbackScreenshot(
   const user = await getCurrentUser();
   if (!user) return { success: false, error: "Not authenticated" };
 
+  const supabase = createAdminSupabase();
+
+  // Rate limit: reuse the submit limit as a proxy to prevent pure-upload abuse.
+  // If a user has already hit RATE_LIMIT_MAX submits in the window, block further
+  // uploads too — otherwise they could spam storage without ever calling submit.
+  const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_MIN * 60_000).toISOString();
+  const { count } = await supabase
+    .from("feedback_reports")
+    .select("id", { count: "exact", head: true })
+    .eq("org_id", user.orgId)
+    .eq("reporter_user_id", user.clerkUserId)
+    .gte("created_at", windowStart);
+
+  if ((count ?? 0) >= RATE_LIMIT_MAX) {
+    return { success: false, error: "Too many reports — please wait a few minutes." };
+  }
+
   const file = formData.get("file");
   if (!(file instanceof File)) return { success: false, error: "No file provided" };
   if (file.size > 5 * 1024 * 1024) return { success: false, error: "File must be ≤5MB" };
@@ -168,7 +191,6 @@ export async function uploadFeedbackScreenshot(
   const ext = file.name.split(".").pop()?.toLowerCase() ?? "png";
   const path = `${user.orgId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
 
-  const supabase = createAdminSupabase();
   const { error } = await supabase.storage
     .from(SCREENSHOT_BUCKET)
     .upload(path, file, { contentType: file.type, upsert: false });

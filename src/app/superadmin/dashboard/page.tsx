@@ -6,6 +6,7 @@ import { UpsellTargetsTable } from "@/components/superadmin/upsell-targets-table
 import { CustomPlansTable } from "@/components/superadmin/custom-plans-table";
 import { listCustomPlanRequests } from "@/actions/superadmin-custom-plan";
 import { listPosts } from "@/actions/social";
+import { listAllFeedback } from "@/actions/feedback";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -50,6 +51,15 @@ export default async function SuperadminDashboard() {
     scheduled: scheduledResult.success ? scheduledResult.data.length : 0,
   };
 
+  const [feedbackNewResult, feedbackTriagedResult] = await Promise.all([
+    listAllFeedback({ status: "new" }),
+    listAllFeedback({ status: "triaged" }),
+  ]);
+  const feedbackCounts = {
+    new: feedbackNewResult.success ? feedbackNewResult.data.length : 0,
+    triaged: feedbackTriagedResult.success ? feedbackTriagedResult.data.length : 0,
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="border-b border-gray-200 bg-white px-6 py-4">
@@ -92,6 +102,30 @@ export default async function SuperadminDashboard() {
               </div>
             </div>
             <span className="text-sm text-teal-700">Open queue →</span>
+          </Link>
+        </section>
+
+        {/* Feedback */}
+        <section>
+          <h2 className="mb-1 text-base font-semibold text-gray-900">Feedback</h2>
+          <p className="mb-4 text-sm text-gray-500">
+            Bug reports, feature requests, and freeform feedback from any role across all orgs.
+          </p>
+          <Link
+            href="/superadmin/feedback"
+            className="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-5 py-4 shadow-sm transition hover:border-gray-300 hover:shadow"
+          >
+            <div className="flex gap-6">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-gray-500">New</p>
+                <p className="mt-1 text-2xl font-semibold text-gray-900">{feedbackCounts.new}</p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-wide text-gray-500">Triaged</p>
+                <p className="mt-1 text-2xl font-semibold text-gray-900">{feedbackCounts.triaged}</p>
+              </div>
+            </div>
+            <span className="text-sm text-teal-700">Open inbox →</span>
           </Link>
         </section>
 

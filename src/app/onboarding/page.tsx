@@ -2,12 +2,14 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useOrganizationList } from "@clerk/nextjs";
-import { Building2, Users, ArrowRight } from "lucide-react";
+import { useClerk, useOrganizationList } from "@clerk/nextjs";
+import { Building2, Users, ArrowRight, ArrowLeft, Mail, LogOut } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
 import { syncOrgToSupabase } from "@/actions/organizations";
 import { LATEST_POLICY_VERSION } from "@/config/legal";
+
+type Mode = "choose" | "create" | "joining";
 
 const companySizes = [
   { label: "1–10", value: "1-10" },
@@ -30,14 +32,27 @@ const industries = [
 export default function OnboardingPage() {
   const router = useRouter();
   const { createOrganization, setActive } = useOrganizationList();
+  const { signOut } = useClerk();
+  const [mode, setMode] = useState<Mode>("choose");
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
   const [accepted, setAccepted] = useState(false);
   const [form, setForm] = useState({
     companyName: "",
     companySize: "",
     industry: "",
   });
+
+  const handleSignOut = async () => {
+    setSigningOut(true);
+    try {
+      await signOut({ redirectUrl: "/sign-in" });
+    } catch (error: any) {
+      toast.error(error?.message ?? "Could not sign out. Please try again.");
+      setSigningOut(false);
+    }
+  };
 
   const handleSubmit = async () => {
     if (!createOrganization || !setActive) {
@@ -84,20 +99,123 @@ export default function OnboardingPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-muted/30 px-4">
       <div className="w-full max-w-lg">
-        {/* Progress */}
-        <div className="mb-8 flex items-center justify-center gap-2">
-          {[1, 2].map((s) => (
-            <div
-              key={s}
-              className={`h-2 w-16 rounded-full transition-colors ${
-                s <= step ? "bg-primary" : "bg-border"
-              }`}
-            />
-          ))}
-        </div>
+        {/* Progress (only in create mode) */}
+        {mode === "create" && (
+          <div className="mb-8 flex items-center justify-center gap-2">
+            {[1, 2].map((s) => (
+              <div
+                key={s}
+                className={`h-2 w-16 rounded-full transition-colors ${
+                  s <= step ? "bg-primary" : "bg-border"
+                }`}
+              />
+            ))}
+          </div>
+        )}
 
         <div className="rounded-2xl border border-border bg-card p-8 shadow-sm">
-          {step === 1 && (
+          {mode === "choose" && (
+            <div className="space-y-6">
+              <div className="text-center">
+                <h1 className="text-2xl font-bold tracking-tight">
+                  Welcome to JambaHR
+                </h1>
+                <p className="mt-2 text-muted-foreground">
+                  Are you setting up HR for your company, or joining one?
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <button
+                  onClick={() => setMode("create")}
+                  className="group flex w-full items-start gap-4 rounded-xl border-2 border-border p-5 text-left transition-all hover:border-primary hover:bg-primary/5"
+                >
+                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                    <Building2 className="h-5 w-5 text-primary" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="font-semibold">I&apos;m setting up HR for my company</div>
+                    <div className="mt-1 text-sm text-muted-foreground">
+                      Create a new workspace and invite your team.
+                    </div>
+                  </div>
+                  <ArrowRight className="mt-1 h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
+                </button>
+
+                <button
+                  onClick={() => setMode("joining")}
+                  className="group flex w-full items-start gap-4 rounded-xl border-2 border-border p-5 text-left transition-all hover:border-primary hover:bg-primary/5"
+                >
+                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                    <Mail className="h-5 w-5 text-primary" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="font-semibold">I&apos;m joining an existing company</div>
+                    <div className="mt-1 text-sm text-muted-foreground">
+                      Your admin will send you an invite link by email.
+                    </div>
+                  </div>
+                  <ArrowRight className="mt-1 h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {mode === "joining" && (
+            <div className="space-y-6">
+              <div className="text-center">
+                <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
+                  <Mail className="h-6 w-6 text-primary" />
+                </div>
+                <h1 className="text-2xl font-bold tracking-tight">
+                  Ask your admin for an invite
+                </h1>
+                <p className="mt-2 text-muted-foreground">
+                  Employees can&apos;t self-join an existing JambaHR workspace.
+                </p>
+              </div>
+
+              <div className="space-y-3 rounded-lg border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
+                <p>
+                  Ask your HR admin to invite you from{" "}
+                  <span className="font-medium text-foreground">
+                    Settings → Employees → Invite Employee
+                  </span>{" "}
+                  inside JambaHR. They&apos;ll send an invite link to your
+                  work email.
+                </p>
+                <p>
+                  Click that link from your email and sign in with the same
+                  address — you&apos;ll be added to their workspace
+                  automatically.
+                </p>
+                <p className="text-xs">
+                  Already signed up with the wrong email? Sign out below and
+                  come back via the invite link.
+                </p>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setMode("choose")}
+                  className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-lg border border-border text-sm font-medium hover:bg-muted transition-colors"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  Back
+                </button>
+                <button
+                  onClick={handleSignOut}
+                  disabled={signingOut}
+                  className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-lg border border-border text-sm font-medium hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <LogOut className="h-4 w-4" />
+                  {signingOut ? "Signing out…" : "Sign out"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {mode === "create" && step === 1 && (
             <div className="space-y-6">
               <div className="text-center">
                 <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
@@ -148,18 +266,27 @@ export default function OnboardingPage() {
                 </div>
               </div>
 
-              <button
-                onClick={() => setStep(2)}
-                disabled={!form.companyName || !form.industry}
-                className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Continue
-                <ArrowRight className="h-4 w-4" />
-              </button>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setMode("choose")}
+                  className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-lg border border-border text-sm font-medium hover:bg-muted transition-colors"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  Back
+                </button>
+                <button
+                  onClick={() => setStep(2)}
+                  disabled={!form.companyName || !form.industry}
+                  className="flex h-11 flex-1 items-center justify-center gap-2 rounded-lg bg-primary text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Continue
+                  <ArrowRight className="h-4 w-4" />
+                </button>
+              </div>
             </div>
           )}
 
-          {step === 2 && (
+          {mode === "create" && step === 2 && (
             <div className="space-y-6">
               <div className="text-center">
                 <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">

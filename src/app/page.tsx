@@ -104,15 +104,18 @@ export default function HomePage() {
             <Link href="/pricing" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">Pricing</Link>
             <Link href="/blog" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">Blog</Link>
           </div>
-          <div className="flex items-center gap-3">
-            <Link href="/sign-in" className="hidden sm:block text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <Link
+              href="/sign-in"
+              className="inline-flex h-9 items-center rounded-lg border border-border bg-background px-3 sm:px-4 text-sm font-semibold text-foreground shadow-sm hover:bg-muted transition-all"
+            >
               Sign In
             </Link>
             <Link
               href="/sign-up"
-              className="inline-flex h-9 items-center rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 transition-all"
+              className="inline-flex h-9 items-center rounded-lg bg-primary px-3 sm:px-4 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 transition-all"
             >
-              Get Started Free
+              Sign Up
             </Link>
           </div>
         </div>

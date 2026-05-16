@@ -17,7 +17,7 @@ import {
   type DragStartEvent,
   type DragEndEvent,
 } from "@dnd-kit/core";
-import { updateApplicationStage, bulkUpdateApplicationStage } from "@/actions/hire";
+import { updateApplicationStage, bulkUpdateApplicationStage, rejectApplication } from "@/actions/hire";
 import type { Application, ApplicationStage, Job } from "@/actions/hire";
 import { computeDirection } from "@/lib/hire/stage-direction";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -142,6 +142,13 @@ export function PipelineClient({ applications, jobs, isAdmin }: Props) {
   const [backwardComment, setBackwardComment] = useState("");
   const [backwardSubmitting, setBackwardSubmitting] = useState(false);
 
+  // Rejection prompt — required internal reason for the audit log.
+  // The reason is internal-only; the candidate email (M3+) is a neutral sorry note.
+  type RejectPrompt = { ids: string[]; candidateName: string };
+  const [pendingReject, setPendingReject] = useState<RejectPrompt | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
+  const [rejectSubmitting, setRejectSubmitting] = useState(false);
+
   // Click-to-open detail dialog (lazy-loads transitions inside).
   const [detailApp, setDetailApp] = useState<Application | null>(null);
 
@@ -200,6 +207,15 @@ export function PipelineClient({ applications, jobs, isAdmin }: Props) {
   async function handleMove(appId: string, stage: ApplicationStage) {
     const current = localApps.find((a) => a.id === appId);
     if (!current) return;
+
+    // Rejection: prompt-first (no optimistic move). The Rejected column is
+    // hidden by default — vanishing cards mid-cancel is disorienting.
+    if (stage === "rejected") {
+      setPendingReject({ ids: [appId], candidateName: current.candidate_name });
+      setRejectReason("");
+      return;
+    }
+
     const direction = computeDirection(current.stage, stage);
 
     // Snapshot before any optimistic mutation.
@@ -236,6 +252,17 @@ export function PipelineClient({ applications, jobs, isAdmin }: Props) {
 
   async function handleBulkMove() {
     if (!selected.size) return;
+
+    // Bulk reject: prompt for one shared internal reason, then loop reject server-side.
+    if (bulkStage === "rejected") {
+      setPendingReject({
+        ids: Array.from(selected),
+        candidateName: `${selected.size} candidates`,
+      });
+      setRejectReason("");
+      return;
+    }
+
     setBulkMoving(true);
     const result = await bulkUpdateApplicationStage(Array.from(selected), bulkStage);
     setBulkMoving(false);
@@ -300,6 +327,45 @@ export function PipelineClient({ applications, jobs, isAdmin }: Props) {
     setLocalApps(pendingBackward.snapshot);
     setPendingBackward(null);
     setBackwardComment("");
+  }
+
+  async function confirmReject() {
+    if (!pendingReject || !rejectReason.trim()) return;
+    setRejectSubmitting(true);
+    const { ids } = pendingReject;
+    const reason = rejectReason.trim();
+
+    const snapshot = localApps;
+    setLocalApps((apps) =>
+      apps.map((a) => (ids.includes(a.id) ? { ...a, stage: "rejected" as ApplicationStage } : a)),
+    );
+    setShowRejected(true);
+
+    try {
+      const results = await Promise.all(ids.map((id) => rejectApplication(id, reason)));
+      const failures = results.filter((r) => !r.success);
+      if (failures.length === 0) {
+        toast.success(
+          ids.length === 1 ? "Candidate rejected" : `Rejected ${ids.length} candidates`,
+        );
+        if (ids.length > 1) setSelected(new Set());
+        setPendingReject(null);
+        setRejectReason("");
+        router.refresh();
+      } else {
+        setLocalApps(snapshot);
+        setPendingReject(null);
+        setRejectReason("");
+        toast.error(`Failed to reject: ${(failures[0] as { error: string }).error}`);
+      }
+    } finally {
+      setRejectSubmitting(false);
+    }
+  }
+
+  function cancelReject() {
+    setPendingReject(null);
+    setRejectReason("");
   }
 
   function onDragStart(e: DragStartEvent) {
@@ -700,6 +766,49 @@ export function PipelineClient({ applications, jobs, isAdmin }: Props) {
               className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
             >
               {backwardSubmitting ? "Saving…" : "Save & Move"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Rejection internal-reason prompt — required, NOT shown to the candidate */}
+      <Dialog
+        open={pendingReject !== null}
+        onOpenChange={(open) => {
+          if (!open) cancelReject();
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reject {pendingReject?.candidateName}?</DialogTitle>
+            <DialogDescription>
+              The reason is for your internal audit log only. The candidate will receive a neutral rejection email
+              (no reason text) when email notifications are wired up.
+            </DialogDescription>
+          </DialogHeader>
+          <textarea
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[100px] focus:border-red-400 focus:outline-none focus:ring-1 focus:ring-red-400"
+            placeholder="Internal reason (e.g. compensation mismatch, weak culture fit, lost to competitor)…"
+            value={rejectReason}
+            onChange={(e) => setRejectReason(e.target.value)}
+            autoFocus
+          />
+          <DialogFooter className="flex gap-2 justify-end mt-2">
+            <button
+              type="button"
+              onClick={cancelReject}
+              disabled={rejectSubmitting}
+              className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted disabled:opacity-60"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={confirmReject}
+              disabled={!rejectReason.trim() || rejectSubmitting}
+              className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60"
+            >
+              {rejectSubmitting ? "Rejecting…" : "Reject"}
             </button>
           </DialogFooter>
         </DialogContent>

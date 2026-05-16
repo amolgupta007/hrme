@@ -17,6 +17,7 @@ export type JobStatus = "draft" | "active" | "paused" | "closed";
 export type ApplicationStage =
   | "applied"
   | "screening"
+  | "shortlisted"
   | "interview_1"
   | "interview_2"
   | "final_round"

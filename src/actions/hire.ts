@@ -10,6 +10,7 @@ import {
   markReferralRejectedByApplication,
 } from "@/lib/referrals/sync";
 import { computeDirection, type TransitionDirection } from "@/lib/hire/stage-direction";
+import { planActionsForTransition, roundLabelForStage, type ActionKey } from "@/lib/hire/transitions";
 import type { ActionResult } from "@/types";
 
 // ---- Types ----
@@ -406,7 +407,7 @@ export async function updateApplicationStage(
   id: string,
   stage: ApplicationStage,
   opts?: { comment?: string }
-): Promise<ActionResult<void>> {
+): Promise<ActionResult<{ transitionId: string | null }>> {
   const user = await getHireContext();
   if (!user) return { success: false, error: "Not authenticated" };
   if (!isAdmin(user.role)) return { success: false, error: "Only admins can move application stages" };
@@ -437,7 +438,7 @@ export async function updateApplicationStage(
     .eq("org_id", user.orgId);
   if (error) return { success: false, error: error.message };
 
-  await writeStageTransition({
+  const transitionId = await writeStageTransition({
     orgId: user.orgId,
     applicationId: id,
     fromStage,
@@ -454,10 +455,13 @@ export async function updateApplicationStage(
   revalidatePath("/hire/candidates");
   revalidatePath("/hire/referrals");
   revalidatePath("/dashboard/refer/my-referrals");
-  return { success: true, data: undefined };
+  return { success: true, data: { transitionId } };
 }
 
-export async function rejectApplication(id: string, reason: string): Promise<ActionResult<void>> {
+export async function rejectApplication(
+  id: string,
+  reason: string,
+): Promise<ActionResult<{ transitionId: string | null }>> {
   const user = await getHireContext();
   if (!user) return { success: false, error: "Not authenticated" };
   if (!isAdmin(user.role)) return { success: false, error: "Only admins can reject applications" };
@@ -484,7 +488,7 @@ export async function rejectApplication(id: string, reason: string): Promise<Act
     .eq("org_id", user.orgId);
   if (error) return { success: false, error: error.message };
 
-  await writeStageTransition({
+  const transitionId = await writeStageTransition({
     orgId: user.orgId,
     applicationId: id,
     fromStage,
@@ -501,14 +505,14 @@ export async function rejectApplication(id: string, reason: string): Promise<Act
   revalidatePath("/hire/candidates");
   revalidatePath("/hire/referrals");
   revalidatePath("/dashboard/refer/my-referrals");
-  return { success: true, data: undefined };
+  return { success: true, data: { transitionId } };
 }
 
 export async function bulkUpdateApplicationStage(
   ids: string[],
   stage: ApplicationStage,
   opts?: { comment?: string }
-): Promise<ActionResult<void>> {
+): Promise<ActionResult<{ transitionIds: string[] }>> {
   const user = await getHireContext();
   if (!user) return { success: false, error: "Not authenticated" };
   if (!isAdmin(user.role)) return { success: false, error: "Admins only" };
@@ -555,14 +559,18 @@ export async function bulkUpdateApplicationStage(
       comment: direction === "backward" ? comment : null,
     };
   });
-  await supabase.from("candidate_stage_transitions").insert(transitionRows as any);
+  const { data: inserted } = await supabase
+    .from("candidate_stage_transitions")
+    .insert(transitionRows as any)
+    .select("id");
+  const transitionIds = ((inserted as Array<{ id: string }> | null) ?? []).map((r) => r.id);
 
   await Promise.all(ids.map((id) => syncReferralFromApplicationStage(id, stage)));
 
   revalidatePath("/hire/pipeline");
   revalidatePath("/hire/referrals");
   revalidatePath("/dashboard/refer/my-referrals");
-  return { success: true, data: undefined };
+  return { success: true, data: { transitionIds } };
 }
 
 // ---- Audit log read + write helpers ----
@@ -576,20 +584,28 @@ async function writeStageTransition(args: {
   actorId: string | null;
   actorType: "admin" | "manager" | "system" | "candidate";
   comment: string | null;
-}) {
+}): Promise<string | null> {
   const supabase = createAdminSupabase();
-  const { error } = await supabase.from("candidate_stage_transitions").insert({
-    org_id: args.orgId,
-    application_id: args.applicationId,
-    from_stage: args.fromStage,
-    to_stage: args.toStage,
-    direction: args.direction,
-    actor_id: args.actorId,
-    actor_type: args.actorType,
-    comment: args.comment,
-  } as any);
+  const { data, error } = await supabase
+    .from("candidate_stage_transitions")
+    .insert({
+      org_id: args.orgId,
+      application_id: args.applicationId,
+      from_stage: args.fromStage,
+      to_stage: args.toStage,
+      direction: args.direction,
+      actor_id: args.actorId,
+      actor_type: args.actorType,
+      comment: args.comment,
+    } as any)
+    .select("id")
+    .single();
   // Best-effort: never block the main action on audit-write failure. Surface in logs.
-  if (error) console.warn("writeStageTransition failed:", error.message);
+  if (error) {
+    console.warn("writeStageTransition failed:", error.message);
+    return null;
+  }
+  return (data as { id: string } | null)?.id ?? null;
 }
 
 export type StageTransition = {
@@ -659,6 +675,196 @@ export async function getApplicationTransitions(applicationId: string): Promise<
       created_at: r.created_at,
     })),
   };
+}
+
+// ---- M3: Confirm-Send side-effect dispatch ----
+//
+// Called by the ConfirmTransitionDialog when the admin clicks Send. Looks up the
+// transition + application context, runs the user-confirmed subset of actions,
+// records per-action status in candidate_stage_transitions.side_effects_status.
+// Unconfirmed actions are recorded as 'skipped_by_user' so the audit trail is
+// complete. Empty enabledKeys = Skip All (dialog dismissed or user said no).
+
+type DispatchResult = "sent" | "skipped_by_user" | "failed";
+
+export async function dispatchStageTransitionSideEffects(
+  transitionId: string,
+  enabledKeys: string[],
+): Promise<ActionResult<{ results: Record<string, DispatchResult> }>> {
+  const user = await getHireContext();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Admins only" };
+
+  const supabase = createAdminSupabase();
+
+  const { data: transitionRow, error: tErr } = await supabase
+    .from("candidate_stage_transitions")
+    .select("id, application_id, from_stage, to_stage, direction")
+    .eq("id", transitionId)
+    .eq("org_id", user.orgId)
+    .single();
+  if (tErr || !transitionRow) return { success: false, error: tErr?.message ?? "Transition not found" };
+  const transition = transitionRow as {
+    id: string;
+    application_id: string;
+    from_stage: ApplicationStage | null;
+    to_stage: ApplicationStage;
+    direction: TransitionDirection;
+  };
+
+  const { data: appRow } = await supabase
+    .from("applications")
+    .select("id, candidate_id, job_id, org_id")
+    .eq("id", transition.application_id)
+    .eq("org_id", user.orgId)
+    .single();
+  if (!appRow) return { success: false, error: "Application not found" };
+  const app = appRow as { id: string; candidate_id: string; job_id: string; org_id: string };
+
+  const [{ data: candidateRow }, { data: jobRow }, { data: orgRow }] = await Promise.all([
+    supabase.from("candidates").select("name, email").eq("id", app.candidate_id).single(),
+    supabase.from("jobs").select("title").eq("id", app.job_id).single(),
+    supabase.from("organizations").select("name").eq("id", app.org_id).single(),
+  ]);
+  if (!candidateRow || !jobRow || !orgRow) return { success: false, error: "Missing related data for email" };
+  const candidate = candidateRow as { name: string; email: string };
+  const job = jobRow as { title: string };
+  const org = orgRow as { name: string };
+
+  const plannedActions = planActionsForTransition(transition.direction, transition.from_stage, transition.to_stage);
+  const results: Record<string, DispatchResult> = {};
+
+  for (const action of plannedActions) {
+    if (!enabledKeys.includes(action.key)) {
+      results[action.key] = "skipped_by_user";
+      continue;
+    }
+    try {
+      await dispatchTransitionAction(action.key, {
+        candidateName: candidate.name,
+        candidateEmail: candidate.email,
+        orgName: org.name,
+        roleTitle: job.title,
+        fromStage: transition.from_stage,
+        toStage: transition.to_stage,
+      });
+      results[action.key] = "sent";
+    } catch (err) {
+      console.error(`dispatchTransitionAction ${action.key} failed:`, err);
+      results[action.key] = "failed";
+    }
+  }
+
+  // Persist per-action status. Best-effort — don't block on audit-update failure.
+  const { error: updateErr } = await supabase
+    .from("candidate_stage_transitions")
+    .update({ side_effects_status: results } as any)
+    .eq("id", transitionId)
+    .eq("org_id", user.orgId);
+  if (updateErr) console.warn("side_effects_status update failed:", updateErr.message);
+
+  return { success: true, data: { results } };
+}
+
+async function dispatchTransitionAction(
+  key: ActionKey,
+  ctx: {
+    candidateName: string;
+    candidateEmail: string;
+    orgName: string;
+    roleTitle: string;
+    fromStage: ApplicationStage | null;
+    toStage: ApplicationStage;
+  },
+) {
+  const { resend, NOREPLY_EMAIL, FROM_EMAIL } = await import("@/lib/resend");
+  const { render } = await import("@react-email/render");
+
+  if (!ctx.candidateEmail) throw new Error("Candidate has no email address on file");
+
+  switch (key) {
+    case "email-candidate-ack": {
+      const { CandidateAckEmail } = await import("@/components/emails/candidate-ack");
+      const html = await render(
+        CandidateAckEmail({
+          candidateName: ctx.candidateName,
+          orgName: ctx.orgName,
+          roleTitle: ctx.roleTitle,
+        }),
+      );
+      const result = await resend.emails.send({
+        from: NOREPLY_EMAIL,
+        to: ctx.candidateEmail,
+        replyTo: FROM_EMAIL,
+        subject: `Thanks for applying — ${ctx.orgName}`,
+        html,
+      });
+      if ((result as any).error) throw new Error((result as any).error.message ?? "Resend error");
+      return;
+    }
+    case "email-interview-next-round": {
+      const { InterviewNextRoundEmail } = await import("@/components/emails/interview-next-round");
+      const roundLabel = roundLabelForStage(ctx.toStage);
+      const html = await render(
+        InterviewNextRoundEmail({
+          candidateName: ctx.candidateName,
+          orgName: ctx.orgName,
+          roleTitle: ctx.roleTitle,
+          roundLabel,
+        }),
+      );
+      const result = await resend.emails.send({
+        from: NOREPLY_EMAIL,
+        to: ctx.candidateEmail,
+        replyTo: FROM_EMAIL,
+        subject: `Advancing to ${roundLabel} — ${ctx.orgName}`,
+        html,
+      });
+      if ((result as any).error) throw new Error((result as any).error.message ?? "Resend error");
+      return;
+    }
+    case "email-rejection": {
+      const usePostInterview = ctx.fromStage
+        ? (["interview_1", "interview_2", "final_round", "offer"] as ApplicationStage[]).includes(ctx.fromStage)
+        : false;
+      if (usePostInterview) {
+        const { RejectionPostInterviewEmail } = await import("@/components/emails/rejection-postinterview");
+        const html = await render(
+          RejectionPostInterviewEmail({
+            candidateName: ctx.candidateName,
+            orgName: ctx.orgName,
+            roleTitle: ctx.roleTitle,
+          }),
+        );
+        const result = await resend.emails.send({
+          from: NOREPLY_EMAIL,
+          to: ctx.candidateEmail,
+          replyTo: FROM_EMAIL,
+          subject: `Thank you for interviewing with ${ctx.orgName}`,
+          html,
+        });
+        if ((result as any).error) throw new Error((result as any).error.message ?? "Resend error");
+      } else {
+        const { RejectionEarlyEmail } = await import("@/components/emails/rejection-early");
+        const html = await render(
+          RejectionEarlyEmail({
+            candidateName: ctx.candidateName,
+            orgName: ctx.orgName,
+            roleTitle: ctx.roleTitle,
+          }),
+        );
+        const result = await resend.emails.send({
+          from: NOREPLY_EMAIL,
+          to: ctx.candidateEmail,
+          replyTo: FROM_EMAIL,
+          subject: `Update on your application — ${ctx.orgName}`,
+          html,
+        });
+        if ((result as any).error) throw new Error((result as any).error.message ?? "Resend error");
+      }
+      return;
+    }
+  }
 }
 
 // ---- Public (no auth required) ----

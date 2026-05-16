@@ -9,6 +9,7 @@ import {
   syncReferralFromApplicationStage,
   markReferralRejectedByApplication,
 } from "@/lib/referrals/sync";
+import { computeDirection, type TransitionDirection } from "@/lib/hire/stage-direction";
 import type { ActionResult } from "@/types";
 
 // ---- Types ----
@@ -403,20 +404,49 @@ export async function listAllApplications(): Promise<ActionResult<Application[]>
 
 export async function updateApplicationStage(
   id: string,
-  stage: ApplicationStage
+  stage: ApplicationStage,
+  opts?: { comment?: string }
 ): Promise<ActionResult<void>> {
   const user = await getHireContext();
   if (!user) return { success: false, error: "Not authenticated" };
   if (!isAdmin(user.role)) return { success: false, error: "Only admins can move application stages" };
 
   const supabase = createAdminSupabase();
+
+  // Fetch current stage so we can record from→to in the audit log.
+  const { data: existing, error: fetchErr } = await supabase
+    .from("applications")
+    .select("stage")
+    .eq("id", id)
+    .eq("org_id", user.orgId)
+    .single();
+  if (fetchErr || !existing) return { success: false, error: fetchErr?.message ?? "Application not found" };
+
+  const fromStage = (existing as { stage: ApplicationStage }).stage;
+  const direction = computeDirection(fromStage, stage);
+  const comment = opts?.comment?.trim() || null;
+
+  if (direction === "backward" && !comment) {
+    return { success: false, error: "A reason is required when moving a candidate to an earlier stage." };
+  }
+
   const { error } = await supabase
     .from("applications")
     .update({ stage, updated_at: new Date().toISOString() })
     .eq("id", id)
     .eq("org_id", user.orgId);
-
   if (error) return { success: false, error: error.message };
+
+  await writeStageTransition({
+    orgId: user.orgId,
+    applicationId: id,
+    fromStage,
+    toStage: stage,
+    direction,
+    actorId: user.employeeId,
+    actorType: isAdmin(user.role) ? "admin" : "manager",
+    comment,
+  });
 
   await syncReferralFromApplicationStage(id, stage);
 
@@ -432,14 +462,38 @@ export async function rejectApplication(id: string, reason: string): Promise<Act
   if (!user) return { success: false, error: "Not authenticated" };
   if (!isAdmin(user.role)) return { success: false, error: "Only admins can reject applications" };
 
+  const trimmedReason = reason?.trim();
+  if (!trimmedReason) return { success: false, error: "A reason is required to reject a candidate." };
+
   const supabase = createAdminSupabase();
+
+  const { data: existing, error: fetchErr } = await supabase
+    .from("applications")
+    .select("stage")
+    .eq("id", id)
+    .eq("org_id", user.orgId)
+    .single();
+  if (fetchErr || !existing) return { success: false, error: fetchErr?.message ?? "Application not found" };
+
+  const fromStage = (existing as { stage: ApplicationStage }).stage;
+
   const { error } = await supabase
     .from("applications")
-    .update({ stage: "rejected", rejection_reason: reason, updated_at: new Date().toISOString() })
+    .update({ stage: "rejected", rejection_reason: trimmedReason, updated_at: new Date().toISOString() })
     .eq("id", id)
     .eq("org_id", user.orgId);
-
   if (error) return { success: false, error: error.message };
+
+  await writeStageTransition({
+    orgId: user.orgId,
+    applicationId: id,
+    fromStage,
+    toStage: "rejected",
+    direction: "reject",
+    actorId: user.employeeId,
+    actorType: isAdmin(user.role) ? "admin" : "manager",
+    comment: trimmedReason,
+  });
 
   await markReferralRejectedByApplication(id);
 
@@ -450,20 +504,58 @@ export async function rejectApplication(id: string, reason: string): Promise<Act
   return { success: true, data: undefined };
 }
 
-export async function bulkUpdateApplicationStage(ids: string[], stage: ApplicationStage): Promise<ActionResult<void>> {
+export async function bulkUpdateApplicationStage(
+  ids: string[],
+  stage: ApplicationStage,
+  opts?: { comment?: string }
+): Promise<ActionResult<void>> {
   const user = await getHireContext();
   if (!user) return { success: false, error: "Not authenticated" };
   if (!isAdmin(user.role)) return { success: false, error: "Admins only" };
   if (!ids.length) return { success: false, error: "No candidates selected" };
 
   const supabase = createAdminSupabase();
+
+  const { data: existingRows, error: fetchErr } = await supabase
+    .from("applications")
+    .select("id, stage")
+    .in("id", ids)
+    .eq("org_id", user.orgId);
+  if (fetchErr) return { success: false, error: fetchErr.message };
+
+  const comment = opts?.comment?.trim() || null;
+  const rows = (existingRows ?? []) as Array<{ id: string; stage: ApplicationStage }>;
+  const fromMap = new Map(rows.map((r) => [r.id, r.stage]));
+
+  const hasBackward = rows.some((r) => computeDirection(r.stage, stage) === "backward");
+  if (hasBackward && !comment) {
+    return { success: false, error: "A reason is required — the selection includes a backward move." };
+  }
+
   const { error } = await supabase
     .from("applications")
     .update({ stage, updated_at: new Date().toISOString() })
     .in("id", ids)
     .eq("org_id", user.orgId);
-
   if (error) return { success: false, error: error.message };
+
+  // Batch-insert one transition row per id.
+  const actorType: "admin" | "manager" = isAdmin(user.role) ? "admin" : "manager";
+  const transitionRows = ids.map((id) => {
+    const fromStage = fromMap.get(id) ?? null;
+    const direction = computeDirection(fromStage, stage);
+    return {
+      org_id: user.orgId,
+      application_id: id,
+      from_stage: fromStage,
+      to_stage: stage,
+      direction,
+      actor_id: user.employeeId,
+      actor_type: actorType,
+      comment: direction === "backward" ? comment : null,
+    };
+  });
+  await supabase.from("candidate_stage_transitions").insert(transitionRows as any);
 
   await Promise.all(ids.map((id) => syncReferralFromApplicationStage(id, stage)));
 
@@ -471,6 +563,102 @@ export async function bulkUpdateApplicationStage(ids: string[], stage: Applicati
   revalidatePath("/hire/referrals");
   revalidatePath("/dashboard/refer/my-referrals");
   return { success: true, data: undefined };
+}
+
+// ---- Audit log read + write helpers ----
+
+async function writeStageTransition(args: {
+  orgId: string;
+  applicationId: string;
+  fromStage: ApplicationStage | null;
+  toStage: ApplicationStage;
+  direction: TransitionDirection;
+  actorId: string | null;
+  actorType: "admin" | "manager" | "system" | "candidate";
+  comment: string | null;
+}) {
+  const supabase = createAdminSupabase();
+  const { error } = await supabase.from("candidate_stage_transitions").insert({
+    org_id: args.orgId,
+    application_id: args.applicationId,
+    from_stage: args.fromStage,
+    to_stage: args.toStage,
+    direction: args.direction,
+    actor_id: args.actorId,
+    actor_type: args.actorType,
+    comment: args.comment,
+  } as any);
+  // Best-effort: never block the main action on audit-write failure. Surface in logs.
+  if (error) console.warn("writeStageTransition failed:", error.message);
+}
+
+export type StageTransition = {
+  id: string;
+  from_stage: ApplicationStage | null;
+  to_stage: ApplicationStage;
+  direction: TransitionDirection;
+  actor_id: string | null;
+  actor_name: string | null;
+  actor_type: "admin" | "manager" | "system" | "candidate";
+  comment: string | null;
+  created_at: string;
+};
+
+export async function getApplicationTransitions(applicationId: string): Promise<ActionResult<StageTransition[]>> {
+  const user = await getHireContext();
+  if (!user) return { success: false, error: "Not authenticated" };
+
+  const supabase = createAdminSupabase();
+  const { data, error } = await supabase
+    .from("candidate_stage_transitions")
+    .select("id, from_stage, to_stage, direction, actor_id, actor_type, comment, created_at")
+    .eq("application_id", applicationId)
+    .eq("org_id", user.orgId)
+    .order("created_at", { ascending: false });
+  if (error) return { success: false, error: error.message };
+
+  const rows = (data ?? []) as Array<{
+    id: string;
+    from_stage: ApplicationStage | null;
+    to_stage: ApplicationStage;
+    direction: TransitionDirection;
+    actor_id: string | null;
+    actor_type: "admin" | "manager" | "system" | "candidate";
+    comment: string | null;
+    created_at: string;
+  }>;
+
+  // Hydrate actor names in one round trip.
+  const actorIds = Array.from(new Set(rows.map((r) => r.actor_id).filter(Boolean) as string[]));
+  let nameMap = new Map<string, string>();
+  if (actorIds.length) {
+    const { data: emps } = await supabase
+      .from("employees")
+      .select("id, first_name, last_name")
+      .in("id", actorIds)
+      .eq("org_id", user.orgId);
+    nameMap = new Map(
+      ((emps ?? []) as Array<{ id: string; first_name: string; last_name: string }>).map((e) => [
+        e.id,
+        `${e.first_name ?? ""} ${e.last_name ?? ""}`.trim() || "Unknown",
+      ]),
+    );
+  }
+
+  return {
+    success: true,
+    data: rows.map((r) => ({
+      id: r.id,
+      from_stage: r.from_stage,
+      to_stage: r.to_stage,
+      direction: r.direction,
+      actor_id: r.actor_id,
+      actor_name: r.actor_id ? nameMap.get(r.actor_id) ?? null : null,
+      actor_type: r.actor_type,
+      comment: r.comment,
+      created_at: r.created_at,
+    })),
+  };
 }
 
 // ---- Public (no auth required) ----

@@ -19,6 +19,9 @@ import {
 } from "@dnd-kit/core";
 import { updateApplicationStage, bulkUpdateApplicationStage } from "@/actions/hire";
 import type { Application, ApplicationStage, Job } from "@/actions/hire";
+import { computeDirection } from "@/lib/hire/stage-direction";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { ApplicationDetailDialog } from "./application-detail-dialog";
 import Link from "next/link";
 
 const STAGES: { value: ApplicationStage; label: string; color: string; headerColor: string; dot: string }[] = [
@@ -122,6 +125,25 @@ export function PipelineClient({ applications, jobs, isAdmin }: Props) {
   );
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const activeDragApp = activeDragId ? localApps.find((a) => a.id === activeDragId) ?? null : null;
+  // True when the user starts dragging a card that is part of the multi-select.
+  // Drop in that case applies to every selected card (bulk drag).
+  const [bulkDrag, setBulkDrag] = useState(false);
+
+  // Backward-move prompt — opened whenever a drop/dropdown moves a card to an earlier stage.
+  // Snapshot lets us roll back the optimistic update if the admin cancels the prompt.
+  type BackwardPrompt = {
+    ids: string[];
+    fromStage: ApplicationStage;
+    toStage: ApplicationStage;
+    candidateName: string;
+    snapshot: Application[];
+  };
+  const [pendingBackward, setPendingBackward] = useState<BackwardPrompt | null>(null);
+  const [backwardComment, setBackwardComment] = useState("");
+  const [backwardSubmitting, setBackwardSubmitting] = useState(false);
+
+  // Click-to-open detail dialog (lazy-loads transitions inside).
+  const [detailApp, setDetailApp] = useState<Application | null>(null);
 
   const activeJobs = jobs.filter((j) => j.status === "active" || j.status === "paused");
 
@@ -176,9 +198,28 @@ export function PipelineClient({ applications, jobs, isAdmin }: Props) {
   }
 
   async function handleMove(appId: string, stage: ApplicationStage) {
-    setMoving(appId);
+    const current = localApps.find((a) => a.id === appId);
+    if (!current) return;
+    const direction = computeDirection(current.stage, stage);
+
+    // Snapshot before any optimistic mutation.
     const snapshot = localApps;
     setLocalApps((apps) => apps.map((a) => (a.id === appId ? { ...a, stage } : a)));
+
+    if (direction === "backward") {
+      // Defer the server call — admin must enter a reason in the prompt.
+      setPendingBackward({
+        ids: [appId],
+        fromStage: current.stage,
+        toStage: stage,
+        candidateName: current.candidate_name,
+        snapshot,
+      });
+      setBackwardComment("");
+      return;
+    }
+
+    setMoving(appId);
     try {
       const result = await updateApplicationStage(appId, stage);
       if (result.success) {
@@ -202,18 +243,77 @@ export function PipelineClient({ applications, jobs, isAdmin }: Props) {
       toast.success(`Moved ${selected.size} candidates to ${STAGES.find((s) => s.value === bulkStage)?.label}`);
       setSelected(new Set());
       router.refresh();
+    } else if (/reason is required/i.test(result.error)) {
+      // The toolbar bulk action doesn't gather a comment; prompt for one.
+      const stages = localApps.filter((a) => selected.has(a.id)).map((a) => a.stage);
+      const firstBackward = stages.find((s) => computeDirection(s, bulkStage) === "backward");
+      if (firstBackward) {
+        setPendingBackward({
+          ids: Array.from(selected),
+          fromStage: firstBackward,
+          toStage: bulkStage,
+          candidateName: `${selected.size} candidates`,
+          snapshot: localApps,
+        });
+        setBackwardComment("");
+      } else {
+        toast.error(result.error);
+      }
     } else {
       toast.error(result.error);
     }
   }
 
+  async function confirmBackwardMove() {
+    if (!pendingBackward || !backwardComment.trim()) return;
+    setBackwardSubmitting(true);
+    const { ids, toStage, snapshot } = pendingBackward;
+    try {
+      const result =
+        ids.length === 1
+          ? await updateApplicationStage(ids[0], toStage, { comment: backwardComment.trim() })
+          : await bulkUpdateApplicationStage(ids, toStage, { comment: backwardComment.trim() });
+
+      if (result.success) {
+        toast.success(
+          ids.length === 1
+            ? `Moved back to ${STAGES.find((s) => s.value === toStage)?.label ?? toStage}`
+            : `Moved ${ids.length} candidates back to ${STAGES.find((s) => s.value === toStage)?.label}`,
+        );
+        if (ids.length > 1) setSelected(new Set());
+        setPendingBackward(null);
+        setBackwardComment("");
+        router.refresh();
+      } else {
+        setLocalApps(snapshot);
+        setPendingBackward(null);
+        setBackwardComment("");
+        toast.error(result.error);
+      }
+    } finally {
+      setBackwardSubmitting(false);
+    }
+  }
+
+  function cancelBackwardMove() {
+    if (!pendingBackward) return;
+    setLocalApps(pendingBackward.snapshot);
+    setPendingBackward(null);
+    setBackwardComment("");
+  }
+
   function onDragStart(e: DragStartEvent) {
-    setActiveDragId(String(e.active.id));
+    const id = String(e.active.id);
+    setActiveDragId(id);
+    // Bulk drag mode kicks in when the user picks up one of the selected cards.
+    setBulkDrag(selected.size > 1 && selected.has(id));
   }
 
   async function onDragEnd(e: DragEndEvent) {
     const id = activeDragId;
+    const wasBulkDrag = bulkDrag;
     setActiveDragId(null);
+    setBulkDrag(false);
     if (!id || !e.over) return;
     const fromStage = e.active.data.current?.stage as ApplicationStage | undefined;
     const overId = String(e.over.id);
@@ -222,7 +322,64 @@ export function PipelineClient({ applications, jobs, isAdmin }: Props) {
     if (!fromStage || fromStage === toStage) return;
 
     const snapshot = localApps;
+
+    if (wasBulkDrag) {
+      // Move every selected card.
+      const ids = Array.from(selected);
+      const targets = localApps.filter((a) => selected.has(a.id));
+      const hasBackward = targets.some((a) => computeDirection(a.stage, toStage) === "backward");
+      setLocalApps((apps) => apps.map((a) => (selected.has(a.id) ? { ...a, stage: toStage } : a)));
+
+      if (hasBackward) {
+        const firstBackward = targets.find((a) => computeDirection(a.stage, toStage) === "backward")!;
+        setPendingBackward({
+          ids,
+          fromStage: firstBackward.stage,
+          toStage,
+          candidateName: `${ids.length} candidates`,
+          snapshot,
+        });
+        setBackwardComment("");
+        return;
+      }
+
+      setMoving(id);
+      try {
+        const result = await bulkUpdateApplicationStage(ids, toStage);
+        if (result.success) {
+          toast.success(`Moved ${ids.length} candidates to ${STAGES.find((s) => s.value === toStage)?.label ?? toStage}`);
+          setSelected(new Set());
+          router.refresh();
+        } else {
+          setLocalApps(snapshot);
+          toast.error(result.error);
+        }
+      } catch {
+        setLocalApps(snapshot);
+        toast.error("Failed to move candidates");
+      } finally {
+        setMoving(null);
+      }
+      return;
+    }
+
+    // Single-card drag.
+    const direction = computeDirection(fromStage, toStage);
     setLocalApps((apps) => apps.map((a) => (a.id === id ? { ...a, stage: toStage } : a)));
+
+    if (direction === "backward") {
+      const card = snapshot.find((a) => a.id === id);
+      setPendingBackward({
+        ids: [id],
+        fromStage,
+        toStage,
+        candidateName: card?.candidate_name ?? "candidate",
+        snapshot,
+      });
+      setBackwardComment("");
+      return;
+    }
+
     setMoving(id);
     try {
       const result = await updateApplicationStage(id, toStage);
@@ -423,7 +580,13 @@ export function PipelineClient({ applications, jobs, isAdmin }: Props) {
                             )}
                             {/* Leave room for the drag handle in the top-right */}
                             <div className={`min-w-0 flex-1 ${isDraggable ? "pr-5" : ""}`}>
-                              <p className="text-xs font-semibold truncate">{app.candidate_name}</p>
+                              <button
+                                type="button"
+                                onClick={() => setDetailApp(app)}
+                                className="text-xs font-semibold truncate text-left w-full hover:text-indigo-600 hover:underline"
+                              >
+                                {app.candidate_name}
+                              </button>
                               <Link
                                 href={`/hire/jobs/${app.job_id}`}
                                 className="text-xs text-muted-foreground hover:text-indigo-600 truncate block mt-0.5"
@@ -477,12 +640,78 @@ export function PipelineClient({ applications, jobs, isAdmin }: Props) {
 
       <DragOverlay dropAnimation={null}>
         {activeDragApp ? (
-          <div className="rounded-lg border-2 border-indigo-400 bg-white dark:bg-[#150e2b] p-3 shadow-2xl w-56 cursor-grabbing">
-            <p className="text-xs font-semibold truncate">{activeDragApp.candidate_name}</p>
-            <p className="text-xs text-muted-foreground truncate mt-0.5">{activeDragApp.job_title}</p>
+          <div className="rounded-lg border-2 border-indigo-400 bg-white dark:bg-[#150e2b] p-3 shadow-2xl w-56 cursor-grabbing relative">
+            {bulkDrag && (
+              <span className="absolute -top-2 -right-2 rounded-full bg-indigo-600 px-2 py-0.5 text-xs font-semibold text-white shadow">
+                {selected.size}
+              </span>
+            )}
+            <p className="text-xs font-semibold truncate">
+              {bulkDrag ? `${selected.size} candidates` : activeDragApp.candidate_name}
+            </p>
+            <p className="text-xs text-muted-foreground truncate mt-0.5">
+              {bulkDrag ? "Drop to move all selected" : activeDragApp.job_title}
+            </p>
           </div>
         ) : null}
       </DragOverlay>
+
+      {/* Backward-move comment prompt — required reason per M2 acceptance */}
+      <Dialog
+        open={pendingBackward !== null}
+        onOpenChange={(open) => {
+          if (!open) cancelBackwardMove();
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Why are you moving this back?</DialogTitle>
+            <DialogDescription>
+              {pendingBackward && (
+                <>
+                  {pendingBackward.candidateName} —{" "}
+                  <span className="font-medium">{STAGES.find((s) => s.value === pendingBackward.fromStage)?.label ?? pendingBackward.fromStage}</span>
+                  {" → "}
+                  <span className="font-medium">{STAGES.find((s) => s.value === pendingBackward.toStage)?.label ?? pendingBackward.toStage}</span>
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <textarea
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[100px] focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+            placeholder="A short reason for the audit log (required)…"
+            value={backwardComment}
+            onChange={(e) => setBackwardComment(e.target.value)}
+            autoFocus
+          />
+          <DialogFooter className="flex gap-2 justify-end mt-2">
+            <button
+              type="button"
+              onClick={cancelBackwardMove}
+              disabled={backwardSubmitting}
+              className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted disabled:opacity-60"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={confirmBackwardMove}
+              disabled={!backwardComment.trim() || backwardSubmitting}
+              className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
+            >
+              {backwardSubmitting ? "Saving…" : "Save & Move"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <ApplicationDetailDialog
+        application={detailApp}
+        open={detailApp !== null}
+        onOpenChange={(open) => {
+          if (!open) setDetailApp(null);
+        }}
+      />
     </DndContext>
   );
 }

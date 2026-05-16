@@ -250,7 +250,7 @@ export function PipelineClient({ applications, jobs, isAdmin }: Props) {
             <h1 className="text-xl font-bold">Pipeline</h1>
             <p className="text-sm text-muted-foreground mt-0.5">
               {activeCount} active candidates
-              {rejectedCount > 0 && ` Â· ${rejectedCount} rejected`}
+              {rejectedCount > 0 && ` · ${rejectedCount} rejected`}
             </p>
           </div>
           <button
@@ -296,7 +296,7 @@ export function PipelineClient({ applications, jobs, isAdmin }: Props) {
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
             <input
               className="rounded-lg border border-input bg-background pl-8 pr-3 py-1.5 text-sm w-44 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400"
-              placeholder="Search nameâ€¦"
+              placeholder="Search name…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -361,7 +361,7 @@ export function PipelineClient({ applications, jobs, isAdmin }: Props) {
                 disabled={bulkMoving}
                 className="rounded-lg bg-white text-indigo-700 font-semibold px-3 py-1 text-xs hover:bg-indigo-50 disabled:opacity-60"
               >
-                {bulkMoving ? "Movingâ€¦" : "Apply"}
+                {bulkMoving ? "Moving…" : "Apply"}
               </button>
               <button onClick={clearSelection} className="text-xs opacity-70 hover:opacity-100 ml-1">
                 <X className="h-4 w-4" />

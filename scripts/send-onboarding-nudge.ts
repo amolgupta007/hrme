@@ -94,6 +94,7 @@ async function main() {
   const result = await resend.emails.send({
     from: "amol@jambahr.com",
     to,
+    cc: ["support@jambahr.com"],
     subject: c.subject,
     html,
   });

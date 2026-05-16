@@ -17,12 +17,20 @@ import {
   type DragStartEvent,
   type DragEndEvent,
 } from "@dnd-kit/core";
-import { updateApplicationStage, bulkUpdateApplicationStage, rejectApplication } from "@/actions/hire";
+import {
+  updateApplicationStage,
+  bulkUpdateApplicationStage,
+  rejectApplication,
+  dispatchStageTransitionSideEffects,
+} from "@/actions/hire";
 import type { Application, ApplicationStage, Job } from "@/actions/hire";
-import { computeDirection } from "@/lib/hire/stage-direction";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { computeDirection, type TransitionDirection } from "@/lib/hire/stage-direction";
+import { planActionsForTransition, type TransitionAction } from "@/lib/hire/transitions";
+import { ConfirmTransitionDialog } from "./confirm-transition-dialog";
 import { ApplicationDetailDialog } from "./application-detail-dialog";
 import Link from "next/link";
+
+// Dialog primitives are now wrapped by ConfirmTransitionDialog — no direct import needed here.
 
 const STAGES: { value: ApplicationStage; label: string; color: string; headerColor: string; dot: string }[] = [
   { value: "applied",     label: "Applied",     color: "bg-gray-50 dark:bg-gray-900/30",       headerColor: "bg-gray-200 dark:bg-gray-700",         dot: "bg-gray-400" },
@@ -129,25 +137,27 @@ export function PipelineClient({ applications, jobs, isAdmin }: Props) {
   // Drop in that case applies to every selected card (bulk drag).
   const [bulkDrag, setBulkDrag] = useState(false);
 
-  // Backward-move prompt — opened whenever a drop/dropdown moves a card to an earlier stage.
-  // Snapshot lets us roll back the optimistic update if the admin cancels the prompt.
-  type BackwardPrompt = {
-    ids: string[];
+  // Unified Confirm-Send popup (M3). One state drives every prompt:
+  //  • Reject = prompt-first, reason required, email action default-on.
+  //  • Backward = prompt-first, reason required, no email actions.
+  //  • Forward with side-effects = prompt-after (stage already persisted),
+  //    actions appear with Skip-All option.
+  //  • Forward with no side-effects = no popup at all.
+  type ConfirmConfig = {
+    candidateLabel: string;
     fromStage: ApplicationStage;
     toStage: ApplicationStage;
-    candidateName: string;
-    snapshot: Application[];
+    direction: TransitionDirection;
+    actions: TransitionAction[];
+    commentLabel?: string;
+    commentRequired?: boolean;
+    commentPlaceholder?: string;
+    onSend: (args: { comment: string; enabledKeys: string[] }) => Promise<void>;
+    onSkipAll?: () => Promise<void>;
+    onCancel: () => void;
   };
-  const [pendingBackward, setPendingBackward] = useState<BackwardPrompt | null>(null);
-  const [backwardComment, setBackwardComment] = useState("");
-  const [backwardSubmitting, setBackwardSubmitting] = useState(false);
-
-  // Rejection prompt — required internal reason for the audit log.
-  // The reason is internal-only; the candidate email (M3+) is a neutral sorry note.
-  type RejectPrompt = { ids: string[]; candidateName: string };
-  const [pendingReject, setPendingReject] = useState<RejectPrompt | null>(null);
-  const [rejectReason, setRejectReason] = useState("");
-  const [rejectSubmitting, setRejectSubmitting] = useState(false);
+  const [confirmConfig, setConfirmConfig] = useState<ConfirmConfig | null>(null);
+  const [confirmSending, setConfirmSending] = useState(false);
 
   // Click-to-open detail dialog (lazy-loads transitions inside).
   const [detailApp, setDetailApp] = useState<Application | null>(null);
@@ -204,46 +214,48 @@ export function PipelineClient({ applications, jobs, isAdmin }: Props) {
     setSelected(new Set());
   }
 
+  const stageLabel = (s: ApplicationStage) => STAGES.find((x) => x.value === s)?.label ?? s;
+
+  // ---- Single-card move flow ----
+  // Reject → prompt-first (no optimistic), unified popup with email checkbox + reason.
+  // Backward → prompt-first (no optimistic) with required reason.
+  // Forward + actions → optimistic move, then prompt-after popup with action checkboxes + Skip All.
+  // Forward + no actions → optimistic move + toast, no popup.
   async function handleMove(appId: string, stage: ApplicationStage) {
     const current = localApps.find((a) => a.id === appId);
     if (!current) return;
+    const fromStage = current.stage;
 
-    // Rejection: prompt-first (no optimistic move). The Rejected column is
-    // hidden by default — vanishing cards mid-cancel is disorienting.
     if (stage === "rejected") {
-      setPendingReject({ ids: [appId], candidateName: current.candidate_name });
-      setRejectReason("");
+      openRejectPrompt([appId], current.candidate_name, fromStage);
       return;
     }
 
-    const direction = computeDirection(current.stage, stage);
-
-    // Snapshot before any optimistic mutation.
-    const snapshot = localApps;
-    setLocalApps((apps) => apps.map((a) => (a.id === appId ? { ...a, stage } : a)));
+    const direction = computeDirection(fromStage, stage);
+    const actions = planActionsForTransition(direction, fromStage, stage);
 
     if (direction === "backward") {
-      // Defer the server call — admin must enter a reason in the prompt.
-      setPendingBackward({
-        ids: [appId],
-        fromStage: current.stage,
-        toStage: stage,
-        candidateName: current.candidate_name,
-        snapshot,
-      });
-      setBackwardComment("");
+      openBackwardPrompt([appId], current.candidate_name, fromStage, stage, actions);
       return;
     }
 
+    // Forward path: optimistic move + server call. Popup only if actions queued.
+    const snapshot = localApps;
+    setLocalApps((apps) => apps.map((a) => (a.id === appId ? { ...a, stage } : a)));
     setMoving(appId);
     try {
       const result = await updateApplicationStage(appId, stage);
-      if (result.success) {
-        toast.success(`Moved to ${STAGES.find((s) => s.value === stage)?.label ?? stage}`);
-        router.refresh();
-      } else {
+      if (!result.success) {
         setLocalApps(snapshot);
         toast.error(result.error);
+        return;
+      }
+      const transitionId = result.data.transitionId;
+      if (actions.length > 0 && transitionId) {
+        openPostMovePopup(current.candidate_name, fromStage, stage, direction, actions, transitionId);
+      } else {
+        toast.success(`Moved to ${stageLabel(stage)}`);
+        router.refresh();
       }
     } finally {
       setMoving(null);
@@ -252,120 +264,201 @@ export function PipelineClient({ applications, jobs, isAdmin }: Props) {
 
   async function handleBulkMove() {
     if (!selected.size) return;
+    const ids = Array.from(selected);
 
-    // Bulk reject: prompt for one shared internal reason, then loop reject server-side.
     if (bulkStage === "rejected") {
-      setPendingReject({
-        ids: Array.from(selected),
-        candidateName: `${selected.size} candidates`,
-      });
-      setRejectReason("");
+      openRejectPrompt(ids, `${ids.length} candidates`, null);
+      return;
+    }
+
+    const targets = localApps.filter((a) => selected.has(a.id));
+    const hasBackward = targets.some((a) => computeDirection(a.stage, bulkStage) === "backward");
+
+    if (hasBackward) {
+      const firstBackward = targets.find((a) => computeDirection(a.stage, bulkStage) === "backward")!;
+      openBackwardPrompt(ids, `${ids.length} candidates`, firstBackward.stage, bulkStage, []);
       return;
     }
 
     setBulkMoving(true);
-    const result = await bulkUpdateApplicationStage(Array.from(selected), bulkStage);
+    const result = await bulkUpdateApplicationStage(ids, bulkStage);
     setBulkMoving(false);
     if (result.success) {
-      toast.success(`Moved ${selected.size} candidates to ${STAGES.find((s) => s.value === bulkStage)?.label}`);
+      toast.success(`Moved ${ids.length} candidates to ${stageLabel(bulkStage)}`);
       setSelected(new Set());
       router.refresh();
-    } else if (/reason is required/i.test(result.error)) {
-      // The toolbar bulk action doesn't gather a comment; prompt for one.
-      const stages = localApps.filter((a) => selected.has(a.id)).map((a) => a.stage);
-      const firstBackward = stages.find((s) => computeDirection(s, bulkStage) === "backward");
-      if (firstBackward) {
-        setPendingBackward({
-          ids: Array.from(selected),
-          fromStage: firstBackward,
-          toStage: bulkStage,
-          candidateName: `${selected.size} candidates`,
-          snapshot: localApps,
-        });
-        setBackwardComment("");
-      } else {
-        toast.error(result.error);
-      }
     } else {
       toast.error(result.error);
     }
   }
 
-  async function confirmBackwardMove() {
-    if (!pendingBackward || !backwardComment.trim()) return;
-    setBackwardSubmitting(true);
-    const { ids, toStage, snapshot } = pendingBackward;
-    try {
-      const result =
-        ids.length === 1
-          ? await updateApplicationStage(ids[0], toStage, { comment: backwardComment.trim() })
-          : await bulkUpdateApplicationStage(ids, toStage, { comment: backwardComment.trim() });
+  // ---- Confirm-Send popup wiring (M3) ----
 
-      if (result.success) {
-        toast.success(
-          ids.length === 1
-            ? `Moved back to ${STAGES.find((s) => s.value === toStage)?.label ?? toStage}`
-            : `Moved ${ids.length} candidates back to ${STAGES.find((s) => s.value === toStage)?.label}`,
-        );
-        if (ids.length > 1) setSelected(new Set());
-        setPendingBackward(null);
-        setBackwardComment("");
-        router.refresh();
-      } else {
-        setLocalApps(snapshot);
-        setPendingBackward(null);
-        setBackwardComment("");
-        toast.error(result.error);
-      }
-    } finally {
-      setBackwardSubmitting(false);
-    }
+  function openPostMovePopup(
+    candidateLabel: string,
+    fromStage: ApplicationStage,
+    toStage: ApplicationStage,
+    direction: TransitionDirection,
+    actions: TransitionAction[],
+    transitionId: string,
+  ) {
+    setConfirmConfig({
+      candidateLabel,
+      fromStage,
+      toStage,
+      direction,
+      actions,
+      onSend: async ({ enabledKeys }) => {
+        setConfirmSending(true);
+        try {
+          const dispatchResult = await dispatchStageTransitionSideEffects(transitionId, enabledKeys);
+          if (!dispatchResult.success) {
+            toast.error(dispatchResult.error);
+            return;
+          }
+          const sent = Object.values(dispatchResult.data.results).filter((r) => r === "sent").length;
+          const failed = Object.values(dispatchResult.data.results).filter((r) => r === "failed").length;
+          if (failed > 0) toast.error(`Moved to ${stageLabel(toStage)} — ${failed} action${failed > 1 ? "s" : ""} failed`);
+          else if (sent > 0) toast.success(`Moved to ${stageLabel(toStage)} — sent ${sent} action${sent > 1 ? "s" : ""}`);
+          else toast.success(`Moved to ${stageLabel(toStage)}`);
+          setConfirmConfig(null);
+          router.refresh();
+        } finally {
+          setConfirmSending(false);
+        }
+      },
+      onSkipAll: async () => {
+        setConfirmSending(true);
+        try {
+          await dispatchStageTransitionSideEffects(transitionId, []);
+          toast.success(`Moved to ${stageLabel(toStage)} — no actions sent`);
+          setConfirmConfig(null);
+          router.refresh();
+        } finally {
+          setConfirmSending(false);
+        }
+      },
+      onCancel: () => setConfirmConfig(null),
+    });
   }
 
-  function cancelBackwardMove() {
-    if (!pendingBackward) return;
-    setLocalApps(pendingBackward.snapshot);
-    setPendingBackward(null);
-    setBackwardComment("");
+  function openBackwardPrompt(
+    ids: string[],
+    candidateLabel: string,
+    fromStage: ApplicationStage,
+    toStage: ApplicationStage,
+    actions: TransitionAction[],
+  ) {
+    setConfirmConfig({
+      candidateLabel,
+      fromStage,
+      toStage,
+      direction: "backward",
+      actions,
+      commentLabel: "Reason for moving back",
+      commentRequired: true,
+      commentPlaceholder: "A short reason for the audit log…",
+      onSend: async ({ comment, enabledKeys }) => {
+        setConfirmSending(true);
+        try {
+          const result =
+            ids.length === 1
+              ? await updateApplicationStage(ids[0], toStage, { comment })
+              : await bulkUpdateApplicationStage(ids, toStage, { comment });
+          if (!result.success) {
+            toast.error(result.error);
+            return;
+          }
+          // Optimistic update only after server success — backward is prompt-first.
+          setLocalApps((apps) => apps.map((a) => (ids.includes(a.id) ? { ...a, stage: toStage } : a)));
+
+          // Dispatch any actions per transition row.
+          const transitionIds: string[] = "transitionId" in result.data
+            ? result.data.transitionId
+              ? [result.data.transitionId]
+              : []
+            : result.data.transitionIds;
+          if (transitionIds.length > 0 && actions.length > 0) {
+            await Promise.all(
+              transitionIds.map((tid) => dispatchStageTransitionSideEffects(tid, enabledKeys)),
+            );
+          }
+
+          toast.success(
+            ids.length === 1
+              ? `Moved back to ${stageLabel(toStage)}`
+              : `Moved ${ids.length} candidates back to ${stageLabel(toStage)}`,
+          );
+          if (ids.length > 1) setSelected(new Set());
+          setConfirmConfig(null);
+          router.refresh();
+        } finally {
+          setConfirmSending(false);
+        }
+      },
+      onCancel: () => setConfirmConfig(null),
+    });
   }
 
-  async function confirmReject() {
-    if (!pendingReject || !rejectReason.trim()) return;
-    setRejectSubmitting(true);
-    const { ids } = pendingReject;
-    const reason = rejectReason.trim();
+  function openRejectPrompt(
+    ids: string[],
+    candidateLabel: string,
+    fromStage: ApplicationStage | null,
+  ) {
+    // Use the most likely fromStage for template selection. For bulk, just use
+    // the most common origin; per-row dispatch will pick the right template
+    // based on each row's own from_stage in the audit row.
+    const targets = localApps.filter((a) => ids.includes(a.id));
+    const fromStageForPrompt = fromStage ?? targets[0]?.stage ?? "applied";
+    const actions = planActionsForTransition("reject", fromStageForPrompt, "rejected");
 
-    const snapshot = localApps;
-    setLocalApps((apps) =>
-      apps.map((a) => (ids.includes(a.id) ? { ...a, stage: "rejected" as ApplicationStage } : a)),
-    );
-    setShowRejected(true);
+    setConfirmConfig({
+      candidateLabel,
+      fromStage: fromStageForPrompt,
+      toStage: "rejected",
+      direction: "reject",
+      actions,
+      commentLabel: "Internal reason",
+      commentRequired: true,
+      commentPlaceholder: "e.g. compensation mismatch, weak culture fit, lost to competitor…",
+      onSend: async ({ comment, enabledKeys }) => {
+        setConfirmSending(true);
+        try {
+          const results = await Promise.all(ids.map((id) => rejectApplication(id, comment)));
+          const failures = results.filter((r) => !r.success);
+          if (failures.length > 0) {
+            toast.error(`Failed to reject: ${(failures[0] as { error: string }).error}`);
+            return;
+          }
+          // Optimistic move to rejected
+          setLocalApps((apps) =>
+            apps.map((a) =>
+              ids.includes(a.id) ? { ...a, stage: "rejected" as ApplicationStage } : a,
+            ),
+          );
+          setShowRejected(true);
 
-    try {
-      const results = await Promise.all(ids.map((id) => rejectApplication(id, reason)));
-      const failures = results.filter((r) => !r.success);
-      if (failures.length === 0) {
-        toast.success(
-          ids.length === 1 ? "Candidate rejected" : `Rejected ${ids.length} candidates`,
-        );
-        if (ids.length > 1) setSelected(new Set());
-        setPendingReject(null);
-        setRejectReason("");
-        router.refresh();
-      } else {
-        setLocalApps(snapshot);
-        setPendingReject(null);
-        setRejectReason("");
-        toast.error(`Failed to reject: ${(failures[0] as { error: string }).error}`);
-      }
-    } finally {
-      setRejectSubmitting(false);
-    }
-  }
+          // Dispatch rejection email per transition (template chosen server-side per from_stage)
+          const transitionIds = results
+            .filter((r): r is { success: true; data: { transitionId: string | null } } => r.success)
+            .map((r) => r.data.transitionId)
+            .filter((tid): tid is string => tid !== null);
+          if (transitionIds.length > 0 && enabledKeys.length > 0) {
+            await Promise.all(
+              transitionIds.map((tid) => dispatchStageTransitionSideEffects(tid, enabledKeys)),
+            );
+          }
 
-  function cancelReject() {
-    setPendingReject(null);
-    setRejectReason("");
+          toast.success(ids.length === 1 ? "Candidate rejected" : `Rejected ${ids.length} candidates`);
+          if (ids.length > 1) setSelected(new Set());
+          setConfirmConfig(null);
+          router.refresh();
+        } finally {
+          setConfirmSending(false);
+        }
+      },
+      onCancel: () => setConfirmConfig(null),
+    });
   }
 
   function onDragStart(e: DragStartEvent) {
@@ -387,81 +480,45 @@ export function PipelineClient({ applications, jobs, isAdmin }: Props) {
     const toStage = overId.slice(4) as ApplicationStage;
     if (!fromStage || fromStage === toStage) return;
 
-    const snapshot = localApps;
-
     if (wasBulkDrag) {
-      // Move every selected card.
       const ids = Array.from(selected);
       const targets = localApps.filter((a) => selected.has(a.id));
       const hasBackward = targets.some((a) => computeDirection(a.stage, toStage) === "backward");
-      setLocalApps((apps) => apps.map((a) => (selected.has(a.id) ? { ...a, stage: toStage } : a)));
 
+      if (toStage === "rejected") {
+        openRejectPrompt(ids, `${ids.length} candidates`, null);
+        return;
+      }
       if (hasBackward) {
         const firstBackward = targets.find((a) => computeDirection(a.stage, toStage) === "backward")!;
-        setPendingBackward({
-          ids,
-          fromStage: firstBackward.stage,
-          toStage,
-          candidateName: `${ids.length} candidates`,
-          snapshot,
-        });
-        setBackwardComment("");
+        openBackwardPrompt(ids, `${ids.length} candidates`, firstBackward.stage, toStage, []);
         return;
       }
 
+      // Forward bulk: optimistic move + server update, no popup (M3 keeps bulk-forward simple)
+      const snapshot = localApps;
+      setLocalApps((apps) => apps.map((a) => (selected.has(a.id) ? { ...a, stage: toStage } : a)));
       setMoving(id);
       try {
         const result = await bulkUpdateApplicationStage(ids, toStage);
         if (result.success) {
-          toast.success(`Moved ${ids.length} candidates to ${STAGES.find((s) => s.value === toStage)?.label ?? toStage}`);
+          toast.success(`Moved ${ids.length} candidates to ${stageLabel(toStage)}`);
           setSelected(new Set());
           router.refresh();
         } else {
           setLocalApps(snapshot);
           toast.error(result.error);
         }
-      } catch {
-        setLocalApps(snapshot);
-        toast.error("Failed to move candidates");
       } finally {
         setMoving(null);
       }
       return;
     }
 
-    // Single-card drag.
-    const direction = computeDirection(fromStage, toStage);
-    setLocalApps((apps) => apps.map((a) => (a.id === id ? { ...a, stage: toStage } : a)));
-
-    if (direction === "backward") {
-      const card = snapshot.find((a) => a.id === id);
-      setPendingBackward({
-        ids: [id],
-        fromStage,
-        toStage,
-        candidateName: card?.candidate_name ?? "candidate",
-        snapshot,
-      });
-      setBackwardComment("");
-      return;
-    }
-
-    setMoving(id);
-    try {
-      const result = await updateApplicationStage(id, toStage);
-      if (result.success) {
-        toast.success(`Moved to ${STAGES.find((s) => s.value === toStage)?.label ?? toStage}`);
-        router.refresh();
-      } else {
-        setLocalApps(snapshot);
-        toast.error(result.error);
-      }
-    } catch {
-      setLocalApps(snapshot);
-      toast.error("Failed to move candidate");
-    } finally {
-      setMoving(null);
-    }
+    // Single-card drag → route through the same handleMove gate so the popup
+    // logic (reject prompt-first, backward prompt-first, forward optimistic +
+    // post-move popup) is identical to dropdown moves.
+    await handleMove(id, toStage);
   }
 
   return (
@@ -722,97 +779,24 @@ export function PipelineClient({ applications, jobs, isAdmin }: Props) {
         ) : null}
       </DragOverlay>
 
-      {/* Backward-move comment prompt — required reason per M2 acceptance */}
-      <Dialog
-        open={pendingBackward !== null}
-        onOpenChange={(open) => {
-          if (!open) cancelBackwardMove();
-        }}
-      >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Why are you moving this back?</DialogTitle>
-            <DialogDescription>
-              {pendingBackward && (
-                <>
-                  {pendingBackward.candidateName} —{" "}
-                  <span className="font-medium">{STAGES.find((s) => s.value === pendingBackward.fromStage)?.label ?? pendingBackward.fromStage}</span>
-                  {" → "}
-                  <span className="font-medium">{STAGES.find((s) => s.value === pendingBackward.toStage)?.label ?? pendingBackward.toStage}</span>
-                </>
-              )}
-            </DialogDescription>
-          </DialogHeader>
-          <textarea
-            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[100px] focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400"
-            placeholder="A short reason for the audit log (required)…"
-            value={backwardComment}
-            onChange={(e) => setBackwardComment(e.target.value)}
-            autoFocus
-          />
-          <DialogFooter className="flex gap-2 justify-end mt-2">
-            <button
-              type="button"
-              onClick={cancelBackwardMove}
-              disabled={backwardSubmitting}
-              className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted disabled:opacity-60"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={confirmBackwardMove}
-              disabled={!backwardComment.trim() || backwardSubmitting}
-              className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
-            >
-              {backwardSubmitting ? "Saving…" : "Save & Move"}
-            </button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Rejection internal-reason prompt — required, NOT shown to the candidate */}
-      <Dialog
-        open={pendingReject !== null}
-        onOpenChange={(open) => {
-          if (!open) cancelReject();
-        }}
-      >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Reject {pendingReject?.candidateName}?</DialogTitle>
-            <DialogDescription>
-              The reason is for your internal audit log only. The candidate will receive a neutral rejection email
-              (no reason text) when email notifications are wired up.
-            </DialogDescription>
-          </DialogHeader>
-          <textarea
-            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[100px] focus:border-red-400 focus:outline-none focus:ring-1 focus:ring-red-400"
-            placeholder="Internal reason (e.g. compensation mismatch, weak culture fit, lost to competitor)…"
-            value={rejectReason}
-            onChange={(e) => setRejectReason(e.target.value)}
-            autoFocus
-          />
-          <DialogFooter className="flex gap-2 justify-end mt-2">
-            <button
-              type="button"
-              onClick={cancelReject}
-              disabled={rejectSubmitting}
-              className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted disabled:opacity-60"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={confirmReject}
-              disabled={!rejectReason.trim() || rejectSubmitting}
-              className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60"
-            >
-              {rejectSubmitting ? "Rejecting…" : "Reject"}
-            </button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Unified Confirm-Send dialog (M3) — handles forward/backward/reject. */}
+      {confirmConfig && (
+        <ConfirmTransitionDialog
+          open={true}
+          onClose={confirmConfig.onCancel}
+          candidateLabel={confirmConfig.candidateLabel}
+          fromStageLabel={stageLabel(confirmConfig.fromStage)}
+          toStageLabel={stageLabel(confirmConfig.toStage)}
+          direction={confirmConfig.direction}
+          actions={confirmConfig.actions}
+          commentLabel={confirmConfig.commentLabel}
+          commentRequired={confirmConfig.commentRequired}
+          commentPlaceholder={confirmConfig.commentPlaceholder}
+          sending={confirmSending}
+          onSend={confirmConfig.onSend}
+          onSkipAll={confirmConfig.onSkipAll}
+        />
+      )}
 
       <ApplicationDetailDialog
         application={detailApp}

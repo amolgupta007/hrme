@@ -1,0 +1,12 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "module": "commonjs",
+    "target": "es2022",
+    "moduleResolution": "node",
+    "noEmit": true,
+    "isolatedModules": false
+  },
+  "include": ["./**/*.ts", "../src/components/emails/**/*.tsx"]
+}

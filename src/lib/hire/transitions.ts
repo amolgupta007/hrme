@@ -10,7 +10,8 @@ import type { TransitionDirection } from "./stage-direction";
 export type ActionKey =
   | "email-candidate-ack"
   | "email-interview-next-round"
-  | "email-rejection";
+  | "email-rejection"
+  | "loi-invite"; // M4 — dispatched client-side via sendLOI, not via the standard dispatcher
 
 export type TransitionAction = {
   key: ActionKey;

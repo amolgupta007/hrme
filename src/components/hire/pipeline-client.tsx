@@ -22,6 +22,7 @@ import {
   bulkUpdateApplicationStage,
   rejectApplication,
   dispatchStageTransitionSideEffects,
+  sendLOI,
 } from "@/actions/hire";
 import type { Application, ApplicationStage, Job } from "@/actions/hire";
 import { computeDirection, type TransitionDirection } from "@/lib/hire/stage-direction";
@@ -216,6 +217,48 @@ export function PipelineClient({ applications, jobs, isAdmin }: Props) {
 
   const stageLabel = (s: ApplicationStage) => STAGES.find((x) => x.value === s)?.label ?? s;
 
+  // ---- M4: Letter of Interest flow ----
+  // Special-cased screening → shortlisted transition. The card visually stays
+  // in Screening with an amber `LOI pending` chip until the candidate accepts
+  // or declines via the public /loi/[token] page.
+  function openLOIPrompt(appId: string, candidateName: string) {
+    setConfirmConfig({
+      candidateLabel: candidateName,
+      fromStage: "screening",
+      toStage: "shortlisted",
+      direction: "forward",
+      actions: [
+        {
+          key: "loi-invite",
+          label: "Send Letter of Interest to candidate",
+          description:
+            "Candidate gets an email with accept/decline buttons. The card stays in Screening with a pending chip until they respond. Accept advances the card to Shortlisted and notifies the hiring team. Decline auto-rejects with reason \"LOI declined\".",
+          defaultEnabled: true,
+        },
+      ],
+      onSend: async ({ enabledKeys }) => {
+        if (!enabledKeys.includes("loi-invite")) {
+          toast.error("Cannot shortlist this candidate without sending the LOI.");
+          return;
+        }
+        setConfirmSending(true);
+        try {
+          const result = await sendLOI(appId);
+          if (!result.success) {
+            toast.error(result.error);
+            return;
+          }
+          toast.success("LOI sent — waiting for candidate response");
+          setConfirmConfig(null);
+          router.refresh();
+        } finally {
+          setConfirmSending(false);
+        }
+      },
+      onCancel: () => setConfirmConfig(null),
+    });
+  }
+
   // ---- Single-card move flow ----
   // Reject → prompt-first (no optimistic), unified popup with email checkbox + reason.
   // Backward → prompt-first (no optimistic) with required reason.
@@ -228,6 +271,17 @@ export function PipelineClient({ applications, jobs, isAdmin }: Props) {
 
     if (stage === "rejected") {
       openRejectPrompt([appId], current.candidate_name, fromStage);
+      return;
+    }
+
+    // M4: screening → shortlisted is gated on LOI accept. Show Send-LOI popup
+    // instead of directly advancing the stage.
+    if (fromStage === "screening" && stage === "shortlisted") {
+      if (current.loi_status === "pending") {
+        toast.error("LOI already pending. Wait for the candidate or resend from the card.");
+        return;
+      }
+      openLOIPrompt(appId, current.candidate_name);
       return;
     }
 
@@ -682,7 +736,10 @@ export function PipelineClient({ applications, jobs, isAdmin }: Props) {
                     {cards.map((app) => {
                       const isSelected = selected.has(app.id);
                       const age = daysAgo(app.applied_at);
-                      const isDraggable = isAdmin && stage.value !== "hired";
+                      // LOI-pending cards lock until the candidate responds — drag would
+                      // bypass the gate. Dropdown is also disabled via the same flag below.
+                      const isLoiLocked = app.loi_status === "pending";
+                      const isDraggable = isAdmin && stage.value !== "hired" && !isLoiLocked;
 
                       const cardBody = (
                         <div
@@ -719,6 +776,26 @@ export function PipelineClient({ applications, jobs, isAdmin }: Props) {
                               <p className="text-xs text-muted-foreground/60 mt-1">
                                 {age === 0 ? "Today" : age === 1 ? "1d ago" : `${age}d ago`}
                               </p>
+                              {app.loi_status && (
+                                <p
+                                  className={`mt-1 inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+                                    app.loi_status === "pending"
+                                      ? "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
+                                      : app.loi_status === "accepted"
+                                        ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+                                        : app.loi_status === "declined"
+                                          ? "bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300"
+                                          : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                                  }`}
+                                  title={
+                                    app.loi_status === "pending" && app.loi_expires_at
+                                      ? `Expires ${new Date(app.loi_expires_at).toLocaleDateString()}`
+                                      : undefined
+                                  }
+                                >
+                                  LOI {app.loi_status}
+                                </p>
+                              )}
                             </div>
                           </div>
 

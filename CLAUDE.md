@@ -102,9 +102,9 @@ All tables have `org_id` (FK → organizations) for multi-tenant RLS isolation.
 | `holidays` | date, is_optional |
 | `objectives` | employee_id, manager_id, period_type, period_label, status (draft/submitted/approved/rejected), items (JSONB) |
 | `announcements` | title, body, category (general/policy/event/urgent), is_pinned, created_by |
-| `salary_structures` | employee_id, ctc, basic_monthly, hra_monthly, special_allowance_monthly, gross_monthly, net_monthly, state, is_metro |
-| `payroll_runs` | month (YYYY-MM), status (draft/processed/paid), working_days |
-| `payroll_entries` | gross_salary, employee_pf, professional_tax, tds, lop_days, lop_deduction, bonus, net_pay |
+| `salary_structures` | employee_id, ctc, basic_monthly, hra_monthly, special_allowance_monthly, gross_monthly, net_monthly, state, is_metro, include_hra, effective_from, **tax_regime** ('new'\|'old'), **additional_deductions_annual** (old-regime catch-all for 80C/80D/24), **computed_at** |
+| `payroll_runs` | month (YYYY-MM), status (draft/processed/paid), working_days, processed_at, paid_at, **paid_by** (FK → employees) |
+| `payroll_entries` | gross_salary, employee_pf, professional_tax, tds, lop_days, lop_deduction, bonus, net_pay, **annual_taxable_income** (P-002 FY snapshot), **months_in_fy** (P-002), **edited_by / edited_at / previous_net_pay** (audit trail) |
 | `jobs` | title, employment_type, location_type, salary_min/max, status (draft/active/paused/closed), custom_questions (JSONB), **hiring_manager_id** (FK → employees, drives M5 manager-scoped permissions) |
 | `candidates` | name, email, phone, resume_url, linkedin_url, source, tags (JSONB) |
 | `applications` | job_id, candidate_id, stage (applied/screening/**shortlisted**/interview_1/interview_2/final_round/offer/hired/rejected), rejection_reason, **loi_status** (pending/accepted/declined/expired), loi_token (UNIQUE partial index), loi_sent_at, loi_responded_at, loi_expires_at |
@@ -116,7 +116,7 @@ All tables have `org_id` (FK → organizations) for multi-tenant RLS isolation.
 | `attendance_records` | employee_id, date, clock_in_at, clock_out_at, total_minutes, source (`web`/`device`/`auto_close`), auto_closed (bool), ip_address, device_id |
 
 ### Tables added post-initial-migration (via SQL Editor — NOT in 001_initial_schema.sql)
-`objectives`, `announcements`, `document_acknowledgments`, `salary_structures`, `payroll_runs`, `payroll_entries`, `jobs`, `candidates`, `applications`, `interview_schedules`, `interview_feedback`, `offers`, `grievances`, `attendance_records`, `feedback_reports`, **`candidate_stage_transitions`** (migration `013`, M2)
+`objectives`, `announcements`, `document_acknowledgments`, `jobs`, `candidates`, `applications`, `interview_schedules`, `interview_feedback`, `offers`, `grievances`, `attendance_records`, `feedback_reports`, **`candidate_stage_transitions`** (migration `013`, M2). The payroll tables (`salary_structures`, `payroll_runs`, `payroll_entries`) were originally created via SQL Editor but are now captured in migration `018` (schema + RLS) and extended by `019` (audit columns), `020` (tax regime), `021` (FY snapshot).
 Also: `reviews.objectives_id` added via ALTER TABLE; `attendance_records.auto_closed` (BOOLEAN, default false) and `'auto_close'` value in `attendance_records_source_check` were added 2026-05-08 to support the auto-clockout cron.
 
 **Pipeline overhaul migrations (M1–M5, shipped 2026-05-17)** — run in order:
@@ -127,6 +127,14 @@ Also: `reviews.objectives_id` added via ALTER TABLE; `attendance_records.auto_cl
 - `015_jobs_hiring_manager.sql` — `hiring_manager_id` FK on jobs
 - `017_offers_revoked_status.sql` — adds `'revoked'` to offers.status CHECK
 (`016` was reserved for screener_id columns but deferred — see plan doc.)
+
+**Payroll audit migrations (waves 1–6, shipped 2026-05-17)** — run in order:
+- `018_payroll_schema_capture.sql` — first checked-in DDL for the 3 payroll tables (idempotent), RLS enabled, 4 missing indexes added, admin-CRUD + employee-self-read policies
+- `019_payroll_audit_columns.sql` — `payroll_runs.paid_by`, `payroll_entries.{edited_by, edited_at, previous_net_pay}`, `salary_structures.computed_at`
+- `020_tax_regime.sql` — `salary_structures.tax_regime` ('new'\|'old' CHECK, default 'new') + `additional_deductions_annual` (numeric, default 0)
+- `021_payroll_entry_fy_snapshot.sql` — `payroll_entries.annual_taxable_income` + `months_in_fy` (both nullable; for mid-FY joiner TDS projection)
+
+See `PAYROLL_AUDIT.md` for the per-finding closure log and `docs/payroll-overhaul.md` for the operator-facing summary.
 
 ### Multi-tenancy
 - RLS enabled on ALL tables; admin Supabase client (`SUPABASE_SERVICE_ROLE_KEY`) bypasses RLS — used in all server actions
@@ -372,7 +380,14 @@ Feature-flagged via `organizations.settings.attendance_enabled`. Optional payrol
 - Monthly run: draft → process → mark paid. LOP from approved unpaid leaves.
 - Printable payslip (browser Print → PDF). Employee self-service "My Payslips" tab.
 - **My Compensation tab** (employee-facing, always visible): reads the caller's salary_structure via `getMyCompensation` and renders CTC headline + full breakdown via `CTCBreakdownCard`. Empty state shown when admin hasn't configured the structure.
-- `getSalaryStructures` is **admin-guarded** — non-admins receive `Unauthorized`. Use `getMyCompensation()` for employee-facing reads.
+- `getSalaryStructures` is **admin-guarded** — non-admins receive `Unauthorized`. Use `getMyCompensation()` for employee-facing reads. `getPayrollRuns` + `getPayrollEntries` are also admin-only (P-006/P-007 wired 2026-05-17).
+
+### Payroll audit overhaul (2026-05-17)
+- **Regime toggle (P-003):** every salary structure picks `'new'` (default) or `'old'`. `additional_deductions_annual` is a single catch-all for old-regime 80C/80D/24/HRA-actual — admins compute externally and enter the annual total. Ignored in new regime.
+- **Mid-FY joiner projection (P-002):** `processPayrollRun` calls `computeMonthsInFY(payMonth, date_of_joining)` per employee. Annual taxable = `(gross − PF) × monthsInFY − stdDed − extraDed`. Monthly TDS = `taxByRegime(annualTaxable) / monthsInFY`. Each entry snapshots `annual_taxable_income` + `months_in_fy` so admin bonus edits in `updatePayrollEntry` reuse the same divisor and base.
+- **Bonus marginal tax (P-005):** `computeAdditionalTaxOnBonus(annualTaxable, bonus, regime)` returns `tax(annualTaxable + bonus) - tax(annualTaxable)`. Charged in full in the month the bonus is paid; idempotent on re-edit (bonus=0 collapses to 0).
+- **PF cap (P-010):** `CTCBreakdown.pfCapped` is true when basic > ~₹15k/mo and the ₹1,800 statutory cap kicks in. UI footnote on the CTC card.
+- **Audit trail (P-015/P-017/P-019):** `markPayrollPaid` records `paid_by`. `updatePayrollEntry` records `edited_by`, `edited_at`, `previous_net_pay`. `upsertSalaryStructure` writes `computed_at`.
 
 ---
 
@@ -540,6 +555,12 @@ npm run db:push       # Push migrations (needs CLI)
 51. **`hired → anything` is hard-blocked**: To unmake a hire, terminate the employee from `/dashboard/employees`. Server returns an error; client also pre-checks. There's no "undo hire" path — the `employees` row + Clerk invite are real.
 52. **Audit log writes are best-effort, never block**: `writeStageTransition` in `src/actions/hire.ts` swallows insert failures and logs a warning. The stage update itself succeeds even if the audit row fails (e.g. `candidate_stage_transitions` table missing). Per-action `side_effects_status` JSONB on each row records sent / skipped_by_user / failed for the M3 Confirm-Send popup.
 53. **JambaHire pipeline overhaul (M1–M5) requires 6 migrations to run in order**: `012` → `013` → `scripts/backfill-stage-transitions.sql` → `014` → `015` → `017`. (`016` reserved-then-skipped.) Without `013`, every move silently logs an audit-write warning. Without `014`, LOI fields are missing and `sendLOI` errors. Without `015`, hiring-manager picker writes fail. Without `017`, `revokeOffer` errors on the CHECK constraint.
+54. **Payroll RLS is now enabled but service role bypasses it**: migration `018` flipped `payroll_runs/payroll_entries/salary_structures` to RLS-on. All server actions use `createAdminSupabase()` (service role) which bypasses RLS by design — same pattern as JambaHire (gotcha #5). Policies are advisory; they activate the moment Clerk-JWT-to-Supabase wiring lands or the service-role key leaks.
+55. **Payroll `tax_regime` defaults to `'new'`**: existing salary_structures got `'new'` via migration 020 default. Admin must explicitly switch to `'old'` per employee. `additional_deductions_annual` is the **only** old-regime deduction input — there are NO separate 80C/80D/24/HRA-actual fields (intentional MVP scope). Admin pre-computes total externally.
+56. **Payroll TDS is regime-aware AND FY-aware**: `payroll_entries.tds` is NOT `salary_structures.tds_monthly` at process time. `processPayrollRun` recomputes per employee using `computeMonthsInFY(payMonth, date_of_joining)`. Mid-FY joiners get a lower TDS than the salary_structure preview suggests. The structure-level `tds_monthly` is config-time preview only.
+57. **`updatePayrollEntry` reads `annual_taxable_income` + `months_in_fy` from the entry**: do NOT recompute these from gross×12. Legacy entries (processed pre-2026-05-17) have NULL in those columns — the action falls back to gross×12 inline derivation in that case. Once a run is re-processed, snapshots populate.
+58. **`additional_deductions_annual` is silently ignored in new regime**: `computeCTCBreakdown` only subtracts it when `taxRegime === 'old'`. Admins can leave any value in the column without affecting new-regime tax. Field is conditionally shown in `salary-structure-dialog.tsx` only when the regime dropdown is `'old'`.
+59. **Bonus tax goes into the same `tds` field, not separately**: `updatePayrollEntry` sets `tds = baseTdsMonthly + bonusTax`. There's no `bonus_tax` column — the deduction is folded into total TDS. Reprocessing the run resets `tds` back to base (admin must re-add bonus).
 
 ---
 

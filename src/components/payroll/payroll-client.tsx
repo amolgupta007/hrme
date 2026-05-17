@@ -194,9 +194,13 @@ export function PayrollClient({
 
       {/* Alert: unconfigured employees */}
       {isAdmin && unconfiguredCount > 0 && activeTab === "Salary Structures" && (
-        <div className="rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-4 py-3 text-sm text-amber-800 dark:text-amber-300">
-          {unconfiguredCount} active employee{unconfiguredCount > 1 ? "s" : ""} don&apos;t have a salary structure configured yet.
-        </div>
+        <button
+          type="button"
+          onClick={() => setSalaryDialog({ open: true })}
+          className="w-full text-left rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-4 py-3 text-sm text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-950/50 transition-colors cursor-pointer"
+        >
+          {unconfiguredCount} active employee{unconfiguredCount > 1 ? "s" : ""} don&apos;t have a salary structure configured yet — click to configure.
+        </button>
       )}
 
       {/* Tabs */}

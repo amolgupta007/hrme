@@ -151,6 +151,7 @@ export interface CTCBreakdown {
   annualTaxableIncome: number;
   annualTax: number;
   taxRegime: TaxRegime;
+  pfCapped: boolean;
 }
 
 export function computeCTCBreakdown(
@@ -177,7 +178,10 @@ export function computeCTCBreakdown(
   const grossMonthly = basicMonthly + hraMonthly + specialAllowanceMonthly;
   const grossAnnual = grossMonthly * 12;
 
-  const employeePfMonthly = Math.min(Math.round(basicMonthly * 0.12), 1800);
+  const rawEmployeePf = Math.round(basicMonthly * 0.12);
+  const employeePfMonthly = Math.min(rawEmployeePf, 1800);
+  // P-010: surface whether the EPF wage cap kicked in (basic > ~₹15k/mo).
+  const pfCapped = rawEmployeePf > 1800;
   const ptMonthly = getProfessionalTax(grossMonthly, state);
 
   // TDS — regime-aware
@@ -215,6 +219,7 @@ export function computeCTCBreakdown(
     annualTaxableIncome,
     annualTax,
     taxRegime,
+    pfCapped,
   };
 }
 

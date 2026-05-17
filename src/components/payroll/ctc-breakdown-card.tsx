@@ -59,6 +59,11 @@ export function CTCBreakdownCard({
 
           <p className="text-xs text-muted-foreground font-medium pt-2">Deductions</p>
           <Row label="Employee PF (12% of Basic)" value={b.employeePfMonthly} indent negative />
+          {b.pfCapped && (
+            <p className="text-xs text-muted-foreground italic pl-3 -mt-1">
+              (capped at statutory ₹1,800/mo — basic exceeds EPF wage limit)
+            </p>
+          )}
           <Row label={`Professional Tax (${state})`} value={b.ptMonthly} indent negative />
           <Row label={`TDS (${regimeLabel} Regime)`} value={b.tdsMonthly} indent negative />
           <Row label="Total Deductions" value={b.totalDeductionsMonthly} negative />

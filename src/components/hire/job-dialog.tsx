@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { Plus, Trash2, Sparkles, Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { createJob, updateJob, generateJobDescription } from "@/actions/hire";
+import { createJob, updateJob, generateJobDescription, listPotentialHiringManagers } from "@/actions/hire";
 import type { Job } from "@/actions/hire";
 import type { Department } from "@/types";
 
@@ -35,6 +35,9 @@ export function JobDialog({ open, onClose, departments, existing }: Props) {
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [aiNotes, setAiNotes] = useState("");
+  // M5 — hiring manager picker (lazy-loaded list)
+  const [hiringManagerId, setHiringManagerId] = useState<string>(existing?.hiring_manager_id ?? "");
+  const [potentialManagers, setPotentialManagers] = useState<Array<{ id: string; name: string }>>([]);
 
   useEffect(() => {
     if (open) {
@@ -50,6 +53,11 @@ export function JobDialog({ open, onClose, departments, existing }: Props) {
       setStatus(existing?.status ?? "draft");
       setQuestions(existing?.custom_questions ?? []);
       setAiNotes("");
+      setHiringManagerId(existing?.hiring_manager_id ?? "");
+      // Lazy-load potential managers each time the dialog opens
+      listPotentialHiringManagers().then((r) => {
+        if (r.success) setPotentialManagers(r.data);
+      });
     }
   }, [open, existing]);
 
@@ -102,6 +110,7 @@ export function JobDialog({ open, onClose, departments, existing }: Props) {
         show_salary: showSalary,
         status: status as any,
         custom_questions: questions.filter((q) => q.question.trim()),
+        hiring_manager_id: hiringManagerId || "",
       };
 
       const result = isEdit
@@ -157,6 +166,18 @@ export function JobDialog({ open, onClose, departments, existing }: Props) {
                   <option key={d.id} value={d.id}>{d.name}</option>
                 ))}
               </select>
+            </div>
+            <div>
+              <label className={labelCls}>Hiring Manager</label>
+              <select className={inputCls} value={hiringManagerId} onChange={(e) => setHiringManagerId(e.target.value)}>
+                <option value="">— Unassigned —</option>
+                {potentialManagers.map((m) => (
+                  <option key={m.id} value={m.id}>{m.name}</option>
+                ))}
+              </select>
+              <p className="text-xs text-muted-foreground mt-1">
+                Manager gets pipeline access for their own candidates.
+              </p>
             </div>
             <div>
               <label className={labelCls}>Employment Type</label>

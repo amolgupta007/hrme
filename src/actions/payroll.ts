@@ -433,7 +433,7 @@ export async function processPayrollRun(runId: string): Promise<ActionResult<voi
   const totalDeductions = entries.reduce((s, e) => s + e.total_deductions, 0);
   const totalNet = entries.reduce((s, e) => s + e.net_pay, 0);
 
-  await supabase
+  const { error: updateError } = await supabase
     .from("payroll_runs")
     .update({
       status: "processed",
@@ -444,6 +444,7 @@ export async function processPayrollRun(runId: string): Promise<ActionResult<voi
       processed_at: new Date().toISOString(),
     })
     .eq("id", runId);
+  if (updateError) return { success: false, error: updateError.message };
 
   revalidatePath("/dashboard/payroll");
   return { success: true, data: undefined };

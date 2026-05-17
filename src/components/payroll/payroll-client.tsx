@@ -120,7 +120,7 @@ export function PayrollClient({
   }
 
   async function handleProcess(runId: string) {
-    const run = runs.find((r) => r.id === runId);
+    const run = payrollRuns.find((r) => r.id === runId);
     if (run?.status === "processed") {
       if (!confirm("This run has already been processed. Reprocessing will reset all manual bonus and LOP edits. Continue?")) return;
     }
@@ -137,6 +137,9 @@ export function PayrollClient({
       } else {
         toast.error(result.error);
       }
+    } catch (err) {
+      console.error("Process payroll failed:", err);
+      toast.error(err instanceof Error ? err.message : "Failed to process payroll");
     } finally {
       setProcessingRun(null);
     }

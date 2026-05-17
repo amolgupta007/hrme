@@ -106,7 +106,7 @@ const SalaryStructureSchema = z.object({
 });
 
 const PayrollRunSchema = z.object({
-  month: z.string().regex(/^\d{4}-\d{2}$/, "Month must be YYYY-MM"),
+  month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Month must be YYYY-MM (01-12)"),
   working_days: z.number().int().min(1).max(31).default(26),
   notes: z.string().optional(),
 });
@@ -355,7 +355,14 @@ export async function processPayrollRun(runId: string): Promise<ActionResult<voi
   const runData = run as any;
   if (runData.status !== "draft") return { success: false, error: "Only draft runs can be processed" };
 
-  // Fetch salary structures for org
+  // Compute month boundaries upfront — used for salary effective-from filter and approved-leaves lookup
+  const [year, monthNum] = runData.month.split("-");
+  const monthStart = `${year}-${monthNum}-01`;
+  const monthEnd = new Date(parseInt(year), parseInt(monthNum), 0)
+    .toISOString()
+    .split("T")[0];
+
+  // P-013: only include salary structures effective on or before this run's month start
   const { data: salaries, error: salaryError } = await supabase
     .from("salary_structures")
     .select(`
@@ -363,19 +370,16 @@ export async function processPayrollRun(runId: string): Promise<ActionResult<voi
       special_allowance_monthly, employee_pf_monthly,
       professional_tax_monthly, tds_monthly, net_monthly, state
     `)
-    .eq("org_id", user.orgId);
+    .eq("org_id", user.orgId)
+    .lte("effective_from", monthStart);
 
   if (salaryError) return { success: false, error: salaryError.message };
   if (!salaries || salaries.length === 0) {
-    return { success: false, error: "No salary structures configured. Add salaries for employees first." };
+    return {
+      success: false,
+      error: `No salary structures effective on or before ${monthStart}. Configure salaries for active employees first.`,
+    };
   }
-
-  // Fetch approved leaves for the month to calculate LOP
-  const [year, monthNum] = runData.month.split("-");
-  const monthStart = `${year}-${monthNum}-01`;
-  const monthEnd = new Date(parseInt(year), parseInt(monthNum), 0)
-    .toISOString()
-    .split("T")[0];
 
   const { data: leaves } = await supabase
     .from("leave_requests")

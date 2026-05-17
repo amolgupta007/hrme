@@ -1,9 +1,41 @@
 # JambaHire Pipeline — Drag-Drop + Transition Automation
 
-**Status:** Phase 6 decisions locked (2026-05-16). M1 cleared to start. One small clarification pending — see top of Phase 6.
+**Status:** **SHIPPED 2026-05-16 → 2026-05-17.** All five milestones merged to `main` and deployed to production. See "Shipped — milestone log" below for commit refs and deviations.
 **Author:** Claude (planning pass)
 **Date:** 2026-05-16
 **Scope:** Replace dropdown-based stage moves with drag-drop, add a `shortlisted` stage, and trigger automated side-effects (emails, UI unlocks, LOI flow, offer-gated hiring) on every stage transition.
+
+---
+
+## Shipped — milestone log
+
+| M | Commit | Notes / deviations |
+|---|---|---|
+| **M1** | `ab0f535` | dnd-kit with Pointer (5px) + Touch (200ms long-press) + Keyboard sensors. Dropdown fallback kept on every card per locked Q2. New `Shortlisted` column rendered amber between Screening and Interview 1. Migration `012` added the stage to the CHECK constraint. Mojibake fix landed in `4ddaf38` immediately after (ellipsis + middle-dot got mangled when re-rewriting the file via Bash). |
+| **M2** | `50c44c5` | `candidate_stage_transitions` (migration `013`) with full RLS. `ApplicationTimeline` + `ApplicationDetailDialog` lazy-load history on candidate-name click. Backward moves require comment, enforced server + client. Bulk drag wired (carry-selection-drop). Backfill script `scripts/backfill-stage-transitions.sql` seeds one `initial` row per existing application. |
+| **M2.5** | `0eeadef` | Interim rejection-reason prompt — admin-typed reason stored in `applications.rejection_reason` + audit `comment`, never sent to candidate. Saved as the `feedback-rejection-email-internal-reason` memory rule. |
+| **M3** | `60e4a54` | Unified `ConfirmTransitionDialog` replaces M2's separate backward + reject modals. `planActionsForTransition` (client) + `dispatchStageTransitionSideEffects` (server) for the audit-clean send-or-skip flow. 4 transition emails: `candidate-ack`, `interview-next-round`, `rejection-early`, `rejection-postinterview`. All send from `NOREPLY_EMAIL` with reply-to `FROM_EMAIL`. `side_effects_status` JSONB on each audit row records sent / skipped_by_user / failed per action key. |
+| **M4** | `0d20adf` | Migration `014` adds LOI columns to `applications` (token UNIQUE-partial index, expires_at indexed for cron). New public `/loi/[token]` page (added to middleware public matcher). `sendLOI` writes the token + pending row + email; `respondToLOI` (public, candidate-actor audit row) flips to accepted → advances stage + notifies admins via `manager-shortlist-notify`, or declined → auto-rejects with `rejection_reason='LOI declined'`. Cron `/api/cron/loi-expiry` daily at `15 4 * * *` UTC. LOI-pending cards get amber chip + drag-lock. |
+| **M5** | `669c723` | Migrations `015` (jobs.hiring_manager_id) + `017` (offers.status += 'revoked'). `gates.ts` shared by server `convertOfferToHire` and client `pipeline-client.tsx` for the offer-status + joining-date double-gate. `convertOfferToHire` creates the `employees` row atomically (rolls back on stage-update failure), advances application to `hired`, fires Clerk org invite, sends `hire-onboarding-handoff`. `ConvertToEmployeeDialog` prefills from offer + candidate. `OfferStatusChip` on Offer-column cards. `revokeOffer` action + `offer-revoked` email. `canMoveStage` enforces manager-scope (own-job only, screening↔shortlisted↔interview pipeline). Hired column is hard-blocked terminal. Bulk → Hired refused with toast. |
+
+**Deferrals (not shipped, documented as M5.1/v2):**
+- Per-org LOI expiry config (currently hardcoded 7 days)
+- Auto-revoke offer on backward-from-sent (M5 surfaces a clear error instructing admin to revoke from Offers page first)
+- `internal-hire-notify.tsx` template (HR-side email when a hire happens)
+- Per-candidate breakdown in bulk-popup
+- Hover lock/check visual on the Hired column during drag-in-progress
+
+**Migrations to run (in order):**
+1. `012_application_stage_add_shortlisted.sql` — M1
+2. `013_candidate_stage_transitions.sql` — M2
+3. `scripts/backfill-stage-transitions.sql` — M2 (one-shot, idempotent)
+4. `014_application_loi_columns.sql` — M4
+5. `015_jobs_hiring_manager.sql` — M5
+6. `017_offers_revoked_status.sql` — M5
+
+(`016_applications_screener.sql` was planned but deferred — `screener_id`/`screened_at`/`shortlisted_at` were not implemented in M5 since the timeline already captures actor + transition timestamps adequately.)
+
+---
 
 ---
 

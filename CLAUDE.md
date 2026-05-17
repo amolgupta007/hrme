@@ -105,18 +105,28 @@ All tables have `org_id` (FK → organizations) for multi-tenant RLS isolation.
 | `salary_structures` | employee_id, ctc, basic_monthly, hra_monthly, special_allowance_monthly, gross_monthly, net_monthly, state, is_metro |
 | `payroll_runs` | month (YYYY-MM), status (draft/processed/paid), working_days |
 | `payroll_entries` | gross_salary, employee_pf, professional_tax, tds, lop_days, lop_deduction, bonus, net_pay |
-| `jobs` | title, employment_type, location_type, salary_min/max, status (draft/active/paused/closed), custom_questions (JSONB) |
+| `jobs` | title, employment_type, location_type, salary_min/max, status (draft/active/paused/closed), custom_questions (JSONB), **hiring_manager_id** (FK → employees, drives M5 manager-scoped permissions) |
 | `candidates` | name, email, phone, resume_url, linkedin_url, source, tags (JSONB) |
-| `applications` | job_id, candidate_id, stage (applied/screening/interview_1/interview_2/final_round/offer/hired) |
+| `applications` | job_id, candidate_id, stage (applied/screening/**shortlisted**/interview_1/interview_2/final_round/offer/hired/rejected), rejection_reason, **loi_status** (pending/accepted/declined/expired), loi_token (UNIQUE partial index), loi_sent_at, loi_responded_at, loi_expires_at |
 | `interview_schedules` | application_id, interviewer_id, scheduled_at, interview_type (video/phone/in_person), status |
 | `interview_feedback` | schedule_id, interviewer_id, technical/communication/culture_fit/overall rating, recommendation; unique(schedule_id, interviewer_id) |
-| `offers` | application_id, ctc, joining_date, status (draft/sent/accepted/declined), offer_token (unique UUID) |
+| `offers` | application_id, ctc, joining_date, status (draft/sent/accepted/declined/expired/**revoked**), offer_token (unique UUID) |
+| `candidate_stage_transitions` | application_id, from_stage, to_stage, direction (forward/backward/reject/undo/initial), actor_id, actor_type (admin/manager/system/candidate), comment, side_effects_status (JSONB per-action), undone_at, created_at — full audit log for every pipeline move |
 | `grievances` | employee_id (null if anonymous), type, severity (low/medium/high/urgent), is_anonymous, tracking_token (unique), status (open/in_review/resolved/closed) |
 | `attendance_records` | employee_id, date, clock_in_at, clock_out_at, total_minutes, source (`web`/`device`/`auto_close`), auto_closed (bool), ip_address, device_id |
 
 ### Tables added post-initial-migration (via SQL Editor — NOT in 001_initial_schema.sql)
-`objectives`, `announcements`, `document_acknowledgments`, `salary_structures`, `payroll_runs`, `payroll_entries`, `jobs`, `candidates`, `applications`, `interview_schedules`, `interview_feedback`, `offers`, `grievances`, `attendance_records`, `feedback_reports`
-Also: `reviews.objectives_id` added via ALTER TABLE; `attendance_records.auto_closed` (BOOLEAN, default false) and `'auto_close'` value in `attendance_records_source_check` were added 2026-05-08 to support the auto-clockout cron
+`objectives`, `announcements`, `document_acknowledgments`, `salary_structures`, `payroll_runs`, `payroll_entries`, `jobs`, `candidates`, `applications`, `interview_schedules`, `interview_feedback`, `offers`, `grievances`, `attendance_records`, `feedback_reports`, **`candidate_stage_transitions`** (migration `013`, M2)
+Also: `reviews.objectives_id` added via ALTER TABLE; `attendance_records.auto_closed` (BOOLEAN, default false) and `'auto_close'` value in `attendance_records_source_check` were added 2026-05-08 to support the auto-clockout cron.
+
+**Pipeline overhaul migrations (M1–M5, shipped 2026-05-17)** — run in order:
+- `012_application_stage_add_shortlisted.sql` — adds `shortlisted` to applications.stage CHECK
+- `013_candidate_stage_transitions.sql` — full audit table + RLS
+- `scripts/backfill-stage-transitions.sql` — one-shot, seeds `initial` row per existing application
+- `014_application_loi_columns.sql` — `loi_*` columns on applications
+- `015_jobs_hiring_manager.sql` — `hiring_manager_id` FK on jobs
+- `017_offers_revoked_status.sql` — adds `'revoked'` to offers.status CHECK
+(`016` was reserved for screener_id columns but deferred — see plan doc.)
 
 ### Multi-tenancy
 - RLS enabled on ALL tables; admin Supabase client (`SUPABASE_SERVICE_ROLE_KEY`) bypasses RLS — used in all server actions
@@ -239,6 +249,70 @@ Business-tier, toggled per-org via `organizations.settings.jambahire_enabled`. R
 - Sidebar entry "Refer" gated on `referrals` feature flag, which is `jambaHireEnabled && JAMBAHIRE_REFERRALS_ENABLED === 'true'` (env+org compound).
 
 All actions in `src/actions/hire.ts`.
+
+### Pipeline overhaul (M1–M5, shipped 2026-05-17)
+
+**Plan + milestone log:** `docs/superpowers/plans/2026-05-16-jambahire-pipeline-drag-drop-and-transitions.md`.
+**Operator doc:** `docs/jambahire-pipeline-overhaul.md`.
+
+**Stage flow** (now 8 stages + rejected): `applied → screening → shortlisted → interview_1 → interview_2 → final_round → offer → hired`. `shortlisted` is the new gate; LOI fires on `screening → shortlisted`.
+
+**New libs (single source of truth, server + client both import):**
+- `src/lib/hire/stage-direction.ts` — `computeDirection(from, to)` returns `forward | backward | reject | undo | initial`
+- `src/lib/hire/transitions.ts` — `planActionsForTransition(direction, from, to)` returns the action checklist for the Confirm-Send popup
+- `src/lib/hire/permissions.ts` — `canMoveStage(from, to, ctx)` enforces admin-anywhere / manager-own-job-interview-only
+- `src/lib/hire/gates.ts` — `checkOfferToHiredGates(offer)` enforces offer.status === 'accepted' AND today >= joining_date (IST, day-precision)
+
+**New dialogs:**
+- `src/components/hire/confirm-transition-dialog.tsx` — unified popup (forward/backward/reject), reason + per-action checkboxes, Send / Skip All / Cancel
+- `src/components/hire/application-detail-dialog.tsx` — lazy-loads the timeline on candidate-name click
+- `src/components/hire/application-timeline.tsx` — vertical chrono timeline component
+- `src/components/hire/convert-to-employee-dialog.tsx` — opens on drag offer→hired (both gates pass), prefilled from offer
+- `src/components/hire/offer-status-chip.tsx` — draft/sent/accepted/declined/expired/revoked chip with relative time
+
+**Drag-drop:** `@dnd-kit/core` + `@dnd-kit/sortable` + `@dnd-kit/utilities`. Pointer (5px distance), Touch (200ms long-press), Keyboard sensors. Dropdown fallback kept on every card.
+
+**New email templates** (all from `NOREPLY_EMAIL` with reply-to `FROM_EMAIL`; **never include `rejection_reason` text** per `memory/feedback_rejection_email_internal_reason.md`):
+- `candidate-ack.tsx` (applied → screening)
+- `interview-next-round.tsx` (interview transitions, takes `roundLabel` prop)
+- `rejection-early.tsx`, `rejection-postinterview.tsx`, `rejection-postoffer.tsx` (stage-aware rejections)
+- `loi-invite.tsx` (M4 — candidate accept/decline buttons → `/loi/[token]`)
+- `manager-shortlist-notify.tsx` (M4 — fires on LOI accept, not on drag; currently goes to all org admins; M6 target = hiring_manager_id)
+- `hire-onboarding-handoff.tsx` (M5 — welcome candidate as employee)
+- `offer-revoked.tsx` (M5 — sorry-we-pulled-back, no internal reason)
+
+**New public route:** `src/app/loi/[token]/page.tsx` (no Clerk; `/loi(.*)` added to middleware public matcher). Handles `?response=accept|decline` querystring for one-click email CTA.
+
+**New cron:** `src/app/api/cron/loi-expiry/route.ts` — see Cron Jobs table below.
+
+**Server action surface (in `src/actions/hire.ts`):**
+- `updateApplicationStage(id, stage, opts?: { comment? })` returns `{ transitionId }`. Enforces canMoveStage + hard-blocks `hired → anything` + blocks backward-from-sent-offer + requires comment on backward.
+- `bulkUpdateApplicationStage(ids[], stage, opts?: { comment? })` returns `{ transitionIds }`. Admin-only.
+- `rejectApplication(id, reason)` returns `{ transitionId }`. Reason required.
+- `dispatchStageTransitionSideEffects(transitionId, enabledKeys[])` — runs the user-confirmed subset, writes `side_effects_status` JSONB.
+- `getApplicationTransitions(applicationId)` — hydrated with actor names in one round trip.
+- `sendLOI(applicationId)` — generates token, sets pending, sends email.
+- `respondToLOI(token, 'accept' | 'decline')` — public; on accept advances stage + notifies admins; on decline auto-rejects with reason "LOI declined".
+- `convertOfferToHire(applicationId, payload)` — admin only, enforces both gates, creates employees row atomically, fires Clerk invite + welcome email.
+- `revokeOffer(offerId, reason)` — admin only, sets status='revoked', sends offer-revoked email.
+- `getHirePrefillData(applicationId)` — one-call hydration for the convert-to-employee wizard (offer + candidate + departments + potential managers).
+- `listPotentialHiringManagers()` — powers the hiring-manager picker in the job dialog.
+
+**Pipeline UX summary:**
+- Forward drag with no actions → toast + done.
+- Forward drag with email actions (e.g. applied → screening) → optimistic move, popup with checkboxes, Send / Skip All.
+- Backward → prompt-first (no optimistic move) with required comment.
+- Reject → prompt-first with required internal reason + email checkbox (internal reason NEVER in candidate email).
+- `screening → shortlisted` → LOI flow (popup → sendLOI → card stays in Screening with amber `LOI pending` chip until candidate responds via public page).
+- `offer → hired` → gate check → ConvertToEmployeeDialog wizard → employees row + Clerk invite + welcome email.
+- `hired → anything` → hard-blocked.
+
+**Permissions matrix (`canMoveStage`):**
+| Role | Forward | Backward | Reject | Bulk |
+|---|---|---|---|---|
+| owner/admin | all | yes (reason required) | yes (reason required) | yes |
+| manager | own-job only, screening↔shortlisted↔interview pipeline only | no | no | no |
+| employee | none | no | no | no |
 
 ---
 
@@ -376,6 +450,7 @@ Primary: teal `172 50% 36%`. Accent: warm orange `32 95% 52%`. Use CSS variables
 | `/api/cron/attendance-auto-clockout` | `30 18 * * *` | 12:00am | Close attendance shifts where employee forgot to clock out (uses per-org `standard_workday_hours`, capped at 23:59 of the same date; sets `auto_closed=true`, `source='auto_close'`) |
 | `/api/cron/social-agent-generate` | `0 4 * * 1,3,5` | Mon/Wed/Fri 9:30am | Generate one LinkedIn draft via Claude + Cloudflare Flux. Gated on `SOCIAL_AGENT_ENABLED=true`. |
 | `/api/cron/social-agent-publish-check` | `0 5 * * *` | 10:30am | Reconcile Buffer post statuses → DB; mark `published`/`failed` and email on failure. (Daily — Vercel Hobby plan limits crons to once-per-day; inline reconciliation on page-load is a future improvement.) |
+| `/api/cron/loi-expiry` | `15 4 * * *` | 9:45am | M4 — flips JambaHire `applications.loi_status` from `pending` to `expired` where `loi_expires_at < now()`. No email sent on expiry (admin can resend from the card). |
 
 All cron routes require `Authorization: Bearer CRON_SECRET` header. `CRON_SECRET` env var must be set in Vercel.
 
@@ -459,6 +534,12 @@ npm run db:push       # Push migrations (needs CLI)
 45. **`feedback-screenshots` bucket**: Must be created via `INSERT INTO storage.buckets (id, name, public) VALUES ('feedback-screenshots', 'feedback-screenshots', true)` before deploying — not in migration 011 because storage DDL is environment-specific.
 46. **Feedback dialog mounting**: `<ReportFeedbackTriggerRoot>` is mounted at the dashboard layout. It does NOT exist on public pages (`/`, `/sign-in`, `/blog`, `/careers`, `/offers`, `/apply/r`). Feedback can only be submitted from inside `/dashboard/*`.
 47. **Feedback Cmd+/ inside form fields**: To avoid hijacking text-input shortcuts, the listener requires `Shift+Cmd/Ctrl+/` when focus is inside an `<input>` or `<textarea>`. Outside text fields, plain `Cmd/Ctrl+/` works.
+48. **JambaHire rejection emails NEVER include the internal reason**: `applications.rejection_reason` + `candidate_stage_transitions.comment` are audit-only. The candidate-facing templates (`rejection-early.tsx`, `rejection-postinterview.tsx`, `rejection-postoffer.tsx`, `offer-revoked.tsx`) accept only `{ candidateName, orgName, roleTitle }` — do NOT thread `rejection_reason` through. See `memory/feedback_rejection_email_internal_reason.md`.
+49. **LOI flow stages the card visually in Screening**: When admin drags `screening → shortlisted`, `sendLOI` writes the token + sets `loi_status='pending'` but the application's `stage` stays as `screening` until the candidate accepts via `/loi/[token]`. The pipeline UI renders the amber `LOI pending` chip and locks the drag handle. `respondToLOI` (public, candidate-actor audit) does the actual stage advance. Decline auto-routes to `rejected` with `rejection_reason='LOI declined'`.
+50. **`offer → hired` is double-gated**: `checkOfferToHiredGates` in `src/lib/hire/gates.ts` is the single source of truth (server + client both import). Gate A = `offer.status === 'accepted'`. Gate B = `today >= offer.joining_date` (IST, day-precision). Bypass requires editing the offer's `joining_date`. The drag opens `ConvertToEmployeeDialog`; the wizard's submit calls `convertOfferToHire` which re-checks both gates server-side.
+51. **`hired → anything` is hard-blocked**: To unmake a hire, terminate the employee from `/dashboard/employees`. Server returns an error; client also pre-checks. There's no "undo hire" path — the `employees` row + Clerk invite are real.
+52. **Audit log writes are best-effort, never block**: `writeStageTransition` in `src/actions/hire.ts` swallows insert failures and logs a warning. The stage update itself succeeds even if the audit row fails (e.g. `candidate_stage_transitions` table missing). Per-action `side_effects_status` JSONB on each row records sent / skipped_by_user / failed for the M3 Confirm-Send popup.
+53. **JambaHire pipeline overhaul (M1–M5) requires 6 migrations to run in order**: `012` → `013` → `scripts/backfill-stage-transitions.sql` → `014` → `015` → `017`. (`016` reserved-then-skipped.) Without `013`, every move silently logs an audit-write warning. Without `014`, LOI fields are missing and `sendLOI` errors. Without `015`, hiring-manager picker writes fail. Without `017`, `revokeOffer` errors on the CHECK constraint.
 
 ---
 

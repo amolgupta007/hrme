@@ -254,6 +254,7 @@ export async function upsertSalaryStructure(
         include_hra,
         effective_from,
         updated_at: new Date().toISOString(),
+        computed_at: new Date().toISOString(),
       },
       { onConflict: "org_id,employee_id" }
     );
@@ -464,7 +465,11 @@ export async function markPayrollPaid(runId: string): Promise<ActionResult<void>
 
   const { error } = await supabase
     .from("payroll_runs")
-    .update({ status: "paid", paid_at: new Date().toISOString() })
+    .update({
+      status: "paid",
+      paid_at: new Date().toISOString(),
+      paid_by: user.employeeId ?? null,
+    })
     .eq("id", runId)
     .eq("org_id", user.orgId)
     .eq("status", "processed");
@@ -572,10 +577,10 @@ export async function updatePayrollEntry(
 
   const supabase = createAdminSupabase();
 
-  // Fetch current entry
+  // Fetch current entry (net_pay captured for previous_net_pay audit column)
   const { data: entry, error: fetchErr } = await supabase
     .from("payroll_entries")
-    .select("gross_salary, employee_pf, professional_tax, tds, payroll_run_id")
+    .select("gross_salary, employee_pf, professional_tax, tds, net_pay, payroll_run_id")
     .eq("id", entryId)
     .eq("org_id", user.orgId)
     .single();
@@ -618,6 +623,9 @@ export async function updatePayrollEntry(
       tds: adjustedTds,
       total_deductions: totalDeductions,
       net_pay: netPay,
+      previous_net_pay: e.net_pay,
+      edited_by: user.employeeId ?? null,
+      edited_at: new Date().toISOString(),
     })
     .eq("id", entryId)
     .eq("org_id", user.orgId);

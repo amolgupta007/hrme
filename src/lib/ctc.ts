@@ -81,13 +81,49 @@ export function computeNewRegimeTax(taxableIncome: number): number {
   return Math.max(0, Math.round(tax * 1.04));
 }
 
+export type TaxRegime = "new" | "old";
+
 /**
- * Marginal tax on a one-time bonus payment. Returns tax(annualTaxable + bonus) - tax(annualTaxable).
- * The full marginal amount is deducted in the payroll month the bonus is paid.
+ * Old Tax Regime slabs (FY 2025-26).
+ * Standard Deduction: ₹50,000 for salaried.
+ * 87A Rebate: full rebate if taxable income ≤ ₹5L (caps at ₹12,500 of tax).
+ * 80C/80D/24 deductions are passed upstream as a single `additionalDeductions`
+ * catch-all — see computeCTCBreakdown.
  */
-export function computeAdditionalTaxOnBonus(annualTaxableIncome: number, bonus: number): number {
+export function computeOldRegimeTax(taxableIncome: number): number {
+  if (taxableIncome <= 250000) return 0;
+
+  let tax = 0;
+  // 2.5L–5L: 5%
+  if (taxableIncome > 250000) tax += Math.min(taxableIncome - 250000, 250000) * 0.05;
+  // 5L–10L: 20%
+  if (taxableIncome > 500000) tax += Math.min(taxableIncome - 500000, 500000) * 0.20;
+  // 10L+: 30%
+  if (taxableIncome > 1000000) tax += (taxableIncome - 1000000) * 0.30;
+
+  // Rebate u/s 87A: no tax if taxable income ≤ ₹5L (old-regime threshold).
+  if (taxableIncome <= 500000) tax = 0;
+
+  // Health & Education Cess: 4% on post-rebate tax.
+  return Math.max(0, Math.round(tax * 1.04));
+}
+
+export function computeTaxByRegime(taxableIncome: number, regime: TaxRegime): number {
+  return regime === "old" ? computeOldRegimeTax(taxableIncome) : computeNewRegimeTax(taxableIncome);
+}
+
+/**
+ * Marginal tax on a one-time bonus payment, routed through the employee's regime.
+ * Returns tax(annualTaxable + bonus) - tax(annualTaxable). Full marginal amount is
+ * deducted in the payroll month the bonus is paid.
+ */
+export function computeAdditionalTaxOnBonus(
+  annualTaxableIncome: number,
+  bonus: number,
+  regime: TaxRegime = "new"
+): number {
   if (bonus <= 0) return 0;
-  return computeNewRegimeTax(annualTaxableIncome + bonus) - computeNewRegimeTax(annualTaxableIncome);
+  return computeTaxByRegime(annualTaxableIncome + bonus, regime) - computeTaxByRegime(annualTaxableIncome, regime);
 }
 
 export interface CTCBreakdown {
@@ -114,13 +150,16 @@ export interface CTCBreakdown {
   // Tax info
   annualTaxableIncome: number;
   annualTax: number;
+  taxRegime: TaxRegime;
 }
 
 export function computeCTCBreakdown(
   ctc: number,
   state: string = "other",
   isMetro: boolean = true,
-  includeHra: boolean = true
+  includeHra: boolean = true,
+  taxRegime: TaxRegime = "new",
+  additionalDeductions: number = 0
 ): CTCBreakdown {
   const basicAnnual = Math.round(ctc * 0.4);
   const hraAnnual = includeHra ? Math.round(basicAnnual * (isMetro ? 0.5 : 0.4)) : 0;
@@ -141,10 +180,15 @@ export function computeCTCBreakdown(
   const employeePfMonthly = Math.min(Math.round(basicMonthly * 0.12), 1800);
   const ptMonthly = getProfessionalTax(grossMonthly, state);
 
-  // TDS — new regime
-  const standardDeduction = 75000;
-  const annualTaxableIncome = Math.max(0, grossAnnual - employeePfMonthly * 12 - standardDeduction);
-  const annualTax = computeNewRegimeTax(annualTaxableIncome);
+  // TDS — regime-aware
+  const standardDeduction = taxRegime === "old" ? 50000 : 75000;
+  // Old regime: subtract caller's 80C/80D/24/HRA-actual catch-all. New regime disallows most deductions.
+  const allowedExtraDeductions = taxRegime === "old" ? Math.max(0, additionalDeductions) : 0;
+  const annualTaxableIncome = Math.max(
+    0,
+    grossAnnual - employeePfMonthly * 12 - standardDeduction - allowedExtraDeductions
+  );
+  const annualTax = computeTaxByRegime(annualTaxableIncome, taxRegime);
   const tdsMonthly = Math.round(annualTax / 12);
 
   const totalDeductionsMonthly = employeePfMonthly + ptMonthly + tdsMonthly;
@@ -170,6 +214,7 @@ export function computeCTCBreakdown(
     netMonthly,
     annualTaxableIncome,
     annualTax,
+    taxRegime,
   };
 }
 

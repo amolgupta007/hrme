@@ -7,12 +7,22 @@ interface CTCBreakdownCardProps {
   state: string;
   isMetro: boolean;
   includeHra?: boolean;
+  taxRegime?: "new" | "old";
+  additionalDeductions?: number;
 }
 
-export function CTCBreakdownCard({ ctc, state, isMetro, includeHra = true }: CTCBreakdownCardProps) {
+export function CTCBreakdownCard({
+  ctc,
+  state,
+  isMetro,
+  includeHra = true,
+  taxRegime = "new",
+  additionalDeductions = 0,
+}: CTCBreakdownCardProps) {
   if (!ctc || ctc <= 0) return null;
 
-  const b = computeCTCBreakdown(ctc, state, isMetro, includeHra);
+  const b = computeCTCBreakdown(ctc, state, isMetro, includeHra, taxRegime, additionalDeductions);
+  const regimeLabel = taxRegime === "old" ? "Old" : "New";
 
   return (
     <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-4 text-sm">
@@ -50,7 +60,7 @@ export function CTCBreakdownCard({ ctc, state, isMetro, includeHra = true }: CTC
           <p className="text-xs text-muted-foreground font-medium pt-2">Deductions</p>
           <Row label="Employee PF (12% of Basic)" value={b.employeePfMonthly} indent negative />
           <Row label={`Professional Tax (${state})`} value={b.ptMonthly} indent negative />
-          <Row label="TDS (New Regime)" value={b.tdsMonthly} indent negative />
+          <Row label={`TDS (${regimeLabel} Regime)`} value={b.tdsMonthly} indent negative />
           <Row label="Total Deductions" value={b.totalDeductionsMonthly} negative />
 
           <div className="border-t border-primary/30 pt-1 mt-1">
@@ -62,13 +72,17 @@ export function CTCBreakdownCard({ ctc, state, isMetro, includeHra = true }: CTC
       {/* Tax summary */}
       {b.annualTax > 0 && (
         <div className="rounded bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
-          Annual Tax (New Regime): {formatINR(b.annualTax)} on taxable income of{" "}
-          {formatINR(b.annualTaxableIncome)} (after ₹75k std deduction + PF)
+          Annual Tax ({regimeLabel} Regime): {formatINR(b.annualTax)} on taxable income of{" "}
+          {formatINR(b.annualTaxableIncome)} (after ₹{taxRegime === "old" ? "50k" : "75k"} std deduction
+          {taxRegime === "old" && additionalDeductions > 0
+            ? ` + ${formatINR(additionalDeductions)} other deductions`
+            : ""}
+          {" "}+ PF)
         </div>
       )}
       {b.annualTax === 0 && b.annualTaxableIncome > 0 && (
         <div className="rounded bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 px-3 py-2 text-xs text-green-800 dark:text-green-300">
-          No TDS — taxable income ≤ ₹12L (Rebate u/s 87A applies)
+          No TDS — taxable income ≤ ₹{taxRegime === "old" ? "5L" : "12L"} (Rebate u/s 87A applies)
         </div>
       )}
     </div>

@@ -113,6 +113,33 @@ export function computeTaxByRegime(taxableIncome: number, regime: TaxRegime): nu
 }
 
 /**
+ * Indian fiscal year = April 1 → March 31. Returns the number of months this
+ * employee earns salary in the FY containing payMonth.
+ *   - dateOfJoining null/missing       → 12 (defensive: assume full year)
+ *   - joined before this FY's April 1  → 12 (old hire)
+ *   - joined within this FY            → months from joining month through March, inclusive
+ * Clamped to [1, 12]. Used by processPayrollRun to project annual income for
+ * mid-FY joiners so monthly TDS isn't over-deducted on a fictitious gross×12.
+ */
+export function computeMonthsInFY(payMonth: string, dateOfJoining: string | null): number {
+  if (!dateOfJoining) return 12;
+  const [payYearStr, payMonthStr] = payMonth.split("-");
+  const payYear = parseInt(payYearStr, 10);
+  const payMonthNum = parseInt(payMonthStr, 10);
+  if (!payYear || !payMonthNum) return 12;
+  // FY containing payMonth: Apr–Dec → payYear; Jan–Mar → payYear-1
+  const fyStartYear = payMonthNum >= 4 ? payYear : payYear - 1;
+  const fyStartDate = new Date(fyStartYear, 3, 1); // April 1 (0-indexed month)
+  const join = new Date(dateOfJoining);
+  if (Number.isNaN(join.getTime())) return 12;
+  if (join <= fyStartDate) return 12;
+  // Months from join's month-of-year to March of (fyStartYear+1), inclusive.
+  const monthsRemaining =
+    (fyStartYear + 1 - join.getFullYear()) * 12 + (2 - join.getMonth()) + 1;
+  return Math.max(1, Math.min(12, monthsRemaining));
+}
+
+/**
  * Marginal tax on a one-time bonus payment, routed through the employee's regime.
  * Returns tax(annualTaxable + bonus) - tax(annualTaxable). Full marginal amount is
  * deducted in the payroll month the bonus is paid.

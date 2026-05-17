@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { getCurrentUser, isAdmin } from "@/lib/current-user";
-import { computeCTCBreakdown, getProfessionalTax, computeTaxByRegime, computeAdditionalTaxOnBonus } from "@/lib/ctc";
+import { computeCTCBreakdown, getProfessionalTax, computeTaxByRegime, computeAdditionalTaxOnBonus, computeMonthsInFY } from "@/lib/ctc";
 import type { ActionResult } from "@/types";
 
 // ---- Types ----
@@ -381,7 +381,8 @@ export async function processPayrollRun(runId: string): Promise<ActionResult<voi
     .select(`
       employee_id, gross_monthly, basic_monthly, hra_monthly,
       special_allowance_monthly, employee_pf_monthly,
-      professional_tax_monthly, tds_monthly, net_monthly, state
+      professional_tax_monthly, tds_monthly, net_monthly, state,
+      tax_regime, additional_deductions_annual
     `)
     .eq("org_id", user.orgId)
     .lte("effective_from", monthStart);
@@ -413,13 +414,42 @@ export async function processPayrollRun(runId: string): Promise<ActionResult<voi
     }
   }
 
-  // Build entries
+  // P-002: fetch each employee's date_of_joining for mid-FY income projection.
+  const employeeIds = (salaries as any[]).map((s) => s.employee_id);
+  const { data: emps } = await supabase
+    .from("employees")
+    .select("id, date_of_joining")
+    .eq("org_id", user.orgId)
+    .in("id", employeeIds);
+  const joiningMap = new Map<string, string | null>(
+    (emps ?? []).map((e: any) => [e.id, (e.date_of_joining as string | null) ?? null])
+  );
+
+  // Build entries — TDS is projected over months_in_fy so mid-FY joiners aren't
+  // over-deducted. Stored on each entry for later read-back in updatePayrollEntry.
   const entries = (salaries as any[]).map((s) => {
     const lopDays = lopMap[s.employee_id] ?? 0;
     const lopDeduction = lopDays > 0
       ? Math.round((s.gross_monthly / runData.working_days) * lopDays)
       : 0;
-    const totalDeductions = s.employee_pf_monthly + s.professional_tax_monthly + s.tds_monthly + lopDeduction;
+
+    const regime: "new" | "old" = (s.tax_regime as "new" | "old") ?? "new";
+    const standardDeduction = regime === "old" ? 50000 : 75000;
+    const allowedExtraDed =
+      regime === "old" ? Number(s.additional_deductions_annual ?? 0) : 0;
+    const monthsInFY = computeMonthsInFY(runData.month, joiningMap.get(s.employee_id) ?? null);
+    const annualTaxableIncome = Math.max(
+      0,
+      s.gross_monthly * monthsInFY -
+        s.employee_pf_monthly * monthsInFY -
+        standardDeduction -
+        allowedExtraDed
+    );
+    const annualTax = computeTaxByRegime(annualTaxableIncome, regime);
+    const monthlyTds = Math.round(annualTax / monthsInFY);
+
+    const totalDeductions =
+      s.employee_pf_monthly + s.professional_tax_monthly + monthlyTds + lopDeduction;
     const netPay = Math.max(0, s.gross_monthly - totalDeductions);
 
     return {
@@ -432,12 +462,14 @@ export async function processPayrollRun(runId: string): Promise<ActionResult<voi
       gross_salary: s.gross_monthly,
       employee_pf: s.employee_pf_monthly,
       professional_tax: s.professional_tax_monthly,
-      tds: s.tds_monthly,
+      tds: monthlyTds,
       lop_days: lopDays,
       lop_deduction: lopDeduction,
       bonus: 0,
       total_deductions: totalDeductions,
       net_pay: netPay,
+      annual_taxable_income: annualTaxableIncome,
+      months_in_fy: monthsInFY,
     };
   });
 
@@ -592,7 +624,7 @@ export async function updatePayrollEntry(
   // Fetch current entry (net_pay captured for previous_net_pay audit column)
   const { data: entry, error: fetchErr } = await supabase
     .from("payroll_entries")
-    .select("gross_salary, employee_pf, professional_tax, tds, net_pay, payroll_run_id, employee_id")
+    .select("gross_salary, employee_pf, professional_tax, tds, net_pay, payroll_run_id, employee_id, annual_taxable_income, months_in_fy")
     .eq("id", entryId)
     .eq("org_id", user.orgId)
     .single();
@@ -629,11 +661,15 @@ export async function updatePayrollEntry(
   const standardDeduction = regime === "old" ? 50000 : 75000;
   const extraDeductions =
     regime === "old" ? Number((salary as any)?.additional_deductions_annual ?? 0) : 0;
-  const annualTaxable = Math.max(
-    0,
-    e.gross_salary * 12 - e.employee_pf * 12 - standardDeduction - extraDeductions
-  );
-  const baseTdsMonthly = Math.round(computeTaxByRegime(annualTaxable, regime) / 12);
+
+  // P-002: prefer the FY snapshot stored at process time; fall back to gross×12 for
+  // legacy entries written before the snapshot columns existed.
+  const monthsInFY: number = Number(e.months_in_fy) > 0 ? Number(e.months_in_fy) : 12;
+  const annualTaxable: number =
+    e.annual_taxable_income != null
+      ? Number(e.annual_taxable_income)
+      : Math.max(0, e.gross_salary * 12 - e.employee_pf * 12 - standardDeduction - extraDeductions);
+  const baseTdsMonthly = Math.round(computeTaxByRegime(annualTaxable, regime) / monthsInFY);
   const bonusTax = computeAdditionalTaxOnBonus(annualTaxable, updates.bonus, regime);
   const adjustedTds = baseTdsMonthly + bonusTax;
 

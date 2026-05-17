@@ -124,7 +124,6 @@ export function PayslipDialog({ open, onClose, data, orgName }: Props) {
             </div>
             <div className="text-right text-xs text-muted-foreground">
               <p>{getMonthLabel(month)}</p>
-              <p>New Tax Regime</p>
             </div>
           </div>
 

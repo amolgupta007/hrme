@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { getCurrentUser, isAdmin } from "@/lib/current-user";
-import { computeCTCBreakdown, getProfessionalTax, computeNewRegimeTax, computeAdditionalTaxOnBonus } from "@/lib/ctc";
+import { computeCTCBreakdown, getProfessionalTax, computeTaxByRegime, computeAdditionalTaxOnBonus } from "@/lib/ctc";
 import type { ActionResult } from "@/types";
 
 // ---- Types ----
@@ -17,6 +17,8 @@ export type MyCompensation = {
   effective_from: string;
   designation: string | null;
   department: string | null;
+  tax_regime: "new" | "old";
+  additional_deductions_annual: number;
 };
 
 export type SalaryStructureRow = {
@@ -38,6 +40,8 @@ export type SalaryStructureRow = {
   is_metro: boolean;
   include_hra: boolean;
   effective_from: string;
+  tax_regime: "new" | "old";
+  additional_deductions_annual: number;
 };
 
 export type PayrollRun = {
@@ -103,6 +107,8 @@ const SalaryStructureSchema = z.object({
   is_metro: z.boolean().default(true),
   include_hra: z.boolean().default(true),
   effective_from: z.string(),
+  tax_regime: z.enum(["new", "old"]).default("new"),
+  additional_deductions_annual: z.number().nonnegative().default(0),
 });
 
 const PayrollRunSchema = z.object({
@@ -163,6 +169,8 @@ export async function getSalaryStructures(): Promise<ActionResult<SalaryStructur
       is_metro: r.is_metro,
       include_hra: r.include_hra ?? true,
       effective_from: r.effective_from,
+      tax_regime: (r.tax_regime as "new" | "old") ?? "new",
+      additional_deductions_annual: Number(r.additional_deductions_annual ?? 0),
     };
   });
 
@@ -178,7 +186,7 @@ export async function getMyCompensation(): Promise<ActionResult<MyCompensation |
 
   const { data: structure } = await supabase
     .from("salary_structures")
-    .select("ctc, state, is_metro, include_hra, effective_from")
+    .select("ctc, state, is_metro, include_hra, effective_from, tax_regime, additional_deductions_annual")
     .eq("org_id", user.orgId)
     .eq("employee_id", user.employeeId)
     .maybeSingle();
@@ -213,6 +221,8 @@ export async function getMyCompensation(): Promise<ActionResult<MyCompensation |
       effective_from: (structure as any).effective_from,
       designation: (emp as any)?.designation ?? null,
       department,
+      tax_regime: ((structure as any).tax_regime as "new" | "old") ?? "new",
+      additional_deductions_annual: Number((structure as any).additional_deductions_annual ?? 0),
     },
   };
 }
@@ -227,8 +237,8 @@ export async function upsertSalaryStructure(
   const parsed = SalaryStructureSchema.safeParse(input);
   if (!parsed.success) return { success: false, error: parsed.error.errors[0].message };
 
-  const { employee_id, ctc, state, is_metro, include_hra, effective_from } = parsed.data;
-  const breakdown = computeCTCBreakdown(ctc, state, is_metro, include_hra);
+  const { employee_id, ctc, state, is_metro, include_hra, effective_from, tax_regime, additional_deductions_annual } = parsed.data;
+  const breakdown = computeCTCBreakdown(ctc, state, is_metro, include_hra, tax_regime, additional_deductions_annual);
 
   const supabase = createAdminSupabase();
 
@@ -253,6 +263,8 @@ export async function upsertSalaryStructure(
         is_metro,
         include_hra,
         effective_from,
+        tax_regime,
+        additional_deductions_annual,
         updated_at: new Date().toISOString(),
         computed_at: new Date().toISOString(),
       },
@@ -580,7 +592,7 @@ export async function updatePayrollEntry(
   // Fetch current entry (net_pay captured for previous_net_pay audit column)
   const { data: entry, error: fetchErr } = await supabase
     .from("payroll_entries")
-    .select("gross_salary, employee_pf, professional_tax, tds, net_pay, payroll_run_id")
+    .select("gross_salary, employee_pf, professional_tax, tds, net_pay, payroll_run_id, employee_id")
     .eq("id", entryId)
     .eq("org_id", user.orgId)
     .single();
@@ -604,11 +616,25 @@ export async function updatePayrollEntry(
     ? Math.round((e.gross_salary / workingDays) * updates.lop_days)
     : 0;
 
-  // P-005: re-derive base TDS from the entry's gross + PF, then add marginal tax
-  // on the bonus. Indempotent on re-edit: bonus=0 collapses bonusTax to 0.
-  const annualTaxable = Math.max(0, e.gross_salary * 12 - e.employee_pf * 12 - 75000);
-  const baseTdsMonthly = Math.round(computeNewRegimeTax(annualTaxable) / 12);
-  const bonusTax = computeAdditionalTaxOnBonus(annualTaxable, updates.bonus);
+  // P-005 + P-003: re-derive base TDS regime-aware, then add marginal tax on bonus.
+  // Idempotent on re-edit: bonus=0 collapses bonusTax to 0. Salary structure provides
+  // regime + old-regime deductions; falls back to new regime if structure missing.
+  const { data: salary } = await supabase
+    .from("salary_structures")
+    .select("tax_regime, additional_deductions_annual")
+    .eq("org_id", user.orgId)
+    .eq("employee_id", e.employee_id)
+    .maybeSingle();
+  const regime: "new" | "old" = ((salary as any)?.tax_regime as "new" | "old") ?? "new";
+  const standardDeduction = regime === "old" ? 50000 : 75000;
+  const extraDeductions =
+    regime === "old" ? Number((salary as any)?.additional_deductions_annual ?? 0) : 0;
+  const annualTaxable = Math.max(
+    0,
+    e.gross_salary * 12 - e.employee_pf * 12 - standardDeduction - extraDeductions
+  );
+  const baseTdsMonthly = Math.round(computeTaxByRegime(annualTaxable, regime) / 12);
+  const bonusTax = computeAdditionalTaxOnBonus(annualTaxable, updates.bonus, regime);
   const adjustedTds = baseTdsMonthly + bonusTax;
 
   const totalDeductions = e.employee_pf + e.professional_tax + adjustedTds + lopDeduction;

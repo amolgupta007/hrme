@@ -37,6 +37,12 @@ export function SalaryStructureDialog({ open, onClose, employees, existing }: Pr
   const [effectiveFrom, setEffectiveFrom] = useState(
     existing?.effective_from ?? new Date().toISOString().split("T")[0]
   );
+  const [taxRegime, setTaxRegime] = useState<"new" | "old">(existing?.tax_regime ?? "new");
+  const [additionalDeductionsInput, setAdditionalDeductionsInput] = useState(
+    existing && existing.additional_deductions_annual
+      ? new Intl.NumberFormat("en-IN").format(existing.additional_deductions_annual)
+      : "0"
+  );
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -49,10 +55,17 @@ export function SalaryStructureDialog({ open, onClose, employees, existing }: Pr
       setIsMetro(existing?.is_metro ?? true);
       setIncludeHra(existing?.include_hra ?? true);
       setEffectiveFrom(existing?.effective_from ?? new Date().toISOString().split("T")[0]);
+      setTaxRegime(existing?.tax_regime ?? "new");
+      setAdditionalDeductionsInput(
+        existing && existing.additional_deductions_annual
+          ? new Intl.NumberFormat("en-IN").format(existing.additional_deductions_annual)
+          : "0"
+      );
     }
   }, [open, existing]);
 
   const ctc = parseFloat(ctcInput.replace(/,/g, "")) || 0;
+  const additionalDeductions = parseFloat(additionalDeductionsInput.replace(/,/g, "")) || 0;
   const isEdit = !!existing;
 
   async function handleSave() {
@@ -62,7 +75,16 @@ export function SalaryStructureDialog({ open, onClose, employees, existing }: Pr
 
     setSaving(true);
     try {
-      const result = await upsertSalaryStructure({ employee_id: employeeId, ctc, state, is_metro: isMetro, include_hra: includeHra, effective_from: effectiveFrom });
+      const result = await upsertSalaryStructure({
+        employee_id: employeeId,
+        ctc,
+        state,
+        is_metro: isMetro,
+        include_hra: includeHra,
+        effective_from: effectiveFrom,
+        tax_regime: taxRegime,
+        additional_deductions_annual: additionalDeductions,
+      });
       if (result.success) {
         toast.success(isEdit ? "Salary updated" : "Salary structure saved");
         onClose();
@@ -198,6 +220,40 @@ export function SalaryStructureDialog({ open, onClose, employees, existing }: Pr
               />
             </div>
 
+            {/* Tax Regime */}
+            <div>
+              <label className="text-sm font-medium">Tax Regime</label>
+              <select
+                className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={taxRegime}
+                onChange={(e) => setTaxRegime(e.target.value as "new" | "old")}
+              >
+                <option value="new">New Regime (FY 2025-26, ₹75k std deduction)</option>
+                <option value="old">Old Regime (₹50k std deduction + chapter VI-A)</option>
+              </select>
+            </div>
+
+            {/* Additional Deductions — old regime only */}
+            {taxRegime === "old" && (
+              <div>
+                <label className="text-sm font-medium">Other Annual Deductions (₹)</label>
+                <input
+                  type="text"
+                  className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
+                  placeholder="e.g. 150000"
+                  value={additionalDeductionsInput}
+                  onChange={(e) => {
+                    const digits = e.target.value.replace(/[^0-9]/g, "");
+                    if (!digits) return setAdditionalDeductionsInput("");
+                    setAdditionalDeductionsInput(new Intl.NumberFormat("en-IN").format(parseInt(digits, 10)));
+                  }}
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Catch-all for 80C (PF, ELSS, PPF), 80D (health insurance), Section 24 (home loan interest), HRA-actual exemption, etc. Compute externally and enter the annual total.
+                </p>
+              </div>
+            )}
+
             {/* Actions */}
             <div className="flex gap-2 pt-2">
               <Button onClick={handleSave} disabled={saving} className="flex-1">
@@ -219,7 +275,7 @@ export function SalaryStructureDialog({ open, onClose, employees, existing }: Pr
           <div>
             <p className="text-sm font-medium mb-2">Live Breakdown Preview</p>
             {ctc >= 100000 ? (
-              <CTCBreakdownCard ctc={ctc} state={state} isMetro={isMetro} includeHra={includeHra} />
+              <CTCBreakdownCard ctc={ctc} state={state} isMetro={isMetro} includeHra={includeHra} taxRegime={taxRegime} additionalDeductions={additionalDeductions} />
             ) : (
               <div className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
                 Enter a CTC of at least ₹1,00,000 to see the breakdown

@@ -11,6 +11,8 @@ import {
 } from "@/lib/referrals/sync";
 import { computeDirection, type TransitionDirection } from "@/lib/hire/stage-direction";
 import { planActionsForTransition, roundLabelForStage, type ActionKey } from "@/lib/hire/transitions";
+import { canMoveStage, isOwnerOrAdmin } from "@/lib/hire/permissions";
+import { checkOfferToHiredGates } from "@/lib/hire/gates";
 import type { ActionResult } from "@/types";
 
 // ---- Types ----
@@ -44,6 +46,8 @@ export type Job = {
   custom_questions: { question: string; required: boolean }[];
   application_count: number;
   created_at: string;
+  // M5 — null until admin assigns a hiring manager
+  hiring_manager_id: string | null;
 };
 
 export type Candidate = {
@@ -78,6 +82,8 @@ export type Application = {
   loi_sent_at: string | null;
   loi_responded_at: string | null;
   loi_expires_at: string | null;
+  // M5 — set on the linked job, denormalised here for manager-scoped UI permissions.
+  job_hiring_manager_id: string | null;
 };
 
 // ---- Schemas ----
@@ -96,6 +102,8 @@ const JobSchema = z.object({
   custom_questions: z
     .array(z.object({ question: z.string(), required: z.boolean() }))
     .default([]),
+  // M5 — hiring_manager_id is the FK to employees, persisted on jobs row.
+  hiring_manager_id: z.string().uuid().optional().or(z.literal("")),
 });
 
 // ---- Helpers ----
@@ -200,6 +208,7 @@ export async function createJob(input: z.infer<typeof JobSchema>): Promise<Actio
       ...parsed.data,
       department_id: parsed.data.department_id || null,
       location: parsed.data.location || null,
+      hiring_manager_id: parsed.data.hiring_manager_id || null,
       created_by: user.employeeId,
     })
     .select("id")
@@ -226,6 +235,7 @@ export async function updateJob(id: string, input: z.infer<typeof JobSchema>): P
       ...parsed.data,
       department_id: parsed.data.department_id || null,
       location: parsed.data.location || null,
+      hiring_manager_id: parsed.data.hiring_manager_id || null,
       updated_at: new Date().toISOString(),
     })
     .eq("id", id)
@@ -355,7 +365,7 @@ export async function listApplications(jobId: string): Promise<ActionResult<Appl
   const [{ data: apps, error }, { data: candidates }, { data: job }] = await Promise.all([
     supabase.from("applications").select("*").eq("job_id", jobId).eq("org_id", user.orgId).order("applied_at"),
     supabase.from("candidates").select("id, name, email, resume_url").eq("org_id", user.orgId),
-    supabase.from("jobs").select("title").eq("id", jobId).single(),
+    supabase.from("jobs").select("title, hiring_manager_id").eq("id", jobId).single(),
   ]);
 
   if (error) return { success: false, error: error.message };
@@ -373,6 +383,7 @@ export async function listApplications(jobId: string): Promise<ActionResult<Appl
         candidate_email: cand?.email ?? "",
         resume_url: (cand as any)?.resume_url ?? null,
         answers: (a as any).answers ?? null,
+        job_hiring_manager_id: (job as any)?.hiring_manager_id ?? null,
       };
     }),
   };
@@ -386,23 +397,25 @@ export async function listAllApplications(): Promise<ActionResult<Application[]>
   const [{ data: apps, error }, { data: candidates }, { data: jobs }] = await Promise.all([
     supabase.from("applications").select("*").eq("org_id", user.orgId).order("applied_at"),
     supabase.from("candidates").select("id, name, email").eq("org_id", user.orgId),
-    supabase.from("jobs").select("id, title").eq("org_id", user.orgId),
+    supabase.from("jobs").select("id, title, hiring_manager_id").eq("org_id", user.orgId),
   ]);
 
   if (error) return { success: false, error: error.message };
 
   const candMap = new Map((candidates ?? []).map((c: any) => [c.id, c]));
-  const jobMap = new Map((jobs ?? []).map((j: any) => [j.id, j.title]));
+  const jobMap = new Map((jobs ?? []).map((j: any) => [j.id, { title: j.title as string, hiring_manager_id: j.hiring_manager_id as string | null }]));
 
   return {
     success: true,
     data: (apps ?? []).map((a: any) => {
       const cand = candMap.get(a.candidate_id) as any;
+      const jobMeta = jobMap.get(a.job_id);
       return {
         ...a,
-        job_title: jobMap.get(a.job_id) ?? "Unknown",
+        job_title: jobMeta?.title ?? "Unknown",
         candidate_name: cand?.name ?? "Unknown",
         candidate_email: cand?.email ?? "",
+        job_hiring_manager_id: jobMeta?.hiring_manager_id ?? null,
       };
     }),
   };
@@ -415,22 +428,76 @@ export async function updateApplicationStage(
 ): Promise<ActionResult<{ transitionId: string | null }>> {
   const user = await getHireContext();
   if (!user) return { success: false, error: "Not authenticated" };
-  if (!isAdmin(user.role)) return { success: false, error: "Only admins can move application stages" };
 
   const supabase = createAdminSupabase();
 
-  // Fetch current stage so we can record from→to in the audit log.
+  // Fetch current stage + job_id so we can compute direction and check permissions.
   const { data: existing, error: fetchErr } = await supabase
     .from("applications")
-    .select("stage")
+    .select("stage, job_id")
     .eq("id", id)
     .eq("org_id", user.orgId)
     .single();
   if (fetchErr || !existing) return { success: false, error: fetchErr?.message ?? "Application not found" };
 
-  const fromStage = (existing as { stage: ApplicationStage }).stage;
+  const fromStage = (existing as { stage: ApplicationStage; job_id: string }).stage;
+  const jobId = (existing as { stage: ApplicationStage; job_id: string }).job_id;
   const direction = computeDirection(fromStage, stage);
   const comment = opts?.comment?.trim() || null;
+
+  // M5: hired is terminal — terminate the employee from /dashboard/employees first.
+  if (fromStage === "hired") {
+    return { success: false, error: "This candidate has been hired. Terminate the employee from the directory first." };
+  }
+
+  // M5: hiring drag (→ hired) is gated by the convert-to-employee wizard, not this action.
+  if (stage === "hired") {
+    return {
+      success: false,
+      error: "Use the convert-to-employee wizard to mark someone as hired (gates on offer status + joining date).",
+    };
+  }
+
+  // M5: per-role permissions. Owner/admin pass through; managers limited to own jobs + interview stages.
+  const { data: jobRow } = await supabase
+    .from("jobs")
+    .select("hiring_manager_id")
+    .eq("id", jobId)
+    .eq("org_id", user.orgId)
+    .single();
+  const jobHiringManagerId = (jobRow as { hiring_manager_id: string | null } | null)?.hiring_manager_id ?? null;
+
+  if (!canMoveStage(fromStage, stage, {
+    role: user.role,
+    employeeId: user.employeeId,
+    jobHiringManagerId,
+  })) {
+    return {
+      success: false,
+      error: isOwnerOrAdmin(user.role)
+        ? "Only admins/owners can move into this stage."
+        : "You can only move candidates on jobs where you're the hiring manager.",
+    };
+  }
+
+  // M5: backward from a sent-and-not-yet-responded offer requires explicit revoke.
+  if (fromStage === "offer" && direction === "backward") {
+    const { data: linkedOffer } = await supabase
+      .from("offers")
+      .select("id, status")
+      .eq("application_id", id)
+      .eq("org_id", user.orgId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const status = (linkedOffer as { status: string } | null)?.status ?? null;
+    if (status === "sent") {
+      return {
+        success: false,
+        error: "Revoke the offer first from the Offers page before moving this candidate back.",
+      };
+    }
+  }
 
   if (direction === "backward" && !comment) {
     return { success: false, error: "A reason is required when moving a candidate to an earlier stage." };
@@ -1993,3 +2060,354 @@ export async function respondToOffer(
 
   return { success: true, data: undefined };
 }
+
+// ---- M5: Convert offer → hire (employee creation + Clerk invite + welcome email) ----
+
+export type ConvertOfferToHirePayload = {
+  startDate: string;                  // YYYY-MM-DD
+  departmentId: string | null;
+  designation: string | null;
+  employmentType: "full_time" | "part_time" | "contract" | "intern";
+  reportingManagerId: string | null;
+  role: "owner" | "admin" | "manager" | "employee";
+  clerkInviteEmail: string;           // defaults to candidate email on the client
+};
+
+export async function convertOfferToHire(
+  applicationId: string,
+  payload: ConvertOfferToHirePayload,
+): Promise<ActionResult<{ employeeId: string }>> {
+  const user = await getHireContext();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can convert offers to hires" };
+
+  const supabase = createAdminSupabase();
+
+  // Hydrate application + linked offer + candidate + org + clerk_org_id
+  const { data: app, error: appErr } = await supabase
+    .from("applications")
+    .select("id, org_id, stage, candidate_id, job_id")
+    .eq("id", applicationId)
+    .eq("org_id", user.orgId)
+    .single();
+  if (appErr || !app) return { success: false, error: appErr?.message ?? "Application not found" };
+  const a = app as { id: string; org_id: string; stage: ApplicationStage; candidate_id: string; job_id: string };
+
+  const { data: offerRow } = await supabase
+    .from("offers")
+    .select("id, status, joining_date, role_title, department_id, reporting_manager_id, ctc")
+    .eq("application_id", applicationId)
+    .eq("org_id", user.orgId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const offer = offerRow as {
+    id: string; status: "draft" | "sent" | "accepted" | "declined" | "expired" | "revoked";
+    joining_date: string; role_title: string;
+    department_id: string | null; reporting_manager_id: string | null; ctc: number;
+  } | null;
+
+  // Gate check (single source of truth shared with the client)
+  const gate = checkOfferToHiredGates(offer);
+  if (!gate.ok) return { success: false, error: gate.message };
+
+  const [{ data: candidate }, { data: org }] = await Promise.all([
+    supabase.from("candidates").select("name, email").eq("id", a.candidate_id).single(),
+    supabase.from("organizations").select("id, name, clerk_org_id, max_employees").eq("id", a.org_id).single(),
+  ]);
+  if (!candidate || !org) return { success: false, error: "Missing related data" };
+  const c = candidate as { name: string; email: string };
+  const o = org as { id: string; name: string; clerk_org_id: string; max_employees: number };
+
+  // Headroom check (matches addEmployee behavior)
+  const { count: activeCount } = await supabase
+    .from("employees")
+    .select("*", { count: "exact", head: true })
+    .eq("org_id", o.id)
+    .eq("status", "active");
+  if ((activeCount ?? 0) >= o.max_employees) {
+    return { success: false, error: `Employee limit reached (${o.max_employees}). Upgrade the plan first.` };
+  }
+
+  const inviteEmail = (payload.clerkInviteEmail || c.email || "").trim();
+  if (!inviteEmail) return { success: false, error: "Candidate email is required for the invite" };
+
+  // Dupe check by email within the org
+  const { data: dupe } = await supabase
+    .from("employees")
+    .select("id")
+    .eq("org_id", o.id)
+    .eq("email", inviteEmail)
+    .maybeSingle();
+  if (dupe) return { success: false, error: "An employee with this email already exists in this org" };
+
+  // Split candidate name into first/last for the employees row
+  const nameParts = c.name.trim().split(/\s+/);
+  const firstName = nameParts[0] ?? "Employee";
+  const lastName = nameParts.slice(1).join(" ") || ".";
+
+  const { data: emp, error: insertErr } = await supabase
+    .from("employees")
+    .insert({
+      org_id: o.id,
+      first_name: firstName,
+      last_name: lastName,
+      email: inviteEmail,
+      phone: null,
+      department_id: payload.departmentId,
+      designation: payload.designation,
+      date_of_joining: payload.startDate,
+      employment_type: payload.employmentType,
+      role: payload.role,
+      reporting_manager_id: payload.reportingManagerId,
+      status: "active",
+      metadata: {},
+    } as any)
+    .select("id")
+    .single();
+  if (insertErr) return { success: false, error: insertErr.message };
+  const employeeId = (emp as { id: string }).id;
+
+  // Advance the application + write the audit row
+  const { error: stageErr } = await supabase
+    .from("applications")
+    .update({ stage: "hired", updated_at: new Date().toISOString() } as any)
+    .eq("id", applicationId)
+    .eq("org_id", o.id);
+  if (stageErr) {
+    // Roll back the employees insert so the application doesn't get into a bad state
+    await supabase.from("employees").delete().eq("id", employeeId);
+    return { success: false, error: stageErr.message };
+  }
+
+  await writeStageTransition({
+    orgId: o.id,
+    applicationId,
+    fromStage: a.stage,
+    toStage: "hired",
+    direction: "forward",
+    actorId: user.employeeId,
+    actorType: isAdmin(user.role) ? "admin" : "manager",
+    comment: `Converted to employee ${firstName} ${lastName}`,
+  });
+
+  await syncReferralFromApplicationStage(applicationId, "hired");
+
+  // Fire Clerk invite (non-fatal — admin can resend from /dashboard/employees)
+  try {
+    const { clerkClient } = await import("@clerk/nextjs/server");
+    const client = await clerkClient();
+    await client.organizations.createOrganizationInvitation({
+      organizationId: o.clerk_org_id,
+      emailAddress: inviteEmail,
+      role: "org:member",
+      redirectUrl: `${process.env.NEXT_PUBLIC_APP_URL ?? "https://jambahr.com"}/dashboard`,
+    });
+  } catch (inviteErr) {
+    console.warn("Clerk invite (convertOfferToHire) failed — non-fatal:", inviteErr);
+  }
+
+  // Welcome / handoff email (non-fatal)
+  try {
+    const { resend, NOREPLY_EMAIL, FROM_EMAIL } = await import("@/lib/resend");
+    const { render } = await import("@react-email/render");
+    const { HireOnboardingHandoffEmail } = await import("@/components/emails/hire-onboarding-handoff");
+    const portalUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? "https://jambahr.com"}/dashboard`;
+    const html = await render(
+      HireOnboardingHandoffEmail({
+        candidateName: c.name,
+        orgName: o.name,
+        roleTitle: offer?.role_title ?? "your new role",
+        startDate: payload.startDate,
+        portalUrl,
+      }),
+    );
+    await resend.emails.send({
+      from: NOREPLY_EMAIL,
+      to: inviteEmail,
+      replyTo: FROM_EMAIL,
+      subject: `Welcome to ${o.name} 🎉`,
+      html,
+    });
+  } catch (emailErr) {
+    console.warn("Hire welcome email failed — non-fatal:", emailErr);
+  }
+
+  revalidatePath("/hire/pipeline");
+  revalidatePath("/hire/candidates");
+  revalidatePath("/dashboard/employees");
+
+  return { success: true, data: { employeeId } };
+}
+
+// ---- M5: revoke a sent offer (sends offer-revoked email, no internal reason) ----
+
+export async function revokeOffer(
+  offerId: string,
+  reason: string,
+): Promise<ActionResult<void>> {
+  const user = await getHireContext();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can revoke offers" };
+
+  const trimmed = reason?.trim();
+  if (!trimmed) return { success: false, error: "An internal reason is required to revoke an offer." };
+
+  const supabase = createAdminSupabase();
+
+  const { data: offerRow, error: fetchErr } = await supabase
+    .from("offers")
+    .select("id, application_id, status, role_title")
+    .eq("id", offerId)
+    .eq("org_id", user.orgId)
+    .single();
+  if (fetchErr || !offerRow) return { success: false, error: fetchErr?.message ?? "Offer not found" };
+  const offer = offerRow as { id: string; application_id: string; status: string; role_title: string };
+
+  if (offer.status === "accepted" || offer.status === "declined" || offer.status === "revoked") {
+    return { success: false, error: `Cannot revoke — offer status is "${offer.status}".` };
+  }
+
+  const { error: updateErr } = await supabase
+    .from("offers")
+    .update({ status: "revoked", response_note: trimmed } as any)
+    .eq("id", offerId)
+    .eq("org_id", user.orgId);
+  if (updateErr) return { success: false, error: updateErr.message };
+
+  // Send candidate the offer-revoked email (no internal reason text per design rule)
+  try {
+    const { data: app } = await supabase
+      .from("applications")
+      .select("candidate_id, job_id")
+      .eq("id", offer.application_id)
+      .single();
+    if (app) {
+      const [{ data: cand }, { data: org }] = await Promise.all([
+        supabase.from("candidates").select("name, email").eq("id", (app as any).candidate_id).single(),
+        supabase.from("organizations").select("name").eq("id", user.orgId).single(),
+      ]);
+      if (cand && (cand as any).email) {
+        const { resend, NOREPLY_EMAIL, FROM_EMAIL } = await import("@/lib/resend");
+        const { render } = await import("@react-email/render");
+        const { OfferRevokedEmail } = await import("@/components/emails/offer-revoked");
+        const html = await render(
+          OfferRevokedEmail({
+            candidateName: (cand as any).name ?? "Candidate",
+            orgName: (org as any)?.name ?? "Company",
+            roleTitle: offer.role_title,
+          }),
+        );
+        await resend.emails.send({
+          from: NOREPLY_EMAIL,
+          to: (cand as any).email,
+          replyTo: FROM_EMAIL,
+          subject: `Update on your offer — ${(org as any)?.name ?? "JambaHire"}`,
+          html,
+        });
+      }
+    }
+  } catch (emailErr) {
+    console.warn("offer-revoked email failed — non-fatal:", emailErr);
+  }
+
+  revalidatePath("/hire/offers");
+  revalidatePath("/hire/pipeline");
+  return { success: true, data: undefined };
+}
+
+// ---- M5: prefill data for the convert-to-employee wizard ----
+
+export type HirePrefillData = {
+  offer: {
+    id: string;
+    status: "draft" | "sent" | "accepted" | "declined" | "expired" | "revoked";
+    joining_date: string;
+    role_title: string;
+    department_id: string | null;
+    reporting_manager_id: string | null;
+    ctc: number;
+  } | null;
+  candidate: { name: string; email: string };
+  departments: Array<{ id: string; name: string }>;
+  potentialManagers: Array<{ id: string; name: string }>;
+};
+
+// M5: list employees who can be assigned as hiring_manager for a job
+export async function listPotentialHiringManagers(): Promise<ActionResult<Array<{ id: string; name: string }>>> {
+  const user = await getHireContext();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Admins only" };
+  const supabase = createAdminSupabase();
+  const { data, error } = await supabase
+    .from("employees")
+    .select("id, first_name, last_name")
+    .eq("org_id", user.orgId)
+    .in("role", ["owner", "admin", "manager"])
+    .neq("status", "terminated")
+    .order("first_name");
+  if (error) return { success: false, error: error.message };
+  return {
+    success: true,
+    data: ((data ?? []) as Array<{ id: string; first_name: string; last_name: string }>).map((e) => ({
+      id: e.id,
+      name: `${e.first_name} ${e.last_name}`.trim() || "Unknown",
+    })),
+  };
+}
+
+export async function getHirePrefillData(applicationId: string): Promise<ActionResult<HirePrefillData>> {
+  const user = await getHireContext();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Admins only" };
+
+  const supabase = createAdminSupabase();
+
+  const { data: app, error: appErr } = await supabase
+    .from("applications")
+    .select("candidate_id")
+    .eq("id", applicationId)
+    .eq("org_id", user.orgId)
+    .single();
+  if (appErr || !app) return { success: false, error: appErr?.message ?? "Application not found" };
+
+  const [{ data: offer }, { data: cand }, { data: depts }, { data: emps }] = await Promise.all([
+    supabase
+      .from("offers")
+      .select("id, status, joining_date, role_title, department_id, reporting_manager_id, ctc")
+      .eq("application_id", applicationId)
+      .eq("org_id", user.orgId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase.from("candidates").select("name, email").eq("id", (app as any).candidate_id).single(),
+    supabase.from("departments").select("id, name").eq("org_id", user.orgId).order("name"),
+    supabase
+      .from("employees")
+      .select("id, first_name, last_name")
+      .eq("org_id", user.orgId)
+      .in("role", ["owner", "admin", "manager"])
+      .neq("status", "terminated")
+      .order("first_name"),
+  ]);
+
+  return {
+    success: true,
+    data: {
+      offer: (offer as any) ?? null,
+      candidate: {
+        name: (cand as any)?.name ?? "Candidate",
+        email: (cand as any)?.email ?? "",
+      },
+      departments: ((depts ?? []) as Array<{ id: string; name: string }>).map((d) => ({
+        id: d.id,
+        name: d.name,
+      })),
+      potentialManagers: ((emps ?? []) as Array<{ id: string; first_name: string; last_name: string }>).map((e) => ({
+        id: e.id,
+        name: `${e.first_name} ${e.last_name}`.trim() || "Unknown",
+      })),
+    },
+  };
+}
+

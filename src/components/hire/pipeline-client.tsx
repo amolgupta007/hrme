@@ -24,11 +24,16 @@ import {
   dispatchStageTransitionSideEffects,
   sendLOI,
 } from "@/actions/hire";
-import type { Application, ApplicationStage, Job } from "@/actions/hire";
+import type { Application, ApplicationStage, Job, Offer } from "@/actions/hire";
 import { computeDirection, type TransitionDirection } from "@/lib/hire/stage-direction";
 import { planActionsForTransition, type TransitionAction } from "@/lib/hire/transitions";
+import { canMoveStage } from "@/lib/hire/permissions";
+import { checkOfferToHiredGates } from "@/lib/hire/gates";
 import { ConfirmTransitionDialog } from "./confirm-transition-dialog";
 import { ApplicationDetailDialog } from "./application-detail-dialog";
+import { ConvertToEmployeeDialog } from "./convert-to-employee-dialog";
+import { OfferStatusChip } from "./offer-status-chip";
+import type { UserRole } from "@/types";
 import Link from "next/link";
 
 // Dialog primitives are now wrapped by ConfirmTransitionDialog — no direct import needed here.
@@ -58,7 +63,10 @@ function daysAgo(dateStr: string) {
 interface Props {
   applications: Application[];
   jobs: Job[];
+  offers: Offer[];
   isAdmin: boolean;
+  currentEmployeeId: string | null;
+  currentRole: UserRole;
 }
 
 function DroppableColumn({ id, children }: { id: string; children: React.ReactNode }) {
@@ -111,7 +119,7 @@ function DraggableCard({
   );
 }
 
-export function PipelineClient({ applications, jobs, isAdmin }: Props) {
+export function PipelineClient({ applications, jobs, offers, isAdmin, currentEmployeeId, currentRole }: Props) {
   const router = useRouter();
   const [filterJobId, setFilterJobId] = useState<string>("all");
   const [filterDays, setFilterDays] = useState<number>(0);
@@ -162,6 +170,20 @@ export function PipelineClient({ applications, jobs, isAdmin }: Props) {
 
   // Click-to-open detail dialog (lazy-loads transitions inside).
   const [detailApp, setDetailApp] = useState<Application | null>(null);
+
+  // M5: offer-by-application lookup for the offer-status chip + gate checks.
+  const offerByApp = useMemo(() => {
+    const map = new Map<string, Offer>();
+    for (const o of offers) {
+      // If multiple offers exist for one application, the most recent wins (listOffers
+      // returns ordered by created_at desc).
+      if (!map.has(o.application_id)) map.set(o.application_id, o);
+    }
+    return map;
+  }, [offers]);
+
+  // M5: convert-to-employee wizard state.
+  const [convertingApp, setConvertingApp] = useState<{ id: string; name: string } | null>(null);
 
   const activeJobs = jobs.filter((j) => j.status === "active" || j.status === "paused");
 
@@ -269,6 +291,34 @@ export function PipelineClient({ applications, jobs, isAdmin }: Props) {
     if (!current) return;
     const fromStage = current.stage;
 
+    // M5: hired is terminal. Block client-side too for a faster error than server bounce.
+    if (fromStage === "hired") {
+      toast.error("This candidate is hired. Terminate the employee from the directory to make changes.");
+      return;
+    }
+
+    // M5: → hired routes through the convert-to-employee wizard (gates checked there + server-side).
+    if (stage === "hired") {
+      const offer = offerByApp.get(appId) ?? null;
+      const gate = checkOfferToHiredGates(offer ? { status: offer.status, joining_date: offer.joining_date } : null);
+      if (!gate.ok) {
+        toast.error(gate.message);
+        return;
+      }
+      setConvertingApp({ id: appId, name: current.candidate_name });
+      return;
+    }
+
+    // M5: per-role guard (server enforces too, but block early for nicer UX).
+    if (!canMoveStage(fromStage, stage, {
+      role: currentRole,
+      employeeId: currentEmployeeId,
+      jobHiringManagerId: current.job_hiring_manager_id ?? null,
+    })) {
+      toast.error("You don't have permission to move this candidate.");
+      return;
+    }
+
     if (stage === "rejected") {
       openRejectPrompt([appId], current.candidate_name, fromStage);
       return;
@@ -319,6 +369,11 @@ export function PipelineClient({ applications, jobs, isAdmin }: Props) {
   async function handleBulkMove() {
     if (!selected.size) return;
     const ids = Array.from(selected);
+
+    if (bulkStage === "hired") {
+      toast.error("Hire candidates one at a time via the offer flow — bulk hiring isn't supported.");
+      return;
+    }
 
     if (bulkStage === "rejected") {
       openRejectPrompt(ids, `${ids.length} candidates`, null);
@@ -739,7 +794,20 @@ export function PipelineClient({ applications, jobs, isAdmin }: Props) {
                       // LOI-pending cards lock until the candidate responds — drag would
                       // bypass the gate. Dropdown is also disabled via the same flag below.
                       const isLoiLocked = app.loi_status === "pending";
-                      const isDraggable = isAdmin && stage.value !== "hired" && !isLoiLocked;
+                      // M5: per-role permissions. Admins always; managers only on own-job
+                      // interview-stage cards. Hired cards never draggable. Use a probe to
+                      // see if the user could move this card to ANY other stage.
+                      const userCanMove = canMoveStage(stage.value, "screening", {
+                        role: currentRole,
+                        employeeId: currentEmployeeId,
+                        jobHiringManagerId: app.job_hiring_manager_id ?? null,
+                      }) || canMoveStage(stage.value, "shortlisted", {
+                        role: currentRole,
+                        employeeId: currentEmployeeId,
+                        jobHiringManagerId: app.job_hiring_manager_id ?? null,
+                      });
+                      const isDraggable =
+                        userCanMove && stage.value !== "hired" && !isLoiLocked;
 
                       const cardBody = (
                         <div
@@ -796,6 +864,19 @@ export function PipelineClient({ applications, jobs, isAdmin }: Props) {
                                   LOI {app.loi_status}
                                 </p>
                               )}
+                              {/* M5: offer-status chip on Offer-column cards */}
+                              {stage.value === "offer" && (() => {
+                                const offer = offerByApp.get(app.id);
+                                if (!offer) return null;
+                                return (
+                                  <OfferStatusChip
+                                    status={offer.status}
+                                    sentAt={offer.sent_at}
+                                    respondedAt={offer.responded_at}
+                                    joiningDate={offer.joining_date}
+                                  />
+                                );
+                              })()}
                             </div>
                           </div>
 
@@ -880,6 +961,23 @@ export function PipelineClient({ applications, jobs, isAdmin }: Props) {
         open={detailApp !== null}
         onOpenChange={(open) => {
           if (!open) setDetailApp(null);
+        }}
+      />
+
+      {/* M5: convert offer → hire wizard. Opens when admin drags Offer→Hired and gates pass. */}
+      <ConvertToEmployeeDialog
+        applicationId={convertingApp?.id ?? null}
+        candidateName={convertingApp?.name ?? ""}
+        open={convertingApp !== null}
+        onClose={() => setConvertingApp(null)}
+        onHired={() => {
+          // Optimistically reflect the move in the kanban until the next refresh.
+          if (convertingApp) {
+            setLocalApps((apps) =>
+              apps.map((a) => (a.id === convertingApp.id ? { ...a, stage: "hired" as ApplicationStage } : a)),
+            );
+          }
+          router.refresh();
         }}
       />
     </DndContext>

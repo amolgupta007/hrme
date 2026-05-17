@@ -73,6 +73,11 @@ export type Application = {
   applied_at: string;
   resume_url: string | null;
   answers: { question: string; answer: string }[] | null;
+  // M4 — LOI flow. Nullable when no LOI has ever been issued for this application.
+  loi_status: "pending" | "accepted" | "declined" | "expired" | null;
+  loi_sent_at: string | null;
+  loi_responded_at: string | null;
+  loi_expires_at: string | null;
 };
 
 // ---- Schemas ----
@@ -677,6 +682,106 @@ export async function getApplicationTransitions(applicationId: string): Promise<
   };
 }
 
+// ---- M4: Letter of Interest (LOI) flow ----
+//
+// Admin "drags" a card Screening → Shortlisted. Instead of advancing the stage
+// immediately, sendLOI generates a token, marks loi_status='pending', and emails
+// the candidate. The card visually stays in Screening (UI driven by loi_status).
+// When the candidate clicks accept on /loi/[token] (public), respondToLOI moves
+// the stage to 'shortlisted' and emails the hiring manager(s). Decline routes to
+// 'rejected' with reason "LOI declined".
+
+const LOI_EXPIRY_DAYS = 7; // hardcoded v1; per-org override deferred to v2 (locked Q4)
+
+export async function sendLOI(applicationId: string): Promise<ActionResult<{ loiUrl: string }>> {
+  const user = await getHireContext();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can send Letters of Interest" };
+
+  const supabase = createAdminSupabase();
+
+  const { data: existing, error: fetchErr } = await supabase
+    .from("applications")
+    .select("id, stage, loi_status, candidate_id, job_id, org_id")
+    .eq("id", applicationId)
+    .eq("org_id", user.orgId)
+    .single();
+  if (fetchErr || !existing) return { success: false, error: fetchErr?.message ?? "Application not found" };
+  const app = existing as {
+    id: string; stage: ApplicationStage; loi_status: string | null;
+    candidate_id: string; job_id: string; org_id: string;
+  };
+
+  if (app.stage !== "screening") {
+    return { success: false, error: "LOI can only be sent from the Screening stage" };
+  }
+  if (app.loi_status === "pending") {
+    return { success: false, error: "An LOI is already pending for this candidate. Wait or resend." };
+  }
+
+  const { randomBytes } = await import("node:crypto");
+  const token = randomBytes(32).toString("base64url");
+  const expiresAt = new Date(Date.now() + LOI_EXPIRY_DAYS * 24 * 60 * 60 * 1000).toISOString();
+
+  const { error: updateErr } = await supabase
+    .from("applications")
+    .update({
+      loi_sent_at: new Date().toISOString(),
+      loi_status: "pending",
+      loi_token: token,
+      loi_expires_at: expiresAt,
+      loi_responded_at: null,
+    } as any)
+    .eq("id", applicationId)
+    .eq("org_id", user.orgId);
+  if (updateErr) return { success: false, error: updateErr.message };
+
+  // Hydrate candidate, job, org for the email
+  const [{ data: candidate }, { data: job }, { data: org }] = await Promise.all([
+    supabase.from("candidates").select("name, email").eq("id", app.candidate_id).single(),
+    supabase.from("jobs").select("title").eq("id", app.job_id).single(),
+    supabase.from("organizations").select("name").eq("id", app.org_id).single(),
+  ]);
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://jambahr.com";
+  const loiUrl = `${appUrl}/loi/${token}`;
+
+  try {
+    const { resend, NOREPLY_EMAIL, FROM_EMAIL } = await import("@/lib/resend");
+    const { render } = await import("@react-email/render");
+    const { LoiInviteEmail } = await import("@/components/emails/loi-invite");
+
+    const html = await render(
+      LoiInviteEmail({
+        candidateName: (candidate as any)?.name ?? "Candidate",
+        orgName: (org as any)?.name ?? "Company",
+        roleTitle: (job as any)?.title ?? "the role",
+        loiUrl,
+        expiresInDays: LOI_EXPIRY_DAYS,
+      }),
+    );
+
+    await resend.emails.send({
+      from: NOREPLY_EMAIL,
+      to: (candidate as any)?.email ?? "",
+      replyTo: FROM_EMAIL,
+      subject: `You've been shortlisted — ${(org as any)?.name ?? "JambaHire"}`,
+      html,
+    });
+  } catch (emailErr) {
+    console.error("LOI email failed:", emailErr);
+    // Still return success — admin can resend. Token is saved.
+    return {
+      success: true,
+      data: { loiUrl: `${loiUrl} (email send failed — share manually)` },
+    };
+  }
+
+  revalidatePath("/hire/pipeline");
+  revalidatePath("/hire/candidates");
+  return { success: true, data: { loiUrl } };
+}
+
 // ---- M3: Confirm-Send side-effect dispatch ----
 //
 // Called by the ConfirmTransitionDialog when the admin clicks Send. Looks up the
@@ -868,6 +973,211 @@ async function dispatchTransitionAction(
 }
 
 // ---- Public (no auth required) ----
+
+// ---- M4: Public LOI accept/decline ----
+
+export type LoiInfo = {
+  applicationId: string;
+  candidateName: string;
+  orgName: string;
+  roleTitle: string;
+  status: "pending" | "accepted" | "declined" | "expired";
+  expiresAt: string | null;
+  respondedAt: string | null;
+};
+
+export async function getApplicationByLoiToken(token: string): Promise<ActionResult<LoiInfo>> {
+  if (!token) return { success: false, error: "Missing token" };
+  const supabase = createAdminSupabase();
+
+  const { data: app, error } = await supabase
+    .from("applications")
+    .select("id, candidate_id, job_id, org_id, loi_status, loi_expires_at, loi_responded_at")
+    .eq("loi_token", token)
+    .maybeSingle();
+  if (error) return { success: false, error: error.message };
+  if (!app) return { success: false, error: "Invalid or expired link" };
+  const a = app as any;
+
+  const [{ data: candidate }, { data: job }, { data: org }] = await Promise.all([
+    supabase.from("candidates").select("name").eq("id", a.candidate_id).single(),
+    supabase.from("jobs").select("title").eq("id", a.job_id).single(),
+    supabase.from("organizations").select("name").eq("id", a.org_id).single(),
+  ]);
+
+  let status: LoiInfo["status"] = (a.loi_status as LoiInfo["status"]) ?? "expired";
+  if (status === "pending" && a.loi_expires_at && new Date(a.loi_expires_at).getTime() < Date.now()) {
+    status = "expired";
+  }
+
+  return {
+    success: true,
+    data: {
+      applicationId: a.id,
+      candidateName: (candidate as any)?.name ?? "Candidate",
+      orgName: (org as any)?.name ?? "Company",
+      roleTitle: (job as any)?.title ?? "the role",
+      status,
+      expiresAt: a.loi_expires_at ?? null,
+      respondedAt: a.loi_responded_at ?? null,
+    },
+  };
+}
+
+export async function respondToLOI(
+  token: string,
+  response: "accept" | "decline",
+): Promise<ActionResult<{ result: "accepted" | "declined"; orgName: string; roleTitle: string }>> {
+  if (!token) return { success: false, error: "Missing token" };
+  const supabase = createAdminSupabase();
+
+  const { data: app, error: fetchErr } = await supabase
+    .from("applications")
+    .select("id, org_id, stage, candidate_id, job_id, loi_status, loi_expires_at")
+    .eq("loi_token", token)
+    .maybeSingle();
+  if (fetchErr) return { success: false, error: fetchErr.message };
+  if (!app) return { success: false, error: "Invalid link" };
+  const a = app as any;
+
+  if (a.loi_status !== "pending") {
+    return { success: false, error: `This link has already been used (status: ${a.loi_status}).` };
+  }
+  if (a.loi_expires_at && new Date(a.loi_expires_at).getTime() < Date.now()) {
+    // Lazy expire: flip status before refusing.
+    await supabase
+      .from("applications")
+      .update({ loi_status: "expired" } as any)
+      .eq("id", a.id);
+    return { success: false, error: "This link has expired. Please contact the hiring team." };
+  }
+
+  const respondedAtIso = new Date().toISOString();
+
+  if (response === "accept") {
+    const { error: updateErr } = await supabase
+      .from("applications")
+      .update({
+        loi_status: "accepted",
+        loi_responded_at: respondedAtIso,
+        stage: "shortlisted",
+        updated_at: respondedAtIso,
+      } as any)
+      .eq("id", a.id)
+      .eq("org_id", a.org_id);
+    if (updateErr) return { success: false, error: updateErr.message };
+
+    // Audit row: candidate-actor advances screening → shortlisted
+    await writeStageTransition({
+      orgId: a.org_id,
+      applicationId: a.id,
+      fromStage: "screening",
+      toStage: "shortlisted",
+      direction: "forward",
+      actorId: null,
+      actorType: "candidate",
+      comment: "Candidate accepted the LOI",
+    });
+
+    await syncReferralFromApplicationStage(a.id, "shortlisted");
+
+    // Notify hiring admins (no hiring_manager_id yet — that lands in M5).
+    const [{ data: org }, { data: candidate }, { data: job }, { data: admins }] = await Promise.all([
+      supabase.from("organizations").select("name").eq("id", a.org_id).single(),
+      supabase.from("candidates").select("name").eq("id", a.candidate_id).single(),
+      supabase.from("jobs").select("title").eq("id", a.job_id).single(),
+      supabase
+        .from("employees")
+        .select("first_name, last_name, email")
+        .eq("org_id", a.org_id)
+        .in("role", ["owner", "admin"])
+        .neq("status", "terminated"),
+    ]);
+
+    try {
+      const recipients = ((admins ?? []) as Array<{ first_name: string; last_name: string; email: string }>)
+        .map((e) => e.email)
+        .filter(Boolean);
+      if (recipients.length > 0) {
+        const { resend, FROM_EMAIL } = await import("@/lib/resend");
+        const { render } = await import("@react-email/render");
+        const { ManagerShortlistNotifyEmail } = await import("@/components/emails/manager-shortlist-notify");
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://jambahr.com";
+        const html = await render(
+          ManagerShortlistNotifyEmail({
+            managerName: "team",
+            candidateName: (candidate as any)?.name ?? "Candidate",
+            roleTitle: (job as any)?.title ?? "the role",
+            orgName: (org as any)?.name ?? "Company",
+            pipelineUrl: `${appUrl}/hire/pipeline`,
+          }),
+        );
+        await resend.emails.send({
+          from: FROM_EMAIL,
+          to: recipients,
+          subject: `Candidate accepted — ${(candidate as any)?.name ?? "candidate"} ready to schedule`,
+          html,
+        });
+      }
+    } catch (emailErr) {
+      console.error("manager-shortlist-notify email failed:", emailErr);
+    }
+
+    revalidatePath("/hire/pipeline");
+
+    return {
+      success: true,
+      data: {
+        result: "accepted",
+        orgName: (org as any)?.name ?? "Company",
+        roleTitle: (job as any)?.title ?? "the role",
+      },
+    };
+  }
+
+  // response === "decline"
+  const { error: updateErr } = await supabase
+    .from("applications")
+    .update({
+      loi_status: "declined",
+      loi_responded_at: respondedAtIso,
+      stage: "rejected",
+      rejection_reason: "LOI declined",
+      updated_at: respondedAtIso,
+    } as any)
+    .eq("id", a.id)
+    .eq("org_id", a.org_id);
+  if (updateErr) return { success: false, error: updateErr.message };
+
+  await writeStageTransition({
+    orgId: a.org_id,
+    applicationId: a.id,
+    fromStage: a.stage as ApplicationStage,
+    toStage: "rejected",
+    direction: "reject",
+    actorId: null,
+    actorType: "candidate",
+    comment: "LOI declined",
+  });
+
+  await markReferralRejectedByApplication(a.id);
+
+  const [{ data: org2 }, { data: job2 }] = await Promise.all([
+    supabase.from("organizations").select("name").eq("id", a.org_id).single(),
+    supabase.from("jobs").select("title").eq("id", a.job_id).single(),
+  ]);
+
+  revalidatePath("/hire/pipeline");
+
+  return {
+    success: true,
+    data: {
+      result: "declined",
+      orgName: (org2 as any)?.name ?? "Company",
+      roleTitle: (job2 as any)?.title ?? "the role",
+    },
+  };
+}
 
 export async function getPublicJobs(orgSlug: string): Promise<ActionResult<{ org: { name: string; slug: string }; jobs: Job[] }>> {
   const supabase = createAdminSupabase();

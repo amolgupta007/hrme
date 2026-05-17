@@ -288,6 +288,7 @@ export async function deleteSalaryStructure(employeeId: string): Promise<ActionR
 export async function getPayrollRuns(): Promise<ActionResult<PayrollRun[]>> {
   const user = await getCurrentUser();
   if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can view payroll runs" };
 
   const supabase = createAdminSupabase();
 
@@ -506,6 +507,7 @@ export async function deletePayrollRun(runId: string): Promise<ActionResult<void
 export async function getPayrollEntries(runId: string): Promise<ActionResult<PayrollEntry[]>> {
   const user = await getCurrentUser();
   if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can view payroll entries" };
 
   const supabase = createAdminSupabase();
 

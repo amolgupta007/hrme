@@ -75,6 +75,15 @@ export function computeNewRegimeTax(taxableIncome: number): number {
   return Math.max(0, Math.round(tax * 1.04));
 }
 
+/**
+ * Marginal tax on a one-time bonus payment. Returns tax(annualTaxable + bonus) - tax(annualTaxable).
+ * The full marginal amount is deducted in the payroll month the bonus is paid.
+ */
+export function computeAdditionalTaxOnBonus(annualTaxableIncome: number, bonus: number): number {
+  if (bonus <= 0) return 0;
+  return computeNewRegimeTax(annualTaxableIncome + bonus) - computeNewRegimeTax(annualTaxableIncome);
+}
+
 export interface CTCBreakdown {
   ctc: number;
   // Annual components

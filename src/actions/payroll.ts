@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { getCurrentUser, isAdmin } from "@/lib/current-user";
-import { computeCTCBreakdown, getProfessionalTax } from "@/lib/ctc";
+import { computeCTCBreakdown, getProfessionalTax, computeNewRegimeTax, computeAdditionalTaxOnBonus } from "@/lib/ctc";
 import type { ActionResult } from "@/types";
 
 // ---- Types ----
@@ -594,7 +594,15 @@ export async function updatePayrollEntry(
   const lopDeduction = updates.lop_days > 0
     ? Math.round((e.gross_salary / workingDays) * updates.lop_days)
     : 0;
-  const totalDeductions = e.employee_pf + e.professional_tax + e.tds + lopDeduction;
+
+  // P-005: re-derive base TDS from the entry's gross + PF, then add marginal tax
+  // on the bonus. Indempotent on re-edit: bonus=0 collapses bonusTax to 0.
+  const annualTaxable = Math.max(0, e.gross_salary * 12 - e.employee_pf * 12 - 75000);
+  const baseTdsMonthly = Math.round(computeNewRegimeTax(annualTaxable) / 12);
+  const bonusTax = computeAdditionalTaxOnBonus(annualTaxable, updates.bonus);
+  const adjustedTds = baseTdsMonthly + bonusTax;
+
+  const totalDeductions = e.employee_pf + e.professional_tax + adjustedTds + lopDeduction;
   const netPay = Math.max(0, e.gross_salary + updates.bonus - totalDeductions);
 
   const { error } = await supabase
@@ -603,6 +611,7 @@ export async function updatePayrollEntry(
       bonus: updates.bonus,
       lop_days: updates.lop_days,
       lop_deduction: lopDeduction,
+      tds: adjustedTds,
       total_deductions: totalDeductions,
       net_pay: netPay,
     })

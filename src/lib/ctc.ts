@@ -15,6 +15,11 @@ export const INDIAN_STATES = [
   { value: "other", label: "Other State" },
 ];
 
+/**
+ * Professional Tax — state-based monthly deduction.
+ * Slabs hardcoded to FY 2025-26 rates. State rate revisions (MH/KA/TN/WB)
+ * historically happen in April; re-verify each FY. Last verified: 2026-05.
+ */
 export function getProfessionalTax(grossMonthly: number, state: string): number {
   switch (state.toLowerCase()) {
     case "maharashtra":
@@ -68,10 +73,11 @@ export function computeNewRegimeTax(taxableIncome: number): number {
   // 24L+: 30%
   if (taxableIncome > 2400000) tax += (taxableIncome - 2400000) * 0.30;
 
-  // Rebate u/s 87A: no tax if taxable income ≤ ₹12L
+  // Rebate u/s 87A: no tax if taxable income ≤ ₹12L (new regime, FY 2025-26).
+  // Rebate is applied BEFORE Cess per CBDT — the ₹12L threshold is on pre-Cess tax.
   if (taxableIncome <= 1200000) tax = 0;
 
-  // Health & Education Cess: 4%
+  // Health & Education Cess: 4% — levied on the post-rebate tax.
   return Math.max(0, Math.round(tax * 1.04));
 }
 

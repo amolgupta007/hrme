@@ -128,7 +128,11 @@ export function SalaryStructureDialog({ open, onClose, employees, existing }: Pr
                 className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
                 placeholder="e.g. 600000"
                 value={ctcInput}
-                onChange={(e) => setCtcInput(e.target.value.replace(/[^0-9,]/g, ""))}
+                onChange={(e) => {
+                  const digits = e.target.value.replace(/[^0-9]/g, "");
+                  if (!digits) return setCtcInput("");
+                  setCtcInput(new Intl.NumberFormat("en-IN").format(parseInt(digits, 10)));
+                }}
               />
               {ctc >= 100000 && (
                 <p className="text-xs text-muted-foreground mt-1">

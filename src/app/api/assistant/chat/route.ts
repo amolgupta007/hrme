@@ -46,8 +46,8 @@ export async function POST(req: Request) {
   const access = canUseAssistant({
     plan: user.plan,
     role: user.role,
-    orgEnabled: true, // TODO(P1.13): replace with real org flag from user context
-    monthUsage: 0,    // Monthly quota enforcement is a Phase 4 concern
+    orgEnabled: user.assistantEnabled,
+    monthUsage: 0, // Monthly quota enforcement is a Phase 4 concern
   });
   if (!access.allowed) {
     return NextResponse.json({ error: access.reason }, { status: 403 });

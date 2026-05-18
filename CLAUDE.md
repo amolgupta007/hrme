@@ -561,6 +561,25 @@ npm run db:push       # Push migrations (needs CLI)
 57. **`updatePayrollEntry` reads `annual_taxable_income` + `months_in_fy` from the entry**: do NOT recompute these from gross×12. Legacy entries (processed pre-2026-05-17) have NULL in those columns — the action falls back to gross×12 inline derivation in that case. Once a run is re-processed, snapshots populate.
 58. **`additional_deductions_annual` is silently ignored in new regime**: `computeCTCBreakdown` only subtracts it when `taxRegime === 'old'`. Admins can leave any value in the column without affecting new-regime tax. Field is conditionally shown in `salary-structure-dialog.tsx` only when the regime dropdown is `'old'`.
 59. **Bonus tax goes into the same `tds` field, not separately**: `updatePayrollEntry` sets `tds = baseTdsMonthly + bonusTax`. There's no `bonus_tax` column — the deduction is folded into total TDS. Reprocessing the run resets `tds` back to base (admin must re-add bonus).
+60. **AI Assistant feature gating**: Floating chat button on `/dashboard/*` gated on `NEXT_PUBLIC_ASSISTANT_ENABLED` (client env flag) AND `canUseAssistant()` in `src/lib/assistant/permissions.ts`. Plan-tier matrix: Starter locked, Growth 30 questions/month preview, Business unlimited (subject to monthly INR budget cap planned for Phase 4). Read before adding new entry points or tools.
+61. **AI Assistant route registry must stay in sync**: Every new `/dashboard/*` page added from Phase 1 onward needs an entry in `src/lib/assistant/route-registry.ts` AND a markdown article in `src/lib/assistant/help/articles/` (directory created in Phase 1). Enforced by vitest integrity test (`tests/assistant/route-registry.integrity.test.ts`) + ESLint rule (added in Phase 1). Skipping these = stale how-to answers from the assistant.
+62. **AI SDK v6 is `streamText` + `gateway()` wrapper, not a plain string**: `streamText({ model: gateway("anthropic/claude-sonnet-4-6"), ... })` — passing a bare string fails type check. AI Gateway resolves the model via `AI_GATEWAY_API_KEY`. The client uses `useChat` from `@ai-sdk/react@3` which does NOT have `input` / `handleSubmit` / `isLoading` — manage input state yourself and call `sendMessage({ text })`. Route returns `result.toUIMessageStreamResponse()` (not `toDataStreamResponse()`).
+
+---
+
+## AI Assistant (`/dashboard/*` floating button) — Phase 0 shipped 2026-05-18
+
+Read-only, plan-tier-gated chat assistant. Phase 0 ships the foundation only — stub `POST /api/assistant/chat` route (no tools), floating launcher + side panel, plan/role permission helpers, empty route registry with integrity test. Full plan in `docs/planning/ai-hr-assistant-plan.md`; phase plans under `docs/superpowers/plans/2026-05-18-ai-hr-assistant-phase-*.md`.
+
+**Decision log (§7 of planning doc)**: 14 locked decisions. Notable:
+- Read-only forever — no write tools, ever (OQ-9). Phase 5 becomes "Proactive Insights" only.
+- Vercel AI Gateway with `anthropic/claude-sonnet-4-6` model strings (OQ-4).
+- Voyage `voyage-3-large` embeddings planned for Phase 2 RAG (OQ-3).
+- pgvector enabled by upgrading Supabase tier (OQ-1, blocker for Phase 2).
+- 14d raw → 76d PII-redacted → 90d hard-delete retention (OQ-8).
+- shadcn CLI for new UI primitives, existing `button/card/badge` untouched (OQ-14).
+
+**Migration 022** adds four tables: `assistant_conversations`, `assistant_messages`, `assistant_tool_calls`, `assistant_feedback`. RLS on all four (advisory — service-role bypasses per gotcha #5).
 
 ---
 

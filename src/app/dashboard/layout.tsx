@@ -4,6 +4,8 @@ import { Header } from "@/components/layout/header";
 import { getPendingCounts } from "@/actions/notifications";
 import { getCurrentUser } from "@/lib/current-user";
 import { ReportFeedbackTriggerRoot } from "@/components/feedback/report-feedback-trigger";
+import { AssistantLauncher } from "@/components/assistant/assistant-launcher";
+import { canUseAssistant } from "@/lib/assistant/permissions";
 
 export default async function DashboardLayout({
   children,
@@ -28,6 +30,15 @@ export default async function DashboardLayout({
       process.env.JAMBAHIRE_REFERRALS_ENABLED === "true",
   };
 
+  const assistantClientFlag = process.env.NEXT_PUBLIC_ASSISTANT_ENABLED === "true";
+  const assistantAccess = canUseAssistant({
+    plan,
+    role,
+    orgEnabled: true,
+    monthUsage: 0,
+  });
+  const assistantEnabled = assistantClientFlag && assistantAccess.allowed;
+
   return (
     <ReportFeedbackTriggerRoot>
       <div className="flex min-h-screen">
@@ -36,6 +47,7 @@ export default async function DashboardLayout({
           <Header jambaHireEnabled={jambaHireEnabled} badges={badges} role={role} />
           <main className="flex-1 p-6">{children}</main>
         </div>
+        <AssistantLauncher enabled={assistantEnabled} />
       </div>
     </ReportFeedbackTriggerRoot>
   );

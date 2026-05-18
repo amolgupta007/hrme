@@ -34,7 +34,7 @@ export default async function DashboardLayout({
   const assistantAccess = canUseAssistant({
     plan,
     role,
-    orgEnabled: true,
+    orgEnabled: userCtx.assistantEnabled,
     monthUsage: 0,
   });
   const assistantEnabled = assistantClientFlag && assistantAccess.allowed;

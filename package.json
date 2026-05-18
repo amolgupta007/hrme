@@ -12,9 +12,12 @@
     "db:reset": "supabase db reset",
     "db:seed": "tsx scripts/seed.ts",
     "stripe:listen": "stripe listen --forward-to localhost:3000/api/webhooks/stripe",
-    "convert-legal": "node scripts/convert-legal-docs.js"
+    "convert-legal": "node scripts/convert-legal-docs.js",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
+    "@ai-sdk/react": "^3.0.186",
     "@anthropic-ai/sdk": "^0.80.0",
     "@clerk/nextjs": "^5.3.0",
     "@clerk/themes": "^2.1.0",
@@ -42,6 +45,7 @@
     "@tanstack/react-table": "^8.20.0",
     "@types/papaparse": "^5.5.2",
     "@uploadthing/react": "^6.6.0",
+    "ai": "^6.0.184",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
     "date-fns": "^3.6.0",
@@ -76,6 +80,7 @@
     "@types/node": "^20.14.0",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
+    "@vitest/ui": "^4.1.6",
     "autoprefixer": "^10.4.0",
     "eslint": "^8.57.0",
     "eslint-config-next": "^14.2.25",
@@ -86,6 +91,7 @@
     "supabase": "^2.83.0",
     "tailwindcss": "^3.4.0",
     "tsx": "^4.16.0",
-    "typescript": "^5.5.0"
+    "typescript": "^5.5.0",
+    "vitest": "^4.1.6"
   }
 }

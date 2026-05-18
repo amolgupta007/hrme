@@ -5,6 +5,12 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  eslint: {
+    // `npm run lint` enforces lint via `--rulesdir eslint-rules` (custom rule registry).
+    // `next build` doesn't accept --rulesdir, so it would fail on our custom rule ref.
+    // Lint is enforced separately via the npm script.
+    ignoreDuringBuilds: true,
+  },
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "img.clerk.com" },

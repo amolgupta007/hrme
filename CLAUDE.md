@@ -564,20 +564,43 @@ npm run db:push       # Push migrations (needs CLI)
 60. **AI Assistant feature gating**: Floating chat button on `/dashboard/*` gated on `NEXT_PUBLIC_ASSISTANT_ENABLED` (client env flag) AND `canUseAssistant()` in `src/lib/assistant/permissions.ts`. Plan-tier matrix: Starter locked, Growth 30 questions/month preview, Business unlimited (subject to monthly INR budget cap planned for Phase 4). Read before adding new entry points or tools.
 61. **AI Assistant route registry must stay in sync**: Every new `/dashboard/*` page added from Phase 1 onward needs an entry in `src/lib/assistant/route-registry.ts` AND a markdown article in `src/lib/assistant/help/articles/` (directory created in Phase 1). Enforced by vitest integrity test (`tests/assistant/route-registry.integrity.test.ts`) + ESLint rule (added in Phase 1). Skipping these = stale how-to answers from the assistant.
 62. **AI SDK v6 is `streamText` + `gateway()` wrapper, not a plain string**: `streamText({ model: gateway("anthropic/claude-sonnet-4-6"), ... })` — passing a bare string fails type check. AI Gateway resolves the model via `AI_GATEWAY_API_KEY`. The client uses `useChat` from `@ai-sdk/react@3` which does NOT have `input` / `handleSubmit` / `isLoading` — manage input state yourself and call `sendMessage({ text })`. Route returns `result.toUIMessageStreamResponse()` (not `toDataStreamResponse()`).
+63. **AI SDK v6 `tool()` uses `inputSchema`, not `parameters`** and `convertToModelMessages` is async — `messages: await convertToModelMessages(body.messages)`. The `onFinish` callback usage fields are `inputTokens` / `outputTokens` (NOT v3/v4's `promptTokens`/`completionTokens`). Tool parts in `UIMessage.parts` arrive as `DynamicToolUIPart` when `useChat` doesn't pre-register tool types — use the SDK helpers `isToolUIPart(p)` + `getToolName(p)` instead of hand-rolled discriminators. State machine: `input-streaming → input-available → output-available | output-error | output-denied`.
+64. **Help articles align with ROUTE_REGISTRY by id↔route_key**: every `.md` in `src/lib/assistant/help/articles/` has frontmatter `id` matching its filename AND `route_key` matching a key in `ROUTE_REGISTRY`. Loader throws on missing required fields. Numbered-step parser only catches `^\s*\d+\.\s+` — bullets, en-dashes, and nested lists are silently ignored. Run `npm run embed:help` after authoring or editing articles — it wipes and rebuilds `app_help_chunks` via Voyage. Re-run is monolithic (not incremental) — fine for ~25 articles; incremental indexing is a Phase 1.5 nice-to-have.
+65. **`next build` cannot use `--rulesdir`** for the custom `no-orphan-dashboard-route` ESLint rule. `next.config.js` sets `eslint: { ignoreDuringBuilds: true }` to decouple lint from build. Lint enforcement happens via `npm run lint` (which uses `next lint --rulesdir eslint-rules`). CI must run `npm run lint` separately if you want lint to gate deploys.
 
 ---
 
-## AI Assistant (`/dashboard/*` floating button) — Phase 0 shipped 2026-05-18
+## AI Assistant (`/dashboard/*` floating button) — Phase 1 shipped 2026-05-18
 
-Read-only, plan-tier-gated chat assistant. Phase 0 ships the foundation only — stub `POST /api/assistant/chat` route (no tools), floating launcher + side panel, plan/role permission helpers, empty route registry with integrity test. Full plan in `docs/planning/ai-hr-assistant-plan.md`; phase plans under `docs/superpowers/plans/2026-05-18-ai-hr-assistant-phase-*.md`.
+Read-only, plan-tier-gated chat assistant. Floating button on dashboard, side-panel chat, role-aware suggested prompts. Tool-augmented: `app_help.search` / `get_steps` / `get_route` deliver step-by-step how-to answers with "Take me there →" deep-links. Backed by 25 markdown help articles indexed into pgvector via Voyage `voyage-3-large` embeddings. Full plan in `docs/planning/ai-hr-assistant-plan.md`; phase plans under `docs/superpowers/plans/2026-05-18-ai-hr-assistant-phase-*.md`.
+
+**Phase progression:**
+- **Phase 0** (shipped 2026-05-18) — foundation: stub route, UI shell, plan-tier helpers, migration 022 (4 conversation tables).
+- **Phase 1** (shipped 2026-05-18) — how-to assistant: pgvector + `app_help_chunks`, Voyage embeddings, app_help tools, 25 articles, persistence + rate limit (30/hr), org-level `assistant_enabled` flag.
+- **Phase 2** (planned) — tenant document Q&A via `docs.*` tools (reuses pgvector + Voyage).
+- **Phase 3** (planned) — structured data tools (`data.employees.find`, `data.leaves.balance`, etc., all role-scoped).
+- **Phase 4** (planned) — conversation history UI + feedback + founder analytics + monthly budget caps.
+- **Phase 5** (planned) — proactive insights only. **No write tools, ever** (OQ-9).
 
 **Decision log (§7 of planning doc)**: 14 locked decisions. Notable:
-- Read-only forever — no write tools, ever (OQ-9). Phase 5 becomes "Proactive Insights" only.
+- Read-only forever — no write tools, ever (OQ-9).
 - Vercel AI Gateway with `anthropic/claude-sonnet-4-6` model strings (OQ-4).
-- Voyage `voyage-3-large` embeddings planned for Phase 2 RAG (OQ-3).
-- pgvector enabled by upgrading Supabase tier (OQ-1, blocker for Phase 2).
-- 14d raw → 76d PII-redacted → 90d hard-delete retention (OQ-8).
-- shadcn CLI for new UI primitives, existing `button/card/badge` untouched (OQ-14).
+- Voyage `voyage-3-large` embeddings (1024-dim) for RAG (OQ-3).
+- Supabase Pro upgraded for pgvector (OQ-1) — done 2026-05-18.
+- Floating button only — no Cmd+K, no sidebar entry (OQ-2).
+- Business unlimited + Growth 30/mo preview + Starter locked (OQ-5).
+- 14d raw → 76d PII-redacted → 90d hard-delete retention (OQ-8, Phase 4 cron).
+- Hourly rate limit: 30 user-messages/hour, counted via `assistant_messages` join.
+- Per-org `assistant_enabled` flag (`organizations.settings.assistant_enabled`) — admin opt-in. Combined with `NEXT_PUBLIC_ASSISTANT_ENABLED` client flag.
+- shadcn CLI for new UI primitives (OQ-14).
+
+**Migrations**: 022 (Phase 0 — conversations/messages/tool_calls/feedback), 023 (Phase 1 — pgvector + `app_help_chunks`), 024 (Phase 1 — `match_help_chunks` RPC for cosine similarity).
+
+**Env vars required**: `AI_GATEWAY_API_KEY` (with Anthropic provider configured in Vercel AI Gateway, BYOK using existing `ANTHROPIC_API_KEY`), `VOYAGE_API_KEY` (server-only), `NEXT_PUBLIC_ASSISTANT_ENABLED=true` (client-side master switch).
+
+**To enable for an org**: `update organizations set settings = settings || '{"assistant_enabled": true}'::jsonb where clerk_org_id = '...';`
+
+**To rebuild the help index after editing articles**: `npm run embed:help` (wipes + rebuilds `app_help_chunks` via Voyage; ~30s for 25 articles).
 
 **Migration 022** adds four tables: `assistant_conversations`, `assistant_messages`, `assistant_tool_calls`, `assistant_feedback`. RLS on all four (advisory — service-role bypasses per gotcha #5).
 

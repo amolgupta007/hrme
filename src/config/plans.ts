@@ -26,6 +26,7 @@ export const PLAN_FEATURES: Record<OrgPlan, PlanFeature[]> = {
     "objectives",
     "training",
     "hiring_jd",
+    "ai_assistant",
   ],
   business: [
     "documents",
@@ -95,4 +96,14 @@ export const PLAN_UNLOCK_HIGHLIGHTS: Record<"growth" | "business", string[]> = {
     "Full hiring suite (ATS, interviews, offers)",
     "Onboarding workflows",
   ],
+};
+
+// Per-plan monthly question quota for the AI HR Assistant.
+// Starter: locked (gated separately via hasFeature). Growth: preview cap. Business: unlimited.
+// Custom plans inherit "unlimited" — adjust later when per-org caps are wired.
+export const ASSISTANT_QUOTA: Record<OrgPlan, number | "unlimited"> = {
+  starter: 0,
+  growth: 30,
+  business: "unlimited",
+  custom: "unlimited",
 };

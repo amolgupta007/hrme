@@ -4,8 +4,8 @@ import { listHelpArticles, getHelpArticle, clearHelpCache } from "@/lib/assistan
 describe("help loader", () => {
   beforeEach(() => clearHelpCache());
 
-  it("parses at least one article (the placeholder)", () => {
-    expect(listHelpArticles().length).toBeGreaterThan(0);
+  it("loads all 25 help articles", () => {
+    expect(listHelpArticles().length).toBe(25);
   });
 
   it("returns null for unknown id", () => {
@@ -22,9 +22,10 @@ describe("help loader", () => {
     }
   });
 
-  it("placeholder article exposes 3 parsed steps", () => {
-    const a = getHelpArticle("_placeholder");
-    expect(a?.steps.length).toBe(3);
-    expect(a?.steps[0]).toEqual({ n: 1, instruction: "Open the dashboard." });
+  it("add_employee article exposes parsed steps", () => {
+    const a = getHelpArticle("add_employee");
+    expect(a).not.toBeNull();
+    expect(a!.steps.length).toBeGreaterThanOrEqual(3);
+    expect(a!.steps[0].n).toBe(1);
   });
 });

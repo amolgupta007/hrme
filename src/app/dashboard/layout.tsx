@@ -47,7 +47,7 @@ export default async function DashboardLayout({
           <Header jambaHireEnabled={jambaHireEnabled} badges={badges} role={role} />
           <main className="flex-1 p-6">{children}</main>
         </div>
-        <AssistantLauncher enabled={assistantEnabled} />
+        <AssistantLauncher enabled={assistantEnabled} role={role} />
       </div>
     </ReportFeedbackTriggerRoot>
   );

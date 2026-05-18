@@ -1,0 +1,95 @@
+"use client";
+import { useChat } from "@ai-sdk/react";
+import { DefaultChatTransport } from "ai";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { AssistantMessage } from "./assistant-message";
+import { trackAssistant } from "@/lib/assistant/posthog-events";
+import { Send } from "lucide-react";
+
+export function AssistantChat({ conversationId }: { conversationId: string }) {
+  const transport = useMemo(
+    () => new DefaultChatTransport({ api: "/api/assistant/chat" }),
+    []
+  );
+  const { messages, sendMessage, status } = useChat({
+    id: conversationId,
+    transport,
+  });
+
+  const [input, setInput] = useState("");
+  const isLoading = status === "submitted" || status === "streaming";
+
+  const endRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages.length]);
+
+  function submit() {
+    const text = input.trim();
+    if (!text || isLoading) return;
+    trackAssistant({
+      name: "assistant_message_sent",
+      props: { conversation_id: conversationId, char_count: text.length },
+    });
+    sendMessage({ text });
+    setInput("");
+  }
+
+  function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    submit();
+  }
+
+  return (
+    <div className="flex h-full flex-col">
+      <ScrollArea className="flex-1 px-4 py-3">
+        {messages.length === 0 ? (
+          <EmptyState />
+        ) : (
+          <div className="flex flex-col gap-3">
+            {messages.map((m) => (
+              <AssistantMessage key={m.id} message={m} />
+            ))}
+            <div ref={endRef} />
+          </div>
+        )}
+      </ScrollArea>
+      <form
+        onSubmit={onSubmit}
+        className="flex items-end gap-2 border-t border-border px-3 py-3"
+      >
+        <Textarea
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          rows={1}
+          placeholder="Ask JambaHR…"
+          className="min-h-[40px] resize-none"
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              submit();
+            }
+          }}
+        />
+        <Button type="submit" size="icon" disabled={isLoading || !input.trim()}>
+          <Send className="h-4 w-4" />
+          <span className="sr-only">Send</span>
+        </Button>
+      </form>
+    </div>
+  );
+}
+
+function EmptyState() {
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center">
+      <p className="text-sm font-medium">Hi, I&apos;m your JambaHR assistant.</p>
+      <p className="text-xs text-muted-foreground">
+        I&apos;m still being set up. Say hi to test the connection.
+      </p>
+    </div>
+  );
+}

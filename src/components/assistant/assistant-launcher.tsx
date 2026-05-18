@@ -4,8 +4,15 @@ import { Button } from "@/components/ui/button";
 import { MessageSquareText } from "lucide-react";
 import { AssistantPanel } from "./assistant-panel";
 import { trackAssistant } from "@/lib/assistant/posthog-events";
+import type { UserRole } from "@/types";
 
-export function AssistantLauncher({ enabled }: { enabled: boolean }) {
+export function AssistantLauncher({
+  enabled,
+  role,
+}: {
+  enabled: boolean;
+  role: UserRole;
+}) {
   const [open, setOpen] = useState(false);
 
   if (!enabled) return null;
@@ -25,7 +32,7 @@ export function AssistantLauncher({ enabled }: { enabled: boolean }) {
       >
         <MessageSquareText className="h-6 w-6" />
       </Button>
-      <AssistantPanel open={open} onOpenChange={setOpen} />
+      <AssistantPanel open={open} onOpenChange={setOpen} role={role} />
     </>
   );
 }

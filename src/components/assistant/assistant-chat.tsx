@@ -6,10 +6,18 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { AssistantMessage } from "./assistant-message";
+import { SuggestedPrompts } from "./suggested-prompts";
 import { trackAssistant } from "@/lib/assistant/posthog-events";
 import { Send } from "lucide-react";
+import type { UserRole } from "@/types";
 
-export function AssistantChat({ conversationId }: { conversationId: string }) {
+export function AssistantChat({
+  conversationId,
+  role,
+}: {
+  conversationId: string;
+  role: UserRole;
+}) {
   const transport = useMemo(
     () => new DefaultChatTransport({ api: "/api/assistant/chat" }),
     []
@@ -27,27 +35,27 @@ export function AssistantChat({ conversationId }: { conversationId: string }) {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages.length]);
 
-  function submit() {
-    const text = input.trim();
-    if (!text || isLoading) return;
+  function sendText(text: string) {
+    const trimmed = text.trim();
+    if (!trimmed || isLoading) return;
     trackAssistant({
       name: "assistant_message_sent",
-      props: { conversation_id: conversationId, char_count: text.length },
+      props: { conversation_id: conversationId, char_count: trimmed.length },
     });
-    sendMessage({ text });
+    sendMessage({ text: trimmed });
     setInput("");
   }
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    submit();
+    sendText(input);
   }
 
   return (
     <div className="flex h-full flex-col">
       <ScrollArea className="flex-1 px-4 py-3">
         {messages.length === 0 ? (
-          <EmptyState />
+          <EmptyState role={role} onPick={sendText} />
         ) : (
           <div className="flex flex-col gap-3">
             {messages.map((m) => (
@@ -70,7 +78,7 @@ export function AssistantChat({ conversationId }: { conversationId: string }) {
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
-              submit();
+              sendText(input);
             }
           }}
         />
@@ -83,13 +91,22 @@ export function AssistantChat({ conversationId }: { conversationId: string }) {
   );
 }
 
-function EmptyState() {
+function EmptyState({
+  role,
+  onPick,
+}: {
+  role: UserRole;
+  onPick: (q: string) => void;
+}) {
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center">
-      <p className="text-sm font-medium">Hi, I&apos;m your JambaHR assistant.</p>
-      <p className="text-xs text-muted-foreground">
-        I&apos;m still being set up. Say hi to test the connection.
-      </p>
+    <div className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
+      <div className="space-y-1">
+        <p className="text-sm font-medium">Hi, I&apos;m your JambaHR assistant.</p>
+        <p className="text-xs text-muted-foreground">
+          Ask me how to do anything in the app.
+        </p>
+      </div>
+      <SuggestedPrompts role={role} onPick={onPick} />
     </div>
   );
 }

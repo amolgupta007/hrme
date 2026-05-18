@@ -7,13 +7,16 @@ import {
 } from "@/components/ui/sheet";
 import { AssistantChat } from "./assistant-chat";
 import { useMemo } from "react";
+import type { UserRole } from "@/types";
 
 export function AssistantPanel({
   open,
   onOpenChange,
+  role,
 }: {
   open: boolean;
   onOpenChange: (next: boolean) => void;
+  role: UserRole;
 }) {
   const conversationId = useMemo(
     () =>
@@ -33,7 +36,7 @@ export function AssistantPanel({
           <SheetTitle className="text-base">Ask JambaHR</SheetTitle>
         </SheetHeader>
         <div className="flex-1 overflow-hidden">
-          <AssistantChat conversationId={conversationId} />
+          <AssistantChat conversationId={conversationId} role={role} />
         </div>
       </SheetContent>
     </Sheet>

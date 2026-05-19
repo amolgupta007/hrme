@@ -1,6 +1,8 @@
 "use client";
 import { cn } from "@/lib/utils";
 import { isToolUIPart, getToolName, type UIMessage } from "ai";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { AssistantToolChip } from "./assistant-tool-chip";
 import { AssistantCitations, type HelpCitation } from "./assistant-citations";
 import type { RouteEntry } from "@/lib/assistant/route-registry";
@@ -81,8 +83,16 @@ export function AssistantMessage({ message }: { message: UIMessage }) {
             })}
           </div>
         )}
-        <div>
-          {textBody || (toolParts.length === 0 && <span className="opacity-60">...</span>)}
+        <div className="prose prose-sm max-w-none dark:prose-invert prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-headings:my-2">
+          {textBody ? (
+            isUser ? (
+              <p className="whitespace-pre-wrap">{textBody}</p>
+            ) : (
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{textBody}</ReactMarkdown>
+            )
+          ) : (
+            toolParts.length === 0 && <span className="opacity-60">...</span>
+          )}
         </div>
         {!isUser && <AssistantCitations items={citations} />}
       </div>

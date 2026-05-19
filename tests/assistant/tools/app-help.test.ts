@@ -55,7 +55,7 @@ const baseCtx = {
   orgFeatures: { jambaHireEnabled: false, attendanceEnabled: true, grievancesEnabled: true },
 };
 
-describe("app_help.search", () => {
+describe("app_help_search", () => {
   beforeEach(() => rpcMock.mockReset());
 
   it("dedupes by article_id and respects max_results, filtering by role", async () => {
@@ -70,7 +70,7 @@ describe("app_help.search", () => {
     });
     // Use admin role so all three article types are accessible; tests dedup + max_results cap.
     const tools = makeAppHelpTools({ ...baseCtx, role: "admin" });
-    const result = await (tools["app_help.search"] as any).execute({
+    const result = await (tools["app_help_search"] as any).execute({
       query: "approve leave",
       max_results: 2,
     });
@@ -88,7 +88,7 @@ describe("app_help.search", () => {
       error: null,
     });
     const tools = makeAppHelpTools({ ...baseCtx, plan: "starter" });
-    const result = await (tools["app_help.search"] as any).execute({ query: "anything" });
+    const result = await (tools["app_help_search"] as any).execute({ query: "anything" });
     // starter cannot access business-tier run_payroll
     expect(result.map((r: any) => r.id)).toEqual(["request_leave"]);
   });
@@ -97,49 +97,49 @@ describe("app_help.search", () => {
     rpcMock.mockResolvedValue({ data: null, error: new Error("rpc boom") });
     const tools = makeAppHelpTools(baseCtx);
     await expect(
-      (tools["app_help.search"] as any).execute({ query: "test" }),
+      (tools["app_help_search"] as any).execute({ query: "test" }),
     ).rejects.toThrow(/rpc boom/);
   });
 });
 
-describe("app_help.get_steps", () => {
+describe("app_help_get_steps", () => {
   it("returns null for unknown id", async () => {
     const tools = makeAppHelpTools(baseCtx);
-    const r = await (tools["app_help.get_steps"] as any).execute({ id: "not_real" });
+    const r = await (tools["app_help_get_steps"] as any).execute({ id: "not_real" });
     expect(r).toBeNull();
   });
 
   it("returns null for inaccessible article (role gate)", async () => {
     const tools = makeAppHelpTools(baseCtx);
-    const r = await (tools["app_help.get_steps"] as any).execute({ id: "approve_leave" });
+    const r = await (tools["app_help_get_steps"] as any).execute({ id: "approve_leave" });
     expect(r).toBeNull();
   });
 
   it("returns steps for accessible article", async () => {
     const tools = makeAppHelpTools({ ...baseCtx, role: "admin" });
-    const r = await (tools["app_help.get_steps"] as any).execute({ id: "approve_leave" });
+    const r = await (tools["app_help_get_steps"] as any).execute({ id: "approve_leave" });
     expect(r).not.toBeNull();
     expect(r.id).toBe("approve_leave");
     expect(r.route_key).toBe("approve_leave");
   });
 });
 
-describe("app_help.get_route", () => {
+describe("app_help_get_route", () => {
   it("returns null for unknown key", async () => {
     const tools = makeAppHelpTools(baseCtx);
-    const r = await (tools["app_help.get_route"] as any).execute({ feature_key: "not_real" });
+    const r = await (tools["app_help_get_route"] as any).execute({ feature_key: "not_real" });
     expect(r).toBeNull();
   });
 
   it("blocks payroll route for starter plan", async () => {
     const tools = makeAppHelpTools({ ...baseCtx, plan: "starter" });
-    const r = await (tools["app_help.get_route"] as any).execute({ feature_key: "run_payroll" });
+    const r = await (tools["app_help_get_route"] as any).execute({ feature_key: "run_payroll" });
     expect(r).toBeNull();
   });
 
   it("returns route for accessible feature", async () => {
     const tools = makeAppHelpTools(baseCtx);
-    const r = await (tools["app_help.get_route"] as any).execute({ feature_key: "approve_leave" });
+    const r = await (tools["app_help_get_route"] as any).execute({ feature_key: "approve_leave" });
     expect(r).not.toBeNull();
     expect(r.path).toBe("/dashboard/leaves");
   });
@@ -149,7 +149,7 @@ describe("app_help.get_route", () => {
       ...baseCtx,
       orgFeatures: { ...baseCtx.orgFeatures, attendanceEnabled: false },
     });
-    const r = await (tools["app_help.get_route"] as any).execute({ feature_key: "clock_in_out" });
+    const r = await (tools["app_help_get_route"] as any).execute({ feature_key: "clock_in_out" });
     expect(r).toBeNull();
   });
 });

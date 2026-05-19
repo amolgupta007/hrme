@@ -2,15 +2,15 @@
 import { Search, FileText, MapPin } from "lucide-react";
 
 const TOOL_LABELS: Record<string, string> = {
-  "app_help.search": "Searching help articles",
-  "app_help.get_steps": "Fetching step-by-step",
-  "app_help.get_route": "Resolving destination",
+  "app_help_search": "Searching help articles",
+  "app_help_get_steps": "Fetching step-by-step",
+  "app_help_get_route": "Resolving destination",
 };
 
 const TOOL_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
-  "app_help.search": Search,
-  "app_help.get_steps": FileText,
-  "app_help.get_route": MapPin,
+  "app_help_search": Search,
+  "app_help_get_steps": FileText,
+  "app_help_get_route": MapPin,
 };
 
 export function AssistantToolChip({

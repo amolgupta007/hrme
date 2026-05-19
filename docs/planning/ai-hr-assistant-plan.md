@@ -546,6 +546,102 @@ To prevent stale help content (a top risk — see §8) we enforce three things o
 
 ---
 
+## 6.5 Per-Org Scope Toggles (added 2026-05-19)
+
+The assistant has three potential data scopes. Each tenant decides which to enable on their org.
+Phase 1 ships only the always-on scope; Phase 2 and 3 add the toggleable ones.
+
+### Schema additions (no migrations needed — `organizations.settings` is JSONB)
+
+| Settings key | Phase | Default | What it gates |
+|---|---|---|---|
+| `assistant_enabled` (shipped Phase 1) | 1 | `false` | Master switch — floating button visible at all? |
+| `assistant_tenant_docs_enabled` | 2 | `false` | Should `docs.*` tools be included in the tool registry for this org? |
+| `assistant_tenant_data_enabled` | 3 | `false` | Should `data.*` tools (employees/leave/payroll/etc.) be included? |
+
+All three default to `false`. Admin explicitly opts in per scope. No data egress without opt-in.
+
+### Where the gates plug in
+
+**`src/app/api/assistant/chat/route.ts`** — replace `makeAppHelpTools(...)` with:
+
+```ts
+const tools = {
+  ...makeAppHelpTools(ctx),
+  ...(user.assistantTenantDocsEnabled ? makeDocsTools(ctx) : {}),
+  ...(user.assistantTenantDataEnabled ? makeDataTools(ctx) : {}),
+};
+```
+
+If a scope is disabled, the LLM literally doesn't see the tools — no possibility of accidental invocation. The system prompt also adjusts based on enabled scopes: only mention what's actually callable.
+
+**`src/lib/current-user.ts`** — extend `UserContext` with:
+```ts
+assistantTenantDocsEnabled: boolean;
+assistantTenantDataEnabled: boolean;
+```
+
+Reads from `settings.assistant_tenant_docs_enabled` and `settings.assistant_tenant_data_enabled`.
+
+**`src/components/settings/assistant-settings-section.tsx`** — the two "Coming soon" `<ScopeRow>` rows
+become real toggles wired to new server actions `toggleAssistantTenantDocs(boolean)` and
+`toggleAssistantTenantData(boolean)`. The "Coming soon" badge is removed; an "Off" / "On" badge
+takes its place.
+
+### Sub-toggles for tenant data (Phase 3)
+
+The `data.*` family is broad — some orgs may want employees+leave but not payroll. To support that,
+add a nested object on `settings`:
+```jsonc
+{
+  "assistant_tenant_data_enabled": true,
+  "assistant_tenant_data_scopes": {
+    "employees": true,
+    "leave": true,
+    "attendance": true,
+    "reviews": false,
+    "objectives": true,
+    "payroll": false,
+    "org_summary": true
+  }
+}
+```
+
+`makeDataTools(ctx)` reads the scope map and includes only the tools whose key is `true`.
+UI: collapsible sub-section under "Your HR data" with one toggle per scope.
+
+### Per-employee data filters (Phase 3, runtime not config)
+
+Even with a scope enabled, the runtime tool filters apply (§4.1 of this plan): an employee asking
+`data.employees.find` only sees themselves; a manager only sees their team. This is enforced inside
+each tool's `execute` block — independent of the org-level enable flag. The org-level flag is the
+outermost gate (does the LLM even have the tool); the role-level filter is the innermost gate (what
+rows does the tool return).
+
+### Audit log (Phase 4)
+
+When tenant data starts flowing, every tool call is logged to `assistant_tool_calls` with:
+- `tool_name`
+- `args_hash` (sha256 of input — never the raw args)
+- `rows_returned`
+- `ok`
+- `latency_ms`
+
+Founder dashboard at `/superadmin/assistant` surfaces per-org totals + drill-down to recent calls
+(without revealing content). This is the audit trail customers can request.
+
+### Migration & rollout
+
+- **No DB migration needed** — JSONB column `organizations.settings` already exists.
+- **Default off** for all existing orgs. They have to opt in.
+- **Email founders + admins** when the toggle becomes available with a one-paragraph explainer:
+  "We now support adding your HR data to the assistant. Want to enable it? Go to Settings → AI Assistant."
+- **First-time toggle = banner in Settings**: "Enabling tenant data means employee records and leave
+  data will be included in queries to Anthropic Claude (under ZDR). You can disable any time."
+- **Audit row** written every time the toggle changes (Phase 4 — for now, `revalidatePath`).
+
+---
+
 ## 7. Locked Decisions (2026-05-18)
 
 All 14 open questions answered. Captured here as the contract Phase plans are built against.

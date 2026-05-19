@@ -1,4 +1,10 @@
-import { streamText, convertToModelMessages, gateway, type UIMessage } from "ai";
+import {
+  streamText,
+  convertToModelMessages,
+  gateway,
+  stepCountIs,
+  type UIMessage,
+} from "ai";
 import { getCurrentUser } from "@/lib/current-user";
 import { canUseAssistant } from "@/lib/assistant/permissions";
 import { checkRateLimit } from "@/lib/assistant/rate-limit";
@@ -126,6 +132,10 @@ export async function POST(req: Request) {
     system: systemPrompt,
     messages: modelMessages,
     tools,
+    // AI SDK v6 default is stepCountIs(1) which stops after the FIRST tool call.
+    // We need search → get_steps → get_route → final text response = 4 steps minimum.
+    // Set to 6 for safety margin.
+    stopWhen: stepCountIs(6),
     onFinish,
   });
 

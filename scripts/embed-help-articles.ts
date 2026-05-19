@@ -38,7 +38,15 @@ async function main() {
       console.log(`  · skipped ${article.id} (empty body)`);
       continue;
     }
-    const embeddings = await embed({ texts: chunks, inputType: "document" });
+    // Enrich each chunk's *embedded text* with title + summary + keywords so the
+    // vector reflects all the search signal we have. The stored `content` column
+    // remains the original chunk so citation snippets stay clean.
+    const keywords = (article.keywords ?? []).join(", ");
+    const enrichedTexts = chunks.map(
+      (chunk) =>
+        `Title: ${article.title}\nSummary: ${article.summary}\nKeywords: ${keywords}\n\n${chunk}`,
+    );
+    const embeddings = await embed({ texts: enrichedTexts, inputType: "document" });
     const rows = chunks.map((content, i) => ({
       article_id: article.id,
       step_n: null,

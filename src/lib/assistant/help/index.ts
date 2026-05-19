@@ -6,7 +6,10 @@ import type { HelpArticle, HelpFrontmatter } from "./types";
 const ARTICLES_DIR = path.join(process.cwd(), "src/lib/assistant/help/articles");
 
 function parseSteps(body: string): Array<{ n: number; instruction: string }> {
-  const lines = body.split("\n");
+  // Normalize CRLF → LF first. On Windows checkouts the file lands with \r\n
+  // and the `(.+)$` regex below would otherwise fail because `.` doesn't match
+  // `\r` and `$` only matches end-of-string or before `\n`.
+  const lines = body.replace(/\r\n/g, "\n").split("\n");
   const steps: Array<{ n: number; instruction: string }> = [];
   const re = /^\s*(\d+)\.\s+(.+)$/;
   for (const line of lines) {

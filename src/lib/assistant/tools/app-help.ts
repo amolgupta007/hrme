@@ -35,7 +35,7 @@ function articleAccessible(
 
 export function makeAppHelpTools(ctx: Ctx) {
   return {
-    "app_help.search": tool({
+    "app_help_search": tool({
       description:
         "Search JambaHR app-help articles for a how-to question. Returns ranked snippets the assistant can synthesise an answer from.",
       inputSchema: z.object({
@@ -83,7 +83,7 @@ export function makeAppHelpTools(ctx: Ctx) {
       },
     }),
 
-    "app_help.get_steps": tool({
+    "app_help_get_steps": tool({
       description: "Fetch the full step list for a help article by id.",
       inputSchema: z.object({ id: z.string() }),
       execute: async ({ id }) => {
@@ -98,7 +98,7 @@ export function makeAppHelpTools(ctx: Ctx) {
       },
     }),
 
-    "app_help.get_route": tool({
+    "app_help_get_route": tool({
       description: "Resolve a feature key to its in-app destination. Returns null for unknown keys.",
       inputSchema: z.object({ feature_key: z.string() }),
       execute: async ({ feature_key }) => {

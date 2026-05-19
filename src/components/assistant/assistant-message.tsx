@@ -26,12 +26,12 @@ export function AssistantMessage({ message }: { message: UIMessage }) {
     const toolName = getToolName(part);
     const out = part.output as unknown;
 
-    if (toolName === "app_help.search" && Array.isArray(out)) {
+    if (toolName === "app_help_search" && Array.isArray(out)) {
       for (const r of out as Array<{ id: string; title: string; summary: string }>) {
         citations.push({ id: r.id, title: r.title, summary: r.summary });
       }
     } else if (
-      toolName === "app_help.get_route" &&
+      toolName === "app_help_get_route" &&
       out !== null &&
       typeof out === "object" &&
       "path" in (out as object)

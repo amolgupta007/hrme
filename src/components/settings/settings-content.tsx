@@ -8,6 +8,7 @@ import {
   ClipboardList,
   Fingerprint,
   BarChart3,
+  Sparkles,
 } from "lucide-react";
 import { CollapsibleSection } from "@/components/settings/collapsible-section";
 import { LeavePoliciesSection } from "@/components/settings/leave-policies-section";
@@ -16,6 +17,7 @@ import { ProductsSection } from "@/components/settings/products-section";
 import { OnboardingStepsSection } from "@/components/settings/onboarding-steps-section";
 import { FingerprintSection } from "@/components/settings/fingerprint-section";
 import { PerformanceSection } from "@/components/settings/performance-section";
+import { AssistantSettingsSection } from "@/components/settings/assistant-settings-section";
 import type { LeavePolicy, Department } from "@/types";
 import type { OnboardingStepConfig } from "@/config/onboarding";
 import type { FingerprintConfig, EmployeeWithDeviceCode } from "@/actions/fingerprint";
@@ -33,6 +35,7 @@ type SettingsContentProps = {
   attendanceEnabled: boolean;
   attendancePayrollEnabled: boolean;
   grievancesEnabled: boolean;
+  assistantEnabled: boolean;
   onboardingSteps: OnboardingStepConfig[];
   fingerprintConfig: FingerprintConfig;
   fingerprintEmployees: EmployeeWithDeviceCode[];
@@ -52,6 +55,7 @@ export function SettingsContent({
   attendanceEnabled,
   attendancePayrollEnabled,
   grievancesEnabled,
+  assistantEnabled,
   onboardingSteps,
   fingerprintConfig,
   fingerprintEmployees,
@@ -174,6 +178,19 @@ export function SettingsContent({
           <PerformanceSection initialSettings={performanceSettings} />
         </CollapsibleSection>
       )}
+
+      <CollapsibleSection
+        title="AI Assistant"
+        icon={<Sparkles className="h-5 w-5 text-muted-foreground" />}
+        summary={assistantEnabled ? "Enabled" : "Disabled"}
+        isOpen={openSection === "assistant"}
+        onToggle={() => toggle("assistant")}
+      >
+        <AssistantSettingsSection
+          assistantEnabled={assistantEnabled}
+          isAdmin={isAdmin}
+        />
+      </CollapsibleSection>
     </div>
   );
 }

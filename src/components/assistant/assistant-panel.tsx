@@ -33,8 +33,9 @@ export function AssistantPanel({
         side="right"
         className="flex w-full flex-col p-0 sm:max-w-md"
       >
-        <SheetHeader className="border-b border-border px-4 py-3">
-          <div className="flex items-center justify-between gap-2">
+        {/* pr-12 reserves room for the Sheet's built-in close (X) button at absolute right-4. */}
+        <SheetHeader className="border-b border-border py-3 pl-4 pr-12">
+          <div className="flex items-center gap-2">
             <SheetTitle className="text-base">Ask JambaHR</SheetTitle>
             <AssistantPrivacyInfo />
           </div>

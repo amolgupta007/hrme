@@ -4,6 +4,7 @@ import { auth, clerkClient } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { getCurrentUser, isAdmin } from "@/lib/current-user";
+import { ingestDocument, deleteDocumentChunks } from "@/lib/assistant/ingest-document";
 import type { ActionResult } from "@/types";
 
 // ---- Context helper ----
@@ -272,25 +273,39 @@ export async function uploadDocument(formData: FormData): Promise<ActionResult<v
 
   if (uploadError) return { success: false, error: uploadError.message };
 
-  const { error: dbError } = await supabase.from("documents").insert({
-    org_id: ctx.orgId,
-    name,
-    category: category as any,
-    space,
-    ack_method: ackMethod,
-    file_url: storagePath,
-    file_size: file.size,
-    mime_type: file.type || "application/octet-stream",
-    uploaded_by: uploaderId,
-    is_company_wide: isCompanyWide,
-    employee_id: employeeId,
-    requires_acknowledgment: requiresAck,
-  });
+  const { data: newDoc, error: dbError } = await supabase
+    .from("documents")
+    .insert({
+      org_id: ctx.orgId,
+      name,
+      category: category as any,
+      space,
+      ack_method: ackMethod,
+      file_url: storagePath,
+      file_size: file.size,
+      mime_type: file.type || "application/octet-stream",
+      uploaded_by: uploaderId,
+      is_company_wide: isCompanyWide,
+      employee_id: employeeId,
+      requires_acknowledgment: requiresAck,
+    })
+    .select("id, is_company_wide")
+    .single();
 
   if (dbError) {
     // Clean up orphaned file
     await supabase.storage.from("documents").remove([storagePath]);
     return { success: false, error: dbError.message };
+  }
+
+  // Index company-wide docs for the AI assistant (non-blocking; never blocks the upload).
+  // ingestDocument internally also checks is_company_wide, but we guard here to avoid
+  // spawning background work for personal/vault uploads.
+  if (newDoc && (newDoc as { id: string; is_company_wide: boolean }).is_company_wide) {
+    const newDocId = (newDoc as { id: string; is_company_wide: boolean }).id;
+    void ingestDocument(newDocId).catch((err) =>
+      console.error("[documents] ingestDocument failed:", err)
+    );
   }
 
   revalidatePath("/dashboard/documents");
@@ -327,6 +342,11 @@ export async function deleteDocument(id: string): Promise<ActionResult<void>> {
     .eq("org_id", ctx.orgId);
 
   if (error) return { success: false, error: error.message };
+
+  // Belt-and-suspenders: remove any indexed chunks for this document.
+  // The FK cascade on doc_chunks will also handle this, but explicit deletion
+  // ensures the vector index stays clean even if the FK is ever altered.
+  await deleteDocumentChunks(id);
 
   revalidatePath("/dashboard/documents");
   return { success: true, data: undefined };

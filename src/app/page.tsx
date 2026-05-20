@@ -17,7 +17,7 @@ const features = [
   {
     icon: "💰",
     title: "Payroll",
-    description: "Enter CTC. Get Basic, HRA, PF, PT (10 states), and TDS under the new regime — automatically.",
+    description: "Enter CTC. Get Basic, HRA, PF, PT (10 states), and TDS under both old & new regimes — automatically.",
   },
   {
     icon: "⭐",
@@ -49,6 +49,21 @@ const features = [
     title: "AI-Powered Hiring",
     description: "Generate job descriptions with AI. Post jobs, track candidates, and send offer letters — all built in.",
   },
+  {
+    icon: "💬",
+    title: "Ask Jamba — AI Assistant",
+    description: "An AI helper your team chats with — how-to answers for any feature, plus answers from your own uploaded policies, with citations.",
+  },
+  {
+    icon: "🕒",
+    title: "Attendance",
+    description: "Web clock in/out, daily hours, and automatic clock-out at day end. Optional payroll integration for loss-of-pay.",
+  },
+  {
+    icon: "🙋",
+    title: "Grievances",
+    description: "An anonymous channel for employees to raise concerns. Tracking tokens, admin triage, fully compliance-friendly.",
+  },
 ];
 
 const painPoints = [
@@ -67,6 +82,10 @@ const painPoints = [
   {
     icon: "🤷",
     text: "No idea who acknowledged the new policy you sent last month.",
+  },
+  {
+    icon: "🔁",
+    text: "The same 10 questions to HR every week — \"how much leave do I have?\"",
   },
 ];
 
@@ -141,7 +160,7 @@ export default function HomePage() {
 
         <AnimateIn animation="fade-up" delay={160}>
           <p className="mx-auto mt-6 max-w-xl text-lg text-muted-foreground leading-relaxed">
-            JambaHR is one platform for leaves, payroll, hiring, reviews, training, and documents — built for Indian companies that don&apos;t have a dedicated HR team.
+            JambaHR is one platform for leaves, payroll, hiring, attendance, reviews, training, and documents — with an AI assistant your team can just ask. Built for Indian companies that don&apos;t have a dedicated HR team.
           </p>
         </AnimateIn>
 
@@ -170,7 +189,7 @@ export default function HomePage() {
               { value: "10+", label: "Modules" },
               { value: "₹0", label: "To start" },
               { value: "PF · PT · TDS", label: "Indian compliance built in" },
-              { value: "AI", label: "Powered hiring" },
+              { value: "AI", label: "Assistant & hiring" },
             ].map((stat) => (
               <div key={stat.label} className="text-center">
                 <p className="text-2xl font-bold tracking-tight text-foreground">{stat.value}</p>
@@ -267,15 +286,15 @@ export default function HomePage() {
               Your hiring pipeline.<br />Not your inbox.
             </h2>
             <p className="text-muted-foreground leading-relaxed mb-6">
-              Post jobs to a branded careers page. Track candidates through 7 stages. Schedule interviews with Google Calendar links. Send offer letters with one click. All without leaving JambaHR.
+              Post jobs to a branded careers page. Track candidates through 8 stages with drag-and-drop. Schedule interviews with Google Calendar links. Send offer letters with one click. All without leaving JambaHR.
             </p>
             <ul className="space-y-3 text-sm">
               {[
                 "Public careers page at jambahr.com/careers/your-company",
-                "7-stage Kanban pipeline with bulk moves",
+                "8-stage Kanban pipeline with drag-and-drop + bulk moves",
                 "Interview scheduling with calendar links",
                 "AI job description generator — powered by Claude",
-                "Offer letters with accept/decline tracking",
+                "Letter of Intent + offer letters with accept/decline tracking",
               ].map((item) => (
                 <li key={item} className="flex items-start gap-2 text-muted-foreground">
                   <span className="mt-0.5 text-primary font-bold">✓</span>
@@ -292,11 +311,11 @@ export default function HomePage() {
           </AnimateIn>
           <AnimateIn animation="scale-in" delay={100}>
             <div className="rounded-2xl border border-border bg-muted/50 p-8 space-y-3">
-              {["Applied", "Screening", "Interview 1", "Interview 2", "Final Round", "Offer", "Hired"].map((stage, i) => (
+              {["Applied", "Screening", "Shortlisted", "Interview 1", "Interview 2", "Final Round", "Offer", "Hired"].map((stage, i) => (
                 <div key={stage} className="flex items-center justify-between rounded-lg border border-border bg-white dark:bg-[#111118] px-4 py-2.5">
                   <span className="text-sm font-medium">{stage}</span>
                   <span className="text-xs text-muted-foreground bg-muted rounded-full px-2 py-0.5">
-                    {[8, 5, 4, 3, 2, 2, 1][i]} candidates
+                    {[8, 6, 4, 3, 2, 2, 1, 1][i]} candidates
                   </span>
                 </div>
               ))}
@@ -337,13 +356,13 @@ export default function HomePage() {
                 Payroll that knows Indian tax law.
               </h2>
               <p className="text-muted-foreground leading-relaxed mb-6">
-                Enter a CTC. JambaHR computes everything — Basic, HRA, PF (with wage ceiling), state-wise Professional Tax across 10 states, and TDS under the new tax regime with Rebate u/s 87A. No CA needed for routine payroll.
+                Enter a CTC. JambaHR computes everything — Basic, HRA, PF (with wage ceiling), state-wise Professional Tax across 10 states, and TDS under both the old and new tax regimes with Rebate u/s 87A. No CA needed for routine payroll.
               </p>
               <ul className="space-y-3 text-sm">
                 {[
                   "PF with ₹15,000 wage ceiling, employer + employee split",
                   "PT slabs for Maharashtra, Karnataka, WB, and 7 more states",
-                  "TDS under new regime — FY 2025–26 slabs + 87A rebate",
+                  "TDS under old & new regime — FY 2025–26 slabs + 87A rebate",
                   "LOP auto-deducted from unpaid approved leaves",
                   "Printable payslips for every employee, every month",
                 ].map((item) => (
@@ -355,6 +374,79 @@ export default function HomePage() {
               </ul>
             </AnimateIn>
           </div>
+        </div>
+      </section>
+
+      {/* ── Ask Jamba (AI Assistant) Spotlight ── */}
+      <section className="mx-auto max-w-6xl px-6 py-24">
+        <div className="grid md:grid-cols-2 gap-12 items-center">
+          <AnimateIn animation="fade-up">
+            <div className="mb-3 flex items-center gap-2">
+              <Image src="/Jamba.png" alt="Jamba" width={28} height={28} className="rounded-md" />
+              <p className="text-sm font-semibold uppercase tracking-widest text-primary">
+                Ask Jamba — AI Assistant
+              </p>
+            </div>
+            <h2 className="text-3xl font-bold tracking-tight mb-4">
+              Your team&apos;s HR questions,<br />answered in seconds.
+            </h2>
+            <p className="text-muted-foreground leading-relaxed mb-6">
+              Meet Jamba — the friendly AI built into your dashboard. Your team just asks, in plain
+              English. Jamba walks them through any feature and answers straight from your own
+              uploaded policies, with the source cited. Fewer pings to HR, faster answers for everyone.
+            </p>
+            <ul className="space-y-3 text-sm">
+              {[
+                "How-to answers for any feature — “how do I apply for leave?”",
+                "Answers from your own policies & handbooks, with citations",
+                "“Take me there” deep-links straight to the right page",
+                "Role-aware — employees, managers, and admins see what's relevant",
+                "Read-only & private — your data never trains anyone's model",
+              ].map((item) => (
+                <li key={item} className="flex items-start gap-2 text-muted-foreground">
+                  <span className="mt-0.5 text-primary font-bold">✓</span>
+                  {item}
+                </li>
+              ))}
+            </ul>
+            <Link
+              href="/sign-up"
+              className="mt-8 inline-flex h-10 items-center rounded-lg bg-primary px-6 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-all"
+            >
+              Try Ask Jamba →
+            </Link>
+          </AnimateIn>
+          <AnimateIn animation="scale-in" delay={100}>
+            <div className="rounded-2xl border border-border bg-muted/50 p-6 space-y-3">
+              <div className="flex items-center gap-2 border-b border-border pb-3">
+                <Image src="/Jamba.png" alt="Jamba" width={24} height={24} className="rounded-md" />
+                <span className="text-sm font-semibold">Ask Jamba</span>
+              </div>
+              <div className="flex justify-end">
+                <div className="max-w-[80%] rounded-2xl bg-primary px-4 py-2 text-sm text-primary-foreground">
+                  What&apos;s our maternity leave policy?
+                </div>
+              </div>
+              <div className="flex items-start gap-2">
+                <Image
+                  src="/Jamba.png"
+                  alt="Jamba"
+                  width={28}
+                  height={28}
+                  className="mt-0.5 shrink-0 rounded-md"
+                />
+                <div className="max-w-[85%] space-y-2 rounded-2xl border border-border bg-white px-4 py-2 text-sm dark:bg-[#111118]">
+                  <p>
+                    Eligible employees get 26 weeks of paid maternity leave. Apply from the Leave
+                    page and pick &quot;Maternity&quot; as the type.
+                  </p>
+                  <div className="flex items-center gap-1.5 rounded-lg border border-border bg-muted/40 px-2 py-1 text-xs text-muted-foreground">
+                    <span>📄</span> Employee Handbook 2026 · §4.2
+                  </div>
+                </div>
+              </div>
+            </div>
+          </AnimateIn>
         </div>
       </section>
 

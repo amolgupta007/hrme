@@ -4,7 +4,7 @@ import { isToolUIPart, getToolName, type UIMessage } from "ai";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { AssistantToolChip } from "./assistant-tool-chip";
-import { AssistantCitations, type HelpCitation } from "./assistant-citations";
+import { AssistantCitations, type Citation } from "./assistant-citations";
 import type { RouteEntry } from "@/lib/assistant/route-registry";
 
 export function AssistantMessage({ message }: { message: UIMessage }) {
@@ -19,9 +19,13 @@ export function AssistantMessage({ message }: { message: UIMessage }) {
   // Collect tool parts (both static ToolUIPart and DynamicToolUIPart).
   const toolParts = message.parts.filter(isToolUIPart);
 
-  // Build citations from app_help.search outputs and attach routes from app_help.get_route.
-  const citations: HelpCitation[] = [];
+  // Build citations from tool outputs.
+  const citations: Citation[] = [];
   const routeByFeatureKey = new Map<string, RouteEntry>();
+
+  // Doc-specific tracking: dedupe by document_id, ack info from docs_get_chunk.
+  const docCitationIndexById = new Map<string, number>();
+  const ackNeededByDocId = new Map<string, boolean>();
 
   for (const part of toolParts) {
     if (part.state !== "output-available") continue;
@@ -30,7 +34,7 @@ export function AssistantMessage({ message }: { message: UIMessage }) {
 
     if (toolName === "app_help_search" && Array.isArray(out)) {
       for (const r of out as Array<{ id: string; title: string; summary: string }>) {
-        citations.push({ id: r.id, title: r.title, summary: r.summary });
+        citations.push({ kind: "help", id: r.id, title: r.title, summary: r.summary });
       }
     } else if (
       toolName === "app_help_get_route" &&
@@ -38,26 +42,64 @@ export function AssistantMessage({ message }: { message: UIMessage }) {
       typeof out === "object" &&
       "path" in (out as object)
     ) {
-      // The feature_key that was passed as input - used to match citations.
       const featureKey = (part.input as { feature_key?: string } | undefined)?.feature_key;
       if (featureKey) {
         routeByFeatureKey.set(featureKey, out as RouteEntry);
       }
+    } else if (toolName === "docs_search" && Array.isArray(out)) {
+      for (const r of out as Array<{
+        chunk_id: string;
+        document_id: string;
+        title: string;
+        category: string;
+        snippet: string;
+        score: number;
+      }>) {
+        if (!docCitationIndexById.has(r.document_id)) {
+          const idx = citations.length;
+          docCitationIndexById.set(r.document_id, idx);
+          citations.push({
+            kind: "doc",
+            document_id: r.document_id,
+            title: r.title,
+            category: r.category,
+            snippet: r.snippet,
+          });
+        }
+      }
+    } else if (toolName === "docs_get_chunk" && out !== null && typeof out === "object") {
+      const chunk = out as {
+        document_id: string;
+        requires_acknowledgment: boolean;
+        user_has_acknowledged: boolean;
+      };
+      ackNeededByDocId.set(
+        chunk.document_id,
+        chunk.requires_acknowledgment && !chunk.user_has_acknowledged,
+      );
     }
   }
 
-  // Attach routes to citations whose id matches a resolved feature_key.
+  // Attach routes to help citations whose id matches a resolved feature_key.
   for (const c of citations) {
+    if (c.kind !== "help") continue;
     const route = routeByFeatureKey.get(c.id);
     if (route) c.route = route;
   }
   // Fallback: if exactly one route resolved and wasn't matched by id, attach it to all
-  // unrouted citations (covers the common case where route_key !== article id).
+  // unrouted help citations (covers the common case where route_key !== article id).
   if (routeByFeatureKey.size === 1) {
     const [singleRoute] = routeByFeatureKey.values();
     for (const c of citations) {
-      if (!c.route) c.route = singleRoute;
+      if (c.kind === "help" && !c.route) c.route = singleRoute;
     }
+  }
+
+  // Attach ack flags to doc citations.
+  for (const c of citations) {
+    if (c.kind !== "doc") continue;
+    const needsAck = ackNeededByDocId.get(c.document_id);
+    if (needsAck === true) c.needsAck = true;
   }
 
   return (

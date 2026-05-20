@@ -1,16 +1,22 @@
 "use client";
-import { Search, FileText, MapPin } from "lucide-react";
+import { Search, FileText, MapPin, FileSearch, Files } from "lucide-react";
 
 const TOOL_LABELS: Record<string, string> = {
   "app_help_search": "Searching help articles",
   "app_help_get_steps": "Fetching step-by-step",
   "app_help_get_route": "Resolving destination",
+  "docs_search": "Searching your documents",
+  "docs_get_chunk": "Reading document",
+  "docs_list_recent": "Listing recent documents",
 };
 
 const TOOL_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   "app_help_search": Search,
   "app_help_get_steps": FileText,
   "app_help_get_route": MapPin,
+  "docs_search": FileSearch,
+  "docs_get_chunk": FileText,
+  "docs_list_recent": Files,
 };
 
 export function AssistantToolChip({

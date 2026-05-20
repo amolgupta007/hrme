@@ -7,6 +7,7 @@ import {
 } from "@/components/ui/sheet";
 import { AssistantChat } from "./assistant-chat";
 import { AssistantPrivacyInfo } from "./assistant-privacy-info";
+import Image from "next/image";
 import { useMemo } from "react";
 import type { UserRole } from "@/types";
 
@@ -36,7 +37,14 @@ export function AssistantPanel({
         {/* pr-12 reserves room for the Sheet's built-in close (X) button at absolute right-4. */}
         <SheetHeader className="border-b border-border py-3 pl-4 pr-12">
           <div className="flex items-center gap-2">
-            <SheetTitle className="text-base">Ask JambaHR</SheetTitle>
+            <Image
+              src="/Jamba.png"
+              alt="Jamba"
+              width={24}
+              height={24}
+              className="rounded-md"
+            />
+            <SheetTitle className="text-base">Ask Jamba</SheetTitle>
             <AssistantPrivacyInfo />
           </div>
         </SheetHeader>

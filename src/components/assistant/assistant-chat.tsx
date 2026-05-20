@@ -9,6 +9,7 @@ import { AssistantMessage } from "./assistant-message";
 import { SuggestedPrompts } from "./suggested-prompts";
 import { trackAssistant } from "@/lib/assistant/posthog-events";
 import { Send } from "lucide-react";
+import Image from "next/image";
 import type { UserRole } from "@/types";
 
 export function AssistantChat({
@@ -73,7 +74,7 @@ export function AssistantChat({
           value={input}
           onChange={(e) => setInput(e.target.value)}
           rows={1}
-          placeholder="Ask JambaHR…"
+          placeholder="Ask Jamba…"
           className="min-h-[40px] resize-none"
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
@@ -100,11 +101,20 @@ function EmptyState({
 }) {
   return (
     <div className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
-      <div className="space-y-1">
-        <p className="text-sm font-medium">Hi, I&apos;m your JambaHR assistant.</p>
-        <p className="text-xs text-muted-foreground">
-          Ask me how to do anything in the app.
-        </p>
+      <div className="flex flex-col items-center gap-2">
+        <Image
+          src="/Jamba.png"
+          alt="Jamba"
+          width={48}
+          height={48}
+          className="rounded-xl"
+        />
+        <div className="space-y-1">
+          <p className="text-sm font-medium">Hi, I&apos;m Jamba.</p>
+          <p className="text-xs text-muted-foreground">
+            Ask me how to do anything in the app.
+          </p>
+        </div>
       </div>
       <SuggestedPrompts role={role} onPick={onPick} />
     </div>

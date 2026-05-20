@@ -1,7 +1,6 @@
 "use client";
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { MessageSquareText } from "lucide-react";
+import Image from "next/image";
 import { AssistantPanel } from "./assistant-panel";
 import { trackAssistant } from "@/lib/assistant/posthog-events";
 import type { UserRole } from "@/types";
@@ -19,7 +18,8 @@ export function AssistantLauncher({
 
   return (
     <>
-      <Button
+      <button
+        type="button"
         onClick={() => {
           setOpen(true);
           trackAssistant({
@@ -27,11 +27,17 @@ export function AssistantLauncher({
             props: { source: "launcher" },
           });
         }}
-        className="fixed bottom-6 right-6 z-40 h-14 w-14 rounded-full shadow-lg"
-        aria-label="Open JambaHR assistant"
+        className="fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full border border-border bg-background shadow-lg transition-transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+        aria-label="Ask Jamba"
       >
-        <MessageSquareText className="h-6 w-6" />
-      </Button>
+        <Image
+          src="/Jamba.png"
+          alt="Ask Jamba"
+          width={36}
+          height={36}
+          className="rounded-md"
+        />
+      </button>
       <AssistantPanel open={open} onOpenChange={setOpen} role={role} />
     </>
   );

@@ -12,6 +12,7 @@ export type UserContext = {
   customFeatures: string[] | null;
   jambaHireEnabled: boolean;
   assistantEnabled: boolean;
+  assistantTenantDocsEnabled: boolean;
   attendanceEnabled: boolean;
   attendancePayrollEnabled: boolean;
   grievancesEnabled: boolean;
@@ -68,6 +69,7 @@ export async function getCurrentUser(): Promise<UserContext | null> {
     : null;
   const jambaHireEnabled = !!settings?.jambahire_enabled;
   const assistantEnabled = !!settings?.assistant_enabled;
+  const assistantTenantDocsEnabled = !!settings?.assistant_tenant_docs_enabled;
   const attendanceEnabled = !!settings?.attendance_enabled;
   const attendancePayrollEnabled = !!settings?.attendance_payroll_enabled;
   const grievancesEnabled = !!settings?.grievances_enabled;
@@ -122,7 +124,7 @@ export async function getCurrentUser(): Promise<UserContext | null> {
     : "admin";
   const employeeId = emp ? (emp as { id: string; role: string }).id : null;
 
-  return { orgId, clerkUserId: userId, role, employeeId, plan, customFeatures, jambaHireEnabled, assistantEnabled, attendanceEnabled, attendancePayrollEnabled, grievancesEnabled };
+  return { orgId, clerkUserId: userId, role, employeeId, plan, customFeatures, jambaHireEnabled, assistantEnabled, assistantTenantDocsEnabled, attendanceEnabled, attendancePayrollEnabled, grievancesEnabled };
 }
 
 export function isAdmin(role: UserRole): boolean {

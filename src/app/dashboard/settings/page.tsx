@@ -40,6 +40,7 @@ export default async function SettingsPage() {
   const attendancePayrollEnabled = userCtx?.attendancePayrollEnabled ?? false;
   const grievancesEnabled = userCtx?.grievancesEnabled ?? false;
   const assistantEnabled = userCtx?.assistantEnabled ?? false;
+  const assistantTenantDocsEnabled = userCtx?.assistantTenantDocsEnabled ?? false;
   const fingerprintConfig = fingerprintConfigResult.success
     ? fingerprintConfigResult.data
     : { enabled: false, device_token: null };
@@ -80,6 +81,7 @@ export default async function SettingsPage() {
         attendancePayrollEnabled={attendancePayrollEnabled}
         grievancesEnabled={grievancesEnabled}
         assistantEnabled={assistantEnabled}
+        assistantTenantDocsEnabled={assistantTenantDocsEnabled}
         onboardingSteps={onboardingSteps}
         fingerprintConfig={fingerprintConfig}
         fingerprintEmployees={fingerprintEmployees}

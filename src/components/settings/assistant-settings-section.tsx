@@ -4,7 +4,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { Sparkles, FileText, Database, Shield, ExternalLink } from "lucide-react";
-import { toggleAssistant } from "@/actions/settings";
+import { toggleAssistant, toggleAssistantTenantDocs } from "@/actions/settings";
 
 function Toggle({
   enabled,
@@ -72,13 +72,17 @@ function ScopeRow({
 
 export function AssistantSettingsSection({
   assistantEnabled,
+  tenantDocsEnabled,
   isAdmin,
 }: {
   assistantEnabled: boolean;
+  tenantDocsEnabled: boolean;
   isAdmin: boolean;
 }) {
   const [enabled, setEnabled] = useState(assistantEnabled);
+  const [docsEnabled, setDocsEnabled] = useState(tenantDocsEnabled);
   const [loading, setLoading] = useState(false);
+  const [docsLoading, setDocsLoading] = useState(false);
   const router = useRouter();
 
   async function handleToggle() {
@@ -96,6 +100,28 @@ export function AssistantSettingsSection({
       }
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleDocsToggle() {
+    if (!isAdmin) return;
+    setDocsLoading(true);
+    const next = !docsEnabled;
+    try {
+      const result = await toggleAssistantTenantDocs(next);
+      if (result.success) {
+        setDocsEnabled(next);
+        toast.success(
+          next
+            ? "Document Q&A enabled — company-wide docs are now searchable"
+            : "Document Q&A disabled"
+        );
+        router.refresh();
+      } else {
+        toast.error(result.error);
+      }
+    } finally {
+      setDocsLoading(false);
     }
   }
 
@@ -136,12 +162,25 @@ export function AssistantSettingsSection({
               description="How-to guides for using the app. Contains no tenant data — same content for every customer."
               status="always-on"
             />
-            <ScopeRow
-              icon={<FileText className="h-4 w-4" />}
-              title="Your uploaded documents"
-              description="Policies, handbooks, circulars you've uploaded to JambaHR. You'll choose whether to enable this."
-              status="coming-soon"
-            />
+            {/* Tenant documents — real toggle (Phase 2) */}
+            <div className="flex items-start gap-3 rounded-md border border-border p-3">
+              <div className="mt-0.5 text-muted-foreground">
+                <FileText className="h-4 w-4" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-medium">Your uploaded documents</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Company-wide policies, handbooks, and circulars you&apos;ve uploaded. When on,
+                  the assistant can answer questions from their contents and cite the source.
+                  Personal documents (contracts, ID proofs, payslips) are never searched.
+                </p>
+              </div>
+              <Toggle
+                enabled={docsEnabled}
+                onChange={handleDocsToggle}
+                disabled={docsLoading || !isAdmin}
+              />
+            </div>
             <ScopeRow
               icon={<Database className="h-4 w-4" />}
               title="Your HR data"

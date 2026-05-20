@@ -36,6 +36,7 @@ type SettingsContentProps = {
   attendancePayrollEnabled: boolean;
   grievancesEnabled: boolean;
   assistantEnabled: boolean;
+  assistantTenantDocsEnabled: boolean;
   onboardingSteps: OnboardingStepConfig[];
   fingerprintConfig: FingerprintConfig;
   fingerprintEmployees: EmployeeWithDeviceCode[];
@@ -56,6 +57,7 @@ export function SettingsContent({
   attendancePayrollEnabled,
   grievancesEnabled,
   assistantEnabled,
+  assistantTenantDocsEnabled,
   onboardingSteps,
   fingerprintConfig,
   fingerprintEmployees,
@@ -188,6 +190,7 @@ export function SettingsContent({
       >
         <AssistantSettingsSection
           assistantEnabled={assistantEnabled}
+          tenantDocsEnabled={assistantTenantDocsEnabled}
           isAdmin={isAdmin}
         />
       </CollapsibleSection>

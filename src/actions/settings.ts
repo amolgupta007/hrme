@@ -412,6 +412,33 @@ export async function toggleAssistant(enabled: boolean): Promise<ActionResult<vo
   return { success: true, data: undefined };
 }
 
+export async function toggleAssistantTenantDocs(enabled: boolean): Promise<ActionResult<void>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can manage the AI assistant" };
+
+  const supabase = createAdminSupabase();
+  const { data: org } = await supabase
+    .from("organizations")
+    .select("settings")
+    .eq("id", user.orgId)
+    .single();
+
+  const currentSettings = ((org as any)?.settings ?? {}) as Record<string, any>;
+  const newSettings = { ...currentSettings, assistant_tenant_docs_enabled: enabled };
+
+  const { error } = await supabase
+    .from("organizations")
+    .update({ settings: newSettings })
+    .eq("id", user.orgId);
+
+  if (error) return { success: false, error: error.message };
+
+  revalidatePath("/dashboard/settings");
+  revalidatePath("/dashboard");
+  return { success: true, data: undefined };
+}
+
 export async function updatePerformanceSettings(
   data: PerformanceSettings
 ): Promise<ActionResult<void>> {

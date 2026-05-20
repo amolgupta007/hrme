@@ -87,7 +87,7 @@ export function PerformanceSection({ initialSettings }: PerformanceSectionProps)
   }
 
   return (
-    <div className="space-y-6">
+    <div className="p-6 space-y-6">
       {/* 5-Point Rating Labels */}
       <div className="space-y-3">
         <div>

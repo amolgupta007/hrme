@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { getCurrentUser, isAdmin } from "@/lib/current-user";
 import { ingestDocument, deleteDocumentChunks } from "@/lib/assistant/ingest-document";
+import { waitUntil } from "@vercel/functions";
 import type { ActionResult } from "@/types";
 
 // ---- Context helper ----
@@ -303,8 +304,12 @@ export async function uploadDocument(formData: FormData): Promise<ActionResult<v
   // spawning background work for personal/vault uploads.
   if (newDoc && (newDoc as { id: string; is_company_wide: boolean }).is_company_wide) {
     const newDocId = (newDoc as { id: string; is_company_wide: boolean }).id;
-    void ingestDocument(newDocId).catch((err) =>
-      console.error("[documents] ingestDocument failed:", err)
+    // waitUntil keeps the function alive until ingest finishes without blocking the
+    // response — the upload returns immediately, the embed work completes in the background.
+    waitUntil(
+      ingestDocument(newDocId).catch((err) =>
+        console.error("[documents] ingestDocument failed:", err)
+      )
     );
   }
 

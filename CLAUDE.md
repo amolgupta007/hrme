@@ -567,18 +567,23 @@ npm run db:push       # Push migrations (needs CLI)
 63. **AI SDK v6 `tool()` uses `inputSchema`, not `parameters`** and `convertToModelMessages` is async — `messages: await convertToModelMessages(body.messages)`. The `onFinish` callback usage fields are `inputTokens` / `outputTokens` (NOT v3/v4's `promptTokens`/`completionTokens`). Tool parts in `UIMessage.parts` arrive as `DynamicToolUIPart` when `useChat` doesn't pre-register tool types — use the SDK helpers `isToolUIPart(p)` + `getToolName(p)` instead of hand-rolled discriminators. State machine: `input-streaming → input-available → output-available | output-error | output-denied`.
 64. **Help articles align with ROUTE_REGISTRY by id↔route_key**: every `.md` in `src/lib/assistant/help/articles/` has frontmatter `id` matching its filename AND `route_key` matching a key in `ROUTE_REGISTRY`. Loader throws on missing required fields. Numbered-step parser only catches `^\s*\d+\.\s+` — bullets, en-dashes, and nested lists are silently ignored. Run `npm run embed:help` after authoring or editing articles — it wipes and rebuilds `app_help_chunks` via Voyage. Re-run is monolithic (not incremental) — fine for ~25 articles; incremental indexing is a Phase 1.5 nice-to-have.
 65. **`next build` cannot use `--rulesdir`** for the custom `no-orphan-dashboard-route` ESLint rule. `next.config.js` sets `eslint: { ignoreDuringBuilds: true }` to decouple lint from build. Lint enforcement happens via `npm run lint` (which uses `next lint --rulesdir eslint-rules`). CI must run `npm run lint` separately if you want lint to gate deploys.
+66. **Anthropic rejects dots in tool names** — pattern `^[a-zA-Z0-9_-]{1,128}$`. ALL assistant tools use underscores: `app_help_search`, `docs_search`, etc. Never name a tool `foo.bar` — the Gateway call 500s with a cryptic `tools.0.custom.name` schema error.
+67. **Document Q&A indexes company-wide docs ONLY** (v1). `ingestDocument` early-returns `unsupported` for any doc with `is_company_wide=false`. Personal docs (contracts, ID proofs, tax, payslips) are NEVER embedded. `docs_*` tools re-filter by `is_company_wide=true` AND `org_id` at query time — two layers.
+68. **Doc ingestion is non-blocking via `waitUntil`** (`@vercel/functions`). `uploadDocument` fires `ingestDocument(id)` through `waitUntil` so the upload returns instantly while embedding runs in the background (survives function freeze). The daily `/api/cron/assistant-doc-reindex` cron is the safety net for failures. Scanned/image PDFs degrade to `index_status='unsupported'` (no OCR in v1) — never crash the upload.
+69. **`unpdf` + `mammoth` must be in `serverComponentsExternalPackages`** (next.config.js) — pdf.js inside unpdf breaks if webpack tries to bundle it. Both are runtime `dependencies` (not devDeps), since extraction runs in the upload→ingest server path.
+70. **After editing help articles OR re-indexing docs, run the right script**: `npm run embed:help` rebuilds `app_help_chunks`; `npm run backfill:docs` (re)indexes company-wide documents into `doc_chunks`. Both need `VOYAGE_API_KEY` in `.env.local`. Doc re-index is idempotent (wipes a doc's chunks before re-inserting).
 
 ---
 
 ## AI Assistant (`/dashboard/*` floating button) — Phase 1 shipped 2026-05-18
 
-Read-only, plan-tier-gated chat assistant. Floating button on dashboard, side-panel chat, role-aware suggested prompts. Tool-augmented: `app_help.search` / `get_steps` / `get_route` deliver step-by-step how-to answers with "Take me there →" deep-links. Backed by 25 markdown help articles indexed into pgvector via Voyage `voyage-3-large` embeddings. Full plan in `docs/planning/ai-hr-assistant-plan.md`; phase plans under `docs/superpowers/plans/2026-05-18-ai-hr-assistant-phase-*.md`.
+Read-only, plan-tier-gated chat assistant. Floating button on dashboard, side-panel chat, role-aware suggested prompts. Tool-augmented: `app_help_search` / `app_help_get_steps` / `app_help_get_route` deliver step-by-step how-to answers with "Take me there →" deep-links; `docs_search` / `docs_get_chunk` / `docs_list_recent` answer from the org's company-wide documents (Phase 2). Backed by 25 markdown help articles + tenant doc chunks indexed into pgvector via Voyage `voyage-3-large` embeddings. Full plan in `docs/planning/ai-hr-assistant-plan.md`; phase plans under `docs/superpowers/plans/`.
 
 **Phase progression:**
 - **Phase 0** (shipped 2026-05-18) — foundation: stub route, UI shell, plan-tier helpers, migration 022 (4 conversation tables).
-- **Phase 1** (shipped 2026-05-18) — how-to assistant: pgvector + `app_help_chunks`, Voyage embeddings, app_help tools, 25 articles, persistence + rate limit (30/hr), org-level `assistant_enabled` flag.
-- **Phase 2** (planned) — tenant document Q&A via `docs.*` tools (reuses pgvector + Voyage).
-- **Phase 3** (planned) — structured data tools (`data.employees.find`, `data.leaves.balance`, etc., all role-scoped).
+- **Phase 1** (shipped 2026-05-18) — how-to assistant: pgvector + `app_help_chunks`, Voyage embeddings, `app_help_*` tools, 25 articles, persistence + rate limit (30/hr), org-level `assistant_enabled` flag.
+- **Phase 2** (shipped 2026-05-20) — tenant document Q&A: `doc_chunks` table + `match_doc_chunks` RPC, text extraction (unpdf + mammoth), ingestion on upload via `waitUntil` + backfill script + reconcile cron, `docs_search`/`docs_get_chunk`/`docs_list_recent` tools (company-wide-only, org-scoped, ack-aware), prompt-injection `<source>` directive, doc citations + acknowledgment banner, per-org `assistant_tenant_docs_enabled` toggle.
+- **Phase 3** (planned) — structured data tools (`data_employees_find`, `data_leaves_balance`, etc., all role-scoped). Per-org `assistant_tenant_data_enabled` toggle (already stubbed "coming soon" in settings).
 - **Phase 4** (planned) — conversation history UI + feedback + founder analytics + monthly budget caps.
 - **Phase 5** (planned) — proactive insights only. **No write tools, ever** (OQ-9).
 
@@ -594,7 +599,11 @@ Read-only, plan-tier-gated chat assistant. Floating button on dashboard, side-pa
 - Per-org `assistant_enabled` flag (`organizations.settings.assistant_enabled`) — admin opt-in. Combined with `NEXT_PUBLIC_ASSISTANT_ENABLED` client flag.
 - shadcn CLI for new UI primitives (OQ-14).
 
-**Migrations**: 022 (Phase 0 — conversations/messages/tool_calls/feedback), 023 (Phase 1 — pgvector + `app_help_chunks`), 024 (Phase 1 — `match_help_chunks` RPC for cosine similarity).
+**Migrations**: 022 (Phase 0 — conversations/messages/tool_calls/feedback), 023 (Phase 1 — pgvector + `app_help_chunks`), 024 (Phase 1 — `match_help_chunks` RPC), 025 (Phase 2 — `doc_chunks` + `documents.index_status/indexed_at/index_error`), 026 (Phase 2 — `match_doc_chunks` org-scoped RPC).
+
+**Per-org scope toggles** (`organizations.settings`): `assistant_enabled` (master, Phase 1), `assistant_tenant_docs_enabled` (Phase 2 — gates `docs_*` tools), `assistant_tenant_data_enabled` (Phase 3 — not yet wired). All default false; admin opts in per scope from Settings → AI Assistant.
+
+**Doc ingestion scripts**: `npm run backfill:docs` (index existing company-wide docs), reconcile cron `/api/cron/assistant-doc-reindex` (daily 6am UTC, retries null/failed/pending). Upload-time ingest is the primary path (`waitUntil`).
 
 **Env vars required**: `AI_GATEWAY_API_KEY` (with Anthropic provider configured in Vercel AI Gateway, BYOK using existing `ANTHROPIC_API_KEY`), `VOYAGE_API_KEY` (server-only), `NEXT_PUBLIC_ASSISTANT_ENABLED=true` (client-side master switch).
 

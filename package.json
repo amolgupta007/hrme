@@ -12,6 +12,7 @@
     "db:reset": "supabase db reset",
     "db:seed": "tsx scripts/seed.ts",
     "embed:help": "tsx --env-file=.env.local scripts/embed-help-articles.ts",
+    "backfill:docs": "tsx --env-file=.env.local scripts/backfill-doc-chunks.ts",
     "stripe:listen": "stripe listen --forward-to localhost:3000/api/webhooks/stripe",
     "convert-legal": "node scripts/convert-legal-docs.js",
     "test": "vitest run",

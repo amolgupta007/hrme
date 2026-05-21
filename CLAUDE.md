@@ -572,6 +572,10 @@ npm run db:push       # Push migrations (needs CLI)
 68. **Doc ingestion is non-blocking via `waitUntil`** (`@vercel/functions`). `uploadDocument` fires `ingestDocument(id)` through `waitUntil` so the upload returns instantly while embedding runs in the background (survives function freeze). The daily `/api/cron/assistant-doc-reindex` cron is the safety net for failures. Scanned/image PDFs degrade to `index_status='unsupported'` (no OCR in v1) — never crash the upload.
 69. **`unpdf` + `mammoth` must be in `serverComponentsExternalPackages`** (next.config.js) — pdf.js inside unpdf breaks if webpack tries to bundle it. Both are runtime `dependencies` (not devDeps), since extraction runs in the upload→ingest server path.
 70. **After editing help articles OR re-indexing docs, run the right script**: `npm run embed:help` rebuilds `app_help_chunks`; `npm run backfill:docs` (re)indexes company-wide documents into `doc_chunks`. Both need `VOYAGE_API_KEY` in `.env.local`. Doc re-index is idempotent (wipes a doc's chunks before re-inserting).
+71. **Assistant budget is an IST-month rollup, enforced as HTTP 402** (distinct from 429 rate-limit). `checkBudget()` gates BEFORE `streamText`; `recordUsage()` accrues `assistant_budget.cost_inr_paise` in `onFinish` (best-effort, never blocks the stream). Caps: ₹500 Growth / ₹2000 Business (`PLAN_BUDGET_PAISE` in `pricing.ts`), per-org override via `assistant_budget.hard_cap_inr_paise`. cap=0 (starter/unset) never blocks. Token→INR via `tokensToInrPaise` (USD rate card × 86 × 100). Soft alert at 80%, hard pause at 100% — each email fires exactly once (guarded by `soft_alert_sent_at`/`hard_paused_at`).
+72. **Feedback is keyed by ORDINAL, not message id** — the streamed `UIMessage.id` (client) ≠ persisted `assistant_messages.id` (server). `submitFeedback({conversationId, assistantIndex, rating})` resolves the Nth assistant message in the conversation (ordered by created_at) to the real row id, then upserts `assistant_feedback` (unique on message_id+user_employee_id, so re-rating updates). `assistant-chat.tsx` computes `assistantIndex` in the message map.
+73. **Conversation history loads via re-mount** — `assistant-panel.tsx` holds `conversationId` in state; selecting a past conversation sets it + `initialMessages` (text-only reconstruction) and `<AssistantChat key={conversationId}>` forces a clean re-mount. Tool chips/citations do NOT re-render for historical messages (text only) — acceptable for v1 viewing. History/get/delete are per-user, ownership-checked by `employeeId`.
+74. **PII-redaction cron `/api/cron/assistant-redact`** (daily 7:00 UTC): redacts `assistant_messages.content` older than 14d (sets `pii_redacted=true`), deletes `assistant_conversations` (messages cascade) not updated in 90d. `redactPII()` is idempotent (its tokens `<EMAIL>`/`<PHONE>`/`<AMOUNT>`/`<NUMBER>` don't re-match). Batched at 500/run. Bearer `CRON_SECRET`.
 
 ---
 
@@ -583,8 +587,8 @@ Read-only, plan-tier-gated chat assistant. Floating button on dashboard, side-pa
 - **Phase 0** (shipped 2026-05-18) — foundation: stub route, UI shell, plan-tier helpers, migration 022 (4 conversation tables).
 - **Phase 1** (shipped 2026-05-18) — how-to assistant: pgvector + `app_help_chunks`, Voyage embeddings, `app_help_*` tools, 25 articles, persistence + rate limit (30/hr), org-level `assistant_enabled` flag.
 - **Phase 2** (shipped 2026-05-20) — tenant document Q&A: `doc_chunks` table + `match_doc_chunks` RPC, text extraction (unpdf + mammoth), ingestion on upload via `waitUntil` + backfill script + reconcile cron, `docs_search`/`docs_get_chunk`/`docs_list_recent` tools (company-wide-only, org-scoped, ack-aware), prompt-injection `<source>` directive, doc citations + acknowledgment banner, per-org `assistant_tenant_docs_enabled` toggle.
-- **Phase 3** (planned) — structured data tools (`data_employees_find`, `data_leaves_balance`, etc., all role-scoped). Per-org `assistant_tenant_data_enabled` toggle (already stubbed "coming soon" in settings).
-- **Phase 4** (planned) — conversation history UI + feedback + founder analytics + monthly budget caps.
+- **Phase 3** (PARKED — see `docs/planning/ai-hr-assistant-phase-3-parked.md`) — structured data tools (`data_employees_find`, `data_leaves_balance`, etc., all role-scoped via `reporting_manager_id`). Per-org `assistant_tenant_data_enabled` toggle (still stubbed "coming soon" in settings). Build only when required.
+- **Phase 4** (shipped 2026-05-21) — conversation history (list/search/load/delete, per-user), per-message 👍/👎 feedback (ordinal-keyed), founder analytics at `/superadmin/assistant`, monthly INR budget caps (402 enforcement + soft/hard alerts), PII-redaction retention cron. Plus quick-win: system prompt personalised with real org + employee name.
 - **Phase 5** (planned) — proactive insights only. **No write tools, ever** (OQ-9).
 
 **Decision log (§7 of planning doc)**: 14 locked decisions. Notable:
@@ -599,7 +603,9 @@ Read-only, plan-tier-gated chat assistant. Floating button on dashboard, side-pa
 - Per-org `assistant_enabled` flag (`organizations.settings.assistant_enabled`) — admin opt-in. Combined with `NEXT_PUBLIC_ASSISTANT_ENABLED` client flag.
 - shadcn CLI for new UI primitives (OQ-14).
 
-**Migrations**: 022 (Phase 0 — conversations/messages/tool_calls/feedback), 023 (Phase 1 — pgvector + `app_help_chunks`), 024 (Phase 1 — `match_help_chunks` RPC), 025 (Phase 2 — `doc_chunks` + `documents.index_status/indexed_at/index_error`), 026 (Phase 2 — `match_doc_chunks` org-scoped RPC).
+**Migrations**: 022 (Phase 0 — conversations/messages/tool_calls/feedback), 023 (Phase 1 — pgvector + `app_help_chunks`), 024 (Phase 1 — `match_help_chunks` RPC), 025 (Phase 2 — `doc_chunks` + `documents.index_status/indexed_at/index_error`), 026 (Phase 2 — `match_doc_chunks` org-scoped RPC), 027 (Phase 4 — `assistant_budget` + `assistant_messages.created_at` index).
+
+**Crons**: `/api/cron/assistant-doc-reindex` (daily 6:00 UTC — Phase 2 doc reconcile), `/api/cron/assistant-redact` (daily 7:00 UTC — Phase 4 PII redaction + 90d delete).
 
 **Per-org scope toggles** (`organizations.settings`): `assistant_enabled` (master, Phase 1), `assistant_tenant_docs_enabled` (Phase 2 — gates `docs_*` tools), `assistant_tenant_data_enabled` (Phase 3 — not yet wired). All default false; admin opts in per scope from Settings → AI Assistant.
 

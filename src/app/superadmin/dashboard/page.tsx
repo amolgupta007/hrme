@@ -129,6 +129,30 @@ export default async function SuperadminDashboard() {
           </Link>
         </section>
 
+        {/* AI Assistant */}
+        <section>
+          <h2 className="mb-1 text-base font-semibold text-gray-900">AI Assistant</h2>
+          <p className="mb-4 text-sm text-gray-500">
+            Usage and cost analytics across all orgs. Aggregates only — no conversation content.
+          </p>
+          <Link
+            href="/superadmin/assistant"
+            className="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-5 py-4 shadow-sm transition hover:border-gray-300 hover:shadow"
+          >
+            <div className="flex gap-6">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-gray-500">Messages (30d)</p>
+                <p className="mt-1 text-2xl font-semibold text-gray-900">—</p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-wide text-gray-500">Est. cost (30d)</p>
+                <p className="mt-1 text-2xl font-semibold text-gray-900">—</p>
+              </div>
+            </div>
+            <span className="text-sm text-teal-700">View analytics →</span>
+          </Link>
+        </section>
+
         {/* Custom plan requests */}
         <section>
           <h2 className="mb-1 text-base font-semibold text-gray-900">

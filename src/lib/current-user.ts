@@ -5,9 +5,11 @@ import type { OrgPlan } from "@/config/plans";
 
 export type UserContext = {
   orgId: string;
+  orgName: string;
   clerkUserId: string;
   role: UserRole;
   employeeId: string | null;
+  firstName: string | null;
   plan: OrgPlan;
   customFeatures: string[] | null;
   jambaHireEnabled: boolean;
@@ -55,12 +57,13 @@ export async function getCurrentUser(): Promise<UserContext | null> {
   const supabase = createAdminSupabase();
   const { data: org } = await supabase
     .from("organizations")
-    .select("id, plan, settings, custom_features")
+    .select("id, name, plan, settings, custom_features")
     .eq("clerk_org_id", resolved.clerkOrgId)
     .single();
   if (!org) return null;
 
   const orgId = resolved.orgId;
+  const orgName = ((org as any).name as string) ?? "your organisation";
   const plan = ((org as any).plan as OrgPlan) ?? "starter";
   const settings = ((org as any).settings as any) ?? {};
   const rawCustomFeatures = (org as any).custom_features;
@@ -76,7 +79,7 @@ export async function getCurrentUser(): Promise<UserContext | null> {
 
   let { data: emp } = await supabase
     .from("employees")
-    .select("id, role")
+    .select("id, role, first_name")
     .eq("clerk_user_id", userId)
     .eq("org_id", orgId)
     .single();
@@ -98,7 +101,7 @@ export async function getCurrentUser(): Promise<UserContext | null> {
       if (email) {
         const { data: empByEmail } = await supabase
           .from("employees")
-          .select("id, role")
+          .select("id, role, first_name")
           .eq("org_id", orgId)
           .eq("email", email)
           .is("clerk_user_id", null)
@@ -119,12 +122,12 @@ export async function getCurrentUser(): Promise<UserContext | null> {
     }
   }
 
-  const role: UserRole = emp
-    ? ((emp as { id: string; role: string }).role as UserRole)
-    : "admin";
-  const employeeId = emp ? (emp as { id: string; role: string }).id : null;
+  const empTyped = emp as { id: string; role: string; first_name: string | null } | null;
+  const role: UserRole = empTyped ? (empTyped.role as UserRole) : "admin";
+  const employeeId = empTyped ? empTyped.id : null;
+  const firstName = empTyped ? empTyped.first_name : null;
 
-  return { orgId, clerkUserId: userId, role, employeeId, plan, customFeatures, jambaHireEnabled, assistantEnabled, assistantTenantDocsEnabled, attendanceEnabled, attendancePayrollEnabled, grievancesEnabled };
+  return { orgId, orgName, clerkUserId: userId, role, employeeId, firstName, plan, customFeatures, jambaHireEnabled, assistantEnabled, assistantTenantDocsEnabled, attendanceEnabled, attendancePayrollEnabled, grievancesEnabled };
 }
 
 export function isAdmin(role: UserRole): boolean {

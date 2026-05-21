@@ -209,7 +209,7 @@ export default function HomePage() {
               This is HR at most Indian startups right now.
             </h2>
           </AnimateIn>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
             {painPoints.map((pain, i) => (
               <AnimateIn key={pain.text} animation="scale-in" delay={i * 80}>
                 <div className="rounded-xl border border-border bg-white dark:bg-[#111118] p-6 h-full">

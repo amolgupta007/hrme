@@ -121,8 +121,8 @@ export async function POST(req: Request) {
   };
 
   const systemPrompt = buildSystemPrompt({
-    orgName: user.orgId,  // TODO: load real org name in a follow-up
-    userName: "you",       // TODO: load employee first_name in a follow-up
+    orgName: user.orgName,
+    userName: user.firstName ?? "there",
     role: user.role,
     plan: user.plan,
     docsEnabled: user.assistantTenantDocsEnabled,

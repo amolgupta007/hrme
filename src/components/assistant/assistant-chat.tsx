@@ -10,14 +10,31 @@ import { SuggestedPrompts } from "./suggested-prompts";
 import { trackAssistant } from "@/lib/assistant/posthog-events";
 import { Send } from "lucide-react";
 import Image from "next/image";
+import type { UIMessage } from "ai";
 import type { UserRole } from "@/types";
+
+type HistoryMessage = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+};
+
+function toUIMessages(msgs: HistoryMessage[]): UIMessage[] {
+  return msgs.map((m) => ({
+    id: m.id,
+    role: m.role,
+    parts: [{ type: "text" as const, text: m.content }],
+  }));
+}
 
 export function AssistantChat({
   conversationId,
   role,
+  initialMessages,
 }: {
   conversationId: string;
   role: UserRole;
+  initialMessages?: HistoryMessage[];
 }) {
   const transport = useMemo(
     () => new DefaultChatTransport({ api: "/api/assistant/chat" }),
@@ -27,6 +44,7 @@ export function AssistantChat({
   const { messages, sendMessage, status } = useChat({
     id: conversationId,
     transport,
+    messages: initialMessages ? toUIMessages(initialMessages) : undefined,
     onError: (err: Error) => {
       const msg = err?.message ?? "";
       if (msg.includes("402") || msg.toLowerCase().includes("budget")) {

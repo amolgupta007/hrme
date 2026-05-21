@@ -7,9 +7,11 @@ import {
 } from "@/components/ui/sheet";
 import { AssistantChat } from "./assistant-chat";
 import { AssistantPrivacyInfo } from "./assistant-privacy-info";
+import { AssistantHistory } from "./assistant-history";
 import Image from "next/image";
-import { useMemo } from "react";
+import { useState } from "react";
 import type { UserRole } from "@/types";
+import type { HistoryMessage } from "@/lib/assistant/conversations";
 
 export function AssistantPanel({
   open,
@@ -20,13 +22,24 @@ export function AssistantPanel({
   onOpenChange: (next: boolean) => void;
   role: UserRole;
 }) {
-  const conversationId = useMemo(
-    () =>
-      typeof crypto !== "undefined"
-        ? crypto.randomUUID()
-        : String(Date.now()),
-    []
+  const [conversationId, setConversationId] = useState(() =>
+    typeof crypto !== "undefined" ? crypto.randomUUID() : String(Date.now())
   );
+  const [initialMessages, setInitialMessages] = useState<
+    HistoryMessage[] | undefined
+  >(undefined);
+
+  function handleSelectConversation(id: string, msgs: HistoryMessage[]) {
+    setConversationId(id);
+    setInitialMessages(msgs);
+  }
+
+  function handleNewChat() {
+    setConversationId(
+      typeof crypto !== "undefined" ? crypto.randomUUID() : String(Date.now())
+    );
+    setInitialMessages(undefined);
+  }
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -45,11 +58,21 @@ export function AssistantPanel({
               className="rounded-md"
             />
             <SheetTitle className="text-base">Ask Jamba</SheetTitle>
+            <AssistantHistory
+              currentId={conversationId}
+              onSelect={handleSelectConversation}
+              onNew={handleNewChat}
+            />
             <AssistantPrivacyInfo />
           </div>
         </SheetHeader>
         <div className="flex-1 overflow-hidden">
-          <AssistantChat conversationId={conversationId} role={role} />
+          <AssistantChat
+            key={conversationId}
+            conversationId={conversationId}
+            role={role}
+            initialMessages={initialMessages}
+          />
         </div>
       </SheetContent>
     </Sheet>

@@ -8,6 +8,8 @@ import {
 import { getCurrentUser } from "@/lib/current-user";
 import { canUseAssistant } from "@/lib/assistant/permissions";
 import { checkRateLimit } from "@/lib/assistant/rate-limit";
+import { checkBudget, recordUsage } from "@/lib/assistant/budget";
+import { sendBudgetAlert } from "@/lib/assistant/budget-alert";
 import { getOrCreateConversation, persistMessage } from "@/lib/assistant/persistence";
 import { makeAppHelpTools, makeDocsTools } from "@/lib/assistant/tools";
 import { NextResponse } from "next/server";
@@ -86,6 +88,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: limit.reason }, { status: 429 });
   }
 
+  const budget = await checkBudget(user.orgId, user.plan);
+  if (!budget.allowed) {
+    return NextResponse.json({ error: "budget-exceeded" }, { status: 402 });
+  }
+
   const body = (await req.json()) as { id?: string; messages: UIMessage[] };
   const conversationId = body.id ?? crypto.randomUUID();
   await getOrCreateConversation({
@@ -153,6 +160,34 @@ export async function POST(req: Request) {
     } catch (err) {
       // Swallow persistence failures -- never block the stream.
       console.error("assistant persistMessage failed:", err);
+    }
+    try {
+      const usage = await recordUsage({
+        orgId: user.orgId,
+        plan: user.plan,
+        inputTokens: event.usage?.inputTokens ?? 0,
+        outputTokens: event.usage?.outputTokens ?? 0,
+        model: event.response?.modelId,
+      });
+      if (usage.crossedHardCap) {
+        await sendBudgetAlert({
+          orgId: user.orgId,
+          orgName: user.orgName,
+          usedPaise: usage.usedPaise,
+          capPaise: usage.capPaise,
+          kind: "hard",
+        });
+      } else if (usage.crossedSoftCap) {
+        await sendBudgetAlert({
+          orgId: user.orgId,
+          orgName: user.orgName,
+          usedPaise: usage.usedPaise,
+          capPaise: usage.capPaise,
+          kind: "soft",
+        });
+      }
+    } catch (err) {
+      console.error("assistant budget record failed:", err);
     }
   };
 

@@ -23,9 +23,20 @@ export function AssistantChat({
     () => new DefaultChatTransport({ api: "/api/assistant/chat" }),
     []
   );
+  const [chatError, setChatError] = useState<string | null>(null);
   const { messages, sendMessage, status } = useChat({
     id: conversationId,
     transport,
+    onError: (err: Error) => {
+      const msg = err?.message ?? "";
+      if (msg.includes("402") || msg.toLowerCase().includes("budget")) {
+        setChatError(
+          "Your team's monthly AI assistant limit is reached. It resets next month — or ask your admin to raise the cap in Settings → AI Assistant."
+        );
+      } else {
+        setChatError("Something went wrong, try again.");
+      }
+    },
   });
 
   const [input, setInput] = useState("");
@@ -39,6 +50,7 @@ export function AssistantChat({
   function sendText(text: string) {
     const trimmed = text.trim();
     if (!trimmed || isLoading) return;
+    setChatError(null);
     trackAssistant({
       name: "assistant_message_sent",
       props: { conversation_id: conversationId, char_count: trimmed.length },
@@ -66,6 +78,11 @@ export function AssistantChat({
           </div>
         )}
       </ScrollArea>
+      {chatError && (
+        <div className="mx-3 mb-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+          {chatError}
+        </div>
+      )}
       <form
         onSubmit={onSubmit}
         className="flex items-end gap-2 border-t border-border px-3 py-3"

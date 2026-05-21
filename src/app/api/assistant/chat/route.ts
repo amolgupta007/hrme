@@ -145,7 +145,6 @@ export async function POST(req: Request) {
   //   .response     -- LanguageModelResponseMetadata (has .modelId)
   //   .totalUsage   -- aggregated LanguageModelUsage across all steps
   // Typed as any to avoid the complex inferred conditional generic -- P1.5 cleanup.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const onFinish = async (event: any) => {
     try {
       await persistMessage({

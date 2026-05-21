@@ -71,9 +71,21 @@ export function AssistantChat({
           <EmptyState role={role} onPick={sendText} />
         ) : (
           <div className="flex flex-col gap-3">
-            {messages.map((m) => (
-              <AssistantMessage key={m.id} message={m} />
-            ))}
+            {(() => {
+              let assistantCount = -1;
+              return messages.map((m) => {
+                const isAssistant = m.role !== "user";
+                const assistantIndex = isAssistant ? ++assistantCount : undefined;
+                return (
+                  <AssistantMessage
+                    key={m.id}
+                    message={m}
+                    conversationId={conversationId}
+                    assistantIndex={assistantIndex}
+                  />
+                );
+              });
+            })()}
             <div ref={endRef} />
           </div>
         )}

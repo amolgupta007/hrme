@@ -5,9 +5,18 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { AssistantToolChip } from "./assistant-tool-chip";
 import { AssistantCitations, type Citation } from "./assistant-citations";
+import { AssistantFeedbackButtons } from "./assistant-feedback-buttons";
 import type { RouteEntry } from "@/lib/assistant/route-registry";
 
-export function AssistantMessage({ message }: { message: UIMessage }) {
+export function AssistantMessage({
+  message,
+  conversationId,
+  assistantIndex,
+}: {
+  message: UIMessage;
+  conversationId?: string;
+  assistantIndex?: number;
+}) {
   const isUser = message.role === "user";
 
   // Collect text body from all text parts.
@@ -137,6 +146,12 @@ export function AssistantMessage({ message }: { message: UIMessage }) {
           )}
         </div>
         {!isUser && <AssistantCitations items={citations} />}
+        {!isUser && conversationId !== undefined && assistantIndex !== undefined && (
+          <AssistantFeedbackButtons
+            conversationId={conversationId}
+            assistantIndex={assistantIndex}
+          />
+        )}
       </div>
     </div>
   );

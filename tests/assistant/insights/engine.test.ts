@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { isRuleApplicable, selectTopInsights } from "@/lib/assistant/insights/engine";
+import { istDateString } from "@/lib/assistant/insights/constants";
 import type { InsightRule, InsightContext, Insight } from "@/lib/assistant/insights/types";
 
 const ctx = (over: Partial<InsightContext> = {}): InsightContext => ({
@@ -32,6 +33,12 @@ describe("isRuleApplicable", () => {
     const c = ctx({ flags: { jambaHireEnabled: false, attendanceEnabled: false, grievancesEnabled: true } });
     expect(isRuleApplicable(rule({ requiredFlag: "grievancesEnabled" }), c)).toBe(true);
   });
+  it("blocks a feature-gated rule on custom plan with no custom features", () => {
+    expect(isRuleApplicable(rule({ requiredFeature: "training" }), ctx({ plan: "custom" }))).toBe(false);
+  });
+  it("allows a feature-gated rule on custom plan when the feature is granted", () => {
+    expect(isRuleApplicable(rule({ requiredFeature: "training" }), ctx({ plan: "custom", customFeatures: ["training"] }))).toBe(true);
+  });
 });
 
 describe("selectTopInsights", () => {
@@ -44,5 +51,11 @@ describe("selectTopInsights", () => {
   });
   it("returns all when fewer than 3", () => {
     expect(selectTopInsights([ins(5)]).length).toBe(1);
+  });
+});
+
+describe("istDateString", () => {
+  it("formats a Date as YYYY-MM-DD (UTC fields)", () => {
+    expect(istDateString(new Date("2026-05-22T09:15:00.000Z"))).toBe("2026-05-22");
   });
 });

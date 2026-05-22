@@ -18,6 +18,8 @@ export interface Insight {
 export interface InsightContext {
   orgId: string;
   plan: OrgPlan;
+  /** For plan === "custom": the org's enabled feature keys. Forwarded to hasFeature. */
+  customFeatures?: string[] | null;
   /** "now" expressed in IST wall-clock (UTC fields hold IST). Use for date math only. */
   today: Date;
   flags: {

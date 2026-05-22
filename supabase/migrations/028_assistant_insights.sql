@@ -16,8 +16,6 @@ create table if not exists public.assistant_insights (
   unique (org_id, rule_key, computed_for)
 );
 
-create index if not exists assistant_insights_org_day_idx
-  on public.assistant_insights (org_id, computed_for);
 create index if not exists assistant_insights_active_idx
   on public.assistant_insights (org_id, computed_for) where dismissed_at is null;
 

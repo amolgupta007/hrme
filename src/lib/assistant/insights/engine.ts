@@ -15,18 +15,19 @@ export function selectTopInsights(insights: Insight[], n: number = TOP_INSIGHTS)
   return [...insights].sort((a, b) => b.priority - a.priority).slice(0, n);
 }
 
-export async function buildContext(supabase: AdminSupabase, orgId: string): Promise<InsightContext> {
-  const { data } = await supabase
+export async function buildContext(supabase: AdminSupabase, orgId: string, now: Date = new Date()): Promise<InsightContext> {
+  const { data, error } = await supabase
     .from("organizations")
     .select("plan, settings, custom_features")
     .eq("id", orgId)
     .single();
+  if (error) console.warn(`[insights] buildContext could not load org ${orgId}:`, error.message);
   const row = (data ?? {}) as { plan?: string; settings?: Record<string, unknown>; custom_features?: string[] | null };
   const settings = row.settings ?? {};
   return {
     orgId,
     plan: (row.plan as OrgPlan) ?? "starter",
-    today: istNow(),
+    today: istNow(now),
     customFeatures: (row.custom_features as string[] | null) ?? null,
     flags: {
       jambaHireEnabled: !!settings["jambahire_enabled"],
@@ -36,8 +37,8 @@ export async function buildContext(supabase: AdminSupabase, orgId: string): Prom
   };
 }
 
-export async function runInsightsForOrg(supabase: AdminSupabase, orgId: string): Promise<Insight[]> {
-  const ctx = await buildContext(supabase, orgId);
+export async function runInsightsForOrg(supabase: AdminSupabase, orgId: string, now: Date = new Date()): Promise<Insight[]> {
+  const ctx = await buildContext(supabase, orgId, now);
   const out: Insight[] = [];
   for (const rule of INSIGHT_RULES) {
     if (!isRuleApplicable(rule, ctx)) continue;
@@ -53,8 +54,8 @@ export async function runInsightsForOrg(supabase: AdminSupabase, orgId: string):
 }
 
 /** Replace today's non-dismissed rows for the org with a fresh set. Keeps dismissed rows. */
-export async function persistInsights(supabase: AdminSupabase, orgId: string, insights: Insight[]): Promise<void> {
-  const computedFor = istDateString(istNow());
+export async function persistInsights(supabase: AdminSupabase, orgId: string, insights: Insight[], now: Date = new Date()): Promise<void> {
+  const computedFor = istDateString(istNow(now));
   await supabase
     .from("assistant_insights")
     .delete()

@@ -24,6 +24,7 @@ async function readTop(supabase: ReturnType<typeof createAdminSupabase>, orgId: 
     .select("rule_key, category, priority, title, body, metric_count, deep_link")
     .eq("org_id", orgId)
     .eq("computed_for", computedFor)
+    .neq("rule_key", "__none__")
     .is("dismissed_at", null)
     .order("priority", { ascending: false })
     .limit(3);
@@ -58,6 +59,9 @@ export async function refreshInsights(): Promise<ActionResult<Insight[]>> {
   const user = await getCurrentUser();
   if (!user) return { success: false, error: "Not authenticated" };
   if (!isAdmin(user.role)) return { success: false, error: "Unauthorized" };
+  if (!user.assistantEnabled || (user.plan !== "growth" && user.plan !== "business" && user.plan !== "custom")) {
+    return { success: true, data: [] };
+  }
   const supabase = createAdminSupabase();
   const now = new Date();
   const fresh = await runInsightsForOrg(supabase, user.orgId, now);
@@ -72,10 +76,9 @@ export async function dismissInsight(ruleKey: string): Promise<ActionResult> {
   if (!isAdmin(user.role)) return { success: false, error: "Unauthorized" };
   const supabase = createAdminSupabase();
   const computedFor = istDateString(istNow());
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (supabase as any)
+  const { error } = await supabase
     .from("assistant_insights")
-    .update({ dismissed_at: new Date().toISOString(), dismissed_by: user.employeeId })
+    .update({ dismissed_at: new Date().toISOString(), dismissed_by: user.employeeId } as unknown as never)
     .eq("org_id", user.orgId)
     .eq("computed_for", computedFor)
     .eq("rule_key", ruleKey);

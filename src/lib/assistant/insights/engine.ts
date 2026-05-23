@@ -62,11 +62,19 @@ export async function persistInsights(supabase: AdminSupabase, orgId: string, in
     .eq("org_id", orgId)
     .eq("computed_for", computedFor)
     .is("dismissed_at", null);
-  if (insights.length === 0) return;
-  const rows = insights.map((i) => ({
-    org_id: orgId, rule_key: i.ruleKey, category: i.category, priority: i.priority,
-    title: i.title, body: i.body, metric_count: i.metricCount, deep_link: i.deepLink,
-    computed_for: computedFor,
-  }));
+  const rows = insights.length > 0
+    ? insights.map((i) => ({
+        org_id: orgId, rule_key: i.ruleKey, category: i.category, priority: i.priority,
+        title: i.title, body: i.body, metric_count: i.metricCount, deep_link: i.deepLink,
+        computed_for: computedFor,
+      }))
+    : [{
+        // Sentinel: marks "insights computed for this day, nothing to surface" so the
+        // same-day fallback in getInsights does not recompute on every dashboard load.
+        // Excluded from display by readTop's .neq("rule_key", "__none__").
+        org_id: orgId, rule_key: "__none__", category: "ops", priority: -1,
+        title: "", body: "", metric_count: null, deep_link: "/dashboard",
+        computed_for: computedFor,
+      }];
   await supabase.from("assistant_insights").upsert(rows, { onConflict: "org_id,rule_key,computed_for" });
 }

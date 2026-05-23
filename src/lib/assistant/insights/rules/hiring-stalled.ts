@@ -14,7 +14,7 @@ export const hiringStalled: InsightRule<AppRow[]> = {
       .from("applications")
       .select("id, updated_at")
       .eq("org_id", ctx.orgId)
-      .not("stage", "in", '("hired","rejected")');
+      .not("stage", "in", "(hired,rejected)");
     return (data ?? []) as AppRow[];
   },
   evaluate(rows: AppRow[], ctx: InsightContext): Insight | null {

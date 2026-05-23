@@ -45,7 +45,7 @@ export const reviewCycleIncomplete: InsightRule<ReviewData> = {
     return {
       ruleKey: this.key, category: "people", priority: this.basePriority,
       title: "Review cycle closing soon",
-      body: `${worst} review${worst === 1 ? "" : "s"} still incomplete in a cycle ending this week`,
+      body: `${worst} review${worst === 1 ? "" : "s"} still incomplete in a cycle ending within ${REVIEW_CYCLE_END_DAYS} days`,
       metricCount: worst, deepLink: this.deepLink,
     };
   },

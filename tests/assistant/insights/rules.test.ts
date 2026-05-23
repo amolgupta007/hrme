@@ -48,6 +48,17 @@ describe("leave_concentration", () => {
     }, ctx("2026-05-22T00:00:00Z"));
     expect(out).toBeNull();
   });
+  it("skips employees with no department", () => {
+    const out = leaveConcentration.evaluate({
+      leaves: [
+        { employee_id: "a", start_date: "2026-05-23", end_date: "2026-05-25" },
+        { employee_id: "b", start_date: "2026-05-23", end_date: "2026-05-25" },
+        { employee_id: "c", start_date: "2026-05-23", end_date: "2026-05-25" },
+      ],
+      deptByEmployee: { a: null, b: null, c: null },
+    }, ctx("2026-05-22T00:00:00Z"));
+    expect(out).toBeNull();
+  });
 });
 
 describe("leave_balance_expiry", () => {
@@ -61,6 +72,12 @@ describe("leave_balance_expiry", () => {
   });
   it("is silent outside the window", () => {
     expect(leaveBalanceExpiry.evaluate(balances, ctx("2026-05-22T00:00:00Z"))).toBeNull();
+  });
+  it("fires on the inclusive window-start boundary (Nov 16 for 45-day window)", () => {
+    expect(leaveBalanceExpiry.evaluate(balances, ctx("2026-11-16T00:00:00Z"))?.metricCount).toBe(1);
+  });
+  it("fires on Dec 31 (inclusive year-end)", () => {
+    expect(leaveBalanceExpiry.evaluate(balances, ctx("2026-12-31T00:00:00Z"))?.metricCount).toBe(1);
   });
 });
 
@@ -88,6 +105,9 @@ describe("docs_unacknowledged", () => {
     }, ctx("2026-05-22T00:00:00Z"));
     expect(out).toBeNull();
   });
+  it("returns null when there are no required docs", () => {
+    expect(docsUnacknowledged.evaluate({ requiredDocIds: [], acksByDoc: {}, activeEmployeeIds: ["e1"] })).toBeNull();
+  });
 });
 
 describe("new_joiners", () => {
@@ -106,6 +126,10 @@ describe("probation_window", () => {
   it("ignores employees far from probation end", () => {
     expect(probationWindow.evaluate([{ id: "a", date_of_joining: "2026-05-01" }], ctx("2026-05-22T00:00:00Z"))).toBeNull();
   });
+  it("fires when probation ends exactly today", () => {
+    // joined 2026-02-21 → +90d = 2026-05-22
+    expect(probationWindow.evaluate([{ id: "a", date_of_joining: "2026-02-21" }], ctx("2026-05-22T00:00:00Z"))?.metricCount).toBe(1);
+  });
 });
 
 describe("review_cycle_incomplete", () => {
@@ -118,6 +142,12 @@ describe("review_cycle_incomplete", () => {
   it("returns null when the cycle ends far away", () => {
     const out = reviewCycleIncomplete.evaluate(
       { cycles: [{ id: "c1", end_date: "2026-08-01" }], incompleteByCycle: { c1: 4 } },
+      ctx("2026-05-22T00:00:00Z"));
+    expect(out).toBeNull();
+  });
+  it("skips cycles with a null end_date", () => {
+    const out = reviewCycleIncomplete.evaluate(
+      { cycles: [{ id: "c1", end_date: null }], incompleteByCycle: { c1: 4 } },
       ctx("2026-05-22T00:00:00Z"));
     expect(out).toBeNull();
   });

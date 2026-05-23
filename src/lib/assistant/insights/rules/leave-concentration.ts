@@ -24,7 +24,8 @@ export const leaveConcentration: InsightRule<ConcData> = {
     const { data: emps } = await supabase
       .from("employees")
       .select("id, department_id")
-      .eq("org_id", ctx.orgId);
+      .eq("org_id", ctx.orgId)
+      .eq("status", "active");
     const deptByEmployee: Record<string, string | null> = {};
     for (const e of (emps ?? []) as Array<{ id: string; department_id: string | null }>) {
       deptByEmployee[e.id] = e.department_id;

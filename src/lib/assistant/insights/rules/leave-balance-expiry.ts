@@ -12,7 +12,8 @@ export const leaveBalanceExpiry: InsightRule<BalRow[]> = {
     const { data } = await supabase
       .from("leave_balances")
       .select("employee_id, total_days, used_days, carried_forward_days")
-      .eq("org_id", ctx.orgId);
+      .eq("org_id", ctx.orgId)
+      .eq("year", ctx.today.getUTCFullYear());
     return (data ?? []) as BalRow[];
   },
   evaluate(rows: BalRow[], ctx: InsightContext): Insight | null {

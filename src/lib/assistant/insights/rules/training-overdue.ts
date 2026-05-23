@@ -21,7 +21,7 @@ export const trainingOverdue: InsightRule<OverdueRow[]> = {
     if (n === 0) return null;
     return {
       ruleKey: this.key, category: "compliance", priority: this.basePriority,
-      title: "Mandatory training overdue",
+      title: "Training overdue",
       body: `${n} training enrollment${n === 1 ? "" : "s"} are overdue`,
       metricCount: n, deepLink: this.deepLink,
     };

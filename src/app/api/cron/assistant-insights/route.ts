@@ -19,7 +19,7 @@ export async function GET(req: Request) {
 
   const now = new Date();
   let swept = 0;
-  for (const o of (orgs ?? []) as Array<{ id: string; settings?: Record<string, unknown> }>) {
+  for (const o of (orgs ?? []) as Array<{ id: string; plan: string; settings?: Record<string, unknown> }>) {
     if (!o.settings?.["assistant_enabled"]) continue;
     try {
       const insights = await runInsightsForOrg(supabase, o.id, now);

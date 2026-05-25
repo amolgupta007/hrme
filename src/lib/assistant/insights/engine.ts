@@ -76,5 +76,7 @@ export async function persistInsights(supabase: AdminSupabase, orgId: string, in
         title: "", body: "", metric_count: null, deep_link: "/dashboard",
         computed_for: computedFor,
       }];
-  await supabase.from("assistant_insights").upsert(rows, { onConflict: "org_id,rule_key,computed_for" });
+  await supabase
+    .from("assistant_insights")
+    .upsert(rows as unknown as never, { onConflict: "org_id,rule_key,computed_for" });
 }

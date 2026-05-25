@@ -106,7 +106,7 @@ describe("docs_unacknowledged", () => {
     expect(out).toBeNull();
   });
   it("returns null when there are no required docs", () => {
-    expect(docsUnacknowledged.evaluate({ requiredDocIds: [], acksByDoc: {}, activeEmployeeIds: ["e1"] })).toBeNull();
+    expect(docsUnacknowledged.evaluate({ requiredDocIds: [], acksByDoc: {}, activeEmployeeIds: ["e1"] }, ctx("2026-05-22T00:00:00Z"))).toBeNull();
   });
 });
 

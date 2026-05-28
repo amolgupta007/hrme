@@ -56,10 +56,6 @@
     {
       "path": "/api/cron/assistant-redact",
       "schedule": "0 7 * * *"
-    },
-    {
-      "path": "/api/cron/assistant-insights",
-      "schedule": "0 2 * * *"
     }
   ]
 }

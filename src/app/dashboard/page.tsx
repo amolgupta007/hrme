@@ -13,9 +13,6 @@ import type { UserRole } from "@/types";
 import type { DashboardData } from "@/actions/dashboard";
 import { OnboardingCard } from "@/components/dashboard/onboarding-card";
 import type { OnboardingStatusResult } from "@/config/onboarding";
-import { InsightsCards } from "@/components/dashboard/insights-cards";
-import { getInsights } from "@/actions/assistant-insights";
-import type { Insight } from "@/lib/assistant/insights/types";
 
 // ---- Style maps ----
 
@@ -269,13 +266,6 @@ export default async function DashboardPage() {
     if (onboardingResult.success) onboardingStatus = onboardingResult.data;
   }
 
-  // Fetch proactive insights for admin/owner only
-  let insights: Insight[] = [];
-  if (userRole === "owner" || userRole === "admin") {
-    const insightsResult = await getInsights();
-    insights = insightsResult.success ? insightsResult.data : [];
-  }
-
   return (
     <div className="space-y-6">
 
@@ -312,9 +302,6 @@ export default async function DashboardPage() {
       {onboardingStatus && onboardingStatus.totalComplete < onboardingStatus.totalEnabled && (
         <OnboardingCard status={onboardingStatus} />
       )}
-
-      {/* Proactive insights (admin only) */}
-      <InsightsCards insights={insights} />
 
       {/* Stat cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

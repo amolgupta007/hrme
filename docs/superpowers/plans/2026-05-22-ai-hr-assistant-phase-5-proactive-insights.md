@@ -1,5 +1,8 @@
 # AI HR Assistant — Phase 5: Proactive Insights — Implementation Plan
 
+> ⚠️ **REVERTED — historical reference only.**
+> Implementation was shipped to main on 2026-05-25 (`437c98b`) and reverted on 2026-06-06 (`bc8b862`) per user feedback. The DB table `assistant_insights` survives but is empty/idle. See `docs/superpowers/plans/2026-06-06-ai-hr-assistant-phase-5-rollback.md` for the rollback record. Do not resume execution of this plan without re-confirming intent.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add admin-only proactive insight cards to the dashboard home, computed by a daily cron from deterministic SQL rules (no LLM), with a manual refresh button and same-day fallback.

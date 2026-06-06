@@ -1,7 +1,10 @@
 # AI HR Assistant — Phase 5: Proactive Insights — Design
 
+> ⚠️ **REVERTED — historical reference only.**
+> The feature designed here was implemented (shipped to main 2026-05-25 as `437c98b`) and then reverted 2026-06-06 (`bc8b862`) per user feedback. The DB table `assistant_insights` survives but is empty/idle. See `docs/superpowers/plans/2026-06-06-ai-hr-assistant-phase-5-rollback.md` for the rollback record.
+
 **Date:** 2026-05-22
-**Status:** Approved (brainstorming complete) → ready for implementation plan
+**Status:** ~~Approved (brainstorming complete) → ready for implementation plan~~ → **REVERTED 2026-06-06**
 **Planning ref:** `docs/planning/ai-hr-assistant-plan.md` §5 (Phase 5), OQ-9 (read-only forever)
 
 ---

@@ -536,7 +536,9 @@ To prevent stale help content (a top risk — see §8) we enforce three things o
 - `assistant_budget` enforcement + soft/hard cap UX + admin email template.
 - PII redaction cron `/api/cron/assistant-redact`.
 
-### Phase 5 — Proactive Insights (3–4 days)
+### Phase 5 — Proactive Insights (BUILT, then REVERTED 2026-06-06)
+
+> ⚠️ **Status:** Built and shipped to main 2026-05-25 (commit `437c98b`), then reverted 2026-06-06 (commit `bc8b862`) per user feedback. See `docs/superpowers/plans/2026-06-06-ai-hr-assistant-phase-5-rollback.md`. The design and implementation plan docs are kept for historical reference; the original ambition below stays as-written.
 
 - Background sweep: 3 daily insight cards on dashboard ("3 employees have probation ending this week", "Leave usage is concentrated in Engineering this quarter").
 - Per OQ-9, the assistant is **read-only forever** — no write tools. Click-throughs from insight cards link to existing UI surfaces.

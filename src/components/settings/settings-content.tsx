@@ -31,6 +31,7 @@ import type { PerformanceSettings } from "@/lib/performance-settings";
 import type { AttendanceSettings } from "@/actions/attendance";
 import type { Shift, ShiftAssignment } from "@/actions/shifts";
 import type { WeekOffPolicy } from "@/lib/attendance/week-off";
+import type { EmployeeWeekOffOverrideRow } from "@/actions/week-off";
 import type { OvertimeSettings } from "@/lib/attendance/overtime-types";
 
 type UserCtx = {
@@ -56,6 +57,7 @@ type SettingsContentProps = {
   shifts: Shift[];
   shiftAssignments: ShiftAssignment[];
   weekOffPolicy: WeekOffPolicy | null;
+  weekOffOverrides: EmployeeWeekOffOverrideRow[];
   employees: Employee[];
   overtimeSettings: OvertimeSettings;
   payrollActiveConfig: RatioConfig | null;
@@ -86,6 +88,7 @@ export function SettingsContent({
   shifts,
   shiftAssignments,
   weekOffPolicy,
+  weekOffOverrides,
   employees,
   overtimeSettings,
   payrollActiveConfig,
@@ -185,6 +188,7 @@ export function SettingsContent({
             shifts={shifts}
             assignments={shiftAssignments}
             weekOffPolicy={weekOffPolicy}
+            weekOffOverrides={weekOffOverrides}
             employees={employees}
             departments={departments}
             overtimeSettings={overtimeSettings}

@@ -10,6 +10,7 @@ import {
   BarChart3,
   Sparkles,
   Clock as ClockIcon,
+  Wallet as WalletIcon,
 } from "lucide-react";
 import { CollapsibleSection } from "@/components/settings/collapsible-section";
 import { LeavePoliciesSection } from "@/components/settings/leave-policies-section";
@@ -20,7 +21,10 @@ import { FingerprintSection } from "@/components/settings/fingerprint-section";
 import { PerformanceSection } from "@/components/settings/performance-section";
 import { AssistantSettingsSection } from "@/components/settings/assistant-settings-section";
 import { AttendanceSection } from "@/components/settings/attendance-section";
+import { PayrollSection } from "@/components/settings/payroll-section";
 import type { LeavePolicy, Department, Employee } from "@/types";
+import type { SalaryStructureConfig } from "@/actions/payroll";
+import type { RatioConfig } from "@/lib/ctc";
 import type { OnboardingStepConfig } from "@/config/onboarding";
 import type { FingerprintConfig, EmployeeWithDeviceCode } from "@/actions/fingerprint";
 import type { PerformanceSettings } from "@/lib/performance-settings";
@@ -52,6 +56,9 @@ type SettingsContentProps = {
   shiftAssignments: ShiftAssignment[];
   weekOffPolicy: WeekOffPolicy | null;
   employees: Employee[];
+  payrollActiveConfig: RatioConfig | null;
+  payrollConfigHistory: SalaryStructureConfig[];
+  payrollEnabled: boolean;
 };
 
 function pluralise(count: number, singular: string, plural: string): string {
@@ -78,6 +85,9 @@ export function SettingsContent({
   shiftAssignments,
   weekOffPolicy,
   employees,
+  payrollActiveConfig,
+  payrollConfigHistory,
+  payrollEnabled,
 }: SettingsContentProps) {
   const [openSection, setOpenSection] = React.useState<string | null>(null);
 
@@ -212,6 +222,18 @@ export function SettingsContent({
           onToggle={() => toggle("performance")}
         >
           <PerformanceSection initialSettings={performanceSettings} />
+        </CollapsibleSection>
+      )}
+
+      {payrollEnabled && isAdmin && payrollActiveConfig && (
+        <CollapsibleSection
+          title="Payroll"
+          icon={<WalletIcon className="h-5 w-5 text-muted-foreground" />}
+          summary={`Basic ${payrollActiveConfig.basic_pct}% · HRA ${payrollActiveConfig.hra_pct_metro}/${payrollActiveConfig.hra_pct_non_metro} · ${payrollConfigHistory.length} history`}
+          isOpen={openSection === "payroll"}
+          onToggle={() => toggle("payroll")}
+        >
+          <PayrollSection activeConfig={payrollActiveConfig} history={payrollConfigHistory} />
         </CollapsibleSection>
       )}
 

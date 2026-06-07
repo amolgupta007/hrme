@@ -5,6 +5,7 @@ import { z } from "zod";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { getCurrentUser, isAdmin } from "@/lib/current-user";
 import { computeCTCBreakdown, getProfessionalTax, computeTaxByRegime, computeAdditionalTaxOnBonus, computeMonthsInFY, DEFAULT_RATIO_CONFIG, type RatioConfig } from "@/lib/ctc";
+import type { LineItem, LineItemCategory } from "@/lib/payroll/line-items";
 import type { ActionResult } from "@/types";
 
 // ---- Types ----
@@ -948,3 +949,206 @@ export type ConfigImpactRow = {
   net_monthly_old: number;
   net_monthly_new: number;
 };
+
+export type PayrollLineItemRow = LineItem & {
+  payroll_entry_id: string;
+  created_at: string;
+};
+
+// ---- Payroll Line Items ----
+
+const LineItemSchema = z.object({
+  payroll_entry_id: z.string().uuid(),
+  category: z.enum(["bonus", "allowance", "reimbursement", "other"]),
+  amount: z.number().int().min(0).max(10_000_000),
+  taxable: z.boolean().default(true),
+  note: z.string().max(280).nullable().optional(),
+});
+
+export async function listPayrollLineItems(entryId: string): Promise<ActionResult<PayrollLineItemRow[]>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  const sb = createAdminSupabase();
+  const { data: entry } = await sb
+    .from("payroll_entries")
+    .select("id, org_id, employee_id")
+    .eq("id", entryId)
+    .maybeSingle();
+  if (!entry) return { success: false, error: "Entry not found" };
+  if ((entry as any).org_id !== user.orgId) return { success: false, error: "Unauthorized" };
+  // Non-admins may only read their own entry's line items.
+  if (!isAdmin(user.role) && (entry as any).employee_id !== user.employeeId) {
+    return { success: false, error: "Unauthorized" };
+  }
+
+  const { data, error } = await sb
+    .from("payroll_line_items")
+    .select("*")
+    .eq("payroll_entry_id", entryId)
+    .order("created_at", { ascending: true });
+  if (error) return { success: false, error: error.message };
+  return {
+    success: true,
+    data: (data ?? []).map((r: any) => ({
+      id: r.id,
+      payroll_entry_id: r.payroll_entry_id,
+      category: r.category as LineItemCategory,
+      amount: r.amount,
+      taxable: r.taxable,
+      note: r.note,
+      created_at: r.created_at,
+    })),
+  };
+}
+
+export async function addPayrollLineItem(input: z.infer<typeof LineItemSchema>): Promise<ActionResult<{ id: string }>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can add line items" };
+  const parsed = LineItemSchema.safeParse(input);
+  if (!parsed.success) return { success: false, error: parsed.error.errors[0].message };
+
+  const sb = createAdminSupabase();
+  // Verify the entry is in caller's org and the run is not paid.
+  const { data: entry } = await sb
+    .from("payroll_entries")
+    .select("id, org_id, payroll_run_id")
+    .eq("id", parsed.data.payroll_entry_id)
+    .single();
+  if (!entry || (entry as any).org_id !== user.orgId) return { success: false, error: "Entry not found" };
+
+  const { data: run } = await sb
+    .from("payroll_runs")
+    .select("status")
+    .eq("id", (entry as any).payroll_run_id)
+    .single();
+  if ((run as any)?.status === "paid") return { success: false, error: "Cannot add line items to a paid run" };
+
+  const { data, error } = await sb
+    .from("payroll_line_items")
+    .insert({
+      org_id: user.orgId,
+      payroll_entry_id: parsed.data.payroll_entry_id,
+      category: parsed.data.category,
+      amount: parsed.data.amount,
+      taxable: parsed.data.taxable,
+      note: parsed.data.note ?? null,
+      created_by: user.employeeId ?? null,
+    } as any)
+    .select("id")
+    .single();
+
+  if (error) return { success: false, error: error.message };
+
+  await recomputeEntryFromLineItems((entry as any).id);
+  revalidatePath("/dashboard/payroll");
+  return { success: true, data: { id: (data as { id: string }).id } };
+}
+
+export async function removePayrollLineItem(itemId: string): Promise<ActionResult<void>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can remove line items" };
+
+  const sb = createAdminSupabase();
+  const { data: item } = await sb
+    .from("payroll_line_items")
+    .select("id, org_id, payroll_entry_id")
+    .eq("id", itemId)
+    .single();
+  if (!item || (item as any).org_id !== user.orgId) return { success: false, error: "Line item not found" };
+
+  const { data: entry } = await sb
+    .from("payroll_entries")
+    .select("payroll_run_id")
+    .eq("id", (item as any).payroll_entry_id)
+    .single();
+  const { data: run } = await sb
+    .from("payroll_runs")
+    .select("status")
+    .eq("id", (entry as any).payroll_run_id)
+    .single();
+  if ((run as any)?.status === "paid") return { success: false, error: "Cannot remove line items from a paid run" };
+
+  const { error } = await sb.from("payroll_line_items").delete().eq("id", itemId);
+  if (error) return { success: false, error: error.message };
+
+  await recomputeEntryFromLineItems((item as any).payroll_entry_id);
+  revalidatePath("/dashboard/payroll");
+  return { success: true, data: undefined };
+}
+
+/**
+ * Recomputes a single entry's TDS, total_line_items, total_deductions, net_pay
+ * after a line-item add/remove. Reuses the entry's stored
+ * annual_taxable_income + months_in_fy (snapshot from processPayrollRun).
+ * Updates the parent run's roll-up totals.
+ */
+async function recomputeEntryFromLineItems(entryId: string): Promise<void> {
+  const sb = createAdminSupabase();
+  const { data: entry } = await sb
+    .from("payroll_entries")
+    .select("id, gross_salary, employee_pf, professional_tax, lop_deduction, payroll_run_id, employee_id, annual_taxable_income, months_in_fy, net_pay, org_id")
+    .eq("id", entryId)
+    .single();
+  if (!entry) return;
+  const e = entry as any;
+
+  const { data: items } = await sb
+    .from("payroll_line_items")
+    .select("amount, taxable")
+    .eq("payroll_entry_id", entryId);
+  const itemsArr = (items ?? []) as Array<{ amount: number; taxable: boolean }>;
+  const taxableSum = itemsArr.filter((i) => i.taxable).reduce((s, i) => s + i.amount, 0);
+  const totalLineItems = itemsArr.reduce((s, i) => s + i.amount, 0);
+
+  // Regime + extra deductions for marginal-tax math
+  const { data: salary } = await sb
+    .from("salary_structures")
+    .select("tax_regime, additional_deductions_annual")
+    .eq("org_id", e.org_id)
+    .eq("employee_id", e.employee_id)
+    .maybeSingle();
+  const regime: "new" | "old" = ((salary as any)?.tax_regime as "new" | "old") ?? "new";
+  const standardDeduction = regime === "old" ? 50000 : 75000;
+  const extraDed = regime === "old" ? Number((salary as any)?.additional_deductions_annual ?? 0) : 0;
+
+  const monthsInFY: number = Number(e.months_in_fy) > 0 ? Number(e.months_in_fy) : 12;
+  const annualTaxable: number =
+    e.annual_taxable_income != null
+      ? Number(e.annual_taxable_income)
+      : Math.max(0, e.gross_salary * 12 - e.employee_pf * 12 - standardDeduction - extraDed);
+  const baseTds = Math.round(computeTaxByRegime(annualTaxable, regime) / monthsInFY);
+  const bonusTax = computeAdditionalTaxOnBonus(annualTaxable, taxableSum, regime);
+  const adjustedTds = baseTds + bonusTax;
+
+  const totalDeductions = e.employee_pf + e.professional_tax + adjustedTds + (e.lop_deduction ?? 0);
+  const netPay = Math.max(0, e.gross_salary + totalLineItems - totalDeductions);
+
+  await sb
+    .from("payroll_entries")
+    .update({
+      tds: adjustedTds,
+      total_line_items: totalLineItems,
+      total_deductions: totalDeductions,
+      net_pay: netPay,
+      previous_net_pay: e.net_pay,
+      edited_at: new Date().toISOString(),
+    } as any)
+    .eq("id", entryId);
+
+  // Roll up run totals.
+  const { data: allEntries } = await sb
+    .from("payroll_entries")
+    .select("gross_salary, total_deductions, net_pay, total_line_items")
+    .eq("payroll_run_id", e.payroll_run_id);
+  if (allEntries) {
+    const totalGross = (allEntries as any[]).reduce((s, x) => s + x.gross_salary + (x.total_line_items ?? 0), 0);
+    const totalDed = (allEntries as any[]).reduce((s, x) => s + x.total_deductions, 0);
+    const totalNet = (allEntries as any[]).reduce((s, x) => s + x.net_pay, 0);
+    await sb
+      .from("payroll_runs")
+      .update({ total_gross: totalGross, total_deductions: totalDed, total_net: totalNet })
+      .eq("id", e.payroll_run_id);
+  }
+}

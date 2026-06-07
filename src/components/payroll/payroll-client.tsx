@@ -47,6 +47,7 @@ interface Props {
   myCompensation: MyCompensation | null;
   orgName: string;
   currentEmployeeName: string;
+  activeConfigCreatedAt?: string | null;
 }
 
 const MONTHS = [
@@ -74,6 +75,7 @@ export function PayrollClient({
   myCompensation,
   orgName,
   currentEmployeeName,
+  activeConfigCreatedAt,
 }: Props) {
   const router = useRouter();
   const tabs = isAdmin
@@ -621,6 +623,7 @@ export function PayrollClient({
         onClose={() => { setSalaryDialog({ open: false }); router.refresh(); }}
         employees={employees.filter((e) => e.status === "active")}
         existing={salaryDialog.existing}
+        activeConfigCreatedAt={activeConfigCreatedAt}
       />
 
       <PayrollRunDialog open={runDialog} onClose={() => { setRunDialog(false); router.refresh(); }} />

@@ -152,6 +152,21 @@ export function PayslipDialog({ open, onClose, data, orgName }: Props) {
                   </li>
                 ))}
               </ul>
+              {/* Total Earnings = Gross Salary + Bonus + sum(line items).
+                  Only shown when line items exist (otherwise it duplicates Gross
+                  Earnings above). Makes payslip arithmetic tie out:
+                  Total Earnings − Total Deductions = Net Pay. */}
+              <div className="border-t border-border pt-1.5 mt-1.5">
+                <SlipRow
+                  label="Total Earnings"
+                  value={
+                    totalEarnings +
+                    ((data as any).total_line_items ??
+                      lineItems.reduce((s, i) => s + i.amount, 0))
+                  }
+                  bold
+                />
+              </div>
             </div>
           )}
 

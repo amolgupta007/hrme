@@ -135,6 +135,19 @@ export function PayslipEmail({
                   <Column align="right">{fmt(li.amount)}</Column>
                 </Row>
               ))}
+              {/* Total Earnings = Gross Salary + sum(line items). Only shown
+                  when line items exist; makes Total Earnings − Total Deductions
+                  = Net Pay so the email arithmetic ties out. */}
+              <Row>
+                <Column>
+                  <strong>Total Earnings</strong>
+                </Column>
+                <Column align="right">
+                  <strong>
+                    {fmt(grossSalary + lineItems.reduce((s, i) => s + i.amount, 0))}
+                  </strong>
+                </Column>
+              </Row>
             </Section>
           )}
 

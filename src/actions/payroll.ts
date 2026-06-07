@@ -638,11 +638,10 @@ export async function processPayrollRun(runId: string): Promise<ActionResult<voi
     (emps ?? []).map((e: any) => [e.id, (e.date_of_joining as string | null) ?? null])
   );
 
-  // PRD 02 Phase 1: pre-fetch line items grouped by employee. On FIRST process
-  // this map is empty (line items are added AFTER process). On REPROCESS the
-  // ON DELETE CASCADE on the entry FK has already cleared old entries' line
-  // items (entries delete below) so the map is still empty here. Kept for
-  // structural consistency with recomputeEntryFromLineItems.
+  // PRD 02 Phase 1: line items are not pre-fetched here because they only exist
+  // AFTER a run is processed (admin adds them in the entry-edit dialog). The
+  // empty map keeps the per-entry math below simple — `recomputeEntryFromLineItems`
+  // handles the post-process line-item recompute path separately.
   const existingLineItemsByEmployee = new Map<string, Array<{ amount: number; taxable: boolean }>>();
 
   // Build entries — TDS is projected over months_in_fy so mid-FY joiners aren't
@@ -757,7 +756,17 @@ export async function sendPayslipEmail(runId: string): Promise<ActionResult<{ se
   let sent = 0, failed = 0;
   for (const ent of (entries ?? []) as any[]) {
     const email = ent.employees?.email;
-    if (!email) { failed++; continue; }
+    if (!email) {
+      await sb.from("payslip_deliveries").upsert({
+        org_id: user.orgId,
+        payroll_entry_id: ent.id,
+        channel: "email",
+        status: "failed",
+        error: "no email on file for employee",
+      } as any, { onConflict: "payroll_entry_id,channel" });
+      failed++;
+      continue;
+    }
     const employeeName = `${ent.employees.first_name} ${ent.employees.last_name}`;
 
     const { data: items } = await sb.from("payroll_line_items").select("category, amount, taxable, note").eq("payroll_entry_id", ent.id);
@@ -1011,21 +1020,10 @@ export async function updatePayrollEntry(
 
   if (error) return { success: false, error: error.message };
 
-  // Recompute run totals
-  const { data: allEntries } = await supabase
-    .from("payroll_entries")
-    .select("gross_salary, total_deductions, net_pay")
-    .eq("payroll_run_id", e.payroll_run_id);
-
-  if (allEntries) {
-    const totalGross = (allEntries as any[]).reduce((s, x) => s + x.gross_salary, 0);
-    const totalDed = (allEntries as any[]).reduce((s, x) => s + x.total_deductions, 0);
-    const totalNet = (allEntries as any[]).reduce((s, x) => s + x.net_pay, 0);
-    await supabase
-      .from("payroll_runs")
-      .update({ total_gross: totalGross, total_deductions: totalDed, total_net: totalNet })
-      .eq("id", e.payroll_run_id);
-  }
+  // Fold any line items into this entry's TDS + totals + net pay, and roll up
+  // the run totals to include `total_line_items`. Without this call, line items
+  // get silently wiped from net_pay whenever an admin edits LOP/bonus.
+  await recomputeEntryFromLineItems(entryId);
 
   revalidatePath("/dashboard/payroll");
   return { success: true, data: undefined };

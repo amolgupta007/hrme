@@ -504,6 +504,22 @@ export async function processPayrollRun(runId: string): Promise<ActionResult<voi
   const runData = run as any;
   if (runData.status !== "draft") return { success: false, error: "Only draft runs can be processed" };
 
+  // PRD 02 Phase 1: snapshot the active ratio config for immutability.
+  const activeRatioConfig = await getActiveRatioConfig(user.orgId);
+  const { data: configRow } = await supabase
+    .from("salary_structure_config")
+    .select("id, effective_from")
+    .eq("org_id", user.orgId)
+    .lte("effective_from", new Date().toISOString().slice(0, 10))
+    .order("effective_from", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const configSnapshot = {
+    ...activeRatioConfig,
+    effective_from: (configRow as any)?.effective_from ?? null,
+    config_id: (configRow as any)?.id ?? null,
+  };
+
   // Compute month boundaries upfront — used for salary effective-from filter and approved-leaves lookup
   const [year, monthNum] = runData.month.split("-");
   const monthStart = `${year}-${monthNum}-01`;
@@ -561,6 +577,13 @@ export async function processPayrollRun(runId: string): Promise<ActionResult<voi
     (emps ?? []).map((e: any) => [e.id, (e.date_of_joining as string | null) ?? null])
   );
 
+  // PRD 02 Phase 1: pre-fetch line items grouped by employee. On FIRST process
+  // this map is empty (line items are added AFTER process). On REPROCESS the
+  // ON DELETE CASCADE on the entry FK has already cleared old entries' line
+  // items (entries delete below) so the map is still empty here. Kept for
+  // structural consistency with recomputeEntryFromLineItems.
+  const existingLineItemsByEmployee = new Map<string, Array<{ amount: number; taxable: boolean }>>();
+
   // Build entries — TDS is projected over months_in_fy so mid-FY joiners aren't
   // over-deducted. Stored on each entry for later read-back in updatePayrollEntry.
   const entries = (salaries as any[]).map((s) => {
@@ -584,9 +607,16 @@ export async function processPayrollRun(runId: string): Promise<ActionResult<voi
     const annualTax = computeTaxByRegime(annualTaxableIncome, regime);
     const monthlyTds = Math.round(annualTax / monthsInFY);
 
+    const lineItems = existingLineItemsByEmployee.get(s.employee_id) ?? [];
+    const taxableLineSum = lineItems.filter((i) => i.taxable).reduce((a, b) => a + b.amount, 0);
+    const nonTaxableLineSum = lineItems.filter((i) => !i.taxable).reduce((a, b) => a + b.amount, 0);
+    const totalLineItems = taxableLineSum + nonTaxableLineSum;
+    const bonusTax = computeAdditionalTaxOnBonus(annualTaxableIncome, taxableLineSum, regime);
+    const adjustedTds = monthlyTds + bonusTax;
+
     const totalDeductions =
-      s.employee_pf_monthly + s.professional_tax_monthly + monthlyTds + lopDeduction;
-    const netPay = Math.max(0, s.gross_monthly - totalDeductions);
+      s.employee_pf_monthly + s.professional_tax_monthly + adjustedTds + lopDeduction;
+    const netPay = Math.max(0, s.gross_monthly + totalLineItems - totalDeductions);
 
     return {
       payroll_run_id: runId,
@@ -598,10 +628,11 @@ export async function processPayrollRun(runId: string): Promise<ActionResult<voi
       gross_salary: s.gross_monthly,
       employee_pf: s.employee_pf_monthly,
       professional_tax: s.professional_tax_monthly,
-      tds: monthlyTds,
+      tds: adjustedTds,
       lop_days: lopDays,
       lop_deduction: lopDeduction,
-      bonus: 0,
+      bonus: 0, // legacy column kept for back-compat; line items are the new path
+      total_line_items: totalLineItems,
       total_deductions: totalDeductions,
       net_pay: netPay,
       annual_taxable_income: annualTaxableIncome,
@@ -628,6 +659,7 @@ export async function processPayrollRun(runId: string): Promise<ActionResult<voi
       total_net: Math.round(totalNet),
       employee_count: entries.length,
       processed_at: new Date().toISOString(),
+      structure_config_snapshot: configSnapshot,
     })
     .eq("id", runId);
   if (updateError) return { success: false, error: updateError.message };

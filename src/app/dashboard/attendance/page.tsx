@@ -2,8 +2,20 @@ import { getCurrentUser, isAdmin, isManagerOrAbove } from "@/lib/current-user";
 import { redirect } from "next/navigation";
 import { getTodayStatus, listAttendance, getTeamTodayAttendance } from "@/actions/attendance";
 import { listEmployees } from "@/actions/employees";
-import { getActiveShiftForEmployee } from "@/actions/shifts";
+import { getActiveShiftForEmployee, getRosterGrid } from "@/actions/shifts";
+import { getWeekOffPolicy } from "@/actions/week-off";
 import { AttendanceClient } from "@/components/attendance/attendance-client";
+
+function defaultWeekRange(): { from: string; to: string } {
+  // IST today. Find this week's Monday (ISO Monday=1 ... Sunday=7).
+  const now = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
+  const dayOfWeek = now.getUTCDay() || 7; // 0 = Sunday → 7
+  const monday = new Date(now);
+  monday.setUTCDate(now.getUTCDate() - (dayOfWeek - 1));
+  const sunday = new Date(monday);
+  sunday.setUTCDate(monday.getUTCDate() + 6);
+  return { from: monday.toISOString().slice(0, 10), to: sunday.toISOString().slice(0, 10) };
+}
 
 export default async function AttendancePage() {
   const user = await getCurrentUser();
@@ -29,6 +41,15 @@ export default async function AttendancePage() {
   const history = historyResult.success ? historyResult.data : [];
   const team = teamResult?.success ? teamResult.data : null;
   const employees = employeesResult?.success ? employeesResult.data : [];
+
+  const { from: rosterFrom, to: rosterTo } = defaultWeekRange();
+  const [rosterResult, weekOffResult] = await Promise.all([
+    isManager ? getRosterGrid({ from: rosterFrom, to: rosterTo }) : Promise.resolve(null),
+    getWeekOffPolicy(),
+  ]);
+  const roster = rosterResult?.success ? rosterResult.data : null;
+  const weekOff = weekOffResult?.success ? weekOffResult.data : null;
+
   return (
     <AttendanceClient
       today={today}
@@ -39,6 +60,9 @@ export default async function AttendancePage() {
       isAdmin={isAdminUser}
       attendancePayrollEnabled={user.attendancePayrollEnabled}
       activeShift={activeShift}
+      roster={roster}
+      weekOff={weekOff}
+      rosterRange={{ from: rosterFrom, to: rosterTo }}
     />
   );
 }

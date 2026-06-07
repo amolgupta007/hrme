@@ -7,6 +7,9 @@ import { Clock, LogIn, LogOut, Users, CheckCircle, Timer, Calendar } from "lucid
 import { clockIn, clockOut, listAttendance } from "@/actions/attendance";
 import type { AttendanceRecord, TodayStatus } from "@/actions/attendance";
 import type { Employee } from "@/types";
+import { RosterGrid } from "./roster-grid";
+import type { RosterGrid as RosterGridData } from "@/actions/shifts";
+import type { WeekOffPolicy } from "@/lib/attendance/week-off";
 
 interface Props {
   today: TodayStatus | null;
@@ -17,6 +20,9 @@ interface Props {
   isAdmin: boolean;
   attendancePayrollEnabled: boolean;
   activeShift: { id: string; name: string; start_time: string; end_time: string; is_overnight: boolean } | null;
+  roster: RosterGridData | null;
+  weekOff: WeekOffPolicy | null;
+  rosterRange: { from: string; to: string };
 }
 
 function formatTime(iso: string | null) {
@@ -35,11 +41,11 @@ function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
 }
 
-export function AttendanceClient({ today, history, team, employees, isManager, isAdmin, attendancePayrollEnabled, activeShift }: Props) {
+export function AttendanceClient({ today, history, team, employees, isManager, isAdmin, attendancePayrollEnabled, activeShift, roster, weekOff, rosterRange }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [liveTime, setLiveTime] = useState("");
-  const [activeTab, setActiveTab] = useState<"my" | "team">(isManager ? "team" : "my");
+  const [activeTab, setActiveTab] = useState<"my" | "team" | "roster">(isManager ? "team" : "my");
   const [filterEmployee, setFilterEmployee] = useState("");
   const [filteredHistory, setFilteredHistory] = useState<AttendanceRecord[]>(history);
 
@@ -208,10 +214,10 @@ export function AttendanceClient({ today, history, team, employees, isManager, i
       {/* Tabs */}
       {isManager && (
         <div className="flex gap-1 border-b border-border">
-          {[{ label: "Team Today", value: "team" }, { label: "My History", value: "my" }].map((tab) => (
+          {[{ label: "Team Today", value: "team" }, { label: "Roster", value: "roster" }, { label: "My History", value: "my" }].map((tab) => (
             <button
               key={tab.value}
-              onClick={() => setActiveTab(tab.value as "my" | "team")}
+              onClick={() => setActiveTab(tab.value as "my" | "team" | "roster")}
               className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
                 activeTab === tab.value
                   ? "border-primary text-primary"
@@ -260,6 +266,11 @@ export function AttendanceClient({ today, history, team, employees, isManager, i
             </div>
           )}
         </div>
+      )}
+
+      {/* Roster tab */}
+      {activeTab === "roster" && isManager && roster && (
+        <RosterGrid initial={roster} weekOff={weekOff} from={rosterRange.from} to={rosterRange.to} />
       )}
 
       {/* My history tab */}

@@ -377,6 +377,52 @@ Feature-flagged via `organizations.settings.attendance_enabled`. Optional payrol
   - Skips orgs with `attendance_enabled = false`
   - Idempotent (re-checks `clock_out_at IS NULL` at update time)
 
+### Phase 1 — Shifts + Week-Off (PRD 01, shipped 2026-06-07)
+
+- **Shift Master** at Settings → Attendance → Shift Master. Each shift has name,
+  start/end (auto-detects overnight), total_hours (auto-computed from
+  start/end minus break), break/grace/half-day-threshold minutes, OT-eligible,
+  default flag, active flag. At most one default per org. Case-insensitive
+  unique on `(org_id, lower(name))`.
+- **Shift Assignments** at Settings → Attendance → Shift Assignments. Admin
+  assigns a shift to one or more employees, or to a whole department, for a date
+  range (blank to-date = ongoing). Latest `date_from <= today` wins at resolve
+  time (no conflict detection in Phase 1).
+- **Week-Off Policy** at Settings → Attendance → Week-Off Policy. Org-level only
+  in Phase 1. 5-day week = pick 2 off days; 6-day = pick 1.
+- **Overnight attribution** is hard-coded to start-date in Phase 1
+  (configurable per-org in Phase 2). `attendance_records.attributed_date` mirrors
+  the `date` column when a shift is assigned and overnight clock-ins map to the
+  prior IST date.
+- **`clockIn`** writes `shift_id` + `attributed_date` when an active assignment
+  exists; otherwise behaves as before (today IST).
+- **Auto-clockout cron** prefers the row's assigned shift hours; falls back to
+  `organizations.settings.attendance.standard_workday_hours`.
+- **`WorkingHoursCard`** moved from `/dashboard/attendance` to
+  `Settings → Attendance` (Phase 1 consolidation per PRD §8).
+
+**Phase 1 gotchas:**
+- Migrations 029–032 are idempotent and applied via Supabase MCP. Migration 028
+  number was taken by the orphan `assistant_insights` (Phase 5 revert); we
+  start at 029.
+- The original `UNIQUE (org_id, employee_id, date)` constraint on
+  `attendance_records` is preserved. Overnight shifts uphold uniqueness because
+  `date = attributed_date = shift start date`.
+- `clockOut` still matches by **today's IST date**. Clocking out next morning
+  for an overnight shift is a Phase 2 follow-up (the lookup must widen to
+  `attributed_date = yesterday`).
+- All Phase 1 mutations are **admin-only**. Manager-scoped assignment lands in
+  Phase 2 with the roster grid.
+- The "Settings → Attendance" CollapsibleSection only renders when
+  `attendanceEnabled && isAdmin`. Non-admins see no shift configuration UI.
+- `bootstrapDefaultShiftIfMissing()` runs inside `listShifts` and seeds a
+  "General" shift from the org's existing `standard_workday_hours`. Safe to
+  call repeatedly — only inserts when zero shifts exist.
+- Shift master and week-off-policy RLS policies use the Clerk-JWT pattern
+  (`auth.jwt() ->> 'org_id'` + `org_role IN ('org:owner','org:admin')`),
+  matching `009_jambahire_rls.sql` and `018_payroll_schema_capture.sql`.
+  Service-role bypasses today (CLAUDE.md gotcha #5).
+
 ---
 
 ## Payroll Module (`/dashboard/payroll`) — Business+

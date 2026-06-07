@@ -4,6 +4,8 @@ import { getTodayStatus, listAttendance, getTeamTodayAttendance } from "@/action
 import { listEmployees } from "@/actions/employees";
 import { getActiveShiftForEmployee, getRosterGrid } from "@/actions/shifts";
 import { getWeekOffPolicy } from "@/actions/week-off";
+import { getOvertimeRecords, getOvertimeSettings } from "@/actions/overtime";
+import { DEFAULT_OT_SETTINGS } from "@/lib/attendance/overtime-types";
 import { AttendanceClient } from "@/components/attendance/attendance-client";
 
 function defaultWeekRange(): { from: string; to: string } {
@@ -50,6 +52,13 @@ export default async function AttendancePage() {
   const roster = rosterResult?.success ? rosterResult.data : null;
   const weekOff = weekOffResult?.success ? weekOffResult.data : null;
 
+  const [otRecordsResult, otSettingsResult] = await Promise.all([
+    isAdminUser ? getOvertimeRecords() : Promise.resolve(null),
+    getOvertimeSettings(),
+  ]);
+  const overtimeRecords = otRecordsResult?.success ? otRecordsResult.data : [];
+  const overtimeSettings = otSettingsResult?.success ? otSettingsResult.data : DEFAULT_OT_SETTINGS;
+
   return (
     <AttendanceClient
       today={today}
@@ -63,6 +72,8 @@ export default async function AttendancePage() {
       roster={roster}
       weekOff={weekOff}
       rosterRange={{ from: rosterFrom, to: rosterTo }}
+      overtimeRecords={overtimeRecords}
+      overtimeSettings={overtimeSettings}
     />
   );
 }

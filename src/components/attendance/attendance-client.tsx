@@ -5,9 +5,8 @@ import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { Clock, LogIn, LogOut, Users, CheckCircle, Timer, Calendar } from "lucide-react";
 import { clockIn, clockOut, listAttendance } from "@/actions/attendance";
-import type { AttendanceRecord, AttendanceSettings, TodayStatus } from "@/actions/attendance";
+import type { AttendanceRecord, TodayStatus } from "@/actions/attendance";
 import type { Employee } from "@/types";
-import { WorkingHoursCard } from "./working-hours-card";
 
 interface Props {
   today: TodayStatus | null;
@@ -16,7 +15,6 @@ interface Props {
   employees: Employee[];
   isManager: boolean;
   isAdmin: boolean;
-  attendanceSettings: AttendanceSettings | null;
   attendancePayrollEnabled: boolean;
 }
 
@@ -36,7 +34,7 @@ function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
 }
 
-export function AttendanceClient({ today, history, team, employees, isManager, isAdmin, attendanceSettings, attendancePayrollEnabled }: Props) {
+export function AttendanceClient({ today, history, team, employees, isManager, isAdmin, attendancePayrollEnabled }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [liveTime, setLiveTime] = useState("");
@@ -103,11 +101,6 @@ export function AttendanceClient({ today, history, team, employees, isManager, i
         <h1 className="text-xl font-bold text-foreground">Attendance</h1>
         <p className="text-sm text-muted-foreground mt-0.5">{todayDate}</p>
       </div>
-
-      {/* Admin-only working hours setting */}
-      {isAdmin && attendanceSettings && (
-        <WorkingHoursCard settings={attendanceSettings} />
-      )}
 
       {/* Clock in/out card */}
       <div className="rounded-xl border border-border bg-card p-6">

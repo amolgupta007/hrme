@@ -5,6 +5,7 @@ import { isAdmin } from "@/lib/current-user";
 import { listEmployees } from "@/actions/employees";
 import {
   getSalaryStructures,
+  getSalaryStructureConfig,
   getPayrollRuns,
   getMyPayslips,
   getMyCompensation,
@@ -22,17 +23,23 @@ export default async function PayrollPage() {
 
   const adminUser = userCtx ? isAdmin(userCtx.role) : false;
 
-  const [empResult, salaryResult, runsResult, mySlipsResult, myCompResult] = await Promise.all([
+  const [empResult, salaryResult, runsResult, mySlipsResult, myCompResult, configResult] = await Promise.all([
     listEmployees(),
     adminUser ? getSalaryStructures() : Promise.resolve({ success: true as const, data: [] }),
     adminUser ? getPayrollRuns() : Promise.resolve({ success: true as const, data: [] }),
     getMyPayslips(),
     getMyCompensation(),
+    adminUser ? getSalaryStructureConfig() : Promise.resolve({ success: true as const, data: null }),
   ]);
 
   const employees = empResult.success ? empResult.data : [];
   const salaryStructures = salaryResult.success ? salaryResult.data : [];
   const payrollRuns = runsResult.success ? runsResult.data : [];
+  // history is ordered by effective_from DESC; [0] is the most recently effective config
+  const activeConfigCreatedAt =
+    configResult.success && configResult.data && configResult.data.history.length > 0
+      ? configResult.data.history[0].created_at
+      : null;
   const myPayslips = mySlipsResult.success ? mySlipsResult.data : [];
   const myCompensation = myCompResult.success ? myCompResult.data : null;
 
@@ -65,6 +72,7 @@ export default async function PayrollPage() {
       myCompensation={myCompensation}
       orgName={orgName}
       currentEmployeeName={currentEmployeeName}
+      activeConfigCreatedAt={activeConfigCreatedAt}
     />
   );
 }

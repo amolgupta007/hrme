@@ -220,6 +220,18 @@ export const ROUTE_REGISTRY = {
     required_plan: "starter",
   },
 
+  // Attendance settings (Phase 1 shifts + week-off)
+  settings_attendance: {
+    path: "/dashboard/settings",
+    params: { section: "attendance" },
+    label: "Configure attendance shifts and week-off",
+    description:
+      "Shift master, shift assignments, week-off policy, and default working hours.",
+    required_role: "admin",
+    required_plan: "starter",
+    required_org_feature: "attendanceEnabled",
+  },
+
   // Settings + billing
   upgrade_plan: {
     path: "/dashboard/settings",

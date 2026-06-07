@@ -12,6 +12,10 @@ import {
 } from "@/actions/fingerprint";
 import { getPerformanceSettings } from "@/lib/performance-settings";
 import { createAdminSupabase } from "@/lib/supabase/server";
+import { getAttendanceSettings } from "@/actions/attendance";
+import { listShifts, listShiftAssignments } from "@/actions/shifts";
+import { getWeekOffPolicy } from "@/actions/week-off";
+import { listEmployees } from "@/actions/employees";
 
 export default async function SettingsPage() {
   const [
@@ -22,6 +26,11 @@ export default async function SettingsPage() {
     onboardingSteps,
     fingerprintConfigResult,
     fingerprintEmployeesResult,
+    attendanceSettingsResult,
+    shiftsResult,
+    shiftAssignmentsResult,
+    weekOffPolicyResult,
+    employeesResult,
   ] = await Promise.all([
     listDepartments(),
     getOrgProfile(),
@@ -30,6 +39,11 @@ export default async function SettingsPage() {
     getOrgOnboardingConfig(),
     getFingerprintConfig(),
     listEmployeesWithDeviceCodes(),
+    getAttendanceSettings(),
+    listShifts(),
+    listShiftAssignments(),
+    getWeekOffPolicy(),
+    listEmployees(),
   ]);
 
   const departments = departmentsResult.success ? departmentsResult.data : [];
@@ -47,6 +61,11 @@ export default async function SettingsPage() {
   const fingerprintEmployees = fingerprintEmployeesResult.success
     ? fingerprintEmployeesResult.data
     : [];
+  const attendanceSettings = attendanceSettingsResult.success ? attendanceSettingsResult.data : null;
+  const shifts = shiftsResult.success ? shiftsResult.data : [];
+  const shiftAssignments = shiftAssignmentsResult.success ? shiftAssignmentsResult.data : [];
+  const weekOffPolicy = weekOffPolicyResult.success ? weekOffPolicyResult.data : null;
+  const employees = employeesResult.success ? employeesResult.data : [];
 
   const supabase = createAdminSupabase();
   const orgSettingsResult = userCtx
@@ -87,6 +106,11 @@ export default async function SettingsPage() {
         fingerprintEmployees={fingerprintEmployees}
         userCtx={userCtx}
         performanceSettings={performanceSettings}
+        attendanceSettings={attendanceSettings}
+        shifts={shifts}
+        shiftAssignments={shiftAssignments}
+        weekOffPolicy={weekOffPolicy}
+        employees={employees}
       />
     </div>
   );

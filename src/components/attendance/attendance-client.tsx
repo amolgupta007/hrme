@@ -5,9 +5,8 @@ import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { Clock, LogIn, LogOut, Users, CheckCircle, Timer, Calendar } from "lucide-react";
 import { clockIn, clockOut, listAttendance } from "@/actions/attendance";
-import type { AttendanceRecord, AttendanceSettings, TodayStatus } from "@/actions/attendance";
+import type { AttendanceRecord, TodayStatus } from "@/actions/attendance";
 import type { Employee } from "@/types";
-import { WorkingHoursCard } from "./working-hours-card";
 
 interface Props {
   today: TodayStatus | null;
@@ -16,8 +15,8 @@ interface Props {
   employees: Employee[];
   isManager: boolean;
   isAdmin: boolean;
-  attendanceSettings: AttendanceSettings | null;
   attendancePayrollEnabled: boolean;
+  activeShift: { id: string; name: string; start_time: string; end_time: string; is_overnight: boolean } | null;
 }
 
 function formatTime(iso: string | null) {
@@ -36,7 +35,7 @@ function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
 }
 
-export function AttendanceClient({ today, history, team, employees, isManager, isAdmin, attendanceSettings, attendancePayrollEnabled }: Props) {
+export function AttendanceClient({ today, history, team, employees, isManager, isAdmin, attendancePayrollEnabled, activeShift }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [liveTime, setLiveTime] = useState("");
@@ -104,9 +103,13 @@ export function AttendanceClient({ today, history, team, employees, isManager, i
         <p className="text-sm text-muted-foreground mt-0.5">{todayDate}</p>
       </div>
 
-      {/* Admin-only working hours setting */}
-      {isAdmin && attendanceSettings && (
-        <WorkingHoursCard settings={attendanceSettings} />
+      {activeShift && (
+        <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-xs text-muted-foreground">
+          Today&apos;s shift: <span className="font-medium text-foreground">{activeShift.name}</span>
+          <span>·</span>
+          <span>{activeShift.start_time}–{activeShift.end_time}</span>
+          {activeShift.is_overnight && <span className="text-amber-600">overnight</span>}
+        </div>
       )}
 
       {/* Clock in/out card */}

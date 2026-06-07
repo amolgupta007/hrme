@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { getCurrentUser, isAdmin, isManagerOrAbove } from "@/lib/current-user";
 import type { ActionResult } from "@/types";
+import { getActiveShiftForEmployee } from "@/actions/shifts";
+import { attributedDateForClockIn } from "@/lib/attendance/attribute-date";
 
 export type AttendanceSettings = {
   standardWorkdayHours: number;
@@ -94,6 +96,8 @@ export type AttendanceRecord = {
   source: "web" | "device" | "auto_close";
   device_id: string | null;
   auto_closed: boolean;
+  shift_id: string | null;
+  attributed_date: string | null;
 };
 
 export type TodayStatus = {
@@ -110,16 +114,22 @@ export async function clockIn(ipAddress?: string): Promise<ActionResult<Attendan
   if (!user.employeeId) return { success: false, error: "No employee record found" };
 
   const supabase = createAdminSupabase();
-  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  const nowUtc = new Date().toISOString();
+  const istToday = new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-  // Check if already clocked in today
+  // Resolve assigned shift for the IST date; null if none assigned.
+  const shift = await getActiveShiftForEmployee(user.employeeId, istToday);
+  const attributedDate = attributedDateForClockIn(nowUtc, shift);
+  const recordDate = attributedDate; // we always set `date` = attributed_date when a shift is in play; identical to istToday when no shift
+
+  // Idempotency: prevent double clock-in for the same (employee, recordDate).
   const { data: existing } = await supabase
     .from("attendance_records")
     .select("*")
     .eq("org_id", user.orgId)
     .eq("employee_id", user.employeeId)
-    .eq("date", today)
-    .single();
+    .eq("date", recordDate)
+    .maybeSingle();
 
   if (existing) {
     if ((existing as any).clock_in_at && !(existing as any).clock_out_at) {
@@ -130,15 +140,15 @@ export async function clockIn(ipAddress?: string): Promise<ActionResult<Attendan
     }
   }
 
-  const now = new Date().toISOString();
-
   const { data, error } = await supabase
     .from("attendance_records")
     .insert({
       org_id: user.orgId,
       employee_id: user.employeeId,
-      date: today,
-      clock_in_at: now,
+      date: recordDate,
+      attributed_date: attributedDate,
+      shift_id: shift?.id ?? null,
+      clock_in_at: nowUtc,
       ip_address: ipAddress ?? null,
       source: "web" as const,
     })
@@ -151,6 +161,9 @@ export async function clockIn(ipAddress?: string): Promise<ActionResult<Attendan
   return { success: true, data: formatRecord(data) };
 }
 
+// Phase-1 limitation: clockOut still matches by today's IST date. Overnight
+// shifts clocking out the next morning is a Phase 2 follow-up (the lookup
+// needs to widen to attributed_date = yesterday in that case).
 // ---- Clock Out ----
 export async function clockOut(): Promise<ActionResult<AttendanceRecord>> {
   const user = await getCurrentUser();
@@ -159,7 +172,7 @@ export async function clockOut(): Promise<ActionResult<AttendanceRecord>> {
   if (!user.employeeId) return { success: false, error: "No employee record found" };
 
   const supabase = createAdminSupabase();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
   const { data: existing } = await supabase
     .from("attendance_records")
@@ -200,7 +213,7 @@ export async function getTodayStatus(): Promise<ActionResult<TodayStatus>> {
   if (!user.employeeId) return { success: true, data: { record: null, isClockedIn: false, hoursToday: null } };
 
   const supabase = createAdminSupabase();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
   const { data } = await supabase
     .from("attendance_records")
@@ -266,7 +279,7 @@ export async function getTeamTodayAttendance(): Promise<ActionResult<{
   if (!isManagerOrAbove(user.role)) return { success: false, error: "Unauthorized" };
 
   const supabase = createAdminSupabase();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
   const [{ count: totalEmployees }, { data: todayRecords }] = await Promise.all([
     supabase
@@ -309,5 +322,7 @@ function formatRecord(raw: any): AttendanceRecord {
     source: (raw.source ?? "web") as "web" | "device" | "auto_close",
     device_id: raw.device_id ?? null,
     auto_closed: !!raw.auto_closed,
+    shift_id: raw.shift_id ?? null,
+    attributed_date: raw.attributed_date ?? null,
   };
 }

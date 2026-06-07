@@ -30,7 +30,7 @@ export async function GET(req: Request) {
   // Pull every open shift older than today-IST (one query, batch-close in JS).
   const { data: openRows, error: queryErr } = await supabase
     .from("attendance_records")
-    .select("id, org_id, date, clock_in_at")
+    .select("id, org_id, date, clock_in_at, shift_id")
     .is("clock_out_at", null)
     .not("clock_in_at", "is", null)
     .lt("date", today);
@@ -75,6 +75,14 @@ export async function GET(req: Request) {
     settingsByOrg.set(o.id, { enabled, hours });
   }
 
+  // New: load all referenced shifts in one round-trip.
+  const shiftIds = Array.from(new Set(rows.map((r) => (r as any).shift_id).filter(Boolean))) as string[];
+  const shiftsById = new Map<string, { total_hours: number }>();
+  if (shiftIds.length > 0) {
+    const { data: shiftRows } = await supabase.from("shifts").select("id, total_hours").in("id", shiftIds);
+    for (const s of (shiftRows ?? []) as any[]) shiftsById.set(s.id, { total_hours: Number(s.total_hours) });
+  }
+
   // Compute and apply per-record updates.
   let closedCount = 0;
   let skippedDisabled = 0;
@@ -88,8 +96,15 @@ export async function GET(req: Request) {
       continue;
     }
 
+    // Resolution: assigned shift's hours → org's standard_workday_hours.
+    let resolvedHours = orgConfig.hours;
+    const rowShiftId = (row as any).shift_id as string | null;
+    if (rowShiftId && shiftsById.has(rowShiftId)) {
+      resolvedHours = shiftsById.get(rowShiftId)!.total_hours;
+    }
+
     const clockInAt = new Date(row.clock_in_at);
-    const proposedClockOut = new Date(clockInAt.getTime() + orgConfig.hours * 60 * 60 * 1000);
+    const proposedClockOut = new Date(clockInAt.getTime() + resolvedHours * 60 * 60 * 1000);
     const dayCap = endOfDateIST(row.date);
     const finalClockOut = proposedClockOut.getTime() < dayCap.getTime() ? proposedClockOut : dayCap;
     const totalMinutes = Math.max(0, Math.round((finalClockOut.getTime() - clockInAt.getTime()) / 60000));

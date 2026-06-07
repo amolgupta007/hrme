@@ -2,6 +2,7 @@ import { getCurrentUser, isAdmin, isManagerOrAbove } from "@/lib/current-user";
 import { redirect } from "next/navigation";
 import { getTodayStatus, listAttendance, getTeamTodayAttendance } from "@/actions/attendance";
 import { listEmployees } from "@/actions/employees";
+import { getActiveShiftForEmployee } from "@/actions/shifts";
 import { AttendanceClient } from "@/components/attendance/attendance-client";
 
 export default async function AttendancePage() {
@@ -13,6 +14,9 @@ export default async function AttendancePage() {
 
   const isManager = isManagerOrAbove(user.role);
   const isAdminUser = isAdmin(user.role);
+
+  const istToday = new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const activeShift = user.employeeId ? await getActiveShiftForEmployee(user.employeeId, istToday) : null;
 
   const [todayResult, historyResult, teamResult, employeesResult] = await Promise.all([
     getTodayStatus(),
@@ -34,6 +38,7 @@ export default async function AttendancePage() {
       isManager={isManager}
       isAdmin={isAdminUser}
       attendancePayrollEnabled={user.attendancePayrollEnabled}
+      activeShift={activeShift}
     />
   );
 }

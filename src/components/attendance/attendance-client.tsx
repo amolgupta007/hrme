@@ -16,6 +16,7 @@ interface Props {
   isManager: boolean;
   isAdmin: boolean;
   attendancePayrollEnabled: boolean;
+  activeShift: { id: string; name: string; start_time: string; end_time: string; is_overnight: boolean } | null;
 }
 
 function formatTime(iso: string | null) {
@@ -34,7 +35,7 @@ function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
 }
 
-export function AttendanceClient({ today, history, team, employees, isManager, isAdmin, attendancePayrollEnabled }: Props) {
+export function AttendanceClient({ today, history, team, employees, isManager, isAdmin, attendancePayrollEnabled, activeShift }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [liveTime, setLiveTime] = useState("");
@@ -101,6 +102,15 @@ export function AttendanceClient({ today, history, team, employees, isManager, i
         <h1 className="text-xl font-bold text-foreground">Attendance</h1>
         <p className="text-sm text-muted-foreground mt-0.5">{todayDate}</p>
       </div>
+
+      {activeShift && (
+        <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-xs text-muted-foreground">
+          Today&apos;s shift: <span className="font-medium text-foreground">{activeShift.name}</span>
+          <span>·</span>
+          <span>{activeShift.start_time}–{activeShift.end_time}</span>
+          {activeShift.is_overnight && <span className="text-amber-600">overnight</span>}
+        </div>
+      )}
 
       {/* Clock in/out card */}
       <div className="rounded-xl border border-border bg-card p-6">

@@ -226,6 +226,29 @@ export async function assignShiftToEmployees(input: {
     return { success: false, error: "Pick at least one employee" };
   }
   const sb = createAdminSupabase();
+
+  // Cross-tenant guard: every employee_id and the shift_id must belong to the caller's org.
+  const { data: validEmps } = await sb
+    .from("employees")
+    .select("id")
+    .eq("org_id", guard.user.orgId)
+    .in("id", input.employee_ids);
+  const validEmpIds = new Set((validEmps ?? []).map((e: any) => e.id as string));
+  const foreignEmpIds = input.employee_ids.filter((id) => !validEmpIds.has(id));
+  if (foreignEmpIds.length > 0) {
+    return { success: false, error: "One or more employees do not belong to your organization" };
+  }
+
+  const { data: shiftRow } = await sb
+    .from("shifts")
+    .select("id")
+    .eq("org_id", guard.user.orgId)
+    .eq("id", parsed.data.shift_id)
+    .maybeSingle();
+  if (!shiftRow) {
+    return { success: false, error: "Shift does not belong to your organization" };
+  }
+
   const rows = input.employee_ids.map((empId) => ({
     org_id: guard.user.orgId,
     employee_id: empId,
@@ -265,12 +288,21 @@ export async function assignShiftToDepartment(input: {
 /**
  * Returns the active shift for an employee on a given IST date, if any.
  * Phase 1 rule: latest `date_from <= date` wins; ignored if `date_to < date`.
+ *
+ * Security: caller MUST be authenticated and the requested `employeeId` MUST
+ * match the caller's own employee row (Phase 1 surfaces only self-lookup;
+ * admin lookups go through `listShiftAssignments`). Hard-rejects cross-employee
+ * reads to prevent shift-data enumeration via the Server Action surface.
  */
 export async function getActiveShiftForEmployee(employeeId: string, date: string): Promise<Shift | null> {
+  const user = await getCurrentUser();
+  if (!user) return null;
+  if (user.employeeId !== employeeId) return null;
   const sb = createAdminSupabase();
   const { data } = await sb
     .from("shift_assignments")
     .select(`shift_id, date_from, date_to, shifts(*)`)
+    .eq("org_id", user.orgId)
     .eq("employee_id", employeeId)
     .lte("date_from", date)
     .order("date_from", { ascending: false })

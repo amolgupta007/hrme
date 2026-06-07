@@ -45,6 +45,7 @@ export async function GET(req: Request) {
     org_id: string;
     date: string;
     clock_in_at: string;
+    shift_id: string | null;
   }>;
 
   if (rows.length === 0) {

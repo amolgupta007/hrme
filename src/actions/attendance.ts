@@ -172,7 +172,7 @@ export async function clockOut(): Promise<ActionResult<AttendanceRecord>> {
   if (!user.employeeId) return { success: false, error: "No employee record found" };
 
   const supabase = createAdminSupabase();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
   const { data: existing } = await supabase
     .from("attendance_records")
@@ -213,7 +213,7 @@ export async function getTodayStatus(): Promise<ActionResult<TodayStatus>> {
   if (!user.employeeId) return { success: true, data: { record: null, isClockedIn: false, hoursToday: null } };
 
   const supabase = createAdminSupabase();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
   const { data } = await supabase
     .from("attendance_records")
@@ -279,7 +279,7 @@ export async function getTeamTodayAttendance(): Promise<ActionResult<{
   if (!isManagerOrAbove(user.role)) return { success: false, error: "Unauthorized" };
 
   const supabase = createAdminSupabase();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
   const [{ count: totalEmployees }, { data: todayRecords }] = await Promise.all([
     supabase

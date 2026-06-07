@@ -8,6 +8,7 @@ export type HelpFrontmatter = {
   route_key: string;
   allowed_roles: UserRole[];
   plan_tier: OrgPlan;
+  required_org_feature?: "jambaHireEnabled" | "attendanceEnabled" | "grievancesEnabled";
   keywords?: string[];
 };
 

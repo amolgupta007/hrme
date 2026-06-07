@@ -12,7 +12,7 @@ export function WeekOffCard({ initial }: { initial: WeekOffPolicy | null }) {
   const [saving, setSaving] = useState(false);
 
   function toggleDay(d: number) {
-    setOffDays((prev) => prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d].sort());
+    setOffDays((prev) => prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d].sort((a, b) => a - b));
   }
 
   async function handleSave() {

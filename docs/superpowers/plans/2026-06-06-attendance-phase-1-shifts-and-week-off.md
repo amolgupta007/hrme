@@ -132,12 +132,26 @@ CREATE UNIQUE INDEX IF NOT EXISTS shifts_one_default_per_org
 CREATE INDEX IF NOT EXISTS shifts_org_active_idx
   ON public.shifts (org_id, active);
 
+-- Org-uniqueness: a shift name should be unique within an org so the picker
+-- can't show two "Morning" entries. Case-insensitive via lower().
+CREATE UNIQUE INDEX IF NOT EXISTS shifts_org_name_unique
+  ON public.shifts (org_id, lower(name));
+
 ALTER TABLE public.shifts ENABLE ROW LEVEL SECURITY;
 
--- Admin policy mirrors existing tables; service-role bypasses by design (see CLAUDE.md gotcha #5).
+-- Admin policy follows the existing codebase pattern (009_jambahire_rls.sql,
+-- 018_payroll_schema_capture.sql). Service-role bypasses RLS today (CLAUDE.md
+-- gotcha #5); these policies activate when Clerk-JWT-to-Supabase is wired.
 DROP POLICY IF EXISTS shifts_admin_all ON public.shifts;
 CREATE POLICY shifts_admin_all ON public.shifts FOR ALL
-  USING (true) WITH CHECK (true);
+  USING (
+    auth.jwt() ->> 'org_id' = shifts.org_id::text
+    AND auth.jwt() ->> 'org_role' IN ('org:owner', 'org:admin')
+  )
+  WITH CHECK (
+    auth.jwt() ->> 'org_id' = shifts.org_id::text
+    AND auth.jwt() ->> 'org_role' IN ('org:owner', 'org:admin')
+  );
 
 -- Reuse the shared updated_at trigger function (already exists per migration 001).
 DROP TRIGGER IF EXISTS shifts_set_updated_at ON public.shifts;
@@ -195,9 +209,27 @@ CREATE INDEX IF NOT EXISTS shift_assignments_shift_idx
   ON public.shift_assignments (shift_id);
 
 ALTER TABLE public.shift_assignments ENABLE ROW LEVEL SECURITY;
+
+-- Follows 009_jambahire_rls.sql / 018_payroll_schema_capture.sql admin pattern.
+-- Service-role bypasses today (CLAUDE.md gotcha #5).
 DROP POLICY IF EXISTS shift_assignments_admin_all ON public.shift_assignments;
 CREATE POLICY shift_assignments_admin_all ON public.shift_assignments FOR ALL
-  USING (true) WITH CHECK (true);
+  USING (
+    auth.jwt() ->> 'org_id' = shift_assignments.org_id::text
+    AND auth.jwt() ->> 'org_role' IN ('org:owner', 'org:admin')
+  )
+  WITH CHECK (
+    auth.jwt() ->> 'org_id' = shift_assignments.org_id::text
+    AND auth.jwt() ->> 'org_role' IN ('org:owner', 'org:admin')
+  );
+
+-- Employees can SELECT their own assignments (powers the "Today's shift" chip).
+DROP POLICY IF EXISTS shift_assignments_self_read ON public.shift_assignments;
+CREATE POLICY shift_assignments_self_read ON public.shift_assignments FOR SELECT
+  USING (
+    auth.jwt() ->> 'org_id' = shift_assignments.org_id::text
+    AND auth.jwt() ->> 'employee_id' = shift_assignments.employee_id::text
+  );
 ```
 
 > Note: Phase 1 does not enforce non-overlapping assignments. Latest-`date_from` wins at resolve time (see `getActiveShiftForEmployee`). Conflict detection is Phase 2.
@@ -236,9 +268,24 @@ CREATE TABLE IF NOT EXISTS public.week_off_policy (
 );
 
 ALTER TABLE public.week_off_policy ENABLE ROW LEVEL SECURITY;
+
+-- Admin write (org-scoped, Clerk-JWT pattern from 009_jambahire_rls.sql).
 DROP POLICY IF EXISTS week_off_policy_admin_all ON public.week_off_policy;
 CREATE POLICY week_off_policy_admin_all ON public.week_off_policy FOR ALL
-  USING (true) WITH CHECK (true);
+  USING (
+    auth.jwt() ->> 'org_id' = week_off_policy.org_id::text
+    AND auth.jwt() ->> 'org_role' IN ('org:owner', 'org:admin')
+  )
+  WITH CHECK (
+    auth.jwt() ->> 'org_id' = week_off_policy.org_id::text
+    AND auth.jwt() ->> 'org_role' IN ('org:owner', 'org:admin')
+  );
+
+-- Any authenticated user in the org can READ the org's policy (it affects
+-- everyone's calendar — no PII).
+DROP POLICY IF EXISTS week_off_policy_org_read ON public.week_off_policy;
+CREATE POLICY week_off_policy_org_read ON public.week_off_policy FOR SELECT
+  USING (auth.jwt() ->> 'org_id' = week_off_policy.org_id::text);
 
 DROP TRIGGER IF EXISTS week_off_policy_set_updated_at ON public.week_off_policy;
 CREATE TRIGGER week_off_policy_set_updated_at

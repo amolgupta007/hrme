@@ -9,6 +9,12 @@ JambaHR is an all-in-one HR management SaaS platform for small and medium busine
 
 ---
 
+## Feature Specs (PRDs)
+
+Feature specs live in `/docs/prds/`. Always read the relevant PRD before planning a feature, and flag any divergence between the PRD's assumed data model and the actual schema. The PRD describes the target; inspect the real codebase and reconcile.
+
+---
+
 ## Tech Stack
 
 | Layer | Tool |

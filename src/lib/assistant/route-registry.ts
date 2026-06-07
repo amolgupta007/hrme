@@ -232,6 +232,48 @@ export const ROUTE_REGISTRY = {
     required_org_feature: "attendanceEnabled",
   },
 
+  // Attendance Phase 2 — roster, overtime, week-off override
+  attendance_roster: {
+    path: "/dashboard/attendance",
+    params: { tab: "roster" },
+    label: "Attendance → Roster",
+    description:
+      "Weekly roster grid. Drag shifts onto employee cells. Managers see own department.",
+    required_role: "manager",
+    required_plan: "starter",
+    required_org_feature: "attendanceEnabled",
+  },
+  attendance_overtime: {
+    path: "/dashboard/attendance",
+    params: { tab: "overtime" },
+    label: "Attendance → Overtime",
+    description:
+      "Approve, reject, and push overtime to payroll. Visible only when overtime is enabled.",
+    required_role: "admin",
+    required_plan: "starter",
+    required_org_feature: "attendanceEnabled",
+  },
+  settings_overtime: {
+    path: "/dashboard/settings",
+    params: { section: "attendance" },
+    label: "Settings → Attendance → Overtime",
+    description:
+      "Master toggle for overtime, multiplier, threshold mode, approval-required.",
+    required_role: "admin",
+    required_plan: "starter",
+    required_org_feature: "attendanceEnabled",
+  },
+  settings_week_off_override: {
+    path: "/dashboard/settings",
+    params: { section: "attendance" },
+    label: "Settings → Attendance → Week-off Overrides",
+    description:
+      "Per-employee week-off override (e.g. 6-day employee in a 5-day org).",
+    required_role: "admin",
+    required_plan: "starter",
+    required_org_feature: "attendanceEnabled",
+  },
+
   // Payroll settings
   settings_payroll: {
     path: "/dashboard/settings",

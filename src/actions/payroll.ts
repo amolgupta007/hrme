@@ -433,6 +433,60 @@ export async function deleteSalaryStructure(employeeId: string): Promise<ActionR
   return { success: true, data: undefined };
 }
 
+/**
+ * Re-runs computeCTCBreakdown for every salary_structures row in the caller's
+ * org using the latest active RatioConfig. Use after `upsertSalaryStructureConfig`
+ * to propagate new ratios into existing employee structures.
+ */
+export async function recomputeAllSalaryStructures(): Promise<ActionResult<{ recomputed: number }>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can recompute salary structures" };
+
+  const sb = createAdminSupabase();
+  const ratioConfig = await getActiveRatioConfig(user.orgId);
+  const { data: structures, error } = await sb
+    .from("salary_structures")
+    .select("id, employee_id, ctc, state, is_metro, include_hra, effective_from, tax_regime, additional_deductions_annual")
+    .eq("org_id", user.orgId);
+  if (error) return { success: false, error: error.message };
+
+  let recomputed = 0;
+  for (const row of (structures ?? []) as any[]) {
+    const breakdown = computeCTCBreakdown(
+      row.ctc,
+      row.state,
+      row.is_metro,
+      row.include_hra,
+      (row.tax_regime as "new" | "old") ?? "new",
+      Number(row.additional_deductions_annual ?? 0),
+      ratioConfig
+    );
+    const { error: updErr } = await sb
+      .from("salary_structures")
+      .update({
+        basic_monthly: breakdown.basicMonthly,
+        hra_monthly: breakdown.hraMonthly,
+        special_allowance_monthly: breakdown.specialAllowanceMonthly,
+        employer_pf_monthly: breakdown.employerPfMonthly,
+        employer_gratuity_annual: breakdown.employerGratuityAnnual,
+        employee_pf_monthly: breakdown.employeePfMonthly,
+        professional_tax_monthly: breakdown.ptMonthly,
+        tds_monthly: breakdown.tdsMonthly,
+        gross_monthly: breakdown.grossMonthly,
+        net_monthly: breakdown.netMonthly,
+        updated_at: new Date().toISOString(),
+        computed_at: new Date().toISOString(),
+      } as any)
+      .eq("id", row.id);
+    if (!updErr) recomputed++;
+  }
+
+  revalidatePath("/dashboard/payroll");
+  revalidatePath("/dashboard/settings");
+  return { success: true, data: { recomputed } };
+}
+
 // ---- Payroll Runs ----
 
 export async function getPayrollRuns(): Promise<ActionResult<PayrollRun[]>> {

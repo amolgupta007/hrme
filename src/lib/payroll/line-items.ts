@@ -1,4 +1,4 @@
-export type LineItemCategory = "bonus" | "allowance" | "reimbursement" | "other";
+export type LineItemCategory = "bonus" | "allowance" | "reimbursement" | "other" | "overtime";
 
 export type LineItem = {
   id: string;

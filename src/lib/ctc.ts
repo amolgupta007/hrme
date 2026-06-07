@@ -15,6 +15,20 @@ export const INDIAN_STATES = [
   { value: "other", label: "Other State" },
 ];
 
+export type RatioConfig = {
+  basic_pct: number;        // % of CTC — historical hard-code 40
+  hra_pct_metro: number;    // % of Basic — historical hard-code 50
+  hra_pct_non_metro: number; // % of Basic — historical hard-code 40
+  gratuity_pct: number;     // % of Basic — historical hard-code 4.81
+};
+
+export const DEFAULT_RATIO_CONFIG: RatioConfig = {
+  basic_pct: 40,
+  hra_pct_metro: 50,
+  hra_pct_non_metro: 40,
+  gratuity_pct: 4.81,
+};
+
 /**
  * Professional Tax — state-based monthly deduction.
  * Slabs hardcoded to FY 2025-26 rates. State rate revisions (MH/KA/TN/WB)
@@ -187,13 +201,15 @@ export function computeCTCBreakdown(
   isMetro: boolean = true,
   includeHra: boolean = true,
   taxRegime: TaxRegime = "new",
-  additionalDeductions: number = 0
+  additionalDeductions: number = 0,
+  config: RatioConfig = DEFAULT_RATIO_CONFIG
 ): CTCBreakdown {
-  const basicAnnual = Math.round(ctc * 0.4);
-  const hraAnnual = includeHra ? Math.round(basicAnnual * (isMetro ? 0.5 : 0.4)) : 0;
+  const basicAnnual = Math.round(ctc * (config.basic_pct / 100));
+  const hraRate = isMetro ? config.hra_pct_metro : config.hra_pct_non_metro;
+  const hraAnnual = includeHra ? Math.round(basicAnnual * (hraRate / 100)) : 0;
   const employerPfMonthly = Math.min(Math.round((basicAnnual / 12) * 0.12), 1800);
   const employerPfAnnual = employerPfMonthly * 12;
-  const employerGratuityAnnual = Math.round(basicAnnual * 0.0481);
+  const employerGratuityAnnual = Math.round(basicAnnual * (config.gratuity_pct / 100));
   const specialAllowanceAnnual = Math.max(
     0,
     ctc - basicAnnual - hraAnnual - employerPfAnnual - employerGratuityAnnual

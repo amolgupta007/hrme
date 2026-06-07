@@ -20,6 +20,7 @@ import {
   markPayrollPaid,
   deletePayrollRun,
   getPayrollEntries,
+  sendPayslipEmail,
 } from "@/actions/payroll";
 import type {
   SalaryStructureRow,
@@ -46,6 +47,7 @@ interface Props {
   myCompensation: MyCompensation | null;
   orgName: string;
   currentEmployeeName: string;
+  activeConfigCreatedAt?: string | null;
 }
 
 const MONTHS = [
@@ -73,6 +75,7 @@ export function PayrollClient({
   myCompensation,
   orgName,
   currentEmployeeName,
+  activeConfigCreatedAt,
 }: Props) {
   const router = useRouter();
   const tabs = isAdmin
@@ -367,6 +370,19 @@ export function PayrollClient({
                           {markingPaid === run.id ? "…" : "Mark Paid"}
                         </Button>
                       )}
+                      {(run.status === "processed" || run.status === "paid") && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={async () => {
+                            const r = await sendPayslipEmail(run.id);
+                            if (!r.success) { toast.error(r.error); return; }
+                            toast.success(`Sent ${r.data.sent} payslip(s)${r.data.failed > 0 ? `, ${r.data.failed} failed` : ""}`);
+                          }}
+                        >
+                          Send payslips
+                        </Button>
+                      )}
                       {run.status !== "paid" && (
                         <Button
                           size="sm"
@@ -607,6 +623,7 @@ export function PayrollClient({
         onClose={() => { setSalaryDialog({ open: false }); router.refresh(); }}
         employees={employees.filter((e) => e.status === "active")}
         existing={salaryDialog.existing}
+        activeConfigCreatedAt={activeConfigCreatedAt}
       />
 
       <PayrollRunDialog open={runDialog} onClose={() => { setRunDialog(false); router.refresh(); }} />
@@ -614,7 +631,7 @@ export function PayrollClient({
       {editEntry && (
         <EntryEditDialog
           open
-          onClose={() => setEditEntry(null)}
+          onClose={() => { setEditEntry(null); router.refresh(); }}
           entry={editEntry}
         />
       )}

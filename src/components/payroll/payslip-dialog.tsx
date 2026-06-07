@@ -1,11 +1,12 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Printer } from "lucide-react";
 import { formatINR } from "@/lib/ctc";
-import type { PayrollEntry } from "@/actions/payroll";
-import type { MyPayslip } from "@/actions/payroll";
+import type { PayrollEntry, MyPayslip, PayrollLineItemRow } from "@/actions/payroll";
+import { listPayrollLineItems } from "@/actions/payroll";
 
 type SlipData = (PayrollEntry & { month: string; employee_name: string }) | (MyPayslip & { employee_name: string });
 
@@ -31,6 +32,19 @@ export function PayslipDialog({ open, onClose, data, orgName }: Props) {
   const grossSalary = data.gross_salary;
   const bonus = data.bonus;
   const totalEarnings = grossSalary + bonus;
+
+  // Resolve entry ID from either PayrollEntry (.id) or MyPayslip (.entry_id)
+  const entryId: string = (data as any).id ?? (data as any).entry_id;
+
+  const [lineItems, setLineItems] = useState<PayrollLineItemRow[]>([]);
+
+  useEffect(() => {
+    if (!open || !entryId) return;
+    setLineItems([]);
+    listPayrollLineItems(entryId).then((r) => {
+      if (r.success) setLineItems(r.data);
+    });
+  }, [open, entryId]);
 
   function handlePrint() {
     window.print();
@@ -115,6 +129,46 @@ export function PayslipDialog({ open, onClose, data, orgName }: Props) {
               </div>
             </div>
           </div>
+
+          {/* Additional line items */}
+          {lineItems.length > 0 && (
+            <div className="mt-3 border-t border-border pt-3">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
+                Additional Items
+              </p>
+              <ul className="space-y-1.5">
+                {lineItems.map((it) => (
+                  <li key={it.id} className="flex items-center justify-between text-sm">
+                    <span className="flex items-center gap-2 text-muted-foreground">
+                      <span className="capitalize">{it.category}</span>
+                      {it.note && (
+                        <span className="text-xs text-muted-foreground">— {it.note}</span>
+                      )}
+                      {!it.taxable && (
+                        <span className="text-[10px] text-muted-foreground">(non-taxable)</span>
+                      )}
+                    </span>
+                    <span className="font-mono tabular-nums">{formatINR(it.amount)}</span>
+                  </li>
+                ))}
+              </ul>
+              {/* Total Earnings = Gross Salary + Bonus + sum(line items).
+                  Only shown when line items exist (otherwise it duplicates Gross
+                  Earnings above). Makes payslip arithmetic tie out:
+                  Total Earnings − Total Deductions = Net Pay. */}
+              <div className="border-t border-border pt-1.5 mt-1.5">
+                <SlipRow
+                  label="Total Earnings"
+                  value={
+                    totalEarnings +
+                    ((data as any).total_line_items ??
+                      lineItems.reduce((s, i) => s + i.amount, 0))
+                  }
+                  bold
+                />
+              </div>
+            </div>
+          )}
 
           {/* Net Pay */}
           <div className="rounded-lg bg-primary/10 border border-primary/20 px-5 py-4 flex items-center justify-between mt-2">

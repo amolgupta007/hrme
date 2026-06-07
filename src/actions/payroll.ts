@@ -2,9 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { render } from "@react-email/render";
+import { waitUntil } from "@vercel/functions";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { getCurrentUser, isAdmin } from "@/lib/current-user";
-import { computeCTCBreakdown, getProfessionalTax, computeTaxByRegime, computeAdditionalTaxOnBonus, computeMonthsInFY } from "@/lib/ctc";
+import { computeCTCBreakdown, getProfessionalTax, computeTaxByRegime, computeAdditionalTaxOnBonus, computeMonthsInFY, DEFAULT_RATIO_CONFIG, type RatioConfig } from "@/lib/ctc";
+import type { LineItem, LineItemCategory } from "@/lib/payroll/line-items";
+import { resend, FROM_EMAIL } from "@/lib/resend";
+import { PayslipEmail } from "@/components/emails/payslip";
 import type { ActionResult } from "@/types";
 
 // ---- Types ----
@@ -42,6 +47,7 @@ export type SalaryStructureRow = {
   effective_from: string;
   tax_regime: "new" | "old";
   additional_deductions_annual: number;
+  computed_at: string | null;
 };
 
 export type PayrollRun = {
@@ -117,7 +123,142 @@ const PayrollRunSchema = z.object({
   notes: z.string().optional(),
 });
 
+const RatioConfigSchema = z.object({
+  basic_pct: z.number().min(10).max(80),
+  hra_pct_metro: z.number().min(0).max(100),
+  hra_pct_non_metro: z.number().min(0).max(100),
+  gratuity_pct: z.number().min(0).max(20),
+  effective_from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+});
+
 // ---- Salary Structures ----
+
+/**
+ * Returns the org's active RatioConfig — the latest salary_structure_config row
+ * with effective_from <= today. Returns DEFAULT_RATIO_CONFIG if none configured.
+ * Server-internal helper; no auth guard (caller is always already authenticated).
+ */
+async function getActiveRatioConfig(orgId: string): Promise<RatioConfig> {
+  const sb = createAdminSupabase();
+  const today = new Date().toISOString().slice(0, 10);
+  const { data } = await sb
+    .from("salary_structure_config")
+    .select("basic_pct, hra_pct_metro, hra_pct_non_metro, gratuity_pct")
+    .eq("org_id", orgId)
+    .lte("effective_from", today)
+    .order("effective_from", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!data) return DEFAULT_RATIO_CONFIG;
+  return {
+    basic_pct: Number((data as any).basic_pct),
+    hra_pct_metro: Number((data as any).hra_pct_metro),
+    hra_pct_non_metro: Number((data as any).hra_pct_non_metro),
+    gratuity_pct: Number((data as any).gratuity_pct),
+  };
+}
+
+export async function getSalaryStructureConfig(): Promise<ActionResult<{
+  active: RatioConfig;
+  history: SalaryStructureConfig[];
+}>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can view salary structure config" };
+
+  const sb = createAdminSupabase();
+  const { data, error } = await sb
+    .from("salary_structure_config")
+    .select("id, basic_pct, hra_pct_metro, hra_pct_non_metro, gratuity_pct, effective_from, created_at")
+    .eq("org_id", user.orgId)
+    .order("effective_from", { ascending: false });
+
+  if (error) return { success: false, error: error.message };
+
+  const history = (data ?? []).map((r: any) => ({
+    id: r.id,
+    basic_pct: Number(r.basic_pct),
+    hra_pct_metro: Number(r.hra_pct_metro),
+    hra_pct_non_metro: Number(r.hra_pct_non_metro),
+    gratuity_pct: Number(r.gratuity_pct),
+    effective_from: r.effective_from,
+    created_at: r.created_at,
+  })) as SalaryStructureConfig[];
+
+  const active = await getActiveRatioConfig(user.orgId);
+  return { success: true, data: { active, history } };
+}
+
+export async function upsertSalaryStructureConfig(
+  input: z.infer<typeof RatioConfigSchema>
+): Promise<ActionResult<void>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can configure salary structure ratios" };
+
+  const parsed = RatioConfigSchema.safeParse(input);
+  if (!parsed.success) return { success: false, error: parsed.error.errors[0].message };
+
+  const sb = createAdminSupabase();
+  const { error } = await sb
+    .from("salary_structure_config")
+    .upsert(
+      {
+        org_id: user.orgId,
+        basic_pct: parsed.data.basic_pct,
+        hra_pct_metro: parsed.data.hra_pct_metro,
+        hra_pct_non_metro: parsed.data.hra_pct_non_metro,
+        gratuity_pct: parsed.data.gratuity_pct,
+        effective_from: parsed.data.effective_from,
+        created_by: user.employeeId ?? null,
+      } as any,
+      { onConflict: "org_id,effective_from" }
+    );
+
+  if (error) return { success: false, error: error.message };
+  revalidatePath("/dashboard/settings");
+  return { success: true, data: undefined };
+}
+
+export async function previewConfigImpact(
+  proposed: RatioConfig
+): Promise<ActionResult<ConfigImpactRow[]>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can preview config impact" };
+
+  const sb = createAdminSupabase();
+  const [{ data: structures }, { data: employees }] = await Promise.all([
+    sb.from("salary_structures")
+      .select("employee_id, ctc, state, is_metro, include_hra, tax_regime, additional_deductions_annual")
+      .eq("org_id", user.orgId),
+    sb.from("employees")
+      .select("id, first_name, last_name")
+      .eq("org_id", user.orgId),
+  ]);
+
+  const empMap = new Map((employees ?? []).map((e: any) => [e.id, e]));
+
+  const rows: ConfigImpactRow[] = (structures ?? []).map((s: any) => {
+    const emp = empMap.get(s.employee_id) as any;
+    const oldB = computeCTCBreakdown(s.ctc, s.state, s.is_metro, s.include_hra, s.tax_regime ?? "new", Number(s.additional_deductions_annual ?? 0));
+    const newB = computeCTCBreakdown(s.ctc, s.state, s.is_metro, s.include_hra, s.tax_regime ?? "new", Number(s.additional_deductions_annual ?? 0), proposed);
+    return {
+      employee_id: s.employee_id,
+      employee_name: emp ? `${emp.first_name} ${emp.last_name}` : "Unknown",
+      basic_monthly_old: oldB.basicMonthly,
+      basic_monthly_new: newB.basicMonthly,
+      hra_monthly_old: oldB.hraMonthly,
+      hra_monthly_new: newB.hraMonthly,
+      special_allowance_monthly_old: oldB.specialAllowanceMonthly,
+      special_allowance_monthly_new: newB.specialAllowanceMonthly,
+      net_monthly_old: oldB.netMonthly,
+      net_monthly_new: newB.netMonthly,
+    };
+  });
+
+  return { success: true, data: rows };
+}
 
 export async function getSalaryStructures(): Promise<ActionResult<SalaryStructureRow[]>> {
   const user = await getCurrentUser();
@@ -171,6 +312,7 @@ export async function getSalaryStructures(): Promise<ActionResult<SalaryStructur
       effective_from: r.effective_from,
       tax_regime: (r.tax_regime as "new" | "old") ?? "new",
       additional_deductions_annual: Number(r.additional_deductions_annual ?? 0),
+      computed_at: r.computed_at ?? null,
     };
   });
 
@@ -238,7 +380,8 @@ export async function upsertSalaryStructure(
   if (!parsed.success) return { success: false, error: parsed.error.errors[0].message };
 
   const { employee_id, ctc, state, is_metro, include_hra, effective_from, tax_regime, additional_deductions_annual } = parsed.data;
-  const breakdown = computeCTCBreakdown(ctc, state, is_metro, include_hra, tax_regime, additional_deductions_annual);
+  const ratioConfig = await getActiveRatioConfig(user.orgId);
+  const breakdown = computeCTCBreakdown(ctc, state, is_metro, include_hra, tax_regime, additional_deductions_annual, ratioConfig);
 
   const supabase = createAdminSupabase();
 
@@ -294,6 +437,60 @@ export async function deleteSalaryStructure(employeeId: string): Promise<ActionR
 
   revalidatePath("/dashboard/payroll");
   return { success: true, data: undefined };
+}
+
+/**
+ * Re-runs computeCTCBreakdown for every salary_structures row in the caller's
+ * org using the latest active RatioConfig. Use after `upsertSalaryStructureConfig`
+ * to propagate new ratios into existing employee structures.
+ */
+export async function recomputeAllSalaryStructures(): Promise<ActionResult<{ recomputed: number }>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can recompute salary structures" };
+
+  const sb = createAdminSupabase();
+  const ratioConfig = await getActiveRatioConfig(user.orgId);
+  const { data: structures, error } = await sb
+    .from("salary_structures")
+    .select("id, employee_id, ctc, state, is_metro, include_hra, effective_from, tax_regime, additional_deductions_annual")
+    .eq("org_id", user.orgId);
+  if (error) return { success: false, error: error.message };
+
+  let recomputed = 0;
+  for (const row of (structures ?? []) as any[]) {
+    const breakdown = computeCTCBreakdown(
+      row.ctc,
+      row.state,
+      row.is_metro,
+      row.include_hra,
+      (row.tax_regime as "new" | "old") ?? "new",
+      Number(row.additional_deductions_annual ?? 0),
+      ratioConfig
+    );
+    const { error: updErr } = await sb
+      .from("salary_structures")
+      .update({
+        basic_monthly: breakdown.basicMonthly,
+        hra_monthly: breakdown.hraMonthly,
+        special_allowance_monthly: breakdown.specialAllowanceMonthly,
+        employer_pf_monthly: breakdown.employerPfMonthly,
+        employer_gratuity_annual: breakdown.employerGratuityAnnual,
+        employee_pf_monthly: breakdown.employeePfMonthly,
+        professional_tax_monthly: breakdown.ptMonthly,
+        tds_monthly: breakdown.tdsMonthly,
+        gross_monthly: breakdown.grossMonthly,
+        net_monthly: breakdown.netMonthly,
+        updated_at: new Date().toISOString(),
+        computed_at: new Date().toISOString(),
+      } as any)
+      .eq("id", row.id);
+    if (!updErr) recomputed++;
+  }
+
+  revalidatePath("/dashboard/payroll");
+  revalidatePath("/dashboard/settings");
+  return { success: true, data: { recomputed } };
 }
 
 // ---- Payroll Runs ----
@@ -368,6 +565,22 @@ export async function processPayrollRun(runId: string): Promise<ActionResult<voi
   const runData = run as any;
   if (runData.status !== "draft") return { success: false, error: "Only draft runs can be processed" };
 
+  // PRD 02 Phase 1: snapshot the active ratio config for immutability.
+  const activeRatioConfig = await getActiveRatioConfig(user.orgId);
+  const { data: configRow } = await supabase
+    .from("salary_structure_config")
+    .select("id, effective_from")
+    .eq("org_id", user.orgId)
+    .lte("effective_from", new Date().toISOString().slice(0, 10))
+    .order("effective_from", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const configSnapshot = {
+    ...activeRatioConfig,
+    effective_from: (configRow as any)?.effective_from ?? null,
+    config_id: (configRow as any)?.id ?? null,
+  };
+
   // Compute month boundaries upfront — used for salary effective-from filter and approved-leaves lookup
   const [year, monthNum] = runData.month.split("-");
   const monthStart = `${year}-${monthNum}-01`;
@@ -425,6 +638,12 @@ export async function processPayrollRun(runId: string): Promise<ActionResult<voi
     (emps ?? []).map((e: any) => [e.id, (e.date_of_joining as string | null) ?? null])
   );
 
+  // PRD 02 Phase 1: line items are not pre-fetched here because they only exist
+  // AFTER a run is processed (admin adds them in the entry-edit dialog). The
+  // empty map keeps the per-entry math below simple — `recomputeEntryFromLineItems`
+  // handles the post-process line-item recompute path separately.
+  const existingLineItemsByEmployee = new Map<string, Array<{ amount: number; taxable: boolean }>>();
+
   // Build entries — TDS is projected over months_in_fy so mid-FY joiners aren't
   // over-deducted. Stored on each entry for later read-back in updatePayrollEntry.
   const entries = (salaries as any[]).map((s) => {
@@ -448,9 +667,16 @@ export async function processPayrollRun(runId: string): Promise<ActionResult<voi
     const annualTax = computeTaxByRegime(annualTaxableIncome, regime);
     const monthlyTds = Math.round(annualTax / monthsInFY);
 
+    const lineItems = existingLineItemsByEmployee.get(s.employee_id) ?? [];
+    const taxableLineSum = lineItems.filter((i) => i.taxable).reduce((a, b) => a + b.amount, 0);
+    const nonTaxableLineSum = lineItems.filter((i) => !i.taxable).reduce((a, b) => a + b.amount, 0);
+    const totalLineItems = taxableLineSum + nonTaxableLineSum;
+    const bonusTax = computeAdditionalTaxOnBonus(annualTaxableIncome, taxableLineSum, regime);
+    const adjustedTds = monthlyTds + bonusTax;
+
     const totalDeductions =
-      s.employee_pf_monthly + s.professional_tax_monthly + monthlyTds + lopDeduction;
-    const netPay = Math.max(0, s.gross_monthly - totalDeductions);
+      s.employee_pf_monthly + s.professional_tax_monthly + adjustedTds + lopDeduction;
+    const netPay = Math.max(0, s.gross_monthly + totalLineItems - totalDeductions);
 
     return {
       payroll_run_id: runId,
@@ -462,10 +688,11 @@ export async function processPayrollRun(runId: string): Promise<ActionResult<voi
       gross_salary: s.gross_monthly,
       employee_pf: s.employee_pf_monthly,
       professional_tax: s.professional_tax_monthly,
-      tds: monthlyTds,
+      tds: adjustedTds,
       lop_days: lopDays,
       lop_deduction: lopDeduction,
-      bonus: 0,
+      bonus: 0, // legacy column kept for back-compat; line items are the new path
+      total_line_items: totalLineItems,
       total_deductions: totalDeductions,
       net_pay: netPay,
       annual_taxable_income: annualTaxableIncome,
@@ -492,12 +719,109 @@ export async function processPayrollRun(runId: string): Promise<ActionResult<voi
       total_net: Math.round(totalNet),
       employee_count: entries.length,
       processed_at: new Date().toISOString(),
+      structure_config_snapshot: configSnapshot,
     })
     .eq("id", runId);
   if (updateError) return { success: false, error: updateError.message };
 
   revalidatePath("/dashboard/payroll");
   return { success: true, data: undefined };
+}
+
+/**
+ * Sends payslip emails for every entry in a processed (or paid) run.
+ * Records one row in payslip_deliveries per (entry, channel='email').
+ * Best-effort; never throws — failures are recorded as status='failed'.
+ */
+export async function sendPayslipEmail(runId: string): Promise<ActionResult<{ sent: number; failed: number }>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can send payslips" };
+
+  const sb = createAdminSupabase();
+  const { data: run } = await sb.from("payroll_runs").select("id, org_id, month, status").eq("id", runId).single();
+  if (!run || (run as any).org_id !== user.orgId) return { success: false, error: "Run not found" };
+  const status = (run as any).status as string;
+  if (status === "draft") return { success: false, error: "Process the run before sending payslips" };
+
+  const { data: org } = await sb.from("organizations").select("name").eq("id", user.orgId).single();
+  const orgName = (org as any)?.name ?? "Your employer";
+
+  const { data: entries } = await sb
+    .from("payroll_entries")
+    .select(`id, employee_id, basic_monthly, hra_monthly, special_allowance_monthly, gross_salary, employee_pf, professional_tax, tds, lop_days, lop_deduction, total_line_items, total_deductions, net_pay, employees!employee_id(first_name, last_name, email)`)
+    .eq("payroll_run_id", runId)
+    .eq("org_id", user.orgId);
+
+  let sent = 0, failed = 0;
+  for (const ent of (entries ?? []) as any[]) {
+    const email = ent.employees?.email;
+    if (!email) {
+      await sb.from("payslip_deliveries").upsert({
+        org_id: user.orgId,
+        payroll_entry_id: ent.id,
+        channel: "email",
+        status: "failed",
+        error: "no email on file for employee",
+      } as any, { onConflict: "payroll_entry_id,channel" });
+      failed++;
+      continue;
+    }
+    const employeeName = `${ent.employees.first_name} ${ent.employees.last_name}`;
+
+    const { data: items } = await sb.from("payroll_line_items").select("category, amount, taxable, note").eq("payroll_entry_id", ent.id);
+
+    try {
+      const html = await render(PayslipEmail({
+        orgName,
+        employeeName,
+        month: (run as any).month,
+        basicMonthly: ent.basic_monthly,
+        hraMonthly: ent.hra_monthly,
+        specialAllowanceMonthly: ent.special_allowance_monthly,
+        grossSalary: ent.gross_salary,
+        employeePf: ent.employee_pf,
+        professionalTax: ent.professional_tax,
+        tds: ent.tds,
+        lopDays: ent.lop_days,
+        lopDeduction: ent.lop_deduction,
+        lineItems: ((items ?? []) as any[]).map((i) => ({ category: i.category, amount: i.amount, note: i.note, taxable: i.taxable })),
+        totalDeductions: ent.total_deductions,
+        netPay: ent.net_pay,
+        viewInAppUrl: `${process.env.NEXT_PUBLIC_APP_URL ?? "https://jambahr.com"}/dashboard/payroll`,
+      }));
+
+      const sendResult = await resend.emails.send({
+        from: FROM_EMAIL,
+        to: email,
+        subject: `Payslip — ${(run as any).month}`,
+        html,
+      });
+
+      await sb.from("payslip_deliveries").upsert({
+        org_id: user.orgId,
+        payroll_entry_id: ent.id,
+        channel: "email",
+        status: sendResult.error ? "failed" : "sent",
+        sent_at: sendResult.error ? null : new Date().toISOString(),
+        error: sendResult.error ? sendResult.error.message : null,
+        resend_message_id: sendResult.data?.id ?? null,
+      } as any, { onConflict: "payroll_entry_id,channel" });
+      if (sendResult.error) failed++; else sent++;
+    } catch (err: any) {
+      await sb.from("payslip_deliveries").upsert({
+        org_id: user.orgId,
+        payroll_entry_id: ent.id,
+        channel: "email",
+        status: "failed",
+        error: err?.message ?? "send failed",
+      } as any, { onConflict: "payroll_entry_id,channel" });
+      failed++;
+    }
+  }
+
+  revalidatePath("/dashboard/payroll");
+  return { success: true, data: { sent, failed } };
 }
 
 export async function markPayrollPaid(runId: string): Promise<ActionResult<void>> {
@@ -521,6 +845,8 @@ export async function markPayrollPaid(runId: string): Promise<ActionResult<void>
   if (error) return { success: false, error: error.message };
 
   revalidatePath("/dashboard/payroll");
+  // Best-effort payslip email — survives function freeze via waitUntil.
+  try { waitUntil(sendPayslipEmail(runId).then(() => undefined)); } catch {}
   return { success: true, data: undefined };
 }
 
@@ -694,21 +1020,10 @@ export async function updatePayrollEntry(
 
   if (error) return { success: false, error: error.message };
 
-  // Recompute run totals
-  const { data: allEntries } = await supabase
-    .from("payroll_entries")
-    .select("gross_salary, total_deductions, net_pay")
-    .eq("payroll_run_id", e.payroll_run_id);
-
-  if (allEntries) {
-    const totalGross = (allEntries as any[]).reduce((s, x) => s + x.gross_salary, 0);
-    const totalDed = (allEntries as any[]).reduce((s, x) => s + x.total_deductions, 0);
-    const totalNet = (allEntries as any[]).reduce((s, x) => s + x.net_pay, 0);
-    await supabase
-      .from("payroll_runs")
-      .update({ total_gross: totalGross, total_deductions: totalDed, total_net: totalNet })
-      .eq("id", e.payroll_run_id);
-  }
+  // Fold any line items into this entry's TDS + totals + net pay, and roll up
+  // the run totals to include `total_line_items`. Without this call, line items
+  // get silently wiped from net_pay whenever an admin edits LOP/bonus.
+  await recomputeEntryFromLineItems(entryId);
 
   revalidatePath("/dashboard/payroll");
   return { success: true, data: undefined };
@@ -760,4 +1075,226 @@ export async function getMyPayslips(): Promise<ActionResult<MyPayslip[]>> {
   // Exclude drafts — admin is still editing, not relevant to the employee yet
   const filtered = rows.filter((r) => r.status !== "draft");
   return { success: true, data: filtered };
+}
+
+export type SalaryStructureConfig = RatioConfig & {
+  id: string;
+  effective_from: string;
+  created_at: string;
+};
+
+export type ConfigImpactRow = {
+  employee_id: string;
+  employee_name: string;
+  basic_monthly_old: number;
+  basic_monthly_new: number;
+  hra_monthly_old: number;
+  hra_monthly_new: number;
+  special_allowance_monthly_old: number;
+  special_allowance_monthly_new: number;
+  net_monthly_old: number;
+  net_monthly_new: number;
+};
+
+export type PayrollLineItemRow = LineItem & {
+  payroll_entry_id: string;
+  created_at: string;
+};
+
+// ---- Payroll Line Items ----
+
+const LineItemSchema = z.object({
+  payroll_entry_id: z.string().uuid(),
+  category: z.enum(["bonus", "allowance", "reimbursement", "other"]),
+  amount: z.number().int().min(0).max(10_000_000),
+  taxable: z.boolean().default(true),
+  note: z.string().max(280).nullable().optional(),
+});
+
+export async function listPayrollLineItems(entryId: string): Promise<ActionResult<PayrollLineItemRow[]>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  const sb = createAdminSupabase();
+  const { data: entry } = await sb
+    .from("payroll_entries")
+    .select("id, org_id, employee_id")
+    .eq("id", entryId)
+    .maybeSingle();
+  if (!entry) return { success: false, error: "Entry not found" };
+  if ((entry as any).org_id !== user.orgId) return { success: false, error: "Unauthorized" };
+  // Non-admins may only read their own entry's line items.
+  if (!isAdmin(user.role) && (entry as any).employee_id !== user.employeeId) {
+    return { success: false, error: "Unauthorized" };
+  }
+
+  const { data, error } = await sb
+    .from("payroll_line_items")
+    .select("*")
+    .eq("payroll_entry_id", entryId)
+    .order("created_at", { ascending: true });
+  if (error) return { success: false, error: error.message };
+  return {
+    success: true,
+    data: (data ?? []).map((r: any) => ({
+      id: r.id,
+      payroll_entry_id: r.payroll_entry_id,
+      category: r.category as LineItemCategory,
+      amount: r.amount,
+      taxable: r.taxable,
+      note: r.note,
+      created_at: r.created_at,
+    })),
+  };
+}
+
+export async function addPayrollLineItem(input: z.infer<typeof LineItemSchema>): Promise<ActionResult<{ id: string }>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can add line items" };
+  const parsed = LineItemSchema.safeParse(input);
+  if (!parsed.success) return { success: false, error: parsed.error.errors[0].message };
+
+  const sb = createAdminSupabase();
+  // Verify the entry is in caller's org and the run is not paid.
+  const { data: entry } = await sb
+    .from("payroll_entries")
+    .select("id, org_id, payroll_run_id")
+    .eq("id", parsed.data.payroll_entry_id)
+    .single();
+  if (!entry || (entry as any).org_id !== user.orgId) return { success: false, error: "Entry not found" };
+
+  const { data: run } = await sb
+    .from("payroll_runs")
+    .select("status")
+    .eq("id", (entry as any).payroll_run_id)
+    .single();
+  if ((run as any)?.status === "paid") return { success: false, error: "Cannot add line items to a paid run" };
+
+  const { data, error } = await sb
+    .from("payroll_line_items")
+    .insert({
+      org_id: user.orgId,
+      payroll_entry_id: parsed.data.payroll_entry_id,
+      category: parsed.data.category,
+      amount: parsed.data.amount,
+      taxable: parsed.data.taxable,
+      note: parsed.data.note ?? null,
+      created_by: user.employeeId ?? null,
+    } as any)
+    .select("id")
+    .single();
+
+  if (error) return { success: false, error: error.message };
+
+  await recomputeEntryFromLineItems((entry as any).id);
+  revalidatePath("/dashboard/payroll");
+  return { success: true, data: { id: (data as { id: string }).id } };
+}
+
+export async function removePayrollLineItem(itemId: string): Promise<ActionResult<void>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can remove line items" };
+
+  const sb = createAdminSupabase();
+  const { data: item } = await sb
+    .from("payroll_line_items")
+    .select("id, org_id, payroll_entry_id")
+    .eq("id", itemId)
+    .single();
+  if (!item || (item as any).org_id !== user.orgId) return { success: false, error: "Line item not found" };
+
+  const { data: entry } = await sb
+    .from("payroll_entries")
+    .select("payroll_run_id")
+    .eq("id", (item as any).payroll_entry_id)
+    .single();
+  const { data: run } = await sb
+    .from("payroll_runs")
+    .select("status")
+    .eq("id", (entry as any).payroll_run_id)
+    .single();
+  if ((run as any)?.status === "paid") return { success: false, error: "Cannot remove line items from a paid run" };
+
+  const { error } = await sb.from("payroll_line_items").delete().eq("id", itemId);
+  if (error) return { success: false, error: error.message };
+
+  await recomputeEntryFromLineItems((item as any).payroll_entry_id);
+  revalidatePath("/dashboard/payroll");
+  return { success: true, data: undefined };
+}
+
+/**
+ * Recomputes a single entry's TDS, total_line_items, total_deductions, net_pay
+ * after a line-item add/remove. Reuses the entry's stored
+ * annual_taxable_income + months_in_fy (snapshot from processPayrollRun).
+ * Updates the parent run's roll-up totals.
+ */
+async function recomputeEntryFromLineItems(entryId: string): Promise<void> {
+  const sb = createAdminSupabase();
+  const { data: entry } = await sb
+    .from("payroll_entries")
+    .select("id, gross_salary, employee_pf, professional_tax, lop_deduction, payroll_run_id, employee_id, annual_taxable_income, months_in_fy, net_pay, org_id")
+    .eq("id", entryId)
+    .single();
+  if (!entry) return;
+  const e = entry as any;
+
+  const { data: items } = await sb
+    .from("payroll_line_items")
+    .select("amount, taxable")
+    .eq("payroll_entry_id", entryId);
+  const itemsArr = (items ?? []) as Array<{ amount: number; taxable: boolean }>;
+  const taxableSum = itemsArr.filter((i) => i.taxable).reduce((s, i) => s + i.amount, 0);
+  const totalLineItems = itemsArr.reduce((s, i) => s + i.amount, 0);
+
+  // Regime + extra deductions for marginal-tax math
+  const { data: salary } = await sb
+    .from("salary_structures")
+    .select("tax_regime, additional_deductions_annual")
+    .eq("org_id", e.org_id)
+    .eq("employee_id", e.employee_id)
+    .maybeSingle();
+  const regime: "new" | "old" = ((salary as any)?.tax_regime as "new" | "old") ?? "new";
+  const standardDeduction = regime === "old" ? 50000 : 75000;
+  const extraDed = regime === "old" ? Number((salary as any)?.additional_deductions_annual ?? 0) : 0;
+
+  const monthsInFY: number = Number(e.months_in_fy) > 0 ? Number(e.months_in_fy) : 12;
+  const annualTaxable: number =
+    e.annual_taxable_income != null
+      ? Number(e.annual_taxable_income)
+      : Math.max(0, e.gross_salary * 12 - e.employee_pf * 12 - standardDeduction - extraDed);
+  const baseTds = Math.round(computeTaxByRegime(annualTaxable, regime) / monthsInFY);
+  const bonusTax = computeAdditionalTaxOnBonus(annualTaxable, taxableSum, regime);
+  const adjustedTds = baseTds + bonusTax;
+
+  const totalDeductions = e.employee_pf + e.professional_tax + adjustedTds + (e.lop_deduction ?? 0);
+  const netPay = Math.max(0, e.gross_salary + totalLineItems - totalDeductions);
+
+  await sb
+    .from("payroll_entries")
+    .update({
+      tds: adjustedTds,
+      total_line_items: totalLineItems,
+      total_deductions: totalDeductions,
+      net_pay: netPay,
+      previous_net_pay: e.net_pay,
+      edited_at: new Date().toISOString(),
+    } as any)
+    .eq("id", entryId);
+
+  // Roll up run totals.
+  const { data: allEntries } = await sb
+    .from("payroll_entries")
+    .select("gross_salary, total_deductions, net_pay, total_line_items")
+    .eq("payroll_run_id", e.payroll_run_id);
+  if (allEntries) {
+    const totalGross = (allEntries as any[]).reduce((s, x) => s + x.gross_salary + (x.total_line_items ?? 0), 0);
+    const totalDed = (allEntries as any[]).reduce((s, x) => s + x.total_deductions, 0);
+    const totalNet = (allEntries as any[]).reduce((s, x) => s + x.net_pay, 0);
+    await sb
+      .from("payroll_runs")
+      .update({ total_gross: totalGross, total_deductions: totalDed, total_net: totalNet })
+      .eq("id", e.payroll_run_id);
+  }
 }

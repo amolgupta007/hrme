@@ -441,6 +441,29 @@ Feature-flagged via `organizations.settings.attendance_enabled`. Optional payrol
 - **PF cap (P-010):** `CTCBreakdown.pfCapped` is true when basic > ~₹15k/mo and the ₹1,800 statutory cap kicks in. UI footnote on the CTC card.
 - **Audit trail (P-015/P-017/P-019):** `markPayrollPaid` records `paid_by`. `updatePayrollEntry` records `edited_by`, `edited_at`, `previous_net_pay`. `upsertSalaryStructure` writes `computed_at`.
 
+### PRD 02 Phase 1 — Configurable ratios + line items + email payslips (shipped 2026-06-07)
+
+- **Configurable salary-structure ratios** at Settings → Payroll: Basic %, HRA % metro, HRA % non-metro, Gratuity %. PF rate + cap, PT slabs, tax slabs, standard deduction, 87A rebate stay statutory.
+- **`salary_structure_config` is append-only by `(org_id, effective_from)`** — re-saving the same effective_from upserts. `getActiveRatioConfig` reads the latest with `effective_from <= today`.
+- **Existing salary structures DO NOT auto-recompute** when org config changes. Admin must click "Recompute all" or re-upsert each affected employee. PRD §7.1 mandates this — past payslips immutable.
+- **`payroll_line_items`** replaces the single `payroll_entries.bonus` integer for new entries. Categories: bonus / allowance / reimbursement / other. `taxable: boolean` per row. Sums into `payroll_entries.total_line_items` (denormalised) and folds into TDS via `computeAdditionalTaxOnBonus` for taxable items.
+- **`payroll_runs.structure_config_snapshot`** JSONB is frozen at process time. NULL for pre-PRD-02 runs (treat as default hard-coded ratios).
+- **Payslip email** via React Email template (`payslip.tsx`). Trigger: (a) auto on `markPayrollPaid` via `waitUntil` — best-effort, never blocks; (b) on-demand "Send payslips" button. Status tracked in `payslip_deliveries` table per (entry, channel).
+- **No PDF attachment in Phase 1** — email body is HTML inline. CTA links to in-app view where employees can browser-print to PDF.
+- **`computeCTCBreakdown(ctc, state, isMetro, includeHra, taxRegime, additionalDeductions, config?)`** — new optional `config: RatioConfig` arg. `DEFAULT_RATIO_CONFIG = { basic_pct: 40, hra_pct_metro: 50, hra_pct_non_metro: 40, gratuity_pct: 4.81 }` matches historical hard-codes.
+- **Reprocess of a draft run DROPS its line items** via `ON DELETE CASCADE`. Add line items only AFTER process, before paid. Phase 1 limitation; Phase 1.5 could preserve them.
+- **Settings → Payroll CollapsibleSection** only renders when plan has `payroll` feature AND user is admin.
+
+**Phase 1 gotchas:**
+- Migrations 033–036 are idempotent and applied via Supabase MCP.
+- `payroll_runs.structure_config_snapshot` NULL means pre-PRD-02 — treat as `DEFAULT_RATIO_CONFIG` if you read back.
+- `payroll_line_items.taxable=false` items add to `net_pay` but NOT to taxable income — reimbursements don't get TDS.
+- `markPayrollPaid` fires `sendPayslipEmail` via `waitUntil`. If `RESEND_API_KEY` is missing, the function logs and continues — `markPayrollPaid` still succeeds.
+- `payslip_deliveries` is `UNIQUE (payroll_entry_id, channel)` — re-sending a payslip updates the existing row via upsert (so the "sent_at" reflects the LATEST send).
+- All RLS policies use Clerk-JWT pattern (same as Attendance Phase 1).
+- COMMENT ON COLUMN statements can't use `||` string concatenation when applied via Supabase's `apply_migration` MCP — collapse to single-string literals.
+- Drift warning in `salary-structure-dialog` may false-positive when a future-dated config sits at `history[0]`. Acceptable for Phase 1 (advisory only).
+
 ---
 
 ## Social Agent (`/superadmin/social`) — Single-Tenant LinkedIn

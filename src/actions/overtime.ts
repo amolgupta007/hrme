@@ -11,24 +11,11 @@ import {
   computeHourlyRate,
 } from "@/lib/attendance/ot";
 import { recomputeEntryFromLineItems } from "@/lib/payroll/recompute-entry";
+import {
+  DEFAULT_OT_SETTINGS,
+} from "@/lib/attendance/overtime-types";
+import type { OvertimeSettings } from "@/lib/attendance/overtime-types";
 
-// ---- Types ----
-
-export type OvertimeSettings = {
-  enabled: boolean;
-  multiplier: number;
-  threshold_mode: "per_day" | "weekly";
-  weekly_threshold_hours: number;
-  approval_required: boolean;
-};
-
-export const DEFAULT_OT_SETTINGS: OvertimeSettings = {
-  enabled: false,
-  multiplier: 1.5,
-  threshold_mode: "per_day",
-  weekly_threshold_hours: 48,
-  approval_required: true,
-};
 
 export type OvertimeRecord = {
   id: string;

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { getCurrentUser, isAdmin } from "@/lib/current-user";
-import { computeCTCBreakdown, getProfessionalTax, computeTaxByRegime, computeAdditionalTaxOnBonus, computeMonthsInFY } from "@/lib/ctc";
+import { computeCTCBreakdown, getProfessionalTax, computeTaxByRegime, computeAdditionalTaxOnBonus, computeMonthsInFY, DEFAULT_RATIO_CONFIG, type RatioConfig } from "@/lib/ctc";
 import type { ActionResult } from "@/types";
 
 // ---- Types ----
@@ -117,7 +117,142 @@ const PayrollRunSchema = z.object({
   notes: z.string().optional(),
 });
 
+const RatioConfigSchema = z.object({
+  basic_pct: z.number().min(10).max(80),
+  hra_pct_metro: z.number().min(0).max(100),
+  hra_pct_non_metro: z.number().min(0).max(100),
+  gratuity_pct: z.number().min(0).max(20),
+  effective_from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+});
+
 // ---- Salary Structures ----
+
+/**
+ * Returns the org's active RatioConfig — the latest salary_structure_config row
+ * with effective_from <= today. Returns DEFAULT_RATIO_CONFIG if none configured.
+ * Server-internal helper; no auth guard (caller is always already authenticated).
+ */
+async function getActiveRatioConfig(orgId: string): Promise<RatioConfig> {
+  const sb = createAdminSupabase();
+  const today = new Date().toISOString().slice(0, 10);
+  const { data } = await sb
+    .from("salary_structure_config")
+    .select("basic_pct, hra_pct_metro, hra_pct_non_metro, gratuity_pct")
+    .eq("org_id", orgId)
+    .lte("effective_from", today)
+    .order("effective_from", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!data) return DEFAULT_RATIO_CONFIG;
+  return {
+    basic_pct: Number((data as any).basic_pct),
+    hra_pct_metro: Number((data as any).hra_pct_metro),
+    hra_pct_non_metro: Number((data as any).hra_pct_non_metro),
+    gratuity_pct: Number((data as any).gratuity_pct),
+  };
+}
+
+export async function getSalaryStructureConfig(): Promise<ActionResult<{
+  active: RatioConfig;
+  history: SalaryStructureConfig[];
+}>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can view salary structure config" };
+
+  const sb = createAdminSupabase();
+  const { data, error } = await sb
+    .from("salary_structure_config")
+    .select("id, basic_pct, hra_pct_metro, hra_pct_non_metro, gratuity_pct, effective_from, created_at")
+    .eq("org_id", user.orgId)
+    .order("effective_from", { ascending: false });
+
+  if (error) return { success: false, error: error.message };
+
+  const history = (data ?? []).map((r: any) => ({
+    id: r.id,
+    basic_pct: Number(r.basic_pct),
+    hra_pct_metro: Number(r.hra_pct_metro),
+    hra_pct_non_metro: Number(r.hra_pct_non_metro),
+    gratuity_pct: Number(r.gratuity_pct),
+    effective_from: r.effective_from,
+    created_at: r.created_at,
+  })) as SalaryStructureConfig[];
+
+  const active = await getActiveRatioConfig(user.orgId);
+  return { success: true, data: { active, history } };
+}
+
+export async function upsertSalaryStructureConfig(
+  input: z.infer<typeof RatioConfigSchema>
+): Promise<ActionResult<void>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can configure salary structure ratios" };
+
+  const parsed = RatioConfigSchema.safeParse(input);
+  if (!parsed.success) return { success: false, error: parsed.error.errors[0].message };
+
+  const sb = createAdminSupabase();
+  const { error } = await sb
+    .from("salary_structure_config")
+    .upsert(
+      {
+        org_id: user.orgId,
+        basic_pct: parsed.data.basic_pct,
+        hra_pct_metro: parsed.data.hra_pct_metro,
+        hra_pct_non_metro: parsed.data.hra_pct_non_metro,
+        gratuity_pct: parsed.data.gratuity_pct,
+        effective_from: parsed.data.effective_from,
+        created_by: user.employeeId ?? null,
+      } as any,
+      { onConflict: "org_id,effective_from" }
+    );
+
+  if (error) return { success: false, error: error.message };
+  revalidatePath("/dashboard/settings");
+  return { success: true, data: undefined };
+}
+
+export async function previewConfigImpact(
+  proposed: RatioConfig
+): Promise<ActionResult<ConfigImpactRow[]>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can preview config impact" };
+
+  const sb = createAdminSupabase();
+  const [{ data: structures }, { data: employees }] = await Promise.all([
+    sb.from("salary_structures")
+      .select("employee_id, ctc, state, is_metro, include_hra, tax_regime, additional_deductions_annual")
+      .eq("org_id", user.orgId),
+    sb.from("employees")
+      .select("id, first_name, last_name")
+      .eq("org_id", user.orgId),
+  ]);
+
+  const empMap = new Map((employees ?? []).map((e: any) => [e.id, e]));
+
+  const rows: ConfigImpactRow[] = (structures ?? []).map((s: any) => {
+    const emp = empMap.get(s.employee_id) as any;
+    const oldB = computeCTCBreakdown(s.ctc, s.state, s.is_metro, s.include_hra, s.tax_regime ?? "new", Number(s.additional_deductions_annual ?? 0));
+    const newB = computeCTCBreakdown(s.ctc, s.state, s.is_metro, s.include_hra, s.tax_regime ?? "new", Number(s.additional_deductions_annual ?? 0), proposed);
+    return {
+      employee_id: s.employee_id,
+      employee_name: emp ? `${emp.first_name} ${emp.last_name}` : "Unknown",
+      basic_monthly_old: oldB.basicMonthly,
+      basic_monthly_new: newB.basicMonthly,
+      hra_monthly_old: oldB.hraMonthly,
+      hra_monthly_new: newB.hraMonthly,
+      special_allowance_monthly_old: oldB.specialAllowanceMonthly,
+      special_allowance_monthly_new: newB.specialAllowanceMonthly,
+      net_monthly_old: oldB.netMonthly,
+      net_monthly_new: newB.netMonthly,
+    };
+  });
+
+  return { success: true, data: rows };
+}
 
 export async function getSalaryStructures(): Promise<ActionResult<SalaryStructureRow[]>> {
   const user = await getCurrentUser();
@@ -761,3 +896,22 @@ export async function getMyPayslips(): Promise<ActionResult<MyPayslip[]>> {
   const filtered = rows.filter((r) => r.status !== "draft");
   return { success: true, data: filtered };
 }
+
+export type SalaryStructureConfig = RatioConfig & {
+  id: string;
+  effective_from: string;
+  created_at: string;
+};
+
+export type ConfigImpactRow = {
+  employee_id: string;
+  employee_name: string;
+  basic_monthly_old: number;
+  basic_monthly_new: number;
+  hra_monthly_old: number;
+  hra_monthly_new: number;
+  special_allowance_monthly_old: number;
+  special_allowance_monthly_new: number;
+  net_monthly_old: number;
+  net_monthly_new: number;
+};

@@ -631,7 +631,7 @@ export function PayrollClient({
       {editEntry && (
         <EntryEditDialog
           open
-          onClose={() => setEditEntry(null)}
+          onClose={() => { setEditEntry(null); router.refresh(); }}
           entry={editEntry}
         />
       )}

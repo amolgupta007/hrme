@@ -1,5 +1,5 @@
 -- 029_shifts.sql — Attendance Phase 1: Shift master
--- Idempotent. Apply via Supabase SQL Editor.
+-- Idempotent. Apply via Supabase MCP / SQL Editor.
 
 CREATE TABLE IF NOT EXISTS public.shifts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -27,14 +27,28 @@ CREATE UNIQUE INDEX IF NOT EXISTS shifts_one_default_per_org
 CREATE INDEX IF NOT EXISTS shifts_org_active_idx
   ON public.shifts (org_id, active);
 
+-- Org-uniqueness: shift name unique within an org (case-insensitive) so the
+-- picker can't show two "Morning" entries.
+CREATE UNIQUE INDEX IF NOT EXISTS shifts_org_name_unique
+  ON public.shifts (org_id, lower(name));
+
 ALTER TABLE public.shifts ENABLE ROW LEVEL SECURITY;
 
--- Admin policy mirrors existing tables; service-role bypasses by design (see CLAUDE.md gotcha #5).
+-- Admin policy follows the codebase pattern (009_jambahire_rls.sql,
+-- 018_payroll_schema_capture.sql). Service-role bypasses RLS today
+-- (CLAUDE.md gotcha #5); this activates when Clerk-JWT-to-Supabase is wired.
 DROP POLICY IF EXISTS shifts_admin_all ON public.shifts;
 CREATE POLICY shifts_admin_all ON public.shifts FOR ALL
-  USING (true) WITH CHECK (true);
+  USING (
+    auth.jwt() ->> 'org_id' = shifts.org_id::text
+    AND auth.jwt() ->> 'org_role' IN ('org:owner', 'org:admin')
+  )
+  WITH CHECK (
+    auth.jwt() ->> 'org_id' = shifts.org_id::text
+    AND auth.jwt() ->> 'org_role' IN ('org:owner', 'org:admin')
+  );
 
--- Reuse the shared updated_at trigger function (already exists per migration 001).
+-- Reuse the shared updated_at trigger function (created in migration 001).
 DROP TRIGGER IF EXISTS shifts_set_updated_at ON public.shifts;
 CREATE TRIGGER shifts_set_updated_at
   BEFORE UPDATE ON public.shifts

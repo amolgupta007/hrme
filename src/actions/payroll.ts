@@ -373,7 +373,8 @@ export async function upsertSalaryStructure(
   if (!parsed.success) return { success: false, error: parsed.error.errors[0].message };
 
   const { employee_id, ctc, state, is_metro, include_hra, effective_from, tax_regime, additional_deductions_annual } = parsed.data;
-  const breakdown = computeCTCBreakdown(ctc, state, is_metro, include_hra, tax_regime, additional_deductions_annual);
+  const ratioConfig = await getActiveRatioConfig(user.orgId);
+  const breakdown = computeCTCBreakdown(ctc, state, is_metro, include_hra, tax_regime, additional_deductions_annual, ratioConfig);
 
   const supabase = createAdminSupabase();
 

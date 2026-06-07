@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import { useState } from "react";
 import { toast } from "sonner";
 import {
@@ -9,7 +10,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { updatePayrollEntry, type PayrollEntry } from "@/actions/payroll";
+import {
+  updatePayrollEntry,
+  listPayrollLineItems,
+  addPayrollLineItem,
+  removePayrollLineItem,
+  type PayrollEntry,
+  type PayrollLineItemRow,
+} from "@/actions/payroll";
 import { formatINR } from "@/lib/ctc";
 
 interface Props {
@@ -19,18 +27,64 @@ interface Props {
 }
 
 export function EntryEditDialog({ open, onClose, entry }: Props) {
-  const [bonus, setBonus] = useState(String(entry.bonus ?? 0));
   const [lopDays, setLopDays] = useState(String(entry.lop_days ?? 0));
   const [saving, setSaving] = useState(false);
 
-  const bonusNum = parseFloat(bonus) || 0;
+  const [items, setItems] = React.useState<PayrollLineItemRow[]>([]);
+  const [refreshKey, setRefreshKey] = React.useState(0);
+  const [newCategory, setNewCategory] = React.useState<
+    "bonus" | "allowance" | "reimbursement" | "other"
+  >("bonus");
+  const [newAmount, setNewAmount] = React.useState("");
+  const [newTaxable, setNewTaxable] = React.useState(true);
+  const [newNote, setNewNote] = React.useState("");
+
   const lopNum = parseFloat(lopDays) || 0;
+
+  React.useEffect(() => {
+    if (!open) return;
+    listPayrollLineItems(entry.id).then((r) => {
+      if (r.success) setItems(r.data);
+    });
+  }, [open, entry.id, refreshKey]);
+
+  async function handleAddItem() {
+    const amt = Number(newAmount);
+    if (!Number.isFinite(amt) || amt < 0) {
+      toast.error("Enter a valid amount");
+      return;
+    }
+    const r = await addPayrollLineItem({
+      payroll_entry_id: entry.id,
+      category: newCategory,
+      amount: Math.round(amt),
+      taxable: newTaxable,
+      note: newNote.trim() || null,
+    });
+    if (!r.success) {
+      toast.error(r.error);
+      return;
+    }
+    setNewAmount("");
+    setNewNote("");
+    setRefreshKey((k) => k + 1);
+    toast.success("Line item added");
+  }
+
+  async function handleRemoveItem(id: string) {
+    const r = await removePayrollLineItem(id);
+    if (!r.success) {
+      toast.error(r.error);
+      return;
+    }
+    setRefreshKey((k) => k + 1);
+  }
 
   async function handleSave() {
     setSaving(true);
     try {
       const result = await updatePayrollEntry(entry.id, {
-        bonus: bonusNum,
+        bonus: 0,
         lop_days: lopNum,
       });
       if (result.success) {
@@ -66,16 +120,80 @@ export function EntryEditDialog({ open, onClose, entry }: Props) {
             </div>
           </div>
 
-          {/* Bonus */}
-          <div>
-            <label className="text-sm font-medium">Bonus / One-time Pay (₹)</label>
-            <input
-              type="number"
-              min={0}
-              className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
-              value={bonus}
-              onChange={(e) => setBonus(e.target.value)}
-            />
+          {/* Line items */}
+          <div className="rounded-lg border border-border p-3 space-y-2">
+            <p className="text-xs font-semibold">Line items</p>
+            {items.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No line items yet.</p>
+            ) : (
+              <ul className="space-y-1.5 text-xs">
+                {items.map((it) => (
+                  <li
+                    key={it.id}
+                    className="flex items-center justify-between gap-2 rounded-md bg-muted/40 px-2 py-1.5"
+                  >
+                    <span className="inline-flex items-center gap-2 min-w-0">
+                      <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary capitalize">
+                        {it.category}
+                      </span>
+                      <span className="font-semibold tabular-nums">{formatINR(it.amount)}</span>
+                      {!it.taxable && (
+                        <span className="text-[10px] text-muted-foreground">non-taxable</span>
+                      )}
+                      {it.note && (
+                        <span className="truncate text-muted-foreground">— {it.note}</span>
+                      )}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveItem(it.id)}
+                      className="text-muted-foreground hover:text-destructive"
+                    >
+                      ✕
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="grid grid-cols-12 gap-1.5 pt-1 items-end">
+              <select
+                value={newCategory}
+                onChange={(e) => setNewCategory(e.target.value as any)}
+                className="col-span-3 rounded-md border border-input bg-background px-2 py-1 text-xs"
+              >
+                <option value="bonus">Bonus</option>
+                <option value="allowance">Allowance</option>
+                <option value="reimbursement">Reimbursement</option>
+                <option value="other">Other</option>
+              </select>
+              <input
+                type="number"
+                min={0}
+                step={1}
+                placeholder="Amount"
+                value={newAmount}
+                onChange={(e) => setNewAmount(e.target.value)}
+                className="col-span-2 rounded-md border border-input bg-background px-2 py-1 text-xs"
+              />
+              <label className="col-span-2 inline-flex items-center gap-1 text-[10px]">
+                <input
+                  type="checkbox"
+                  checked={newTaxable}
+                  onChange={(e) => setNewTaxable(e.target.checked)}
+                />{" "}
+                Taxable
+              </label>
+              <input
+                type="text"
+                placeholder="Note (optional)"
+                value={newNote}
+                onChange={(e) => setNewNote(e.target.value)}
+                className="col-span-3 rounded-md border border-input bg-background px-2 py-1 text-xs"
+              />
+              <Button type="button" size="sm" onClick={handleAddItem} className="col-span-2">
+                Add
+              </Button>
+            </div>
           </div>
 
           {/* LOP */}

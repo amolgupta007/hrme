@@ -2,10 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { render } from "@react-email/render";
+import { waitUntil } from "@vercel/functions";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { getCurrentUser, isAdmin } from "@/lib/current-user";
 import { computeCTCBreakdown, getProfessionalTax, computeTaxByRegime, computeAdditionalTaxOnBonus, computeMonthsInFY, DEFAULT_RATIO_CONFIG, type RatioConfig } from "@/lib/ctc";
 import type { LineItem, LineItemCategory } from "@/lib/payroll/line-items";
+import { resend, FROM_EMAIL } from "@/lib/resend";
+import { PayslipEmail } from "@/components/emails/payslip";
 import type { ActionResult } from "@/types";
 
 // ---- Types ----
@@ -723,6 +727,92 @@ export async function processPayrollRun(runId: string): Promise<ActionResult<voi
   return { success: true, data: undefined };
 }
 
+/**
+ * Sends payslip emails for every entry in a processed (or paid) run.
+ * Records one row in payslip_deliveries per (entry, channel='email').
+ * Best-effort; never throws — failures are recorded as status='failed'.
+ */
+export async function sendPayslipEmail(runId: string): Promise<ActionResult<{ sent: number; failed: number }>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can send payslips" };
+
+  const sb = createAdminSupabase();
+  const { data: run } = await sb.from("payroll_runs").select("id, org_id, month, status").eq("id", runId).single();
+  if (!run || (run as any).org_id !== user.orgId) return { success: false, error: "Run not found" };
+  const status = (run as any).status as string;
+  if (status === "draft") return { success: false, error: "Process the run before sending payslips" };
+
+  const { data: org } = await sb.from("organizations").select("name").eq("id", user.orgId).single();
+  const orgName = (org as any)?.name ?? "Your employer";
+
+  const { data: entries } = await sb
+    .from("payroll_entries")
+    .select(`id, employee_id, basic_monthly, hra_monthly, special_allowance_monthly, gross_salary, employee_pf, professional_tax, tds, lop_days, lop_deduction, total_line_items, total_deductions, net_pay, employees!employee_id(first_name, last_name, email)`)
+    .eq("payroll_run_id", runId)
+    .eq("org_id", user.orgId);
+
+  let sent = 0, failed = 0;
+  for (const ent of (entries ?? []) as any[]) {
+    const email = ent.employees?.email;
+    if (!email) { failed++; continue; }
+    const employeeName = `${ent.employees.first_name} ${ent.employees.last_name}`;
+
+    const { data: items } = await sb.from("payroll_line_items").select("category, amount, taxable, note").eq("payroll_entry_id", ent.id);
+
+    try {
+      const html = await render(PayslipEmail({
+        orgName,
+        employeeName,
+        month: (run as any).month,
+        basicMonthly: ent.basic_monthly,
+        hraMonthly: ent.hra_monthly,
+        specialAllowanceMonthly: ent.special_allowance_monthly,
+        grossSalary: ent.gross_salary,
+        employeePf: ent.employee_pf,
+        professionalTax: ent.professional_tax,
+        tds: ent.tds,
+        lopDays: ent.lop_days,
+        lopDeduction: ent.lop_deduction,
+        lineItems: ((items ?? []) as any[]).map((i) => ({ category: i.category, amount: i.amount, note: i.note, taxable: i.taxable })),
+        totalDeductions: ent.total_deductions,
+        netPay: ent.net_pay,
+        viewInAppUrl: `${process.env.NEXT_PUBLIC_APP_URL ?? "https://jambahr.com"}/dashboard/payroll`,
+      }));
+
+      const sendResult = await resend.emails.send({
+        from: FROM_EMAIL,
+        to: email,
+        subject: `Payslip — ${(run as any).month}`,
+        html,
+      });
+
+      await sb.from("payslip_deliveries").upsert({
+        org_id: user.orgId,
+        payroll_entry_id: ent.id,
+        channel: "email",
+        status: sendResult.error ? "failed" : "sent",
+        sent_at: sendResult.error ? null : new Date().toISOString(),
+        error: sendResult.error ? sendResult.error.message : null,
+        resend_message_id: sendResult.data?.id ?? null,
+      } as any, { onConflict: "payroll_entry_id,channel" });
+      if (sendResult.error) failed++; else sent++;
+    } catch (err: any) {
+      await sb.from("payslip_deliveries").upsert({
+        org_id: user.orgId,
+        payroll_entry_id: ent.id,
+        channel: "email",
+        status: "failed",
+        error: err?.message ?? "send failed",
+      } as any, { onConflict: "payroll_entry_id,channel" });
+      failed++;
+    }
+  }
+
+  revalidatePath("/dashboard/payroll");
+  return { success: true, data: { sent, failed } };
+}
+
 export async function markPayrollPaid(runId: string): Promise<ActionResult<void>> {
   const user = await getCurrentUser();
   if (!user) return { success: false, error: "Not authenticated" };
@@ -744,6 +834,8 @@ export async function markPayrollPaid(runId: string): Promise<ActionResult<void>
   if (error) return { success: false, error: error.message };
 
   revalidatePath("/dashboard/payroll");
+  // Best-effort payslip email — survives function freeze via waitUntil.
+  try { waitUntil(sendPayslipEmail(runId).then(() => undefined)); } catch {}
   return { success: true, data: undefined };
 }
 

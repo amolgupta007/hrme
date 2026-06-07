@@ -20,6 +20,7 @@ import {
   markPayrollPaid,
   deletePayrollRun,
   getPayrollEntries,
+  sendPayslipEmail,
 } from "@/actions/payroll";
 import type {
   SalaryStructureRow,
@@ -365,6 +366,19 @@ export function PayrollClient({
                         >
                           <CheckCircle className="h-3.5 w-3.5 mr-1" />
                           {markingPaid === run.id ? "…" : "Mark Paid"}
+                        </Button>
+                      )}
+                      {(run.status === "processed" || run.status === "paid") && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={async () => {
+                            const r = await sendPayslipEmail(run.id);
+                            if (!r.success) { toast.error(r.error); return; }
+                            toast.success(`Sent ${r.data.sent} payslip(s)${r.data.failed > 0 ? `, ${r.data.failed} failed` : ""}`);
+                          }}
+                        >
+                          Send payslips
                         </Button>
                       )}
                       {run.status !== "paid" && (

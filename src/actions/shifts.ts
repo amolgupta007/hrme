@@ -158,7 +158,7 @@ export async function bootstrapDefaultShiftIfMissing(orgId: string): Promise<voi
   const endHour = (9 + Math.round(hours)) % 24;
   const end_time = `${String(endHour).padStart(2, "0")}:00`;
 
-  await sb.from("shifts").insert({
+  const { error: insertErr } = await sb.from("shifts").insert({
     org_id: orgId,
     name: "General",
     start_time: "09:00",
@@ -172,6 +172,15 @@ export async function bootstrapDefaultShiftIfMissing(orgId: string): Promise<voi
     ot_eligible: true,
     active: true,
   } as any);
+
+  // Race tolerance: two concurrent first-open `listShifts` calls can both see
+  // count=0 and both attempt to seed. The unique partial index on
+  // `(org_id, lower(name))` makes the second insert fail with 23505. That's
+  // the intended outcome — both callers see the same seeded shift on their
+  // next read. Surface any other error so genuine failures don't disappear.
+  if (insertErr && (insertErr as any).code !== "23505") {
+    console.warn("bootstrapDefaultShiftIfMissing: insert failed", insertErr);
+  }
 }
 
 export async function listShiftAssignments(): Promise<ActionResult<ShiftAssignment[]>> {

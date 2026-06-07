@@ -232,6 +232,17 @@ export const ROUTE_REGISTRY = {
     required_org_feature: "attendanceEnabled",
   },
 
+  // Payroll settings
+  settings_payroll: {
+    path: "/dashboard/settings",
+    params: { section: "payroll" },
+    required_role: "admin",
+    required_plan: "business",
+    label: "Settings → Payroll",
+    description:
+      "Configure salary structure ratios (Basic, HRA, Gratuity), preview impact, and recompute all employees.",
+  },
+
   // Settings + billing
   upgrade_plan: {
     path: "/dashboard/settings",

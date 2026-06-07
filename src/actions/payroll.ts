@@ -47,6 +47,7 @@ export type SalaryStructureRow = {
   effective_from: string;
   tax_regime: "new" | "old";
   additional_deductions_annual: number;
+  computed_at: string | null;
 };
 
 export type PayrollRun = {
@@ -311,6 +312,7 @@ export async function getSalaryStructures(): Promise<ActionResult<SalaryStructur
       effective_from: r.effective_from,
       tax_regime: (r.tax_regime as "new" | "old") ?? "new",
       additional_deductions_annual: Number(r.additional_deductions_annual ?? 0),
+      computed_at: r.computed_at ?? null,
     };
   });
 

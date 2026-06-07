@@ -14,7 +14,7 @@ import { getPerformanceSettings } from "@/lib/performance-settings";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { getAttendanceSettings } from "@/actions/attendance";
 import { listShifts, listShiftAssignments } from "@/actions/shifts";
-import { getWeekOffPolicy } from "@/actions/week-off";
+import { getWeekOffPolicy, listAllWeekOffOverrides } from "@/actions/week-off";
 import { listEmployees } from "@/actions/employees";
 import { getSalaryStructureConfig } from "@/actions/payroll";
 import { getOvertimeSettings } from "@/actions/overtime";
@@ -41,6 +41,7 @@ export default async function SettingsPage() {
     shiftsResult,
     shiftAssignmentsResult,
     weekOffPolicyResult,
+    weekOffOverridesResult,
     employeesResult,
     payrollConfigResult,
     overtimeSettingsResult,
@@ -56,6 +57,7 @@ export default async function SettingsPage() {
     listShifts(),
     listShiftAssignments(),
     getWeekOffPolicy(),
+    listAllWeekOffOverrides(),
     listEmployees(),
     getSalaryStructureConfig(),
     getOvertimeSettings(),
@@ -80,6 +82,7 @@ export default async function SettingsPage() {
   const shifts = shiftsResult.success ? shiftsResult.data : [];
   const shiftAssignments = shiftAssignmentsResult.success ? shiftAssignmentsResult.data : [];
   const weekOffPolicy = weekOffPolicyResult.success ? weekOffPolicyResult.data : null;
+  const weekOffOverrides = weekOffOverridesResult.success ? weekOffOverridesResult.data : [];
   const employees = employeesResult.success ? employeesResult.data : [];
   const payrollEnabled = hasFeature(plan, "payroll", userCtx?.customFeatures ?? null);
   const payrollActiveConfig = payrollConfigResult.success ? payrollConfigResult.data.active : null;
@@ -131,6 +134,7 @@ export default async function SettingsPage() {
         shifts={shifts}
         shiftAssignments={shiftAssignments}
         weekOffPolicy={weekOffPolicy}
+        weekOffOverrides={weekOffOverrides}
         employees={employees}
         payrollActiveConfig={payrollActiveConfig}
         payrollConfigHistory={payrollConfigHistory}

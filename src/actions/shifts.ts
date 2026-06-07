@@ -57,6 +57,39 @@ async function requireAdmin() {
   return { user };
 }
 
+/**
+ * Returns the set of employee IDs a manager can operate on (own department(s)
+ * via departments.head_id). Admins see all. Returns [] = no scope (e.g.
+ * manager not assigned as any department's head); caller decides whether to allow.
+ */
+async function getManagerScopedEmployeeIds(orgId: string, managerEmployeeId: string): Promise<string[]> {
+  const sb = createAdminSupabase();
+  const { data: ownedDepts } = await sb
+    .from("departments")
+    .select("id")
+    .eq("org_id", orgId)
+    .eq("head_id", managerEmployeeId);
+  const deptIds = (ownedDepts ?? []).map((d: any) => d.id);
+  if (deptIds.length === 0) return [];
+  const { data: emps } = await sb
+    .from("employees")
+    .select("id")
+    .eq("org_id", orgId)
+    .in("department_id", deptIds)
+    .neq("status", "terminated");
+  return (emps ?? []).map((e: any) => e.id);
+}
+
+/** Like requireAdmin but allows managers with explicit dept-scope. */
+async function requireAdminOrManager() {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Not authenticated" as const };
+  if (!isAdmin(user.role) && user.role !== "manager") {
+    return { error: "Insufficient permissions" as const };
+  }
+  return { user };
+}
+
 export async function listShifts(): Promise<ActionResult<Shift[]>> {
   const user = await getCurrentUser();
   if (!user) return { success: false, error: "Not authenticated" };

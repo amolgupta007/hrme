@@ -36,6 +36,27 @@ export type ShiftAssignment = {
   notes: string | null;
 };
 
+export type RosterCell = {
+  date: string;
+  assignment_id: string | null;
+  shift_id: string | null;
+  shift_name: string | null;
+  type: "fixed" | "rotational" | null;
+};
+
+export type RosterRow = {
+  employee_id: string;
+  employee_name: string;
+  department: string | null;
+  cells: RosterCell[]; // length = days.length
+};
+
+export type RosterGrid = {
+  days: string[]; // YYYY-MM-DD per col
+  rows: RosterRow[];
+  shifts: Shift[]; // for the palette
+};
+
 const HHMM = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Invalid HH:MM");
 const ShiftInputSchema = z.object({
   id: z.string().uuid().optional(),
@@ -88,6 +109,16 @@ async function requireAdminOrManager() {
     return { error: "Insufficient permissions" as const };
   }
   return { user };
+}
+
+function enumerateDays(from: string, to: string): string[] {
+  const days: string[] = [];
+  const start = new Date(`${from}T00:00:00.000Z`);
+  const end = new Date(`${to}T00:00:00.000Z`);
+  for (let d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
+    days.push(d.toISOString().slice(0, 10));
+  }
+  return days;
 }
 
 export async function listShifts(): Promise<ActionResult<Shift[]>> {
@@ -351,4 +382,155 @@ export async function getActiveShiftForEmployee(employeeId: string, date: string
     .limit(5);
   const row = (data ?? []).find((r: any) => !r.date_to || r.date_to >= date);
   return row ? ((row as any).shifts as Shift) : null;
+}
+
+export async function getRosterGrid(input: { from: string; to: string }): Promise<ActionResult<RosterGrid>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role) && user.role !== "manager") {
+    return { success: false, error: "Insufficient permissions" };
+  }
+
+  const sb = createAdminSupabase();
+  const days = enumerateDays(input.from, input.to);
+
+  // Manager scope
+  let scopedEmployeeIds: string[] | null = null;
+  if (user.role === "manager" && user.employeeId) {
+    scopedEmployeeIds = await getManagerScopedEmployeeIds(user.orgId, user.employeeId);
+    if (scopedEmployeeIds.length === 0) {
+      return { success: true, data: { days, rows: [], shifts: [] } };
+    }
+  }
+
+  const empQuery = sb
+    .from("employees")
+    .select("id, first_name, last_name, department_id, departments(name)")
+    .eq("org_id", user.orgId)
+    .neq("status", "terminated")
+    .order("first_name");
+  const { data: employees } = scopedEmployeeIds
+    ? await empQuery.in("id", scopedEmployeeIds)
+    : await empQuery;
+
+  const empIds = (employees ?? []).map((e: any) => e.id);
+  if (empIds.length === 0) {
+    return { success: true, data: { days, rows: [], shifts: [] } };
+  }
+
+  const [{ data: assignments }, { data: shifts }] = await Promise.all([
+    sb.from("shift_assignments")
+      .select("id, employee_id, shift_id, date_from, date_to, type, shifts(name)")
+      .eq("org_id", user.orgId)
+      .in("employee_id", empIds)
+      .lte("date_from", input.to)
+      .or(`date_to.is.null,date_to.gte.${input.from}`),
+    sb.from("shifts")
+      .select("*")
+      .eq("org_id", user.orgId)
+      .eq("active", true)
+      .order("is_default", { ascending: false }),
+  ]);
+
+  const assignByEmp = new Map<string, any[]>();
+  for (const a of (assignments ?? []) as any[]) {
+    if (!assignByEmp.has(a.employee_id)) assignByEmp.set(a.employee_id, []);
+    assignByEmp.get(a.employee_id)!.push(a);
+  }
+
+  const rows: RosterRow[] = (employees ?? []).map((emp: any) => {
+    const myAssignments = assignByEmp.get(emp.id) ?? [];
+    const cells: RosterCell[] = days.map((d) => {
+      const hit = myAssignments.find((a) => a.date_from <= d && (!a.date_to || a.date_to >= d));
+      return {
+        date: d,
+        assignment_id: hit?.id ?? null,
+        shift_id: hit?.shift_id ?? null,
+        shift_name: hit?.shifts?.name ?? null,
+        type: (hit?.type as "fixed" | "rotational") ?? null,
+      };
+    });
+    return {
+      employee_id: emp.id,
+      employee_name: `${emp.first_name} ${emp.last_name}`,
+      department: emp.departments?.name ?? null,
+      cells,
+    };
+  });
+
+  return { success: true, data: { days, rows, shifts: (shifts ?? []) as Shift[] } };
+}
+
+const CellAssignSchema = z.object({
+  employee_id: z.string().uuid(),
+  shift_id: z.string().uuid(),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  type: z.enum(["fixed", "rotational"]).default("fixed"),
+});
+
+export async function assignShiftToCell(input: z.infer<typeof CellAssignSchema>): Promise<ActionResult<{ id: string }>> {
+  const guard = await requireAdminOrManager();
+  if ("error" in guard) return { success: false, error: guard.error };
+  const parsed = CellAssignSchema.safeParse(input);
+  if (!parsed.success) return { success: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+
+  // Manager scope check
+  if (guard.user.role === "manager") {
+    const scoped = await getManagerScopedEmployeeIds(guard.user.orgId, guard.user.employeeId!);
+    if (!scoped.includes(parsed.data.employee_id)) {
+      return { success: false, error: "You can only assign shifts to your team" };
+    }
+  }
+
+  const sb = createAdminSupabase();
+  // Verify shift + employee belong to org
+  const [{ data: empOk }, { data: shiftOk }] = await Promise.all([
+    sb.from("employees").select("id").eq("org_id", guard.user.orgId).eq("id", parsed.data.employee_id).maybeSingle(),
+    sb.from("shifts").select("id").eq("org_id", guard.user.orgId).eq("id", parsed.data.shift_id).maybeSingle(),
+  ]);
+  if (!empOk) return { success: false, error: "Employee not found in your organisation" };
+  if (!shiftOk) return { success: false, error: "Shift not found in your organisation" };
+
+  const { data, error } = await sb
+    .from("shift_assignments")
+    .insert({
+      org_id: guard.user.orgId,
+      employee_id: parsed.data.employee_id,
+      shift_id: parsed.data.shift_id,
+      date_from: parsed.data.date,
+      date_to: parsed.data.date, // single-day cell assignment
+      type: parsed.data.type,
+      assigned_by: guard.user.employeeId,
+    } as any)
+    .select("id")
+    .single();
+
+  if (error) return { success: false, error: error.message };
+  revalidatePath("/dashboard/attendance");
+  return { success: true, data: { id: (data as { id: string }).id } };
+}
+
+export async function setAssignmentType(assignmentId: string, type: "fixed" | "rotational"): Promise<ActionResult<void>> {
+  const guard = await requireAdminOrManager();
+  if ("error" in guard) return { success: false, error: guard.error };
+
+  const sb = createAdminSupabase();
+  const { data: row } = await sb
+    .from("shift_assignments")
+    .select("id, org_id, employee_id")
+    .eq("id", assignmentId)
+    .maybeSingle();
+  if (!row || (row as any).org_id !== guard.user.orgId) return { success: false, error: "Assignment not found" };
+
+  if (guard.user.role === "manager") {
+    const scoped = await getManagerScopedEmployeeIds(guard.user.orgId, guard.user.employeeId!);
+    if (!scoped.includes((row as any).employee_id)) {
+      return { success: false, error: "You can only edit your team's assignments" };
+    }
+  }
+
+  const { error } = await sb.from("shift_assignments").update({ type } as any).eq("id", assignmentId);
+  if (error) return { success: false, error: error.message };
+  revalidatePath("/dashboard/attendance");
+  return { success: true, data: undefined };
 }

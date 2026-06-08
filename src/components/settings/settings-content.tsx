@@ -25,6 +25,7 @@ import { PayrollSection } from "@/components/settings/payroll-section";
 import type { LeavePolicy, Department, Employee } from "@/types";
 import type { SalaryStructureConfig } from "@/actions/payroll";
 import type { RatioConfig } from "@/lib/ctc";
+import type { MaskedRazorpayXCredentials } from "@/actions/razorpayx-credentials";
 import type { OnboardingStepConfig } from "@/config/onboarding";
 import type { FingerprintConfig, EmployeeWithDeviceCode } from "@/actions/fingerprint";
 import type { PerformanceSettings } from "@/lib/performance-settings";
@@ -63,6 +64,7 @@ type SettingsContentProps = {
   payrollActiveConfig: RatioConfig | null;
   payrollConfigHistory: SalaryStructureConfig[];
   payrollEnabled: boolean;
+  razorpayxCredentials: MaskedRazorpayXCredentials | null;
 };
 
 function pluralise(count: number, singular: string, plural: string): string {
@@ -94,6 +96,7 @@ export function SettingsContent({
   payrollActiveConfig,
   payrollConfigHistory,
   payrollEnabled,
+  razorpayxCredentials,
 }: SettingsContentProps) {
   const [openSection, setOpenSection] = React.useState<string | null>(null);
 
@@ -241,7 +244,11 @@ export function SettingsContent({
           isOpen={openSection === "payroll"}
           onToggle={() => toggle("payroll")}
         >
-          <PayrollSection activeConfig={payrollActiveConfig} history={payrollConfigHistory} />
+          <PayrollSection
+            activeConfig={payrollActiveConfig}
+            history={payrollConfigHistory}
+            razorpayxCredentials={razorpayxCredentials}
+          />
         </CollapsibleSection>
       )}
 

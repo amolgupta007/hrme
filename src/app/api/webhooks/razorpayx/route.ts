@@ -1,6 +1,6 @@
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
-import { createHmac, timingSafeEqual } from "crypto";
+import { createHash, createHmac, timingSafeEqual } from "crypto";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { decrypt } from "@/lib/crypto/aes-gcm";
 import { reconcileBatchAndRunStatus } from "@/lib/payroll/disbursement-reconcile";
@@ -83,15 +83,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Verification failed" }, { status: 400 });
   }
 
-  // Idempotency: dedupe via webhook_events
-  const eventId = event.id as string | undefined;
-  if (eventId) {
-    const { error: dedupeError } = await supabase
-      .from("webhook_events")
-      .insert({ id: eventId, event_type: event.event });
-    if (dedupeError && dedupeError.code === "23505") {
-      return NextResponse.json({ received: true, deduped: true });
-    }
+  // Idempotency: dedupe via webhook_events.
+  // Derive a stable event ID — fall back to a body-hash if RazorpayX omits one,
+  // so retries of an id-less event still dedupe.
+  const eventId =
+    (event.id as string | undefined) ??
+    `synthetic-${createHash("sha256").update(body).digest("hex").slice(0, 32)}`;
+
+  const { error: dedupeError } = await supabase
+    .from("webhook_events")
+    .insert({ id: eventId, event_type: event.event });
+  if (dedupeError && dedupeError.code === "23505") {
+    return NextResponse.json({ received: true, deduped: true });
   }
 
   const orgId = (creds as any).org_id;

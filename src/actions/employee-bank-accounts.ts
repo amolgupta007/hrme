@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { waitUntil } from "@vercel/functions";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { getCurrentUser, isAdmin } from "@/lib/current-user";
 import { encrypt, decrypt, hashSha256 } from "@/lib/crypto/aes-gcm";
@@ -117,7 +118,14 @@ export async function upsertMyBankAccount(input: z.infer<typeof BankAccountInput
     .single();
 
   if (error) return { success: false, error: error.message };
-  // P14 will fire syncBeneficiary via waitUntil here.
+  // Fire-and-forget beneficiary sync — survives function freeze via waitUntil.
+  // Best-effort; if it fails, the row keeps beneficiary_sync_status='pending' and
+  // admins can hit "Re-sync" from the bank-account section.
+  try {
+    waitUntil(syncBeneficiary(user.employeeId).then(() => undefined));
+  } catch {
+    // waitUntil is a no-op outside Vercel; swallow.
+  }
   revalidatePath("/dashboard/profile");
   return { success: true, data: toMasked(data as any) };
 }
@@ -177,6 +185,9 @@ export async function upsertEmployeeBankAccount(employeeId: string, input: z.inf
     .single();
 
   if (error) return { success: false, error: error.message };
+  try {
+    waitUntil(syncBeneficiary(employeeId).then(() => undefined));
+  } catch {}
   revalidatePath("/dashboard/employees");
   return { success: true, data: toMasked(data as any) };
 }

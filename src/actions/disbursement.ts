@@ -113,8 +113,41 @@ export async function runPreflight(runId: string): Promise<ActionResult<Prefligh
     return { success: false, error: "Payroll run has no entries" };
   }
 
+  // PRD 02 Phase 2 fix: when re-running preflight for a `disbursement_failed` run,
+  // exclude employees who were already successfully paid (or are in flight) in a
+  // prior batch. RazorpayX idempotency keys are per-batch, so a fresh batch
+  // would re-pay them.
+  const { data: priorBatches } = await sb
+    .from("disbursement_batches")
+    .select("id")
+    .eq("payroll_run_id", runId)
+    .eq("org_id", user.orgId);
+  const priorBatchIds = (priorBatches ?? []).map((b: any) => b.id);
+
+  const excludedEmployeeIds = new Set<string>();
+  if (priorBatchIds.length > 0) {
+    const { data: priorItemRows } = await sb
+      .from("disbursement_items")
+      .select("employee_id, status")
+      .eq("org_id", user.orgId)
+      .in("batch_id", priorBatchIds)
+      .in("status", ["paid", "queued", "processing", "pending"]);
+    for (const r of (priorItemRows ?? []) as any[]) {
+      excludedEmployeeIds.add(r.employee_id);
+    }
+  }
+
+  const eligibleEntries = (entries as any[]).filter((e) => !excludedEmployeeIds.has(e.employee_id));
+
+  if (eligibleEntries.length === 0) {
+    return {
+      success: false,
+      error: "All employees in this run have already been paid or are in flight. Nothing to disburse.",
+    };
+  }
+
   // 4. Load bank accounts for these employees in one query
-  const employeeIds = (entries as any[]).map((e) => e.employee_id);
+  const employeeIds = eligibleEntries.map((e) => e.employee_id);
   const { data: banks } = await sb
     .from("employee_bank_accounts")
     .select("employee_id, account_number_last4, ifsc_first4, razorpayx_fund_account_id, beneficiary_sync_status")
@@ -125,7 +158,7 @@ export async function runPreflight(runId: string): Promise<ActionResult<Prefligh
   // 5. Build preflight items
   const items: PreflightItem[] = [];
   let totalPayable = 0;
-  for (const e of entries as any[]) {
+  for (const e of eligibleEntries) {
     const bank = bankByEmp.get(e.employee_id) as any | undefined;
     const employeeName = e.employees ? `${e.employees.first_name} ${e.employees.last_name}` : "Unknown";
     totalPayable += e.net_pay;
@@ -224,6 +257,22 @@ export async function initiateDisbursement(
   const sb = createAdminSupabase();
   const idempotencyKey = randomUUID();
 
+  // PRD 02 Phase 2 fix: duplicate-batch guard. Two concurrent initiate calls
+  // would otherwise both create batches for the same run.
+  const { data: openBatch } = await sb
+    .from("disbursement_batches")
+    .select("id, status")
+    .eq("payroll_run_id", runId)
+    .eq("org_id", user.orgId)
+    .in("status", ["awaiting_approval", "approved", "processing", "partial_failed"])
+    .maybeSingle();
+  if (openBatch) {
+    return {
+      success: false,
+      error: `A disbursement batch is already open for this run (status: ${(openBatch as any).status}). Complete or cancel it first.`,
+    };
+  }
+
   // Insert batch
   const { data: batch, error: batchErr } = await sb
     .from("disbursement_batches")
@@ -303,7 +352,7 @@ export async function getDisbursementBatchByRun(runId: string): Promise<ActionRe
 } | null>> {
   const user = await getCurrentUser();
   if (!user) return { success: false, error: "Not authenticated" };
-  if (!isAdmin(user.role) && user.role !== "manager") return { success: false, error: "Unauthorized" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can view disbursement details" };
 
   const sb = createAdminSupabase();
   const { data: batch } = await sb

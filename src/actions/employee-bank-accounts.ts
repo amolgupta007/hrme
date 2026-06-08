@@ -342,7 +342,17 @@ export async function resyncBeneficiary(employeeId: string): Promise<ActionResul
   const user = await getCurrentUser();
   if (!user) return { success: false, error: "Not authenticated" };
   if (!isAdmin(user.role)) return { success: false, error: "Only admins can re-sync beneficiaries" };
-  // Cross-tenant guard via the employee_bank_accounts row's org_id check inside syncBeneficiary
+
+  // Cross-tenant guard: verify the employee belongs to caller's org.
+  const sb = createAdminSupabase();
+  const { data: bankRow } = await sb
+    .from("employee_bank_accounts")
+    .select("id")
+    .eq("org_id", user.orgId)
+    .eq("employee_id", employeeId)
+    .maybeSingle();
+  if (!bankRow) return { success: false, error: "Employee bank account not found in your organisation" };
+
   return syncBeneficiary(employeeId);
 }
 

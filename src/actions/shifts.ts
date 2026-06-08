@@ -547,3 +547,39 @@ export async function setAssignmentType(assignmentId: string, type: "fixed" | "r
   revalidatePath("/dashboard/attendance");
   return { success: true, data: undefined };
 }
+
+/**
+ * Deletes a single shift assignment. Admin can delete any; manager can only
+ * delete assignments for employees in departments where they are the head.
+ *
+ * Safe to delete: assignments only drive forward-looking shift resolution
+ * (which shift TODAY); historical attendance_records snapshot their shift_id
+ * at clock-in time, so deletion does not corrupt past records.
+ */
+export async function deleteShiftAssignment(assignmentId: string): Promise<ActionResult<void>> {
+  const guard = await requireAdminOrManager();
+  if ("error" in guard) return { success: false, error: guard.error };
+
+  const sb = createAdminSupabase();
+  const { data: row } = await sb
+    .from("shift_assignments")
+    .select("id, org_id, employee_id")
+    .eq("id", assignmentId)
+    .maybeSingle();
+  if (!row || (row as any).org_id !== guard.user.orgId) {
+    return { success: false, error: "Assignment not found" };
+  }
+
+  if (guard.user.role === "manager") {
+    const scoped = await getManagerScopedEmployeeIds(guard.user.orgId, guard.user.employeeId!);
+    if (!scoped.includes((row as any).employee_id)) {
+      return { success: false, error: "You can only delete your team's assignments" };
+    }
+  }
+
+  const { error } = await sb.from("shift_assignments").delete().eq("id", assignmentId);
+  if (error) return { success: false, error: error.message };
+  revalidatePath("/dashboard/settings");
+  revalidatePath("/dashboard/attendance");
+  return { success: true, data: undefined };
+}

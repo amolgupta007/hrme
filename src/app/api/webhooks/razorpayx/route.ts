@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { createHmac, timingSafeEqual } from "crypto";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { decrypt } from "@/lib/crypto/aes-gcm";
+import { reconcileBatchAndRunStatus } from "@/lib/payroll/disbursement-reconcile";
 
 /**
  * RazorpayX webhook endpoint.
@@ -185,8 +186,8 @@ export async function POST(req: Request) {
           payload: { event: event.event, from: item.status, to: mapped, razorpayx_payout_id: payout.id },
         } as any);
 
-        // Reconcile batch + run status (function defined in P26)
-        await reconcileBatchAndRunStatus(item.batch_id, orgId);
+        // Reconcile batch + run status via shared helper (P26)
+        await reconcileBatchAndRunStatus(supabase, item.batch_id, orgId);
         break;
       }
 
@@ -199,54 +200,4 @@ export async function POST(req: Request) {
   }
 
   return NextResponse.json({ received: true });
-}
-
-/**
- * Reconcile batch + payroll_runs status based on item aggregate.
- * NOTE: P26 task duplicates this helper into src/actions/disbursement.ts as
- * an exported server action. The webhook path uses this local copy to avoid
- * a server-action round-trip inside an API route. Keep both in sync.
- */
-async function reconcileBatchAndRunStatus(batchId: string, orgId: string) {
-  const sb = createAdminSupabase();
-  const { data: items } = await sb
-    .from("disbursement_items")
-    .select("status")
-    .eq("batch_id", batchId)
-    .eq("org_id", orgId);
-
-  const statuses = (items ?? []).map((i: any) => i.status as string);
-  const allPaid = statuses.length > 0 && statuses.every((s) => s === "paid");
-  const anyFailed = statuses.some((s) => s === "failed");
-  const anyPending = statuses.some((s) => ["pending", "queued", "processing"].includes(s));
-
-  let batchStatus: string | null = null;
-  let runStatus: string | null = null;
-
-  if (allPaid) {
-    batchStatus = "completed";
-    runStatus = "paid";
-  } else if (!anyPending && anyFailed) {
-    batchStatus = "partial_failed";
-    runStatus = "disbursement_failed";
-  } else {
-    batchStatus = "processing";
-    runStatus = "disbursing";
-  }
-
-  const updates: Record<string, any> = { status: batchStatus };
-  if (batchStatus === "completed") updates.completed_at = new Date().toISOString();
-  await sb.from("disbursement_batches").update(updates as any).eq("id", batchId);
-
-  // Update the payroll run
-  const { data: batch } = await sb.from("disbursement_batches").select("payroll_run_id").eq("id", batchId).maybeSingle();
-  if (batch) {
-    await sb
-      .from("payroll_runs")
-      .update({
-        status: runStatus,
-        paid_at: runStatus === "paid" ? new Date().toISOString() : null,
-      } as any)
-      .eq("id", (batch as any).payroll_run_id);
-  }
 }

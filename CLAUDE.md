@@ -496,6 +496,37 @@ Feature-flagged via `organizations.settings.attendance_enabled`. Optional payrol
 - Drift warning in `salary-structure-dialog` may false-positive when a future-dated config sits at `history[0]`. Acceptable for Phase 1 (advisory only).
 - **`RAZORPAYX_CRED_ENCRYPTION_KEY` (Phase 2 prep)**: base64-encoded 32-byte AES-256 key used to encrypt RazorpayX API secrets + employee bank account numbers (Phase 2 in progress). MUST NOT change after data exists — rotation requires re-encrypting every row (Phase 3 envelope-encryption upgrade handles this). Missing/wrong key = AES auth-tag failure on decrypt = total disbursement outage. Generate with `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`. Local: paste into `.env.local`. Production: Vercel env var. See `src/lib/crypto/aes-gcm.ts`.
 
+### PRD 02 Phase 2 — RazorpayX disbursement (shipped 2026-06-08)
+
+- **Customer-brings-own-RazorpayX model.** Each org signs up for their OWN RazorpayX account, completes KYC, gives JambaHR encrypted API credentials. Money flows from their RazorpayX wallet directly to their employees — JambaHR never holds funds.
+- **AES-256-GCM encryption-at-rest** for all sensitive payroll data. Key in `RAZORPAYX_CRED_ENCRYPTION_KEY` env var (32-byte base64). Used for: RazorpayX API secrets, RazorpayX webhook secrets, employee bank account numbers + IFSC.
+- **`razorpayx_credentials` (042)** — one row per org. Encrypted `key_secret_encrypted` + `webhook_secret_encrypted`. `account_id` is the RazorpayX merchant identifier — webhook handler uses it for per-org lookup.
+- **`employee_bank_accounts` (043)** — encrypted `account_number_encrypted` + `ifsc_encrypted`. Visible-only fields: `account_number_last4` + `ifsc_first4`. SHA-256 `account_number_hash` for dedupe + cache key. RazorpayX Contact/Fund Account IDs persisted after `syncBeneficiary`.
+- **`penny_drop_results` (044)** — 30-day cache per (org, account_hash) for ₹1 + name-match RazorpayX validation. Penny-drop costs ~₹2-3 per call; cache aggressively.
+- **`disbursement_batches` (045)** — one batch per Pay Now attempt. Status: `preflight → awaiting_approval → approved → processing → completed | partial_failed | cancelled`. Idempotency key per batch.
+- **`disbursement_items` (046)** — one row per (batch, employee). Status: `pending → queued → processing → paid | failed | cancelled | reversed`. Per-item RazorpayX `payout_id` and fee_paise tracked.
+- **`disbursement_audit_log` (047)** — DPDP audit trail for every initiate/approve/cancel/retry/webhook_status_change/preflight_run.
+- **`payroll_runs.status` extended (048)** — adds `disbursing` and `disbursement_failed` to the existing draft/processed/paid enum.
+- **HTTP client at `src/lib/razorpayx.ts`** — typed wrappers around the RazorpayX REST API. No SDK; uses Node `fetch` with HTTP Basic auth. Bulk payout endpoint is `/payouts_batches` (TODO comment in code: verify against current RazorpayX docs at integration time; falls back to per-item `createPayout` loop if the endpoint changes).
+- **Beneficiary lifecycle**: `syncBeneficiary` creates RazorpayX Contact + Fund Account, fired via `waitUntil` after every `upsertMyBankAccount` / `upsertEmployeeBankAccount`. Bulk re-sync available from Settings → RazorpayX → "Re-sync all beneficiaries".
+- **Maker-checker** enforced server-side in `approveDisbursement`. Default: a different admin must approve than the maker. Toggleable per-org via `razorpayx_credentials.single_person_approval_allowed`.
+- **Wallet shortfall** — `runPreflight` returns shortfall amount; `initiateDisbursement` hard-blocks unless `override_wallet_shortfall: true`. (Phase 2.5: wire actual RazorpayX balance endpoint; currently `getWalletBalance` returns null and the shortfall gate is effectively bypassed — RazorpayX will reject the payout call with `insufficient_balance` if the wallet is short.)
+- **Webhook at `/api/webhooks/razorpayx`**: per-org HMAC verification via `account_id` lookup → decrypt that org's webhook_secret → HMAC-SHA256 compare with `timingSafeEqual`. Reuses shared `webhook_events` table for dedupe.
+- **`reconcileBatchAndRunStatus`** at `src/lib/payroll/disbursement-reconcile.ts` — shared helper used by both the webhook route AND `approveDisbursement`/`retryFailedPayouts`. Aggregates item statuses → updates batch.status + payroll_runs.status atomically.
+- **Existing manual "Mark Paid"** stays available for non-RazorpayX customers. UI shows Pay Now button only when credentials exist.
+
+**Phase 2 gotchas:**
+- `RAZORPAYX_CRED_ENCRYPTION_KEY` **must NOT change** after data exists — rotating it requires re-encrypting every row (Phase 3 envelope-encryption upgrade handles this). Missing/wrong key = AES auth-tag failure on decrypt = total disbursement outage.
+- `account_number` (RazorpayX virtual account) is stored in `razorpayx_credentials` as plaintext — it's NOT a secret (it's the destination wallet number, like an IBAN). The `account_number` ON `employee_bank_accounts` IS encrypted (it's the employee's bank account).
+- `getWalletBalance()` in `disbursement.ts` is a placeholder returning `null`. RazorpayX balance endpoint should be confirmed at integration time and wired in Phase 2.5.
+- Bulk payout endpoint `/payouts_batches` is the canonical mid-2026 path per `src/lib/razorpayx.ts`. If it 404s, `approveDisbursement` falls back to a per-item `createPayout` loop with derived idempotency keys.
+- Maker-checker is the DEFAULT. Single-person mode (one admin both initiating and approving) requires the org admin to explicitly toggle `single_person_approval_allowed=true` in Settings → Payroll → RazorpayX.
+- Penny-drop verification uses a 30-day cache. Bank-account changes invalidate the cache because the `account_number_hash` changes. Admin can force re-verify per row in the pre-flight dialog.
+- Beneficiary sync resets to `pending` on every bank-account upsert. This is intentional — the encrypted ciphertext changes on every save (fresh IV) so we cannot reliably diff inputs. Re-sync queues automatically via `waitUntil`.
+- `disbursement_items.razorpayx_payout_id` is the back-pointer used by the webhook to find the right item. The webhook also falls back to looking up by `reference_id` (which is set to the item's UUID at payout-time).
+- DPDP compliance: bank account number stored encrypted + hashed. UI shows last-4 only. Every read of decrypted bank data is logged via `disbursement_audit_log` (action='bank_account_read') in the disbursement engine path.
+- After P2's `.env.local` overwrite incident, `VOYAGE_API_KEY` is missing — restore it before re-running `npm run embed:help` to index the 6 new RazorpayX articles.
+
 ---
 
 ## Social Agent (`/superadmin/social`) — Single-Tenant LinkedIn

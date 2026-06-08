@@ -16,6 +16,7 @@ import { EntryEditDialog } from "./entry-edit-dialog";
 import { PayslipDialog } from "./payslip-dialog";
 import { CTCBreakdownCard } from "./ctc-breakdown-card";
 import { PayNowButton } from "./pay-now-button";
+import { DisbursementTab } from "./disbursement-tab";
 import {
   processPayrollRun,
   markPayrollPaid,
@@ -505,6 +506,12 @@ export function PayrollClient({
                           </tr>
                         </tfoot>
                       </table>
+                    )}
+                    {razorpayxConnected && (run.status === "processed" || run.status === "paid" || (run.status as string) === "disbursing" || (run.status as string) === "disbursement_failed") && (
+                      <div className="border-t border-border p-5">
+                        <h3 className="text-sm font-semibold mb-3">Disbursement (RazorpayX)</h3>
+                        <DisbursementTab runId={run.id} />
+                      </div>
                     )}
                   </div>
                 )}

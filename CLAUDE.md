@@ -423,6 +423,37 @@ Feature-flagged via `organizations.settings.attendance_enabled`. Optional payrol
   matching `009_jambahire_rls.sql` and `018_payroll_schema_capture.sql`.
   Service-role bypasses today (CLAUDE.md gotcha #5).
 
+### Phase 2 — Roster + Overtime + Week-off overrides (PRD 01, shipped 2026-06-08)
+
+- **Weekly roster grid** at `/dashboard/attendance` → Roster tab. Drag-shift-into-cell using @dnd-kit (reuses JambaHire pipeline pattern). Manager+ visible; admins see all employees, managers see only own department (via `departments.head_id`).
+- **`shift_assignments.type ∈ {fixed, rotational}`** (migration 037). Rotational chips render as tentative (lighter colour + `?`). Drag-to-fix or `setAssignmentType(id, "fixed")` promotes.
+- **`getRosterGrid({ from, to })`** returns `{ days, rows, shifts }`. Each `RosterCell` has `assignment_id`, `shift_id`, `shift_name`, `type`.
+- **`assignShiftToCell({ employee_id, shift_id, date })`** writes a single-day assignment (`date_from = date_to = date`). Manager-scope enforced via `getManagerScopedEmployeeIds(orgId, managerId)`.
+- **Conflict detection** is SOFT — `detectAssignmentConflicts` returns a `Conflict[]` for `double_assigned / week_off / inactive_shift`, surfaced as `toast.warning`. Server does NOT block; admin/manager can override.
+- **Overtime**: new `ot_records` table (migration 038), new `'overtime'` category on `payroll_line_items` (migration 039).
+- **OT master toggle** at `organizations.settings.attendance.overtime.enabled` (default `false`). Gates: `computeAndRecordOvertime`, `pushOvertimeToPayroll`, Overtime tab visibility, Compute + Push buttons. Approve/Reject still work when disabled (drain pending queue).
+- **OT compute**: per-day = `worked_minutes - shift_total_minutes` (positive only). Weekly = `total_worked_minutes - threshold_hours × 60`. Uses `attendance_records.shift_id → shifts.total_hours` from Phase 1.
+- **OT approval flow**: `pending → approved | rejected → pushed` after admin clicks "Push to payroll". `payroll_line_item_id` back-pointer on `ot_records` is the idempotency guard.
+- **`pushOvertimeToPayroll(month)`**: hourly rate = `gross_monthly / (working_days × shift.total_hours)`. Amount (₹) = `OT minutes / 60 × hourly rate × multiplier`. Inserts `payroll_line_items` row (category `'overtime'`, taxable=true), then calls `recomputeEntryFromLineItems(entryId)` for TDS reroll. (Helper extracted into `src/lib/payroll/recompute-entry.ts` so both `payroll.ts` and `overtime.ts` import it.)
+- **Per-employee week-off override** (migration 040, `employee_week_off_override` table, UNIQUE on employee_id). Override fully REPLACES org policy for that employee (not a merge).
+- **`isWeekOff(date, policy, override?)`** v2 — back-compatible third arg; uses override if given, else policy.
+- **Alternate-Saturday support** (migration 041, `week_off_policy.alt_saturday_rule TEXT CHECK IN ('none', 'odd_off', 'even_off')`). `odd_off` = 1st + 3rd Saturdays off; `even_off` = 2nd + 4th. Saturday only; doesn't affect other days.
+- **`isAltSaturdayOff(date, rule)`** — pure helper. nth-Saturday-of-month via `Math.floor((dom - 1) / 7) + 1`.
+
+**Phase 2 gotchas:**
+- Manager scope = `departments.head_id` model — NO `employees.manager_id` column added.
+- Roster grid is **weekly only** in Phase 2. Monthly view is Phase 3.
+- Cell-to-cell drag NOT supported — only palette → cell.
+- Reprocessing a payroll run does NOT pull in NEW OT after process — push OT BEFORE running payroll, or run payroll, then push, which triggers `recomputeEntryFromLineItems`.
+- `payroll_line_items.category` Zod schema in `addPayrollLineItem` deliberately does NOT include `'overtime'` — admins cannot manually create OT line items via the regular UI. Only `pushOvertimeToPayroll` produces them.
+- `LineItemCategory` TS type in `src/lib/payroll/line-items.ts` was bumped to include `'overtime'` (was stale after migration 039).
+- `DEFAULT_OT_SETTINGS` was originally exported from a `"use server"` file (`src/actions/overtime.ts`) — Next.js rejects non-async exports from "use server" files. Extracted to `src/lib/attendance/overtime-types.ts`.
+- Override precedence: `override ?? policy` — override fully replaces, no field-by-field merge. If override has empty `off_days`, employee has zero off days that week.
+- `weekly` threshold mode in `computeAndRecordOvertime` treats the entire `from..to` range as a single bucket per employee — caller is expected to pass a 7-day Mon-Sun window. Multi-week ranges in a single call don't ISO-week-group; that's Phase 2.x polish.
+- Bulk-approve of mixed-status records: `approveOvertime` skips records not in `pending` or `rejected` status. Only counts those it actually updated.
+- Conflict-detection helper only inspects the CURRENT week's assignments from `initial.rows` — long-range assignments spanning week boundaries won't surface in the roster client warn (server-side `assignShiftToCell` is still authoritative).
+- `OvertimeSettings` and `DEFAULT_OT_SETTINGS` live in `src/lib/attendance/overtime-types.ts`, not in `src/actions/overtime.ts`. Import accordingly from client components.
+
 ---
 
 ## Payroll Module (`/dashboard/payroll`) — Business+

@@ -9,6 +9,9 @@ import { WEEK_DAYS, type WeekOffPolicy } from "@/lib/attendance/week-off";
 export function WeekOffCard({ initial }: { initial: WeekOffPolicy | null }) {
   const [weekType, setWeekType] = useState<5 | 6>(initial?.week_type ?? 6);
   const [offDays, setOffDays] = useState<number[]>(initial?.off_days ?? [0]);
+  const [altSaturdayRule, setAltSaturdayRule] = useState<"none" | "odd_off" | "even_off">(
+    initial?.alt_saturday_rule ?? "none"
+  );
   const [saving, setSaving] = useState(false);
 
   function toggleDay(d: number) {
@@ -21,7 +24,7 @@ export function WeekOffCard({ initial }: { initial: WeekOffPolicy | null }) {
       return toast.error(weekType === 5 ? "Pick exactly 2 off days" : "Pick exactly 1 off day");
     }
     setSaving(true);
-    const r = await upsertWeekOffPolicy({ week_type: weekType, off_days: offDays });
+    const r = await upsertWeekOffPolicy({ week_type: weekType, off_days: offDays, alt_saturday_rule: altSaturdayRule });
     setSaving(false);
     if (r.success) toast.success("Week-off policy saved");
     else toast.error(r.error);
@@ -45,6 +48,23 @@ export function WeekOffCard({ initial }: { initial: WeekOffPolicy | null }) {
             {d.label}
           </button>
         ))}
+      </div>
+      <div className="mt-3 pt-3 border-t border-border mb-3">
+        <p className="text-xs font-medium mb-2">Alternate Saturdays (India common patterns)</p>
+        <div className="flex flex-wrap gap-3 text-xs">
+          <label className="inline-flex items-center gap-1.5">
+            <input type="radio" checked={altSaturdayRule === "none"} onChange={() => setAltSaturdayRule("none")} />
+            None
+          </label>
+          <label className="inline-flex items-center gap-1.5">
+            <input type="radio" checked={altSaturdayRule === "odd_off"} onChange={() => setAltSaturdayRule("odd_off")} />
+            1st + 3rd Sat off
+          </label>
+          <label className="inline-flex items-center gap-1.5">
+            <input type="radio" checked={altSaturdayRule === "even_off"} onChange={() => setAltSaturdayRule("even_off")} />
+            2nd + 4th Sat off
+          </label>
+        </div>
       </div>
       <Button size="sm" onClick={handleSave} disabled={saving}>{saving ? "Saving…" : "Save policy"}</Button>
     </div>

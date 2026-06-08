@@ -18,6 +18,7 @@ import { getWeekOffPolicy, listAllWeekOffOverrides } from "@/actions/week-off";
 import { listEmployees } from "@/actions/employees";
 import { getSalaryStructureConfig } from "@/actions/payroll";
 import { getOvertimeSettings } from "@/actions/overtime";
+import { getRazorpayXCredentials } from "@/actions/razorpayx-credentials";
 import type { OvertimeSettings } from "@/lib/attendance/overtime-types";
 
 const DEFAULT_OT_SETTINGS_FALLBACK: OvertimeSettings = {
@@ -45,6 +46,7 @@ export default async function SettingsPage() {
     employeesResult,
     payrollConfigResult,
     overtimeSettingsResult,
+    razorpayxCredentialsResult,
   ] = await Promise.all([
     listDepartments(),
     getOrgProfile(),
@@ -61,6 +63,7 @@ export default async function SettingsPage() {
     listEmployees(),
     getSalaryStructureConfig(),
     getOvertimeSettings(),
+    getRazorpayXCredentials(),
   ]);
 
   const departments = departmentsResult.success ? departmentsResult.data : [];
@@ -90,6 +93,9 @@ export default async function SettingsPage() {
   const overtimeSettings = overtimeSettingsResult.success
     ? overtimeSettingsResult.data
     : DEFAULT_OT_SETTINGS_FALLBACK;
+  const razorpayxCredentials = razorpayxCredentialsResult.success
+    ? razorpayxCredentialsResult.data
+    : null;
 
   const supabase = createAdminSupabase();
   const orgSettingsResult = userCtx
@@ -140,6 +146,7 @@ export default async function SettingsPage() {
         payrollConfigHistory={payrollConfigHistory}
         payrollEnabled={payrollEnabled}
         overtimeSettings={overtimeSettings}
+        razorpayxCredentials={razorpayxCredentials}
       />
     </div>
   );

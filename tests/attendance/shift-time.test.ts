@@ -38,3 +38,20 @@ describe("computeShiftTotalHours", () => {
     expect(() => computeShiftTotalHours("09:00", "10:00", 60)).toThrow();
   });
 });
+
+describe("parseHHMM accepts Postgres TIME format (HH:MM:SS)", () => {
+  it("treats HH:MM:SS the same as HH:MM (seconds discarded)", () => {
+    expect(parseHHMM("09:00:00")).toBe(9 * 60);
+    expect(parseHHMM("17:30:45")).toBe(17 * 60 + 30);
+    expect(parseHHMM("23:59:59")).toBe(23 * 60 + 59);
+  });
+  it("still rejects malformed values with seconds", () => {
+    expect(() => parseHHMM("09:00:60")).toThrow();
+    expect(() => parseHHMM("09:00:")).toThrow();
+    expect(() => parseHHMM("09:00:00:00")).toThrow();
+  });
+  it("computeShiftTotalHours works with HH:MM:SS inputs (bug fix: was crashing on edit of saved shift)", () => {
+    expect(computeShiftTotalHours("09:00:00", "17:00:00", 0)).toBe(8);
+    expect(computeShiftTotalHours("22:00:00", "06:00:00", 0)).toBe(8);
+  });
+});

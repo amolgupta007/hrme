@@ -412,7 +412,10 @@ export async function getRosterGrid(input: { from: string; to: string }): Promis
 
   const empQuery = sb
     .from("employees")
-    .select("id, first_name, last_name, department_id, departments(name)")
+    // Use FK-disambiguated embed: employees has department_id ? departments AND
+    // departments has head_id ? employees, so bare `departments(name)` returns
+    // HTTP 300 Multiple Choices. Must specify `!department_id` to pick the right FK.
+    .select("id, first_name, last_name, department_id, departments!department_id(name)")
     .eq("org_id", user.orgId)
     .neq("status", "terminated")
     .order("first_name");

@@ -7,7 +7,8 @@ export type OnboardingStepId =
   | "address"
   | "id_proof"
   | "emergency_contact"
-  | "documents";
+  | "documents"
+  | "bank_account";
 
 export type OnboardingStepConfig = {
   id: OnboardingStepId;
@@ -47,6 +48,7 @@ export const DEFAULT_ONBOARDING_STEPS: OnboardingStepConfig[] = [
   { id: "id_proof",          enabled: true,  required: true  },
   { id: "emergency_contact", enabled: true,  required: false },
   { id: "documents",         enabled: false, required: false },
+  { id: "bank_account",      enabled: true,  required: false },
 ];
 
 export const STEP_LABELS: Record<OnboardingStepId, string> = {
@@ -56,6 +58,7 @@ export const STEP_LABELS: Record<OnboardingStepId, string> = {
   id_proof:          "Upload ID proof (PAN or Aadhaar)",
   emergency_contact: "Add emergency contact",
   documents:         "Acknowledge company documents",
+  bank_account:      "Add bank account",
 };
 
 export const STEP_ACTION_URLS: Record<OnboardingStepId, string> = {
@@ -65,4 +68,5 @@ export const STEP_ACTION_URLS: Record<OnboardingStepId, string> = {
   id_proof:          "/dashboard/profile",
   emergency_contact: "/dashboard/profile",
   documents:         "/dashboard/documents",
+  bank_account:      "/dashboard/profile#bank-account",
 };

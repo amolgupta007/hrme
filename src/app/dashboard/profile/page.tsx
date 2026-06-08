@@ -1,5 +1,7 @@
 import { getMyProfile } from "@/actions/profile";
+import { getMyBankAccount } from "@/actions/employee-bank-accounts";
 import { ProfileClient } from "@/components/profile/profile-client";
+import { BankAccountSection } from "@/components/profile/bank-account-section";
 import { User } from "lucide-react";
 
 export default async function ProfilePage() {
@@ -27,6 +29,9 @@ export default async function ProfilePage() {
     );
   }
 
+  const bankResult = await getMyBankAccount();
+  const bankAccount = bankResult.success ? bankResult.data : null;
+
   return (
     <div className="space-y-6">
       <div>
@@ -34,6 +39,9 @@ export default async function ProfilePage() {
         <p className="mt-1 text-muted-foreground">Your personal and demographic information.</p>
       </div>
       <ProfileClient profile={result.data} />
+      <div className="max-w-3xl">
+        <BankAccountSection initial={bankAccount} />
+      </div>
     </div>
   );
 }

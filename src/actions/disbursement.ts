@@ -559,3 +559,145 @@ export async function approveDisbursement(
   revalidatePath("/dashboard/payroll");
   return { success: true, data: { status: finalStatus, pushed, failed } };
 }
+
+// ---- retryFailedPayouts ----
+
+/**
+ * Admin-initiated retry of items in `failed` status within a batch.
+ * Per-item createPayout with a derived idempotency key that includes the
+ * retry_count (so RazorpayX treats it as a new request after the previous
+ * failure).
+ */
+export async function retryFailedPayouts(
+  batchId: string,
+): Promise<ActionResult<{ retried: number; succeeded: number; still_failed: number }>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can retry payouts" };
+
+  const sb = createAdminSupabase();
+
+  // Load batch
+  const { data: batch } = await sb
+    .from("disbursement_batches")
+    .select("*")
+    .eq("id", batchId)
+    .eq("org_id", user.orgId)
+    .maybeSingle();
+  if (!batch) return { success: false, error: "Batch not found" };
+  const b = batch as any;
+  if (b.status === "completed") {
+    return { success: false, error: "Batch already completed — nothing to retry" };
+  }
+  if (b.status === "cancelled") {
+    return { success: false, error: "Cancelled batches cannot be retried" };
+  }
+
+  // Load credentials
+  const { data: creds } = await sb
+    .from("razorpayx_credentials")
+    .select("key_id, key_secret_encrypted, account_id, account_number")
+    .eq("org_id", user.orgId)
+    .maybeSingle();
+  if (!creds) return { success: false, error: "RazorpayX not connected" };
+
+  // Find failed items
+  const { data: failedItems } = await sb
+    .from("disbursement_items")
+    .select("id, employee_id, fund_account_id, amount, retry_count")
+    .eq("batch_id", batchId)
+    .eq("org_id", user.orgId)
+    .eq("status", "failed");
+
+  const items = (failedItems ?? []) as any[];
+  if (items.length === 0) {
+    return { success: false, error: "No failed items to retry" };
+  }
+
+  const client = createRazorpayXClient(creds as any);
+
+  let succeeded = 0;
+  let stillFailed = 0;
+
+  for (const it of items) {
+    const newRetryCount = (it.retry_count ?? 0) + 1;
+    const idempotencyKey = `${b.idempotency_key}-retry-${it.id}-${newRetryCount}`;
+
+    const r = await createPayout(
+      client,
+      {
+        account_number: (creds as any).account_number,
+        fund_account_id: it.fund_account_id,
+        amount: it.amount * 100, // paise
+        currency: "INR",
+        mode: "IMPS",
+        purpose: "salary",
+        reference_id: it.id,
+        narration: "Salary (retry)",
+      },
+      idempotencyKey,
+    );
+
+    if (r.ok) {
+      const status = r.data.status;
+      const mapped: string =
+        status === "processed"
+          ? "paid"
+          : status === "queued" || status === "pending"
+            ? "queued"
+            : status === "processing"
+              ? "processing"
+              : "failed";
+      await sb
+        .from("disbursement_items")
+        .update({
+          status: mapped,
+          razorpayx_payout_id: r.data.id,
+          failure_reason: r.data.failure_reason ?? null,
+          fee_paise: r.data.fees ?? 0,
+          retry_count: newRetryCount,
+        } as any)
+        .eq("id", it.id);
+      if (mapped === "paid" || mapped === "queued" || mapped === "processing") {
+        succeeded++;
+      } else {
+        stillFailed++;
+      }
+    } else {
+      await sb
+        .from("disbursement_items")
+        .update({
+          status: "failed",
+          failure_reason: r.error.description,
+          retry_count: newRetryCount,
+        } as any)
+        .eq("id", it.id);
+      stillFailed++;
+    }
+  }
+
+  // If at least one succeeded and the batch was `partial_failed`, lift it back to processing.
+  if (succeeded > 0 && b.status === "partial_failed") {
+    await sb
+      .from("disbursement_batches")
+      .update({ status: "processing" } as any)
+      .eq("id", batchId);
+    await sb
+      .from("payroll_runs")
+      .update({ status: "disbursing" } as any)
+      .eq("id", b.payroll_run_id)
+      .eq("org_id", user.orgId);
+  }
+
+  await logAudit(user.orgId, batchId, user.employeeId ?? null, user.role, "retry", {
+    retried: items.length,
+    succeeded,
+    still_failed: stillFailed,
+  });
+
+  revalidatePath("/dashboard/payroll");
+  return {
+    success: true,
+    data: { retried: items.length, succeeded, still_failed: stillFailed },
+  };
+}

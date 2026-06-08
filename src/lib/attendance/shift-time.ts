@@ -1,5 +1,7 @@
 /** Matches HH:MM strictly: 00–23 hours, 00–59 minutes */
-const HHMM_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
+// Accept both HH:MM (from UI/form inputs) and HH:MM:SS (from Postgres TIME columns).
+// Seconds are validated but discarded — shift granularity is per-minute.
+const HHMM_RE = /^([01]\d|2[0-3]):([0-5]\d)(?::[0-5]\d)?$/;
 
 /**
  * Parse a strict HH:MM string into minutes past midnight (0–1439).

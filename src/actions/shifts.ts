@@ -101,12 +101,15 @@ async function getManagerScopedEmployeeIds(orgId: string, managerEmployeeId: str
   return (emps ?? []).map((e: any) => e.id);
 }
 
-/** Like requireAdmin but allows managers with explicit dept-scope. */
+/** Like requireAdmin but allows managers with explicit dept-scope. Managers MUST have an employee row. */
 async function requireAdminOrManager() {
   const user = await getCurrentUser();
   if (!user) return { error: "Not authenticated" as const };
   if (!isAdmin(user.role) && user.role !== "manager") {
     return { error: "Insufficient permissions" as const };
+  }
+  if (user.role === "manager" && !user.employeeId) {
+    return { error: "Manager profile not linked to an employee record" as const };
   }
   return { user };
 }
@@ -490,6 +493,16 @@ export async function assignShiftToCell(input: z.infer<typeof CellAssignSchema>)
   ]);
   if (!empOk) return { success: false, error: "Employee not found in your organisation" };
   if (!shiftOk) return { success: false, error: "Shift not found in your organisation" };
+
+  // De-dup: remove any existing single-day cell assignment for this (employee, date)
+  // so re-dragging onto a cell replaces rather than stacks.
+  await sb
+    .from("shift_assignments")
+    .delete()
+    .eq("org_id", guard.user.orgId)
+    .eq("employee_id", parsed.data.employee_id)
+    .eq("date_from", parsed.data.date)
+    .eq("date_to", parsed.data.date);
 
   const { data, error } = await sb
     .from("shift_assignments")

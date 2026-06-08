@@ -8,6 +8,7 @@ import { createAdminSupabase } from "@/lib/supabase/server";
 import { getCurrentUser, isAdmin } from "@/lib/current-user";
 import { computeCTCBreakdown, getProfessionalTax, computeTaxByRegime, computeAdditionalTaxOnBonus, computeMonthsInFY, DEFAULT_RATIO_CONFIG, type RatioConfig } from "@/lib/ctc";
 import type { LineItem, LineItemCategory } from "@/lib/payroll/line-items";
+import { recomputeEntryFromLineItems } from "@/lib/payroll/recompute-entry";
 import { resend, FROM_EMAIL } from "@/lib/resend";
 import { PayslipEmail } from "@/components/emails/payslip";
 import type { ActionResult } from "@/types";
@@ -1224,77 +1225,6 @@ export async function removePayrollLineItem(itemId: string): Promise<ActionResul
   return { success: true, data: undefined };
 }
 
-/**
- * Recomputes a single entry's TDS, total_line_items, total_deductions, net_pay
- * after a line-item add/remove. Reuses the entry's stored
- * annual_taxable_income + months_in_fy (snapshot from processPayrollRun).
- * Updates the parent run's roll-up totals.
- */
-async function recomputeEntryFromLineItems(entryId: string): Promise<void> {
-  const sb = createAdminSupabase();
-  const { data: entry } = await sb
-    .from("payroll_entries")
-    .select("id, gross_salary, employee_pf, professional_tax, lop_deduction, payroll_run_id, employee_id, annual_taxable_income, months_in_fy, net_pay, org_id")
-    .eq("id", entryId)
-    .single();
-  if (!entry) return;
-  const e = entry as any;
-
-  const { data: items } = await sb
-    .from("payroll_line_items")
-    .select("amount, taxable")
-    .eq("payroll_entry_id", entryId);
-  const itemsArr = (items ?? []) as Array<{ amount: number; taxable: boolean }>;
-  const taxableSum = itemsArr.filter((i) => i.taxable).reduce((s, i) => s + i.amount, 0);
-  const totalLineItems = itemsArr.reduce((s, i) => s + i.amount, 0);
-
-  // Regime + extra deductions for marginal-tax math
-  const { data: salary } = await sb
-    .from("salary_structures")
-    .select("tax_regime, additional_deductions_annual")
-    .eq("org_id", e.org_id)
-    .eq("employee_id", e.employee_id)
-    .maybeSingle();
-  const regime: "new" | "old" = ((salary as any)?.tax_regime as "new" | "old") ?? "new";
-  const standardDeduction = regime === "old" ? 50000 : 75000;
-  const extraDed = regime === "old" ? Number((salary as any)?.additional_deductions_annual ?? 0) : 0;
-
-  const monthsInFY: number = Number(e.months_in_fy) > 0 ? Number(e.months_in_fy) : 12;
-  const annualTaxable: number =
-    e.annual_taxable_income != null
-      ? Number(e.annual_taxable_income)
-      : Math.max(0, e.gross_salary * 12 - e.employee_pf * 12 - standardDeduction - extraDed);
-  const baseTds = Math.round(computeTaxByRegime(annualTaxable, regime) / monthsInFY);
-  const bonusTax = computeAdditionalTaxOnBonus(annualTaxable, taxableSum, regime);
-  const adjustedTds = baseTds + bonusTax;
-
-  const totalDeductions = e.employee_pf + e.professional_tax + adjustedTds + (e.lop_deduction ?? 0);
-  const netPay = Math.max(0, e.gross_salary + totalLineItems - totalDeductions);
-
-  await sb
-    .from("payroll_entries")
-    .update({
-      tds: adjustedTds,
-      total_line_items: totalLineItems,
-      total_deductions: totalDeductions,
-      net_pay: netPay,
-      previous_net_pay: e.net_pay,
-      edited_at: new Date().toISOString(),
-    } as any)
-    .eq("id", entryId);
-
-  // Roll up run totals.
-  const { data: allEntries } = await sb
-    .from("payroll_entries")
-    .select("gross_salary, total_deductions, net_pay, total_line_items")
-    .eq("payroll_run_id", e.payroll_run_id);
-  if (allEntries) {
-    const totalGross = (allEntries as any[]).reduce((s, x) => s + x.gross_salary + (x.total_line_items ?? 0), 0);
-    const totalDed = (allEntries as any[]).reduce((s, x) => s + x.total_deductions, 0);
-    const totalNet = (allEntries as any[]).reduce((s, x) => s + x.net_pay, 0);
-    await sb
-      .from("payroll_runs")
-      .update({ total_gross: totalGross, total_deductions: totalDed, total_net: totalNet })
-      .eq("id", e.payroll_run_id);
-  }
-}
+// `recomputeEntryFromLineItems` lives in `src/lib/payroll/recompute-entry.ts`
+// so it can be shared with other server-action modules (e.g. overtime push).
+// Imported above; do not redeclare here.

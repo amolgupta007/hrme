@@ -14,9 +14,19 @@ import { getPerformanceSettings } from "@/lib/performance-settings";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { getAttendanceSettings } from "@/actions/attendance";
 import { listShifts, listShiftAssignments } from "@/actions/shifts";
-import { getWeekOffPolicy } from "@/actions/week-off";
+import { getWeekOffPolicy, listAllWeekOffOverrides } from "@/actions/week-off";
 import { listEmployees } from "@/actions/employees";
 import { getSalaryStructureConfig } from "@/actions/payroll";
+import { getOvertimeSettings } from "@/actions/overtime";
+import type { OvertimeSettings } from "@/lib/attendance/overtime-types";
+
+const DEFAULT_OT_SETTINGS_FALLBACK: OvertimeSettings = {
+  enabled: false,
+  multiplier: 1.5,
+  threshold_mode: "per_day",
+  weekly_threshold_hours: 48,
+  approval_required: true,
+};
 
 export default async function SettingsPage() {
   const [
@@ -31,8 +41,10 @@ export default async function SettingsPage() {
     shiftsResult,
     shiftAssignmentsResult,
     weekOffPolicyResult,
+    weekOffOverridesResult,
     employeesResult,
     payrollConfigResult,
+    overtimeSettingsResult,
   ] = await Promise.all([
     listDepartments(),
     getOrgProfile(),
@@ -45,8 +57,10 @@ export default async function SettingsPage() {
     listShifts(),
     listShiftAssignments(),
     getWeekOffPolicy(),
+    listAllWeekOffOverrides(),
     listEmployees(),
     getSalaryStructureConfig(),
+    getOvertimeSettings(),
   ]);
 
   const departments = departmentsResult.success ? departmentsResult.data : [];
@@ -68,10 +82,14 @@ export default async function SettingsPage() {
   const shifts = shiftsResult.success ? shiftsResult.data : [];
   const shiftAssignments = shiftAssignmentsResult.success ? shiftAssignmentsResult.data : [];
   const weekOffPolicy = weekOffPolicyResult.success ? weekOffPolicyResult.data : null;
+  const weekOffOverrides = weekOffOverridesResult.success ? weekOffOverridesResult.data : [];
   const employees = employeesResult.success ? employeesResult.data : [];
   const payrollEnabled = hasFeature(plan, "payroll", userCtx?.customFeatures ?? null);
   const payrollActiveConfig = payrollConfigResult.success ? payrollConfigResult.data.active : null;
   const payrollConfigHistory = payrollConfigResult.success ? payrollConfigResult.data.history : [];
+  const overtimeSettings = overtimeSettingsResult.success
+    ? overtimeSettingsResult.data
+    : DEFAULT_OT_SETTINGS_FALLBACK;
 
   const supabase = createAdminSupabase();
   const orgSettingsResult = userCtx
@@ -116,10 +134,12 @@ export default async function SettingsPage() {
         shifts={shifts}
         shiftAssignments={shiftAssignments}
         weekOffPolicy={weekOffPolicy}
+        weekOffOverrides={weekOffOverrides}
         employees={employees}
         payrollActiveConfig={payrollActiveConfig}
         payrollConfigHistory={payrollConfigHistory}
         payrollEnabled={payrollEnabled}
+        overtimeSettings={overtimeSettings}
       />
     </div>
   );

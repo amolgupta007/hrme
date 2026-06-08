@@ -181,6 +181,7 @@ export async function upsertShift(input: unknown): Promise<ActionResult<Shift>> 
   const { data, error } = await query;
   if (error) return { success: false, error: error.message };
   revalidatePath("/dashboard/settings");
+  revalidatePath("/dashboard/attendance"); // bust Roster grid cache so the palette picks up new/updated shifts
   return { success: true, data: data as Shift };
 }
 
@@ -192,6 +193,7 @@ export async function setDefaultShift(shiftId: string): Promise<ActionResult<voi
   const { error } = await sb.from("shifts").update({ is_default: true } as any).eq("id", shiftId).eq("org_id", guard.user.orgId);
   if (error) return { success: false, error: error.message };
   revalidatePath("/dashboard/settings");
+  revalidatePath("/dashboard/attendance");
   return { success: true, data: undefined };
 }
 
@@ -206,6 +208,7 @@ export async function deactivateShift(shiftId: string): Promise<ActionResult<voi
     .eq("org_id", guard.user.orgId);
   if (error) return { success: false, error: error.message };
   revalidatePath("/dashboard/settings");
+  revalidatePath("/dashboard/attendance");
   return { success: true, data: undefined };
 }
 
@@ -337,6 +340,7 @@ export async function assignShiftToEmployees(input: {
   const { error, data } = await sb.from("shift_assignments").insert(rows as any).select("id");
   if (error) return { success: false, error: error.message };
   revalidatePath("/dashboard/settings");
+  revalidatePath("/dashboard/attendance");
   return { success: true, data: { inserted: (data ?? []).length } };
 }
 

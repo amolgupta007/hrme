@@ -12,6 +12,7 @@ import {
 } from "@/actions/payroll";
 import { PayrollClient } from "@/components/payroll/payroll-client";
 import { createAdminSupabase } from "@/lib/supabase/server";
+import { getRazorpayXCredentials } from "@/actions/razorpayx-credentials";
 
 export default async function PayrollPage() {
   const userCtx = await getCurrentUser();
@@ -23,14 +24,16 @@ export default async function PayrollPage() {
 
   const adminUser = userCtx ? isAdmin(userCtx.role) : false;
 
-  const [empResult, salaryResult, runsResult, mySlipsResult, myCompResult, configResult] = await Promise.all([
+  const [empResult, salaryResult, runsResult, mySlipsResult, myCompResult, configResult, credsResult] = await Promise.all([
     listEmployees(),
     adminUser ? getSalaryStructures() : Promise.resolve({ success: true as const, data: [] }),
     adminUser ? getPayrollRuns() : Promise.resolve({ success: true as const, data: [] }),
     getMyPayslips(),
     getMyCompensation(),
     adminUser ? getSalaryStructureConfig() : Promise.resolve({ success: true as const, data: null }),
+    adminUser ? getRazorpayXCredentials() : Promise.resolve({ success: true as const, data: null }),
   ]);
+  const razorpayxConnected = credsResult.success && credsResult.data != null;
 
   const employees = empResult.success ? empResult.data : [];
   const salaryStructures = salaryResult.success ? salaryResult.data : [];
@@ -73,6 +76,7 @@ export default async function PayrollPage() {
       orgName={orgName}
       currentEmployeeName={currentEmployeeName}
       activeConfigCreatedAt={activeConfigCreatedAt}
+      razorpayxConnected={razorpayxConnected}
     />
   );
 }

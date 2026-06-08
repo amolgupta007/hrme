@@ -13,6 +13,7 @@ import {
   createPayout,
   type PayoutResponse,
 } from "@/lib/razorpayx";
+import { reconcileBatchAndRunStatus } from "@/lib/payroll/disbursement-reconcile";
 
 // ---- Types ----
 
@@ -531,24 +532,15 @@ export async function approveDisbursement(
     }
   }
 
-  // 9. Flip batch status: processing if all items pushed, partial_failed if any failed at the API call level
-  const finalStatus = failed > 0 && pushed === 0 ? "partial_failed" : "processing";
+  // 9. Persist the batch-level total_fees_paise aggregate (not derivable from items).
+  const totalFeesPaise = perItemResults.reduce((s, r) => s + (r.payout?.fees ?? 0), 0);
   await sb
     .from("disbursement_batches")
-    .update({
-      status: finalStatus,
-      total_fees_paise: perItemResults.reduce((s, r) => s + (r.payout?.fees ?? 0), 0),
-    } as any)
+    .update({ total_fees_paise: totalFeesPaise } as any)
     .eq("id", batchId);
 
-  // If everything failed at the API layer, also flip the run back to disbursement_failed
-  if (finalStatus === "partial_failed") {
-    await sb
-      .from("payroll_runs")
-      .update({ status: "disbursement_failed" } as any)
-      .eq("id", b.payroll_run_id)
-      .eq("org_id", user.orgId);
-  }
+  // Reconcile batch.status + payroll_runs.status from the item aggregate (single source of truth).
+  await reconcileBatchAndRunStatus(sb, batchId, user.orgId);
 
   await logAudit(user.orgId, batchId, user.employeeId ?? null, user.role, "approve", {
     razorpayx_call: usedFallback ? "fallback_per_item" : "bulk",
@@ -557,7 +549,17 @@ export async function approveDisbursement(
   });
 
   revalidatePath("/dashboard/payroll");
-  return { success: true, data: { status: finalStatus, pushed, failed } };
+
+  // Re-fetch the reconciled batch status to populate the return value.
+  const { data: finalBatch } = await sb
+    .from("disbursement_batches")
+    .select("status")
+    .eq("id", batchId)
+    .maybeSingle();
+  return {
+    success: true,
+    data: { status: (finalBatch as any)?.status ?? "processing", pushed, failed },
+  };
 }
 
 // ---- retryFailedPayouts ----
@@ -676,18 +678,8 @@ export async function retryFailedPayouts(
     }
   }
 
-  // If at least one succeeded and the batch was `partial_failed`, lift it back to processing.
-  if (succeeded > 0 && b.status === "partial_failed") {
-    await sb
-      .from("disbursement_batches")
-      .update({ status: "processing" } as any)
-      .eq("id", batchId);
-    await sb
-      .from("payroll_runs")
-      .update({ status: "disbursing" } as any)
-      .eq("id", b.payroll_run_id)
-      .eq("org_id", user.orgId);
-  }
+  // Reconcile batch + run status based on the full item aggregate (centralized helper).
+  await reconcileBatchAndRunStatus(sb, batchId, user.orgId);
 
   await logAudit(user.orgId, batchId, user.employeeId ?? null, user.role, "retry", {
     retried: items.length,

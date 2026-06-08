@@ -3,7 +3,7 @@
 import * as React from "react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
-import { Wallet, CheckCircle, AlertCircle, RefreshCw, Plug, Unplug } from "lucide-react";
+import { Wallet, CheckCircle, AlertCircle, RefreshCw, Plug, Unplug, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   disconnectRazorpayX,
@@ -11,6 +11,7 @@ import {
   setSinglePersonApproval,
   type MaskedRazorpayXCredentials,
 } from "@/actions/razorpayx-credentials";
+import { bulkSyncAllBeneficiaries } from "@/actions/employee-bank-accounts";
 import { RazorpayXConnectDialog } from "./razorpayx-connect-dialog";
 
 interface Props {
@@ -21,6 +22,7 @@ export function RazorpayXCard({ credentials }: Props) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
   const [testing, setTesting] = React.useState(false);
+  const [bulkSyncing, setBulkSyncing] = React.useState(false);
 
   async function handleTest() {
     setTesting(true);
@@ -48,6 +50,19 @@ export function RazorpayXCard({ credentials }: Props) {
       return;
     }
     toast.success("RazorpayX disconnected");
+    router.refresh();
+  }
+
+  async function handleBulkSync() {
+    setBulkSyncing(true);
+    const r = await bulkSyncAllBeneficiaries();
+    setBulkSyncing(false);
+    if (!r.success) { toast.error(r.error); return; }
+    if (r.data.failed > 0) {
+      toast.error(`Synced ${r.data.synced}, failed ${r.data.failed}. Check individual employee bank accounts for errors.`);
+    } else {
+      toast.success(`Synced ${r.data.synced} beneficiaries to RazorpayX`);
+    }
     router.refresh();
   }
 
@@ -155,6 +170,10 @@ export function RazorpayXCard({ credentials }: Props) {
             <Button size="sm" variant="ghost" onClick={handleTest} disabled={testing}>
               <RefreshCw className={`h-3.5 w-3.5 mr-1 ${testing ? "animate-spin" : ""}`} />
               {testing ? "Testing…" : "Test connection"}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={handleBulkSync} disabled={bulkSyncing}>
+              <Users className={`h-3.5 w-3.5 mr-1 ${bulkSyncing ? "animate-pulse" : ""}`} />
+              {bulkSyncing ? "Syncing…" : "Re-sync all beneficiaries"}
             </Button>
             <Button size="sm" variant="ghost" onClick={handleDisconnect}>
               <Unplug className="h-3.5 w-3.5 mr-1" /> Disconnect

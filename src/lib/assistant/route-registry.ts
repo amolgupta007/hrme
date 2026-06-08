@@ -285,6 +285,34 @@ export const ROUTE_REGISTRY = {
       "Configure salary structure ratios (Basic, HRA, Gratuity), preview impact, and recompute all employees.",
   },
 
+  // Payroll Phase 2 — RazorpayX disbursement
+  settings_razorpayx: {
+    path: "/dashboard/settings",
+    params: { section: "payroll-razorpayx" },
+    required_role: "admin",
+    required_plan: "business",
+    label: "Settings → Payroll → RazorpayX",
+    description:
+      "Connect, test, and disconnect RazorpayX for online salary disbursement.",
+  },
+  payroll_disbursement: {
+    path: "/dashboard/payroll",
+    required_role: "admin",
+    required_plan: "business",
+    label: "Payroll → Disbursement",
+    description:
+      "Initiate, approve, and reconcile RazorpayX salary disbursement batches.",
+  },
+  profile_bank_account: {
+    path: "/dashboard/profile",
+    params: { section: "bank-account" },
+    required_role: "employee",
+    required_plan: "starter",
+    label: "Profile → Bank Account",
+    description:
+      "Add or update your bank account for salary disbursement.",
+  },
+
   // Settings + billing
   upgrade_plan: {
     path: "/dashboard/settings",

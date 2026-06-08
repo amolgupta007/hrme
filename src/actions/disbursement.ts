@@ -7,6 +7,12 @@ import { createAdminSupabase } from "@/lib/supabase/server";
 import { getCurrentUser, isAdmin } from "@/lib/current-user";
 import type { ActionResult } from "@/types";
 import { getCachedVerification, type PennyDropStatus } from "@/actions/penny-drop";
+import {
+  createRazorpayXClient,
+  createBulkPayout,
+  createPayout,
+  type PayoutResponse,
+} from "@/lib/razorpayx";
 
 // ---- Types ----
 
@@ -317,4 +323,239 @@ export async function getDisbursementBatchByRun(runId: string): Promise<ActionRe
     .order("created_at", { ascending: true });
 
   return { success: true, data: { batch, items: items ?? [] } };
+}
+
+// ---- approveDisbursement ----
+
+/**
+ * Checker action: approves a batch in `awaiting_approval` status, calls
+ * RazorpayX bulk payout API, and updates per-item statuses with the response.
+ *
+ * Maker-checker enforcement:
+ *   - The caller must be a different employee than `batch.maker_id`
+ *     UNLESS `razorpayx_credentials.single_person_approval_allowed === true`.
+ *
+ * RazorpayX call strategy:
+ *   1. Try `createBulkPayout` (single API call for all items)
+ *   2. If it fails with 404 / endpoint_unsupported, fall back to looping
+ *      `createPayout` per item with a derived idempotency key (`${batch.idempotency_key}-${index}`)
+ *
+ * Status mapping after the API call (per RazorpayX payout entity status):
+ *   - `queued` / `pending` / `processing` → disbursement_items.status = 'queued' or 'processing'
+ *   - `processed` → 'paid'
+ *   - `rejected` / `cancelled` / `failed` / `reversed` → 'failed'
+ * Real-time status updates beyond the initial response come via the webhook (P25).
+ */
+export async function approveDisbursement(
+  batchId: string,
+): Promise<ActionResult<{ status: string; pushed: number; failed: number }>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can approve disbursement" };
+
+  const sb = createAdminSupabase();
+
+  // 1. Load batch + verify status
+  const { data: batch } = await sb
+    .from("disbursement_batches")
+    .select("*")
+    .eq("id", batchId)
+    .eq("org_id", user.orgId)
+    .maybeSingle();
+  if (!batch) return { success: false, error: "Batch not found" };
+  const b = batch as any;
+  if (b.status !== "awaiting_approval") {
+    return { success: false, error: `Batch is in '${b.status}' state and cannot be approved` };
+  }
+
+  // 2. Load credentials
+  const { data: creds } = await sb
+    .from("razorpayx_credentials")
+    .select("key_id, key_secret_encrypted, account_id, account_number, single_person_approval_allowed")
+    .eq("org_id", user.orgId)
+    .maybeSingle();
+  if (!creds) return { success: false, error: "RazorpayX not connected" };
+  const c = creds as any;
+
+  // 3. Maker-checker
+  if (b.maker_id && user.employeeId && b.maker_id === user.employeeId && !c.single_person_approval_allowed) {
+    return { success: false, error: "A different admin must approve this batch (maker-checker)" };
+  }
+
+  // 4. Load items
+  const { data: items } = await sb
+    .from("disbursement_items")
+    .select("id, employee_id, fund_account_id, amount, status")
+    .eq("batch_id", batchId)
+    .eq("org_id", user.orgId);
+  if (!items || items.length === 0) {
+    return { success: false, error: "Batch has no items" };
+  }
+
+  // 5. Update batch: approved -> processing (after RazorpayX call, but we set approved metadata now)
+  await sb
+    .from("disbursement_batches")
+    .update({
+      status: "approved",
+      checker_id: user.employeeId ?? null,
+      approved_at: new Date().toISOString(),
+    } as any)
+    .eq("id", batchId);
+
+  await logAudit(user.orgId, batchId, user.employeeId ?? null, user.role, "approve", {
+    item_count: items.length,
+    single_person: b.maker_id === user.employeeId,
+  });
+
+  // 6. Build RazorpayX client + payout payload
+  const client = createRazorpayXClient({
+    key_id: c.key_id,
+    key_secret_encrypted: c.key_secret_encrypted,
+    account_id: c.account_id,
+    account_number: c.account_number,
+  });
+
+  type Item = { id: string; employee_id: string; fund_account_id: string; amount: number; status: string };
+  const itemList = items as unknown as Item[];
+
+  type StatusMap = "queued" | "processing" | "paid" | "failed";
+  function mapStatus(razorpayxStatus: PayoutResponse["status"]): StatusMap {
+    switch (razorpayxStatus) {
+      case "queued":
+      case "pending":
+        return "queued";
+      case "processing":
+        return "processing";
+      case "processed":
+        return "paid";
+      case "rejected":
+      case "cancelled":
+      case "failed":
+      case "reversed":
+        return "failed";
+      default:
+        return "queued";
+    }
+  }
+
+  // 7. Try bulk payout first
+  let pushed = 0;
+  let failed = 0;
+  const bulkResult = await createBulkPayout(
+    client,
+    {
+      account_number: c.account_number,
+      items: itemList.map((it) => ({
+        fund_account_id: it.fund_account_id,
+        amount: it.amount * 100, // paise
+        currency: "INR",
+        mode: "IMPS",
+        purpose: "salary",
+        reference_id: it.id,
+        narration: "Salary",
+      })),
+    },
+    b.idempotency_key,
+  );
+
+  let usedFallback = false;
+  const perItemResults: Array<{ item_id: string; payout?: PayoutResponse; error?: string }> = [];
+
+  if (bulkResult.ok) {
+    // Map response items to our items by reference_id
+    const payoutByRef = new Map<string, PayoutResponse>();
+    for (const p of bulkResult.data.items ?? []) {
+      if ((p as any).reference_id) payoutByRef.set((p as any).reference_id, p);
+    }
+    for (const it of itemList) {
+      const payout = payoutByRef.get(it.id);
+      if (payout) perItemResults.push({ item_id: it.id, payout });
+      else perItemResults.push({ item_id: it.id, error: "No payout returned for this item in bulk response" });
+    }
+    if (b.razorpayx_batch_id == null && bulkResult.data.id) {
+      await sb
+        .from("disbursement_batches")
+        .update({ razorpayx_batch_id: bulkResult.data.id } as any)
+        .eq("id", batchId);
+    }
+  } else {
+    // Bulk failed — fall back to per-item createPayout
+    usedFallback = true;
+    for (let i = 0; i < itemList.length; i++) {
+      const it = itemList[i];
+      const itemIdempotency = `${b.idempotency_key}-${i}`;
+      const r = await createPayout(
+        client,
+        {
+          account_number: c.account_number,
+          fund_account_id: it.fund_account_id,
+          amount: it.amount * 100,
+          currency: "INR",
+          mode: "IMPS",
+          purpose: "salary",
+          reference_id: it.id,
+          narration: "Salary",
+        },
+        itemIdempotency,
+      );
+      if (r.ok) perItemResults.push({ item_id: it.id, payout: r.data });
+      else perItemResults.push({ item_id: it.id, error: r.error.description });
+    }
+  }
+
+  // 8. Persist per-item statuses
+  for (const result of perItemResults) {
+    if (result.payout) {
+      const mappedStatus = mapStatus(result.payout.status);
+      await sb
+        .from("disbursement_items")
+        .update({
+          status: mappedStatus,
+          razorpayx_payout_id: result.payout.id,
+          failure_reason: result.payout.failure_reason ?? null,
+          fee_paise: result.payout.fees ?? 0,
+        } as any)
+        .eq("id", result.item_id);
+      if (mappedStatus === "paid") pushed++;
+      else if (mappedStatus === "failed") failed++;
+      else pushed++; // queued/processing count as "pushed successfully to RazorpayX"
+    } else {
+      await sb
+        .from("disbursement_items")
+        .update({
+          status: "failed",
+          failure_reason: result.error ?? "Unknown error",
+        } as any)
+        .eq("id", result.item_id);
+      failed++;
+    }
+  }
+
+  // 9. Flip batch status: processing if all items pushed, partial_failed if any failed at the API call level
+  const finalStatus = failed > 0 && pushed === 0 ? "partial_failed" : "processing";
+  await sb
+    .from("disbursement_batches")
+    .update({
+      status: finalStatus,
+      total_fees_paise: perItemResults.reduce((s, r) => s + (r.payout?.fees ?? 0), 0),
+    } as any)
+    .eq("id", batchId);
+
+  // If everything failed at the API layer, also flip the run back to disbursement_failed
+  if (finalStatus === "partial_failed") {
+    await sb
+      .from("payroll_runs")
+      .update({ status: "disbursement_failed" } as any)
+      .eq("id", b.payroll_run_id)
+      .eq("org_id", user.orgId);
+  }
+
+  await logAudit(user.orgId, batchId, user.employeeId ?? null, user.role, "approve", {
+    razorpayx_call: usedFallback ? "fallback_per_item" : "bulk",
+    pushed,
+    failed,
+  });
+
+  revalidatePath("/dashboard/payroll");
+  return { success: true, data: { status: finalStatus, pushed, failed } };
 }

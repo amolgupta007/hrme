@@ -4,7 +4,12 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { getCurrentUser, isAdmin } from "@/lib/current-user";
-import { encrypt, hashSha256 } from "@/lib/crypto/aes-gcm";
+import { encrypt, decrypt, hashSha256 } from "@/lib/crypto/aes-gcm";
+import {
+  createRazorpayXClient,
+  createContact,
+  createFundAccount,
+} from "@/lib/razorpayx";
 import type { ActionResult } from "@/types";
 
 // ---- Public (masked) view ----
@@ -196,4 +201,160 @@ export async function listAllBankAccounts(): Promise<ActionResult<MaskedBankAcco
       return toMasked(r, name);
     }),
   };
+}
+
+// ---- RazorpayX beneficiary sync ----
+
+/**
+ * Creates RazorpayX Contact + Fund Account for an employee's bank account.
+ * Updates beneficiary_sync_status + IDs back on the employee_bank_accounts row.
+ * Best-effort; never throws — failures captured in beneficiary_sync_error.
+ *
+ * Called from:
+ *   - waitUntil hook on bank-account save (P14)
+ *   - resyncBeneficiary admin action (this file)
+ *   - bulkSyncAllBeneficiaries admin action (this file)
+ */
+export async function syncBeneficiary(employeeId: string): Promise<ActionResult<void>> {
+  const sb = createAdminSupabase();
+
+  // 1. Look up the employee's bank account row + employee details (for name/email/phone) + the org's RazorpayX credentials.
+  const { data: bankRow } = await sb
+    .from("employee_bank_accounts")
+    .select(`
+      id, org_id, employee_id, holder_name,
+      account_number_encrypted, ifsc_encrypted,
+      employees!employee_id(first_name, last_name, email, phone)
+    `)
+    .eq("employee_id", employeeId)
+    .maybeSingle();
+  if (!bankRow) return { success: false, error: "No bank account on file" };
+
+  const bank = bankRow as any;
+  const orgId = bank.org_id;
+  const employee = bank.employees;
+
+  const { data: credsRow } = await sb
+    .from("razorpayx_credentials")
+    .select("key_id, key_secret_encrypted, account_id, account_number")
+    .eq("org_id", orgId)
+    .maybeSingle();
+
+  if (!credsRow) {
+    await sb.from("employee_bank_accounts")
+      .update({
+        beneficiary_sync_status: "failed",
+        beneficiary_sync_error: "RazorpayX not connected for this org",
+        beneficiary_synced_at: null,
+      } as any)
+      .eq("id", bank.id);
+    return { success: false, error: "RazorpayX not connected" };
+  }
+
+  // 2. Decrypt bank account_number + ifsc for the API call.
+  let accountNumber: string, ifsc: string;
+  try {
+    accountNumber = decrypt(bank.account_number_encrypted);
+    ifsc = decrypt(bank.ifsc_encrypted);
+  } catch (e: any) {
+    await sb.from("employee_bank_accounts")
+      .update({
+        beneficiary_sync_status: "failed",
+        beneficiary_sync_error: `Decryption failed: ${e?.message ?? "unknown"}`,
+      } as any)
+      .eq("id", bank.id);
+    return { success: false, error: "Decryption failed" };
+  }
+
+  // 3. Build the RazorpayX client.
+  const client = createRazorpayXClient(credsRow as any);
+
+  // 4. Create Contact.
+  const contactResult = await createContact(client, {
+    name: bank.holder_name,
+    email: employee?.email ?? undefined,
+    contact: employee?.phone ?? undefined,
+    type: "employee",
+    reference_id: employeeId,
+  });
+
+  if (!contactResult.ok) {
+    await sb.from("employee_bank_accounts")
+      .update({
+        beneficiary_sync_status: "failed",
+        beneficiary_sync_error: `Contact creation failed: ${contactResult.error.description}`,
+      } as any)
+      .eq("id", bank.id);
+    return { success: false, error: contactResult.error.description };
+  }
+
+  const contactId = contactResult.data.id;
+
+  // 5. Create Fund Account.
+  const fundAccountResult = await createFundAccount(client, {
+    contact_id: contactId,
+    account_type: "bank_account",
+    bank_account: {
+      name: bank.holder_name,
+      ifsc,
+      account_number: accountNumber,
+    },
+  });
+
+  if (!fundAccountResult.ok) {
+    await sb.from("employee_bank_accounts")
+      .update({
+        beneficiary_sync_status: "failed",
+        beneficiary_sync_error: `Fund Account creation failed: ${fundAccountResult.error.description}`,
+        razorpayx_contact_id: contactId, // save Contact even if FA failed; resync can retry
+      } as any)
+      .eq("id", bank.id);
+    return { success: false, error: fundAccountResult.error.description };
+  }
+
+  // 6. Persist both IDs + mark synced.
+  await sb.from("employee_bank_accounts")
+    .update({
+      razorpayx_contact_id: contactId,
+      razorpayx_fund_account_id: fundAccountResult.data.id,
+      beneficiary_sync_status: "synced",
+      beneficiary_sync_error: null,
+      beneficiary_synced_at: new Date().toISOString(),
+    } as any)
+    .eq("id", bank.id);
+
+  return { success: true, data: undefined };
+}
+
+/** Admin re-sync of a single employee's beneficiary. */
+export async function resyncBeneficiary(employeeId: string): Promise<ActionResult<void>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can re-sync beneficiaries" };
+  // Cross-tenant guard via the employee_bank_accounts row's org_id check inside syncBeneficiary
+  return syncBeneficiary(employeeId);
+}
+
+/** Bulk re-sync for all employees in the caller's org. */
+export async function bulkSyncAllBeneficiaries(): Promise<ActionResult<{ synced: number; failed: number }>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can bulk re-sync" };
+
+  const sb = createAdminSupabase();
+  const { data: bankAccounts } = await sb
+    .from("employee_bank_accounts")
+    .select("employee_id")
+    .eq("org_id", user.orgId);
+
+  let synced = 0;
+  let failed = 0;
+  for (const row of (bankAccounts ?? []) as any[]) {
+    const r = await syncBeneficiary(row.employee_id);
+    if (r.success) synced++;
+    else failed++;
+  }
+  revalidatePath("/dashboard/settings");
+  revalidatePath("/dashboard/employees");
+  return { success: true, data: { synced, failed } };
 }

@@ -6,7 +6,7 @@ import * as AlertDialog from "@radix-ui/react-alert-dialog";
 import {
   MoreHorizontal, Pencil, UserX, Users,
   ChevronUp, ChevronDown as ChevronDownIcon, ChevronsUpDown,
-  Mail, MailCheck, MailX,
+  Mail, MailCheck, MailX, Landmark,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn, formatDate, getInitials } from "@/lib/utils";
@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { terminateEmployee } from "@/actions/employees";
 import { sendInvite, resendInvite } from "@/actions/invites";
+import { EmployeeBankAccountDialog } from "./employee-bank-account-dialog";
 import type { Employee, Department } from "@/types";
 
 type EmployeeWithDept = Employee & {
@@ -42,6 +43,7 @@ export function EmployeeTable({
   const [terminating, setTerminating] = React.useState<string | null>(null);
   const [confirmTarget, setConfirmTarget] = React.useState<{ id: string; name: string } | null>(null);
   const [inviting, setInviting] = React.useState<string | null>(null);
+  const [bankDialogTarget, setBankDialogTarget] = React.useState<{ id: string; name: string } | null>(null);
 
   async function handleTerminate() {
     if (!confirmTarget) return;
@@ -189,6 +191,13 @@ export function EmployeeTable({
                                   : "Resend Invite"}
                               </DropdownMenu.Item>
                             )}
+                            <DropdownMenu.Item
+                              className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none hover:bg-accent"
+                              onSelect={() => setBankDialogTarget({ id: emp.id, name: fullName })}
+                            >
+                              <Landmark className="h-3.5 w-3.5" />
+                              Edit bank account
+                            </DropdownMenu.Item>
                             <DropdownMenu.Separator className="my-1 h-px bg-border" />
                             <DropdownMenu.Item
                               className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm text-destructive outline-none hover:bg-destructive/10"
@@ -208,6 +217,16 @@ export function EmployeeTable({
           </tbody>
         </table>
       </div>
+
+      {/* Bank account edit dialog */}
+      {bankDialogTarget && (
+        <EmployeeBankAccountDialog
+          open={!!bankDialogTarget}
+          employeeId={bankDialogTarget.id}
+          employeeName={bankDialogTarget.name}
+          onClose={() => setBankDialogTarget(null)}
+        />
+      )}
 
       {/* Terminate confirmation dialog */}
       <AlertDialog.Root open={!!confirmTarget} onOpenChange={(open) => { if (!open) setConfirmTarget(null); }}>

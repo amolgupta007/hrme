@@ -47,7 +47,8 @@ type EmployeeFields = {
 function computeStepComplete(
   stepId: OnboardingStepId,
   employee: EmployeeFields,
-  docAckCount: number
+  docAckCount: number,
+  hasBankAccount: boolean
 ): boolean {
   switch (stepId) {
     case "profile":
@@ -62,13 +63,16 @@ function computeStepComplete(
       return !!(employee.emergency_contact_name && employee.emergency_contact_phone);
     case "documents":
       return docAckCount > 0;
+    case "bank_account":
+      return hasBankAccount;
   }
 }
 
 function buildOnboardingResult(
   employee: EmployeeFields,
   docAckCount: number,
-  steps: OnboardingStepConfig[]
+  steps: OnboardingStepConfig[],
+  hasBankAccount: boolean
 ): OnboardingStatusResult {
   const enabledSteps = steps.filter((s) => s.enabled);
 
@@ -76,7 +80,7 @@ function buildOnboardingResult(
     ...s,
     label: STEP_LABELS[s.id],
     actionUrl: STEP_ACTION_URLS[s.id],
-    complete: computeStepComplete(s.id, employee, docAckCount),
+    complete: computeStepComplete(s.id, employee, docAckCount, hasBankAccount),
   }));
 
   const totalEnabled = stepsWithStatus.length;
@@ -99,16 +103,21 @@ export async function getMyOnboardingStatus(): Promise<ActionResult<OnboardingSt
   if (!user) return { success: false, error: "Not authenticated" };
 
   const supabase = createAdminSupabase();
-  const [configResult, acksResult] = await Promise.all([
+  const [configResult, acksResult, bankResult] = await Promise.all([
     getOrgOnboardingConfig(),
     supabase
       .from("document_acknowledgments")
       .select("id", { count: "exact", head: true })
       .eq("employee_id", profile.id),
+    supabase
+      .from("employee_bank_accounts")
+      .select("id", { count: "exact", head: true })
+      .eq("employee_id", profile.id),
   ]);
 
   const docAckCount = acksResult.count ?? 0;
-  const result = buildOnboardingResult(profile, docAckCount, configResult);
+  const hasBankAccount = (bankResult.count ?? 0) > 0;
+  const result = buildOnboardingResult(profile, docAckCount, configResult, hasBankAccount);
 
   return { success: true, data: result };
 }
@@ -122,7 +131,7 @@ export async function getAllEmployeesOnboardingStatus(): Promise<
 
   const supabase = createAdminSupabase();
 
-  const [empResult, acksResult, steps] = await Promise.all([
+  const [empResult, acksResult, bankAccountsResult, steps] = await Promise.all([
     supabase
       .from("employees")
       .select(
@@ -133,6 +142,9 @@ export async function getAllEmployeesOnboardingStatus(): Promise<
       .order("first_name"),
     supabase
       .from("document_acknowledgments")
+      .select("employee_id"),
+    supabase
+      .from("employee_bank_accounts")
       .select("employee_id"),
     getOrgOnboardingConfig(),
   ]);
@@ -148,13 +160,20 @@ export async function getAllEmployeesOnboardingStatus(): Promise<
       .map((a) => a.employee_id)
       .filter((id) => orgEmployeeIds.has(id))
   );
+  const bankAccountEmployeeIds = new Set(
+    (bankAccountsResult.data ?? [])
+      .map((b) => b.employee_id)
+      .filter((id) => orgEmployeeIds.has(id))
+  );
 
   const summaries: EmployeeOnboardingSummary[] = employees.map((emp) => {
     const docAckCount = ackedIds.has(emp.id) ? 1 : 0;
+    const hasBankAccount = bankAccountEmployeeIds.has(emp.id);
     const { totalEnabled, totalComplete, allRequiredComplete } = buildOnboardingResult(
       emp as EmployeeFields,
       docAckCount,
-      steps
+      steps,
+      hasBankAccount
     );
     return {
       id: emp.id,

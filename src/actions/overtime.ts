@@ -131,9 +131,7 @@ export async function getOvertimeRecords(input?: {
 }): Promise<ActionResult<OvertimeRecord[]>> {
   const user = await getCurrentUser();
   if (!user) return { success: false, error: "Not authenticated" };
-  if (!isAdmin(user.role) && user.role !== "manager" && !user.employeeId) {
-    return { success: false, error: "Insufficient permissions" };
-  }
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can view overtime records" };
 
   const sb = createAdminSupabase();
   let query = sb
@@ -142,12 +140,7 @@ export async function getOvertimeRecords(input?: {
     .eq("org_id", user.orgId)
     .order("date", { ascending: false });
 
-  if (!isAdmin(user.role)) {
-    // Non-admins (managers + employees) see only their own records in v1.
-    // Future: widen manager scope via reporting-manager / dept lookup.
-    if (user.employeeId) query = query.eq("employee_id", user.employeeId);
-    else return { success: true, data: [] };
-  } else if (input?.employee_id) {
+  if (input?.employee_id) {
     query = query.eq("employee_id", input.employee_id);
   }
 

@@ -33,26 +33,25 @@ export function RosterGrid({ initial, weekOff, from, to }: Props) {
     if (!shift || !employee_id || !date) return;
     setBusy(true);
 
-    // Soft-warn for conflicts
-    if (weekOff) {
-      const existing: ExistingAssignment[] = initial.rows
-        .find((r) => r.employee_id === employee_id)
-        ?.cells
-        .flatMap((c) =>
-          c.assignment_id
-            ? [{
-                id: c.assignment_id,
-                employee_id,
-                shift_id: c.shift_id!,
-                shift_name: c.shift_name ?? "",
-                date_from: c.date,
-                date_to: c.date,
-              }]
-            : []
-        ) ?? [];
-      const conflicts = detectAssignmentConflicts({ employee_id, date, shift }, existing, weekOff);
-      conflicts.forEach((c) => toast.warning(c.message));
-    }
+    // Soft-warn for conflicts — always run; pass a safe fallback when no week-off policy exists.
+    const existing: ExistingAssignment[] = initial.rows
+      .find((r) => r.employee_id === employee_id)
+      ?.cells
+      .flatMap((c) =>
+        c.assignment_id
+          ? [{
+              id: c.assignment_id,
+              employee_id,
+              shift_id: c.shift_id!,
+              shift_name: c.shift_name ?? "",
+              date_from: c.date,
+              date_to: c.date,
+            }]
+          : []
+      ) ?? [];
+    const effectiveWeekOff = weekOff ?? { week_type: 6 as const, off_days: [] };
+    const conflicts = detectAssignmentConflicts({ employee_id, date, shift }, existing, effectiveWeekOff);
+    conflicts.forEach((c) => toast.warning(c.message));
 
     const r = await assignShiftToCell({ employee_id, shift_id: shift.id, date, type: "fixed" });
     setBusy(false);

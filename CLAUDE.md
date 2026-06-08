@@ -494,6 +494,7 @@ Feature-flagged via `organizations.settings.attendance_enabled`. Optional payrol
 - All RLS policies use Clerk-JWT pattern (same as Attendance Phase 1).
 - COMMENT ON COLUMN statements can't use `||` string concatenation when applied via Supabase's `apply_migration` MCP — collapse to single-string literals.
 - Drift warning in `salary-structure-dialog` may false-positive when a future-dated config sits at `history[0]`. Acceptable for Phase 1 (advisory only).
+- **`RAZORPAYX_CRED_ENCRYPTION_KEY` (Phase 2 prep)**: base64-encoded 32-byte AES-256 key used to encrypt RazorpayX API secrets + employee bank account numbers (Phase 2 in progress). MUST NOT change after data exists — rotation requires re-encrypting every row (Phase 3 envelope-encryption upgrade handles this). Missing/wrong key = AES auth-tag failure on decrypt = total disbursement outage. Generate with `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`. Local: paste into `.env.local`. Production: Vercel env var. See `src/lib/crypto/aes-gcm.ts`.
 
 ---
 

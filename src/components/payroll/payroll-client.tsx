@@ -15,6 +15,7 @@ import { PayrollRunDialog } from "./payroll-run-dialog";
 import { EntryEditDialog } from "./entry-edit-dialog";
 import { PayslipDialog } from "./payslip-dialog";
 import { CTCBreakdownCard } from "./ctc-breakdown-card";
+import { PayNowButton } from "./pay-now-button";
 import {
   processPayrollRun,
   markPayrollPaid,
@@ -48,6 +49,7 @@ interface Props {
   orgName: string;
   currentEmployeeName: string;
   activeConfigCreatedAt?: string | null;
+  razorpayxConnected?: boolean;
 }
 
 const MONTHS = [
@@ -76,6 +78,7 @@ export function PayrollClient({
   orgName,
   currentEmployeeName,
   activeConfigCreatedAt,
+  razorpayxConnected = false,
 }: Props) {
   const router = useRouter();
   const tabs = isAdmin
@@ -360,15 +363,25 @@ export function PayrollClient({
                         </Button>
                       )}
                       {run.status === "processed" && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleMarkPaid(run.id)}
-                          disabled={markingPaid === run.id}
-                        >
-                          <CheckCircle className="h-3.5 w-3.5 mr-1" />
-                          {markingPaid === run.id ? "…" : "Mark Paid"}
-                        </Button>
+                        razorpayxConnected ? (
+                          <PayNowButton runId={run.id} />
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleMarkPaid(run.id)}
+                            disabled={markingPaid === run.id}
+                          >
+                            <CheckCircle className="h-3.5 w-3.5 mr-1" />
+                            {markingPaid === run.id ? "…" : "Mark Paid"}
+                          </Button>
+                        )
+                      )}
+                      {(run.status as string) === "disbursing" && (
+                        <Badge variant="secondary">Disbursing…</Badge>
+                      )}
+                      {(run.status as string) === "disbursement_failed" && (
+                        <Badge variant="destructive">Disbursement failed</Badge>
                       )}
                       {(run.status === "processed" || run.status === "paid") && (
                         <Button

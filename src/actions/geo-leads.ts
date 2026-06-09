@@ -181,8 +181,8 @@ export async function createLead(
     waitUntil(sendLeadAssignedEmail({ leadId: data.id, assigneeId: data.assigned_to }));
   }
 
-  revalidatePath("/dashboard/geo/leads");
-  revalidatePath("/dashboard/geo/my-leads");
+  revalidatePath("/geo/leads");
+  revalidatePath("/geo/my-leads");
   return { success: true, data: data as LeadRow };
 }
 
@@ -218,8 +218,8 @@ export async function updateLead(
     .single();
   if (error) return { success: false, error: error.message };
 
-  revalidatePath("/dashboard/geo/leads");
-  revalidatePath(`/dashboard/geo/leads/${id}`);
+  revalidatePath("/geo/leads");
+  revalidatePath(`/geo/leads/${id}`);
   return { success: true, data: data as LeadRow };
 }
 
@@ -271,8 +271,8 @@ export async function updateLeadStage(
     }
   }
 
-  revalidatePath("/dashboard/geo/leads");
-  revalidatePath(`/dashboard/geo/leads/${id}`);
+  revalidatePath("/geo/leads");
+  revalidatePath(`/geo/leads/${id}`);
   return { success: true, data: updated as LeadRow };
 }
 
@@ -305,9 +305,9 @@ export async function assignLead(
     waitUntil(sendLeadAssignedEmail({ leadId: id, assigneeId: employee_id }));
   }
 
-  revalidatePath("/dashboard/geo/leads");
-  revalidatePath(`/dashboard/geo/leads/${id}`);
-  revalidatePath("/dashboard/geo/my-leads");
+  revalidatePath("/geo/leads");
+  revalidatePath(`/geo/leads/${id}`);
+  revalidatePath("/geo/my-leads");
   return { success: true, data: data as LeadRow };
 }
 
@@ -334,7 +334,7 @@ export async function bulkAssignLeads(
     }
   }
 
-  revalidatePath("/dashboard/geo/leads");
+  revalidatePath("/geo/leads");
   return { success: true, data: { updated: (data ?? []).length } };
 }
 
@@ -351,6 +351,6 @@ export async function deleteLead(id: string): Promise<ActionResult<void>> {
     .eq("org_id", ctx.orgId);
   if (error) return { success: false, error: error.message };
 
-  revalidatePath("/dashboard/geo/leads");
+  revalidatePath("/geo/leads");
   return { success: true, data: undefined };
 }

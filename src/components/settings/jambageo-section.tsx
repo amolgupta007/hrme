@@ -116,7 +116,7 @@ export function JambaGeoSection({
 
           <p className="text-xs text-muted-foreground border-t pt-3">
             Manage geofences →{" "}
-            <Link href="/dashboard/geo/geofences" className="text-primary hover:underline">
+            <Link href="/geo/geofences" className="text-primary hover:underline">
               JambaGeo &gt; Geofences
             </Link>
           </p>

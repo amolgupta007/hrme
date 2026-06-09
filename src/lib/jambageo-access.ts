@@ -45,6 +45,6 @@ export async function requireJambaGeoAccess(): Promise<JambaGeoAccessContext> {
  */
 export async function requireJambaGeoAdminContext(): Promise<JambaGeoAccessContext> {
   const ctx = await requireJambaGeoAccess();
-  if (!isAdmin(ctx.role)) redirect("/dashboard/geo/leads");
+  if (!isAdmin(ctx.role)) redirect("/geo/leads");
   return ctx;
 }

@@ -1,7 +1,11 @@
 "use client";
 
 import { Badge } from "@/components/ui/badge";
-import { outcomeLabel, type LeadOutcome } from "@/lib/geo/stages";
+import {
+  outcomeBadgeVariant,
+  outcomeLabel,
+  type LeadOutcome,
+} from "@/lib/geo/stages";
 import { Calendar, FileText } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 
@@ -15,17 +19,6 @@ interface VisitRow {
   system: boolean;
   visited_at: string;
 }
-
-const OUTCOME_VARIANTS: Record<
-  LeadOutcome,
-  "default" | "secondary" | "destructive" | "outline"
-> = {
-  in_progress: "secondary",
-  pending: "outline",
-  follow_up: "outline",
-  converted: "default",
-  lost: "destructive",
-};
 
 export function VisitTimeline({ visits }: { visits: VisitRow[] }) {
   if (visits.length === 0) {
@@ -59,7 +52,8 @@ export function VisitTimeline({ visits }: { visits: VisitRow[] }) {
                 {v.employee_name ?? "Unknown"}
               </span>
               <Badge
-                variant={OUTCOME_VARIANTS[v.outcome]}
+                variant={outcomeBadgeVariant(v.outcome)}
+                aria-label={`Outcome: ${outcomeLabel(v.outcome)}`}
                 className="text-[10px]"
               >
                 {outcomeLabel(v.outcome)}

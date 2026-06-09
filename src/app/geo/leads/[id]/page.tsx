@@ -5,6 +5,7 @@ import { listLeadVisits } from "@/actions/geo-visits";
 import { LeadDetail } from "@/components/geo/lead-detail";
 import { LeadPageNav } from "@/components/geo/lead-page-nav";
 import { isManagerOrAbove } from "@/lib/current-user";
+import { createAdminSupabase } from "@/lib/supabase/server";
 
 interface Props {
   params: { id: string };
@@ -27,6 +28,24 @@ export default async function LeadDetailPage({ params }: Props) {
   const visits = visitsRes.success ? visitsRes.data : [];
   const siblings = siblingsRes.success ? siblingsRes.data : [];
 
+  // Resolve assignee name for the detail panel. `getLead` returns the
+  // foreign-key id only, so we do one targeted lookup here rather than
+  // widening the action surface (the kanban/list use a JOIN via `listLeads`,
+  // but the detail page hits `getLead` for the scope check it needs).
+  let assigneeName: string | null = null;
+  if (leadRes.data.assigned_to) {
+    const sb = createAdminSupabase();
+    const { data: emp } = await sb
+      .from("employees")
+      .select("first_name,last_name")
+      .eq("id", leadRes.data.assigned_to)
+      .maybeSingle();
+    if (emp) {
+      const composed = `${emp.first_name ?? ""} ${emp.last_name ?? ""}`.trim();
+      assigneeName = composed.length > 0 ? composed : null;
+    }
+  }
+
   const idx = siblings.findIndex((l) => l.id === params.id);
   const prev = idx > 0 ? { id: siblings[idx - 1].id, name: siblings[idx - 1].name } : null;
   const next =
@@ -43,12 +62,29 @@ export default async function LeadDetailPage({ params }: Props) {
 
   return (
     <>
+      {/* Page identity comes first so it scrolls away on long detail pages
+          and the sticky LeadPageNav below takes its place as the persistent
+          context. Previously the lead name lived inside a <CardTitle>
+          (h3-ish), which left the document outline without a real h1. */}
+      <header className="mb-4">
+        <h1 className="text-2xl font-semibold tracking-tight text-balance">
+          {leadRes.data.name}
+        </h1>
+        {leadRes.data.company && (
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            {leadRes.data.company}
+          </p>
+        )}
+      </header>
+
       <LeadPageNav prev={prev} next={next} position={position} />
+
       <LeadDetail
         lead={leadRes.data}
         visits={visits as any}
         canEdit={canEdit}
         canLogVisit={canLogVisit}
+        assigneeName={assigneeName}
       />
     </>
   );

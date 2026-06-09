@@ -472,3 +472,57 @@ export async function updatePerformanceSettings(
   revalidatePath("/dashboard/settings");
   return { success: true, data: undefined };
 }
+
+// ---- JambaGeo settings ----
+
+const JambaGeoSettingsSchema = z.object({
+  enabled: z.boolean().optional(),
+  default_retention_days: z.number().int().min(1).max(365).optional(),
+  default_ping_interval_min: z.number().int().min(5).max(60).optional(),
+});
+
+export async function updateJambaGeoSettings(
+  input: z.infer<typeof JambaGeoSettingsSchema>,
+): Promise<ActionResult<void>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Admin only" };
+
+  const parsed = JambaGeoSettingsSchema.safeParse(input);
+  if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
+  if (Object.keys(parsed.data).length === 0) {
+    return { success: false, error: "No fields to update" };
+  }
+
+  const supabase = createAdminSupabase();
+  const { data: org, error: rErr } = await supabase
+    .from("organizations")
+    .select("settings")
+    .eq("id", user.orgId)
+    .single();
+  if (rErr) return { success: false, error: rErr.message };
+
+  const currentSettings = ((org as any)?.settings ?? {}) as Record<string, any>;
+  const currentGeo = (currentSettings.jambageo ?? {}) as Record<string, any>;
+
+  const nextGeo = { ...currentGeo };
+  if (parsed.data.default_retention_days !== undefined)
+    nextGeo.default_retention_days = parsed.data.default_retention_days;
+  if (parsed.data.default_ping_interval_min !== undefined)
+    nextGeo.default_ping_interval_min = parsed.data.default_ping_interval_min;
+
+  const nextSettings: Record<string, any> = { ...currentSettings, jambageo: nextGeo };
+  if (parsed.data.enabled !== undefined) {
+    nextSettings.jambageo_enabled = parsed.data.enabled;
+  }
+
+  const { error } = await supabase
+    .from("organizations")
+    .update({ settings: nextSettings })
+    .eq("id", user.orgId);
+  if (error) return { success: false, error: error.message };
+
+  revalidatePath("/dashboard/settings");
+  revalidatePath("/dashboard/geo");
+  return { success: true, data: undefined };
+}

@@ -6,6 +6,7 @@ import { createAdminSupabase } from "@/lib/supabase/server";
 import { getCurrentUser, isAdmin } from "@/lib/current-user";
 import type { ActionResult } from "@/types";
 import { computeShiftTotalHours, isOvernight } from "@/lib/attendance/shift-time";
+import { getManagerScopedEmployeeIds } from "@/lib/attendance/manager-scope";
 
 export type Shift = {
   id: string;
@@ -83,24 +84,6 @@ async function requireAdmin() {
  * via departments.head_id). Admins see all. Returns [] = no scope (e.g.
  * manager not assigned as any department's head); caller decides whether to allow.
  */
-async function getManagerScopedEmployeeIds(orgId: string, managerEmployeeId: string): Promise<string[]> {
-  const sb = createAdminSupabase();
-  const { data: ownedDepts } = await sb
-    .from("departments")
-    .select("id")
-    .eq("org_id", orgId)
-    .eq("head_id", managerEmployeeId);
-  const deptIds = (ownedDepts ?? []).map((d: any) => d.id);
-  if (deptIds.length === 0) return [];
-  const { data: emps } = await sb
-    .from("employees")
-    .select("id")
-    .eq("org_id", orgId)
-    .in("department_id", deptIds)
-    .neq("status", "terminated");
-  return (emps ?? []).map((e: any) => e.id);
-}
-
 /** Like requireAdmin but allows managers with explicit dept-scope. Managers MUST have an employee row. */
 async function requireAdminOrManager() {
   const user = await getCurrentUser();

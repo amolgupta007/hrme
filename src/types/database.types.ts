@@ -582,6 +582,273 @@ export interface Database {
           activated_at?: string | null;
         };
       };
+      geofences: {
+        Row: {
+          id: string;
+          org_id: string;
+          name: string;
+          type: "client" | "office";
+          center_lat: number;
+          center_lng: number;
+          radius_m: number;
+          is_active: boolean;
+          notes: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          name: string;
+          type: "client" | "office";
+          center_lat: number;
+          center_lng: number;
+          radius_m: number;
+          is_active?: boolean;
+          notes?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          org_id?: string;
+          name?: string;
+          type?: "client" | "office";
+          center_lat?: number;
+          center_lng?: number;
+          radius_m?: number;
+          is_active?: boolean;
+          notes?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      leads: {
+        Row: {
+          id: string;
+          org_id: string;
+          name: string;
+          contact_phone: string | null;
+          contact_email: string | null;
+          company: string | null;
+          lat: number | null;
+          lng: number | null;
+          address: string | null;
+          assigned_to: string | null;
+          stage: "new" | "contacted" | "visited" | "negotiation" | "converted" | "lost";
+          value_inr: number | null;
+          source: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          name: string;
+          contact_phone?: string | null;
+          contact_email?: string | null;
+          company?: string | null;
+          lat?: number | null;
+          lng?: number | null;
+          address?: string | null;
+          assigned_to?: string | null;
+          stage?: "new" | "contacted" | "visited" | "negotiation" | "converted" | "lost";
+          value_inr?: number | null;
+          source?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          org_id?: string;
+          name?: string;
+          contact_phone?: string | null;
+          contact_email?: string | null;
+          company?: string | null;
+          lat?: number | null;
+          lng?: number | null;
+          address?: string | null;
+          assigned_to?: string | null;
+          stage?: "new" | "contacted" | "visited" | "negotiation" | "converted" | "lost";
+          value_inr?: number | null;
+          source?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      lead_visits: {
+        Row: {
+          id: string;
+          lead_id: string;
+          org_id: string;
+          employee_id: string;
+          session_id: string | null;
+          lat: number | null;
+          lng: number | null;
+          notes: string | null;
+          outcome: "in_progress" | "converted" | "pending" | "follow_up" | "lost";
+          follow_up_date: string | null;
+          photo_url: string | null;
+          source: "web" | "mobile";
+          system: boolean;
+          visited_at: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          lead_id: string;
+          org_id: string;
+          employee_id: string;
+          session_id?: string | null;
+          lat?: number | null;
+          lng?: number | null;
+          notes?: string | null;
+          outcome: "in_progress" | "converted" | "pending" | "follow_up" | "lost";
+          follow_up_date?: string | null;
+          photo_url?: string | null;
+          source?: "web" | "mobile";
+          system?: boolean;
+          visited_at?: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          lead_id?: string;
+          org_id?: string;
+          employee_id?: string;
+          session_id?: string | null;
+          lat?: number | null;
+          lng?: number | null;
+          notes?: string | null;
+          outcome?: "in_progress" | "converted" | "pending" | "follow_up" | "lost";
+          follow_up_date?: string | null;
+          photo_url?: string | null;
+          source?: "web" | "mobile";
+          system?: boolean;
+          visited_at?: string;
+          created_at?: string;
+        };
+      };
+      duty_sessions: {
+        Row: {
+          id: string;
+          org_id: string;
+          employee_id: string;
+          status: "active" | "paused" | "ended";
+          started_at: string;
+          ended_at: string | null;
+          last_lat: number | null;
+          last_lng: number | null;
+          last_ping_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          employee_id: string;
+          status?: "active" | "paused" | "ended";
+          started_at?: string;
+          ended_at?: string | null;
+          last_lat?: number | null;
+          last_lng?: number | null;
+          last_ping_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          org_id?: string;
+          employee_id?: string;
+          status?: "active" | "paused" | "ended";
+          started_at?: string;
+          ended_at?: string | null;
+          last_lat?: number | null;
+          last_lng?: number | null;
+          last_ping_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      location_pings: {
+        Row: {
+          id: string;
+          session_id: string;
+          org_id: string;
+          employee_id: string;
+          lat: number;
+          lng: number;
+          accuracy_m: number | null;
+          battery_pct: number | null;
+          pinged_at: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          session_id: string;
+          org_id: string;
+          employee_id: string;
+          lat: number;
+          lng: number;
+          accuracy_m?: number | null;
+          battery_pct?: number | null;
+          pinged_at?: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          session_id?: string;
+          org_id?: string;
+          employee_id?: string;
+          lat?: number;
+          lng?: number;
+          accuracy_m?: number | null;
+          battery_pct?: number | null;
+          pinged_at?: string;
+          created_at?: string;
+        };
+      };
+      geo_consents: {
+        Row: {
+          id: string;
+          org_id: string;
+          employee_id: string;
+          granted: boolean;
+          retention_days: number;
+          granted_at: string | null;
+          revoked_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          employee_id: string;
+          granted?: boolean;
+          retention_days?: number;
+          granted_at?: string | null;
+          revoked_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          org_id?: string;
+          employee_id?: string;
+          granted?: boolean;
+          retention_days?: number;
+          granted_at?: string | null;
+          revoked_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
       webhook_events: {
         Row: {
           id: string;

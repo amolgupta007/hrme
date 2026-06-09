@@ -8,17 +8,7 @@ import type { ActionResult } from "@/types";
 import { isAdmin } from "@/lib/current-user";
 import { LEAD_OUTCOMES, mapOutcomeToStage, type LeadOutcome } from "@/lib/geo/stages";
 import { getLead } from "./geo-leads";
-
-export const VisitCreateSchema = z.object({
-  lead_id: z.string().uuid(),
-  notes: z.string().trim().max(2000).nullish(),
-  outcome: z.enum(LEAD_OUTCOMES),
-  follow_up_date: z.string().date().nullish(),  // YYYY-MM-DD
-  lat: z.number().min(-90).max(90).nullish(),
-  lng: z.number().min(-180).max(180).nullish(),
-});
-
-export const VisitUpdateSchema = VisitCreateSchema.partial().omit({ lead_id: true });
+import { VisitCreateSchema, VisitUpdateSchema } from "@/lib/geo/geo-schemas";
 
 interface VisitRow {
   id: string;

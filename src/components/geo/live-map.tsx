@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Map, { Marker, NavigationControl } from "react-map-gl";
+import Map, { Marker, NavigationControl } from "react-map-gl/mapbox";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { MapPin, Smartphone } from "lucide-react";
 import { getMapboxToken, DEFAULT_INDIA_VIEWPORT, MAPBOX_STYLE } from "@/lib/mapbox";
-import { listActiveSessions, type ActiveSessionView } from "@/actions/geo-sessions";
+import { listActiveSessions } from "@/actions/geo-sessions";
+import type { ActiveSessionView } from "@/lib/geo/session-types";
 
 function EmptyState({
   title,

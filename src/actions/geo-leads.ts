@@ -8,98 +8,19 @@ import { getJambaGeoContext } from "@/lib/jambageo-access";
 import type { ActionResult, UserRole } from "@/types";
 import { isAdmin, isManagerOrAbove } from "@/lib/current-user";
 import { LEAD_STAGES, mapStageToOutcome, type LeadStage } from "@/lib/geo/stages";
+import {
+  computeLeadScope,
+  buildSystemVisitForStageMove,
+  type ScopeContext,
+  type ScopeFilter,
+} from "@/lib/geo/lead-scope";
+import {
+  LeadCreateSchema,
+  LeadUpdateSchema,
+  StageUpdateSchema,
+} from "@/lib/geo/geo-schemas";
 import { getManagerScopedEmployeeIds } from "@/lib/attendance/manager-scope";
 import { sendLeadAssignedEmail } from "@/components/emails/lead-assigned-sender";
-
-// ---- Schemas ----
-
-export const LeadCreateSchema = z.object({
-  name: z.string().trim().min(1).max(160),
-  contact_phone: z.string().trim().max(40).nullish(),
-  contact_email: z
-    .string()
-    .trim()
-    .email()
-    .nullish()
-    .or(z.literal("").transform(() => null)),
-  company: z.string().trim().max(160).nullish(),
-  lat: z.number().min(-90).max(90).nullish(),
-  lng: z.number().min(-180).max(180).nullish(),
-  address: z.string().trim().max(500).nullish(),
-  assigned_to: z.string().uuid().nullish(),
-  stage: z.enum(LEAD_STAGES).default("new"),
-  value_inr: z.number().min(0).max(99_999_999.99).nullish(),
-  source: z.string().trim().max(80).nullish(),
-});
-
-export const LeadUpdateSchema = LeadCreateSchema.partial();
-
-export const StageUpdateSchema = z.object({
-  stage: z.enum(LEAD_STAGES),
-  note: z.string().trim().max(500).optional(),
-});
-
-export const AssignSchema = z.object({
-  employee_id: z.string().uuid().nullable(),
-});
-
-// ---- Scope helper (pure, exported for tests) ----
-
-export interface ScopeContext {
-  role: UserRole;
-  employeeId: string | null;
-}
-export interface ScopeFilter {
-  inAssignedTo: string[];
-  includeUnassigned: boolean;
-}
-
-export function computeLeadScope(
-  ctx: ScopeContext,
-  deps: { dept: string[] },
-): ScopeFilter | null {
-  if (isAdmin(ctx.role)) return null; // null = unrestricted
-  if (ctx.role === "manager") {
-    return { inAssignedTo: deps.dept, includeUnassigned: true };
-  }
-  // employee
-  return {
-    inAssignedTo: ctx.employeeId ? [ctx.employeeId] : [],
-    includeUnassigned: false,
-  };
-}
-
-// ---- System visit builder (pure, exported for tests) ----
-
-export function buildSystemVisitForStageMove(args: {
-  leadId: string;
-  orgId: string;
-  employeeId: string;
-  from: LeadStage;
-  to: LeadStage;
-  note?: string;
-}): {
-  lead_id: string;
-  org_id: string;
-  employee_id: string;
-  outcome: string;
-  notes: string;
-  source: "web";
-  system: true;
-} | null {
-  if (args.from === args.to) return null;
-  const base = `Stage: ${args.from} → ${args.to}`;
-  const notes = args.note ? `${base}. ${args.note}` : base;
-  return {
-    lead_id: args.leadId,
-    org_id: args.orgId,
-    employee_id: args.employeeId,
-    outcome: mapStageToOutcome(args.to),
-    notes,
-    source: "web" as const,
-    system: true as const,
-  };
-}
 
 // ---- Row types ----
 

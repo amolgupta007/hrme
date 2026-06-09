@@ -97,3 +97,72 @@ export interface FeedbackReportWithContext extends FeedbackReport {
   reporter_name: string | null;
   reporter_email: string | null;
 }
+
+// ─── JambaGeo domain types ────────────────────────────────────────────────────
+
+export type { LeadStage, LeadOutcome } from "@/lib/geo/stages";
+export { LEAD_STAGES, LEAD_OUTCOMES } from "@/lib/geo/stages";
+
+export interface Geofence {
+  id: string;
+  orgId: string;
+  name: string;
+  type: "client" | "office";
+  centerLat: number;
+  centerLng: number;
+  radiusM: number;
+  isActive: boolean;
+  notes: string | null;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Lead {
+  id: string;
+  orgId: string;
+  name: string;
+  contactPhone: string | null;
+  contactEmail: string | null;
+  company: string | null;
+  lat: number | null;
+  lng: number | null;
+  address: string | null;
+  assignedTo: string | null;
+  assigneeName?: string | null; // hydrated by listLeads
+  stage: import("@/lib/geo/stages").LeadStage;
+  valueInr: number | null;
+  source: string | null;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LeadVisit {
+  id: string;
+  leadId: string;
+  orgId: string;
+  employeeId: string;
+  employeeName?: string | null; // hydrated
+  sessionId: string | null;
+  lat: number | null;
+  lng: number | null;
+  notes: string | null;
+  outcome: import("@/lib/geo/stages").LeadOutcome;
+  followUpDate: string | null;
+  photoUrl: string | null;
+  source: "web" | "mobile";
+  system: boolean;
+  visitedAt: string;
+  createdAt: string;
+}
+
+export interface ActiveSession {
+  sessionId: string;
+  employeeId: string;
+  employeeName: string;
+  startedAt: string;
+  lastPingAt: string | null;
+  lastLat: number | null;
+  lastLng: number | null;
+}

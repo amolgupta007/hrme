@@ -28,11 +28,25 @@ export default async function LeadsPage({ searchParams }: Props) {
   const canDrag = isManagerOrAbove(ctx.role);
 
   return (
-    <LeadsPageClient
-      leads={leads}
-      view={view}
-      canCreate={canCreate}
-      canDrag={canDrag}
-    />
+    <>
+      {/* Page identity. The active section in the GeoHeader signals
+          location, but the page itself owns its title — h1 lands in the
+          document outline and gives screen-reader users a real heading to
+          navigate by. */}
+      <header className="mb-2">
+        <h1 className="text-2xl font-semibold tracking-tight">Leads</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Your sales pipeline. Drag cards across stages, log visits, and
+          keep follow-ups on track.
+        </p>
+      </header>
+
+      <LeadsPageClient
+        leads={leads}
+        view={view}
+        canCreate={canCreate}
+        canDrag={canDrag}
+      />
+    </>
   );
 }

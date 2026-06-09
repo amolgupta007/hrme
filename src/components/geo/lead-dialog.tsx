@@ -13,8 +13,24 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { LEAD_STAGES, stageLabel, type LeadStage } from "@/lib/geo/stages";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  LEAD_SOURCES,
+  LEAD_STAGES,
+  stageLabel,
+  type LeadStage,
+} from "@/lib/geo/stages";
 import { createLead, updateLead } from "@/actions/geo-leads";
+
+// Radix Select can't hold an empty-string value, so we use a sentinel for
+// "unassigned" and map it to null at submit time.
+const UNASSIGNED_VALUE = "__unassigned";
 
 interface AssigneeOption {
   id: string;
@@ -93,9 +109,12 @@ export function LeadDialog(props: LeadDialogProps) {
       contact_email: form.contact_email.trim() || null,
       address: form.address.trim() || null,
       value_inr: form.value_inr ? Number(form.value_inr) : null,
-      source: form.source.trim() || null,
+      source: form.source || null,
       stage: form.stage,
-      assigned_to: form.assigned_to || null,
+      assigned_to:
+        form.assigned_to && form.assigned_to !== UNASSIGNED_VALUE
+          ? form.assigned_to
+          : null,
     };
 
     startTransition(async () => {
@@ -192,46 +211,71 @@ export function LeadDialog(props: LeadDialogProps) {
               />
             </Field>
             <Field label="Source">
-              <Input
+              {/* Curated list of common Indian SMB lead sources, with
+                  "Other" as the escape hatch. Backwards-compatible with
+                  legacy free-text rows already in the database — the
+                  dropdown just won't pre-select them. */}
+              <Select
                 value={form.source}
-                onChange={(e) => patch({ source: e.target.value })}
-                placeholder="Referral, Walk-in…"
+                onValueChange={(v) => patch({ source: v })}
                 disabled={pending}
-              />
+              >
+                <SelectTrigger aria-label="Lead source">
+                  <SelectValue placeholder="Select source" />
+                </SelectTrigger>
+                <SelectContent>
+                  {LEAD_SOURCES.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {s}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </Field>
           </div>
 
-          {/* Stage + Assignee */}
+          {/* Stage + Assignee — shadcn Select keeps the dialog speaking the
+              same form-control vocabulary as the LeadsList filter and the
+              detail-page stage stepper. Native <select> was inconsistent
+              with the rest of the module. */}
           <div className="grid grid-cols-2 gap-3">
             <Field label="Stage">
-              <select
+              <Select
                 value={form.stage}
-                onChange={(e) => patch({ stage: e.target.value as LeadStage })}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                onValueChange={(v) => patch({ stage: v as LeadStage })}
                 disabled={pending}
               >
-                {LEAD_STAGES.map((s) => (
-                  <option key={s} value={s}>
-                    {stageLabel(s)}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger aria-label="Lead stage">
+                  <SelectValue placeholder="Select stage" />
+                </SelectTrigger>
+                <SelectContent>
+                  {LEAD_STAGES.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {stageLabel(s)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </Field>
 
             <Field label="Assigned to">
-              <select
-                value={form.assigned_to}
-                onChange={(e) => patch({ assigned_to: e.target.value })}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+              <Select
+                value={form.assigned_to || UNASSIGNED_VALUE}
+                onValueChange={(v) => patch({ assigned_to: v })}
                 disabled={pending}
               >
-                <option value="">Unassigned</option>
-                {assigneeOptions.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger aria-label="Assignee">
+                  <SelectValue placeholder="Unassigned" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={UNASSIGNED_VALUE}>Unassigned</SelectItem>
+                  {assigneeOptions.map((a) => (
+                    <SelectItem key={a.id} value={a.id}>
+                      {a.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </Field>
           </div>
         </div>

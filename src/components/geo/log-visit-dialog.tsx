@@ -13,6 +13,13 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { LEAD_OUTCOMES, outcomeLabel, type LeadOutcome } from "@/lib/geo/stages";
 import { createLeadVisit } from "@/actions/geo-visits";
 
@@ -69,23 +76,28 @@ export function LogVisitDialog({ open, onOpenChange, leadId }: Props) {
         </DialogHeader>
 
         <div className="grid gap-3 py-2">
-          {/* Outcome */}
+          {/* Outcome — shadcn Select for consistency with the rest of the
+              JambaGeo dialogs (LeadDialog stage/assignee/source picker). */}
           <div className="space-y-1">
             <Label className="text-xs text-muted-foreground">Outcome</Label>
-            <select
+            <Select
               value={outcome}
-              onChange={(e) => setOutcome(e.target.value as LeadOutcome)}
+              onValueChange={(v) => setOutcome(v as LeadOutcome)}
               disabled={pending}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
             >
-              {LEAD_OUTCOMES.map((o) => (
-                <option key={o} value={o}>
-                  {outcomeLabel(o)}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger aria-label="Visit outcome">
+                <SelectValue placeholder="Select outcome" />
+              </SelectTrigger>
+              <SelectContent>
+                {LEAD_OUTCOMES.map((o) => (
+                  <SelectItem key={o} value={o}>
+                    {outcomeLabel(o)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             {isTerminal && (
-              <p className="text-xs text-amber-600 mt-1">
+              <p className="text-xs text-amber-700 mt-1">
                 Saving this visit will move the lead to the &quot;
                 {outcome === "converted" ? "Converted" : "Lost"}&quot; stage.
               </p>

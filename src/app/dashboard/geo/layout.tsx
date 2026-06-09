@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getCurrentUser, isAdmin, isManagerOrAbove } from "@/lib/current-user";
+import { getCurrentUser, isManagerOrAbove } from "@/lib/current-user";
 import { hasFeature } from "@/config/plans";
 import { GeoNav } from "@/components/geo/geo-nav";
 
@@ -21,7 +21,7 @@ export default async function GeoLayout({ children }: { children: React.ReactNod
           Field-staff tracking + lightweight lead CRM
         </p>
       </header>
-      <GeoNav _isAdmin={isAdmin(user.role)} isManagerOrAbove={isManagerOrAbove(user.role)} />
+      <GeoNav isManagerOrAbove={isManagerOrAbove(user.role)} />
       {children}
     </div>
   );

@@ -5,11 +5,10 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 interface GeoNavProps {
-  _isAdmin: boolean;
   isManagerOrAbove: boolean;
 }
 
-export function GeoNav({ _isAdmin, isManagerOrAbove }: GeoNavProps) {
+export function GeoNav({ isManagerOrAbove }: GeoNavProps) {
   const pathname = usePathname();
 
   const items = [

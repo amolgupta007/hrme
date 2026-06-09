@@ -24,7 +24,7 @@ export function LeadCard({
 }) {
   return (
     <Link
-      href={`/dashboard/geo/leads/${lead.id}`}
+      href={`/geo/leads/${lead.id}`}
       className={
         "block rounded-md border bg-card p-3 text-sm shadow-sm hover:border-primary transition-colors " +
         (draggable ? "cursor-grab active:cursor-grabbing" : "")

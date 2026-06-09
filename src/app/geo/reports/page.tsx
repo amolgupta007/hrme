@@ -8,7 +8,7 @@ import { OverdueFollowUps } from "@/components/geo/overdue-followups";
 
 export default async function ReportsPage() {
   const ctx = await requireJambaGeoAccess();
-  if (!isManagerOrAbove(ctx.role)) redirect("/dashboard/geo/leads");
+  if (!isManagerOrAbove(ctx.role)) redirect("/geo/leads");
 
   const [funnelResult, overdueResult] = await Promise.all([
     getLeadFunnel(),

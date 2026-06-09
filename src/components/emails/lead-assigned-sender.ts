@@ -49,7 +49,7 @@ export async function sendLeadAssignedEmail({ leadId, assigneeId }: Args): Promi
         leadContact: lead.contact_phone,
         leadAddress: lead.address,
         leadValueInr: lead.value_inr,
-        deepLinkUrl: `${APP_ORIGIN}/dashboard/geo/leads/${lead.id}`,
+        deepLinkUrl: `${APP_ORIGIN}/geo/leads/${lead.id}`,
         orgName: org?.name ?? "your team",
       }),
     );

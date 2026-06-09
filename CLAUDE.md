@@ -529,7 +529,7 @@ Feature-flagged via `organizations.settings.attendance_enabled`. Optional payrol
 
 ---
 
-## JambaGeo Module (`/dashboard/geo`) — Business+
+## JambaGeo Module (`/geo`) — Business+
 
 Feature-flagged via `organizations.settings.jambageo_enabled`. Lightweight lead CRM + field-staff tracking. Phase 1 (web-only) shipped 2026-06-09.
 
@@ -775,7 +775,7 @@ npm run db:push       # Push migrations (needs CLI)
 72. **Feedback is keyed by ORDINAL, not message id** — the streamed `UIMessage.id` (client) ≠ persisted `assistant_messages.id` (server). `submitFeedback({conversationId, assistantIndex, rating})` resolves the Nth assistant message in the conversation (ordered by created_at) to the real row id, then upserts `assistant_feedback` (unique on message_id+user_employee_id, so re-rating updates). `assistant-chat.tsx` computes `assistantIndex` in the message map.
 73. **Conversation history loads via re-mount** — `assistant-panel.tsx` holds `conversationId` in state; selecting a past conversation sets it + `initialMessages` (text-only reconstruction) and `<AssistantChat key={conversationId}>` forces a clean re-mount. Tool chips/citations do NOT re-render for historical messages (text only) — acceptable for v1 viewing. History/get/delete are per-user, ownership-checked by `employeeId`.
 74. **PII-redaction cron `/api/cron/assistant-redact`** (daily 7:00 UTC): redacts `assistant_messages.content` older than 14d (sets `pii_redacted=true`), deletes `assistant_conversations` (messages cascade) not updated in 90d. `redactPII()` is idempotent (its tokens `<EMAIL>`/`<PHONE>`/`<AMOUNT>`/`<NUMBER>` don't re-match). Batched at 500/run. Bearer `CRON_SECRET`.
-75. **JambaGeo Mapbox SSR**: Mapbox GL JS imports `window`. All map components MUST be loaded via `dynamic(() => import('@/components/geo/...'), { ssr: false })`. Direct SSR import will crash the page. See `src/app/dashboard/geo/geofences/page.tsx` / `live-map/page.tsx`.
+75. **JambaGeo Mapbox SSR**: Mapbox GL JS imports `window`. All map components MUST be loaded via `dynamic(() => import('@/components/geo/...'), { ssr: false })`. Direct SSR import will crash the page. See `src/app/geo/geofences/page.tsx` / `live-map/page.tsx`.
 76. **JambaGeo system visit rows are immutable**: `lead_visits.system = true` rows are kanban-drag audit entries. `updateLeadVisit` / `deleteLeadVisit` reject them with "System rows are immutable" / "System rows cannot be deleted". To "undo" a stage move, drag the card back — that writes a new system row, preserving the audit trail.
 77. **JambaGeo retention sweep is Phase-1 no-op**: `/api/cron/jambageo-retention-sweep` ships in Phase 1 even though `location_pings` is empty. This is intentional: when mobile lands in Phase 2, DPDP retention is enforced from day one without a separate migration/deploy.
 

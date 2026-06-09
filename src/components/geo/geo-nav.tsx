@@ -12,11 +12,11 @@ export function GeoNav({ isManagerOrAbove }: GeoNavProps) {
   const pathname = usePathname();
 
   const items = [
-    { href: "/dashboard/geo/leads", label: "Leads", show: true },
-    { href: "/dashboard/geo/my-leads", label: "My Leads", show: !isManagerOrAbove },
-    { href: "/dashboard/geo/geofences", label: "Geofences", show: true },
-    { href: "/dashboard/geo/live-map", label: "Live Map", show: isManagerOrAbove },
-    { href: "/dashboard/geo/reports", label: "Reports", show: isManagerOrAbove },
+    { href: "/geo/leads", label: "Leads", show: true },
+    { href: "/geo/my-leads", label: "My Leads", show: !isManagerOrAbove },
+    { href: "/geo/geofences", label: "Geofences", show: true },
+    { href: "/geo/live-map", label: "Live Map", show: isManagerOrAbove },
+    { href: "/geo/reports", label: "Reports", show: isManagerOrAbove },
   ].filter(i => i.show);
 
   return (

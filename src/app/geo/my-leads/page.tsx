@@ -26,7 +26,7 @@ export default async function MyLeadsPage() {
             {leads.map(l => (
               <li key={l.id} className="py-3 flex items-center justify-between gap-3">
                 <div>
-                  <Link href={`/dashboard/geo/leads/${l.id}`} className="font-medium hover:underline">
+                  <Link href={`/geo/leads/${l.id}`} className="font-medium hover:underline">
                     {l.name}
                   </Link>
                   {l.company && (

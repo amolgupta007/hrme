@@ -87,7 +87,7 @@ export function LeadsList({ leads }: { leads: LeadCardData[] }) {
                 <TableRow key={lead.id}>
                   <TableCell className="font-medium">
                     <Link
-                      href={`/dashboard/geo/leads/${lead.id}`}
+                      href={`/geo/leads/${lead.id}`}
                       className="hover:underline text-primary"
                     >
                       {lead.name}

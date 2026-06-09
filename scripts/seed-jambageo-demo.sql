@@ -14,6 +14,12 @@ BEGIN
     RETURN;
   END IF;
 
+  -- Skip if seed data already exists for this org (idempotent re-run)
+  IF EXISTS (SELECT 1 FROM leads WHERE org_id = v_org AND name = 'Rajesh Kumar') THEN
+    RAISE NOTICE 'JambaGeo demo seed already applied to this org; skipping';
+    RETURN;
+  END IF;
+
   -- Pick first active employee in Sales and Marketing (used as assignees)
   SELECT e.id INTO v_sales_emp FROM employees e
     JOIN departments d ON d.id = e.department_id

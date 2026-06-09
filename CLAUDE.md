@@ -663,6 +663,8 @@ Primary: teal `172 50% 36%`. Accent: warm orange `32 95% 52%`. Use CSS variables
 | `/api/cron/social-agent-generate` | `0 4 * * 1,3,5` | Mon/Wed/Fri 9:30am | Generate one LinkedIn draft via Claude + Cloudflare Flux. Gated on `SOCIAL_AGENT_ENABLED=true`. |
 | `/api/cron/social-agent-publish-check` | `0 5 * * *` | 10:30am | Reconcile Buffer post statuses → DB; mark `published`/`failed` and email on failure. (Daily — Vercel Hobby plan limits crons to once-per-day; inline reconciliation on page-load is a future improvement.) |
 | `/api/cron/loi-expiry` | `15 4 * * *` | 9:45am | M4 — flips JambaHire `applications.loi_status` from `pending` to `expired` where `loi_expires_at < now()`. No email sent on expiry (admin can resend from the card). |
+| `/api/cron/jambageo-followup-reminders` | `30 3 * * *` | 9:00am | Email staff with `leads.follow_up_date = today` (one digest per recipient) |
+| `/api/cron/jambageo-retention-sweep` | `0 19 * * *` | 12:30am | Delete `location_pings` older than per-employee retention (Phase 1 no-op; ready for Phase 2 mobile pings) |
 
 All cron routes require `Authorization: Bearer CRON_SECRET` header. `CRON_SECRET` env var must be set in Vercel.
 

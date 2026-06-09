@@ -363,6 +363,20 @@ export const ROUTE_REGISTRY = {
     required_role: "manager",
     required_plan: "business",
   },
+  geo_my_leads: {
+    path: "/dashboard/geo/my-leads",
+    label: "My assigned leads",
+    description: "See the leads currently assigned to you and log visits from the detail page.",
+    required_role: "employee",
+    required_plan: "business",
+  },
+  geo_live_map: {
+    path: "/dashboard/geo/live-map",
+    label: "Live map of on-duty staff",
+    description: "View on-duty field staff as pins on a map. Pins appear once the JambaGeo mobile app ships in Phase 2.",
+    required_role: "manager",
+    required_plan: "business",
+  },
 
   // Settings + billing
   upgrade_plan: {

@@ -24,6 +24,14 @@ CREATE POLICY p_geofences_write ON public.geofences FOR ALL
     AND (auth.jwt() ->> 'org_role') IN ('org:owner','org:admin')
   );
 
+-- TODO (Clerk-JWT activation): replace the broad org-scoped policies below with finer per-role scope:
+--   leads: admin ALL + manager-dept-scoped SELECT/INSERT/UPDATE + employee own-assigned SELECT/UPDATE(stage only)
+--   lead_visits: follows parent lead scope
+--   duty_sessions: admin ALL + manager dept-scoped SELECT + employee own SELECT
+--   location_pings: admin/manager SELECT only (no direct employee access)
+--   geo_consents: admin ALL + employee own SELECT
+-- Until then, service-role bypass (gotcha #5) means these policies are advisory.
+
 -- leads / lead_visits / duty_sessions / location_pings / geo_consents: org-scoped (further refined in app code via getManagerScopedEmployeeIds)
 DROP POLICY IF EXISTS p_leads_org ON public.leads;
 CREATE POLICY p_leads_org ON public.leads FOR ALL

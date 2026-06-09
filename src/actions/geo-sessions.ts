@@ -5,16 +5,7 @@ import { getJambaGeoContext } from "@/lib/jambageo-access";
 import type { ActionResult } from "@/types";
 import { isAdmin } from "@/lib/current-user";
 import { getManagerScopedEmployeeIds } from "@/lib/attendance/manager-scope";
-
-export interface ActiveSessionView {
-  session_id: string;
-  employee_id: string;
-  employee_name: string;
-  started_at: string;
-  last_ping_at: string | null;
-  last_lat: number | null;
-  last_lng: number | null;
-}
+import type { ActiveSessionView } from "@/lib/geo/session-types";
 
 export async function listActiveSessions(): Promise<ActionResult<ActiveSessionView[]>> {
   const ctx = await getJambaGeoContext();

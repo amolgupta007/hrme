@@ -1,27 +1,16 @@
 "use server";
 
-import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { getJambaGeoContext } from "@/lib/jambageo-access";
 import { isAdmin } from "@/lib/current-user";
 import type { ActionResult } from "@/types";
-
-export const GeofenceCreateSchema = z.object({
-  name: z.string().trim().min(1).max(120),
-  type: z.enum(["client", "office"]),
-  center_lat: z.number().min(-90).max(90),
-  center_lng: z.number().min(-180).max(180),
-  radius_m: z.number().int().min(1).max(5000),
-  notes: z.string().trim().max(1000).nullish(),
-});
-
-export const GeofenceUpdateSchema = GeofenceCreateSchema.partial().extend({
-  is_active: z.boolean().optional(),
-});
-
-export type GeofenceCreateInput = z.infer<typeof GeofenceCreateSchema>;
-export type GeofenceUpdateInput = z.infer<typeof GeofenceUpdateSchema>;
+import {
+  GeofenceCreateSchema,
+  GeofenceUpdateSchema,
+  type GeofenceCreateInput,
+  type GeofenceUpdateInput,
+} from "@/lib/geo/geo-schemas";
 
 interface GeofenceRow {
   id: string;

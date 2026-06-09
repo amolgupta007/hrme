@@ -75,7 +75,11 @@ export async function getOverdueFollowUps(): Promise<
     )
     .eq("org_id", ctx.orgId)
     .lt("follow_up_date", today)
-    .not("follow_up_date", "is", null);
+    .not("follow_up_date", "is", null)
+    // Phase 1: scope filter applied in JS below (PostgREST embed scope is awkward).
+    // Safety cap on unfiltered fetch; reports page renders the result as a list
+    // so 500 is well past any practical admin-view size.
+    .limit(500);
 
   if (error) return { success: false, error: error.message };
 

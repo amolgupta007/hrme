@@ -96,6 +96,9 @@ export async function updateGeofence(
 
   const parsed = GeofenceUpdateSchema.safeParse(input);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
+  if (Object.keys(parsed.data).length === 0) {
+    return { success: false, error: "No fields to update" };
+  }
 
   const sb = createAdminSupabase();
   const { data, error } = await sb
@@ -134,5 +137,6 @@ export async function deleteGeofence(id: string): Promise<ActionResult<void>> {
   if (error) return { success: false, error: error.message };
 
   revalidatePath("/dashboard/geo/geofences");
+  revalidatePath("/dashboard/settings");
   return { success: true, data: undefined };
 }

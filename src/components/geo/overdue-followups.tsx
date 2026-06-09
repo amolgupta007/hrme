@@ -28,7 +28,7 @@ export function OverdueFollowUps({ rows }: OverdueFollowUpsProps) {
         <li key={r.lead_id} className="py-3 flex items-start justify-between gap-3">
           <div>
             <Link
-              href={`/dashboard/geo/leads/${r.lead_id}`}
+              href={`/geo/leads/${r.lead_id}`}
               className="font-medium hover:underline"
             >
               {r.lead_name}

@@ -13,7 +13,7 @@ const LiveMap = dynamic(() => import("@/components/geo/live-map"), {
 export default async function LiveMapPage() {
   const ctx = await requireJambaGeoAccess();
   if (!isManagerOrAbove(ctx.role)) {
-    redirect("/dashboard/geo/leads");
+    redirect("/geo/leads");
   }
 
   return (

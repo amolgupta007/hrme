@@ -19,7 +19,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { LEAD_STAGES, stageLabel, type LeadStage } from "@/lib/geo/stages";
+import {
+  LEAD_STAGES,
+  stageBadgeVariant,
+  stageLabel,
+  type LeadStage,
+} from "@/lib/geo/stages";
 import type { LeadCardData } from "./lead-card";
 
 export function LeadsList({ leads }: { leads: LeadCardData[] }) {
@@ -38,7 +43,7 @@ export function LeadsList({ leads }: { leads: LeadCardData[] }) {
 
   return (
     <div className="space-y-3">
-      <div className="flex gap-2 flex-wrap">
+      <div className="flex flex-wrap gap-2">
         <Input
           placeholder="Search by name or company…"
           value={q}
@@ -93,22 +98,30 @@ export function LeadsList({ leads }: { leads: LeadCardData[] }) {
                       {lead.name}
                     </Link>
                     {lead.contact_phone && (
-                      <div className="text-xs text-muted-foreground">
+                      <a
+                        href={`tel:${lead.contact_phone}`}
+                        className="block text-xs text-muted-foreground hover:text-foreground"
+                        aria-label={`Call ${lead.name} at ${lead.contact_phone}`}
+                      >
                         {lead.contact_phone}
-                      </div>
+                      </a>
                     )}
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {lead.company ?? <span className="italic">—</span>}
                   </TableCell>
                   <TableCell>
-                    <Badge variant="secondary" className="text-[10px]">
+                    <Badge
+                      variant={stageBadgeVariant(lead.stage)}
+                      aria-label={`Stage: ${stageLabel(lead.stage)}`}
+                      className="text-[10px]"
+                    >
                       {stageLabel(lead.stage)}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {lead.assignee_name ?? (
-                      <span className="italic text-amber-600">Unassigned</span>
+                      <span className="italic text-amber-700">Unassigned</span>
                     )}
                   </TableCell>
                   <TableCell className="text-right text-sm font-medium">

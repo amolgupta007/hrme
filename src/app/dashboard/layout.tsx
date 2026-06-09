@@ -28,6 +28,7 @@ export default async function DashboardLayout({
     referrals:
       userCtx.jambaHireEnabled &&
       process.env.JAMBAHIRE_REFERRALS_ENABLED === "true",
+    jambageo: userCtx.jambaGeoEnabled,
   };
 
   const assistantClientFlag = process.env.NEXT_PUBLIC_ASSISTANT_ENABLED === "true";

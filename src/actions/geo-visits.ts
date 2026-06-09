@@ -106,9 +106,9 @@ export async function createLeadVisit(
     }
   }
 
-  revalidatePath("/dashboard/geo/leads");
-  revalidatePath(`/dashboard/geo/leads/${parsed.data.lead_id}`);
-  revalidatePath("/dashboard/geo/my-leads");
+  revalidatePath("/geo/leads");
+  revalidatePath(`/geo/leads/${parsed.data.lead_id}`);
+  revalidatePath("/geo/my-leads");
   return { success: true, data: visit as VisitRow };
 }
 
@@ -150,8 +150,8 @@ export async function updateLeadVisit(
     .single();
   if (error) return { success: false, error: error.message };
 
-  revalidatePath("/dashboard/geo/leads");
-  revalidatePath(`/dashboard/geo/leads/${existing.lead_id}`);
+  revalidatePath("/geo/leads");
+  revalidatePath(`/geo/leads/${existing.lead_id}`);
   return { success: true, data: data as VisitRow };
 }
 
@@ -178,7 +178,7 @@ export async function deleteLeadVisit(id: string): Promise<ActionResult<void>> {
     .eq("org_id", ctx.orgId);
   if (error) return { success: false, error: error.message };
 
-  revalidatePath("/dashboard/geo/leads");
-  revalidatePath(`/dashboard/geo/leads/${existing.lead_id}`);
+  revalidatePath("/geo/leads");
+  revalidatePath(`/geo/leads/${existing.lead_id}`);
   return { success: true, data: undefined };
 }

@@ -70,7 +70,7 @@ export async function createGeofence(
 
   if (error) return { success: false, error: error.message };
 
-  revalidatePath("/dashboard/geo/geofences");
+  revalidatePath("/geo/geofences");
   revalidatePath("/dashboard/settings");
   return { success: true, data: data as GeofenceRow };
 }
@@ -100,7 +100,7 @@ export async function updateGeofence(
 
   if (error) return { success: false, error: error.message };
 
-  revalidatePath("/dashboard/geo/geofences");
+  revalidatePath("/geo/geofences");
   return { success: true, data: data as GeofenceRow };
 }
 
@@ -125,7 +125,7 @@ export async function deleteGeofence(id: string): Promise<ActionResult<void>> {
 
   if (error) return { success: false, error: error.message };
 
-  revalidatePath("/dashboard/geo/geofences");
+  revalidatePath("/geo/geofences");
   revalidatePath("/dashboard/settings");
   return { success: true, data: undefined };
 }

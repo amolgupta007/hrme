@@ -103,11 +103,17 @@ export async function createLeadVisit(
   // Auto-flip lead stage on terminal outcomes
   const targetStage = mapOutcomeToStage(parsed.data.outcome);
   if (targetStage && targetStage !== lead.data.stage) {
-    await sb
+    const { error: stageErr } = await sb
       .from("leads")
       .update({ stage: targetStage })
       .eq("id", parsed.data.lead_id)
       .eq("org_id", ctx.orgId);
+    if (stageErr) {
+      console.warn(
+        "[jambageo] auto-stage-flip on lead failed after visit insert",
+        { leadId: parsed.data.lead_id, targetStage, error: stageErr },
+      );
+    }
   }
 
   revalidatePath("/dashboard/geo/leads");

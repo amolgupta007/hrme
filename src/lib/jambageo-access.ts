@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser, isAdmin } from "@/lib/current-user";
-import { hasFeature } from "@/config/plans";
+import { hasFeature, type OrgPlan } from "@/config/plans";
 import type { UserRole } from "@/types";
 
 export interface JambaGeoAccessContext {
@@ -8,7 +8,7 @@ export interface JambaGeoAccessContext {
   clerkUserId: string;
   role: UserRole;
   employeeId: string | null;
-  plan: string;
+  plan: OrgPlan;
 }
 
 /**

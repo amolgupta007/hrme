@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 import { LayoutGrid, List, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LeadsKanban } from "@/components/geo/leads-kanban";
@@ -18,8 +17,7 @@ interface Props {
 }
 
 export function LeadsPageClient({ leads, view, canCreate, canDrag }: Props) {
-  const searchParams = useSearchParams();
-  const [dialogOpen, setDialogOpen] = useState(false);
+const [dialogOpen, setDialogOpen] = useState(false);
 
   // Build toggle URLs preserving other search params
   const toKanban = "?view=kanban";

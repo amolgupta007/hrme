@@ -313,6 +313,57 @@ export const ROUTE_REGISTRY = {
       "Add or update your bank account for salary disbursement.",
   },
 
+  // JambaGeo (Business tier)
+  geo_overview: {
+    path: "/dashboard/geo/leads",
+    label: "JambaGeo overview",
+    description: "Lightweight CRM and field-staff tracking module for sales / service / delivery teams.",
+    required_role: "employee",
+    required_plan: "business",
+  },
+  geo_create_lead: {
+    path: "/dashboard/geo/leads",
+    label: "Create a lead",
+    description: "Add a new lead to the CRM with name, company, contact details, and stage.",
+    required_role: "manager",
+    required_plan: "business",
+  },
+  geo_assign_lead: {
+    path: "/dashboard/geo/leads",
+    label: "Assign or reassign a lead",
+    description: "Set or change which staff member owns a lead.",
+    required_role: "manager",
+    required_plan: "business",
+  },
+  geo_log_visit: {
+    path: "/dashboard/geo/leads/[id]",
+    label: "Log a visit on a lead",
+    description: "Record a field visit with outcome, notes, and next follow-up date.",
+    required_role: "employee",
+    required_plan: "business",
+  },
+  geo_kanban_drag: {
+    path: "/dashboard/geo/leads",
+    label: "Move a lead through the kanban",
+    description: "Drag a lead card between pipeline stages or use the stage dropdown.",
+    required_role: "employee",
+    required_plan: "business",
+  },
+  geo_geofences: {
+    path: "/dashboard/geo/geofences",
+    label: "Manage geofences",
+    description: "Draw geofence zones on the map for offices and client sites.",
+    required_role: "admin",
+    required_plan: "business",
+  },
+  geo_reports: {
+    path: "/dashboard/geo/reports",
+    label: "Lead reports",
+    description: "View funnel metrics, conversion rates, and overdue follow-ups.",
+    required_role: "manager",
+    required_plan: "business",
+  },
+
   // Settings + billing
   upgrade_plan: {
     path: "/dashboard/settings",

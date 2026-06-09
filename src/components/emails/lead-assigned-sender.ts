@@ -1,6 +1,7 @@
 import { render } from "@react-email/render";
 import { resend, FROM_EMAIL } from "@/lib/resend";
 import { createAdminSupabase } from "@/lib/supabase/server";
+import LeadAssignedEmail from "./lead-assigned";
 
 interface Args {
   leadId: string;
@@ -36,13 +37,8 @@ export async function sendLeadAssignedEmail({ leadId, assigneeId }: Args): Promi
 
     const assigneeName = `${assignee.first_name ?? ""} ${assignee.last_name ?? ""}`.trim() || "there";
     const assignerName = assigner
-      ? `${(assigner as any).first_name ?? ""} ${(assigner as any).last_name ?? ""}`.trim() || "An admin"
+      ? `${assigner.first_name ?? ""} ${assigner.last_name ?? ""}`.trim() || "An admin"
       : "An admin";
-
-    // Dynamic import so the JSX template is never statically resolved at module
-    // load time — prevents parse errors in test environments that lack a JSX
-    // transform pipeline (vitest + vite:import-analysis).
-    const { default: LeadAssignedEmail } = await import("./lead-assigned");
 
     const html = await render(
       LeadAssignedEmail({
@@ -54,7 +50,7 @@ export async function sendLeadAssignedEmail({ leadId, assigneeId }: Args): Promi
         leadAddress: lead.address,
         leadValueInr: lead.value_inr,
         deepLinkUrl: `${APP_ORIGIN}/dashboard/geo/leads/${lead.id}`,
-        orgName: (org as any)?.name ?? "your team",
+        orgName: org?.name ?? "your team",
       }),
     );
 

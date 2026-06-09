@@ -130,7 +130,7 @@ export interface Lead {
   address: string | null;
   assignedTo: string | null;
   assigneeName?: string | null; // hydrated by listLeads
-  stage: import("@/lib/geo/stages").LeadStage;
+  stage: LeadStage;
   valueInr: number | null;
   source: string | null;
   createdBy: string | null;
@@ -148,7 +148,7 @@ export interface LeadVisit {
   lat: number | null;
   lng: number | null;
   notes: string | null;
-  outcome: import("@/lib/geo/stages").LeadOutcome;
+  outcome: LeadOutcome;
   followUpDate: string | null;
   photoUrl: string | null;
   source: "web" | "mobile";

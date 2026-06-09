@@ -24,12 +24,16 @@ const chipBase =
  * in the destination chrome because it's per-page and depends on per-page
  * server data (sibling IDs in the caller's scope).
  *
- * Server component on purpose — all three actions are plain anchor links.
- * No client state, no dialogs, no router.push.
+ * Sticky on md+: pins directly under the GeoHeader (h-14) so "Back to Leads"
+ * and Prev/Next stay reachable while the visit timeline scrolls. Mobile
+ * stays inline — chrome already has two stacked rows there, three would
+ * own too much real estate. The negative margin breaks out of the parent
+ * <main>'s px-6 py-8 padding so the sticky bar can extend edge-to-edge with
+ * its own background.
  */
 export function LeadPageNav({ prev, next, position }: LeadPageNavProps) {
   return (
-    <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+    <div className="mb-4 -mx-6 md:sticky md:top-14 md:z-30 border-b border-border bg-background px-6 py-3 flex flex-wrap items-center justify-between gap-3">
       <Link
         href="/geo/leads"
         className={cn(
@@ -64,10 +68,12 @@ export function LeadPageNav({ prev, next, position }: LeadPageNavProps) {
             </Link>
           ) : (
             <span
-              aria-hidden
+              role="link"
+              aria-disabled="true"
+              aria-label="Previous lead — this is the first lead"
               className={cn(chipBase, "cursor-not-allowed opacity-40")}
             >
-              <ChevronLeft className="h-3.5 w-3.5" />
+              <ChevronLeft className="h-3.5 w-3.5" aria-hidden />
               <span className="hidden sm:inline">Prev</span>
             </span>
           )}
@@ -87,11 +93,13 @@ export function LeadPageNav({ prev, next, position }: LeadPageNavProps) {
             </Link>
           ) : (
             <span
-              aria-hidden
+              role="link"
+              aria-disabled="true"
+              aria-label="Next lead — this is the last lead"
               className={cn(chipBase, "cursor-not-allowed opacity-40")}
             >
               <span className="hidden sm:inline">Next</span>
-              <ChevronRight className="h-3.5 w-3.5" />
+              <ChevronRight className="h-3.5 w-3.5" aria-hidden />
             </span>
           )}
         </div>

@@ -71,7 +71,10 @@ export function GeofenceList(props: GeofenceListProps) {
   }
 
   function doUpdateRadius(id: string, radius_m: number) {
-    if (!radius_m || radius_m < 1 || radius_m > 5000) return;
+    if (isNaN(radius_m) || radius_m < 1 || radius_m > 5000) {
+      toast.error("Radius must be between 1 and 5000 m");
+      return;
+    }
     startTransition(async () => {
       const res = await updateGeofence(id, { radius_m });
       if (!res.success) toast.error(res.error);
@@ -186,6 +189,7 @@ export function GeofenceList(props: GeofenceListProps) {
                 >
                   <Label className="text-xs shrink-0">Radius (m)</Label>
                   <Input
+                    key={`r-${g.id}-${g.radius_m}`}
                     type="number"
                     min={1}
                     max={5000}

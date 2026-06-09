@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -115,9 +116,9 @@ export function JambaGeoSection({
 
           <p className="text-xs text-muted-foreground border-t pt-3">
             Manage geofences →{" "}
-            <a href="/dashboard/geo/geofences" className="text-primary hover:underline">
+            <Link href="/dashboard/geo/geofences" className="text-primary hover:underline">
               JambaGeo &gt; Geofences
-            </a>
+            </Link>
           </p>
         </CardContent>
       </Card>

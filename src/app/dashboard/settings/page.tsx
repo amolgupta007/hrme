@@ -102,6 +102,12 @@ export default async function SettingsPage() {
     ? await supabase.from("organizations").select("settings").eq("id", userCtx.orgId).single()
     : { data: null };
   const performanceSettings = getPerformanceSettings((orgSettingsResult.data as any)?.settings ?? null);
+  const rawOrgSettings = (orgSettingsResult.data as any)?.settings ?? {};
+  const jambaGeoEnabled = userCtx?.jambaGeoEnabled ?? false;
+  const jambaGeoSettings = {
+    default_retention_days: (rawOrgSettings.jambageo?.default_retention_days as number) ?? 90,
+    default_ping_interval_min: (rawOrgSettings.jambageo?.default_ping_interval_min as number) ?? 15,
+  };
 
   return (
     <div className="space-y-6">
@@ -147,6 +153,8 @@ export default async function SettingsPage() {
         payrollEnabled={payrollEnabled}
         overtimeSettings={overtimeSettings}
         razorpayxCredentials={razorpayxCredentials}
+        jambaGeoEnabled={jambaGeoEnabled}
+        jambaGeoSettings={jambaGeoSettings}
       />
     </div>
   );

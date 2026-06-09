@@ -85,7 +85,7 @@ export async function GET(req: Request) {
     grouped.get(email)!.leads.push({
       name: lead.name,
       company: lead.company,
-      url: `${APP_ORIGIN}/dashboard/geo/leads/${lead.id}`,
+      url: `${APP_ORIGIN}/geo/leads/${lead.id}`,
     });
   }
 

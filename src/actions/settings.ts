@@ -523,6 +523,6 @@ export async function updateJambaGeoSettings(
   if (error) return { success: false, error: error.message };
 
   revalidatePath("/dashboard/settings");
-  revalidatePath("/dashboard/geo");
+  revalidatePath("/geo");
   return { success: true, data: undefined };
 }

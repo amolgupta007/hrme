@@ -6,9 +6,9 @@ import type { ActionResult } from "@/types";
 import { isAdmin } from "@/lib/current-user";
 import { LEAD_STAGES, type LeadStage } from "@/lib/geo/stages";
 import { getManagerScopedEmployeeIds } from "@/lib/attendance/manager-scope";
-import { computeLeadScope } from "./geo-leads";
+import { computeLeadScope } from "@/lib/geo/lead-scope";
 
-export interface FunnelRow {
+interface FunnelRow {
   stage: LeadStage;
   count: number;
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeLeadScope } from "@/actions/geo-leads";
+import { computeLeadScope } from "@/lib/geo/lead-scope";
 
 describe("computeLeadScope", () => {
   it("admin: returns null (= no filter)", () => {

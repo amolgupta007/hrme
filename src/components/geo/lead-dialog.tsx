@@ -57,8 +57,11 @@ export function LeadDialog(props: LeadDialogProps) {
   const [pending, startTransition] = useTransition();
   const [form, setForm] = useState(EMPTY_FORM);
 
-  // Auto-fill form when lead prop changes (edit mode) or reset for create
+  // Auto-fill form when dialog opens: populate from lead (edit) or reset (create).
+  // Depends on `open` so that opening the same create dialog twice in a row
+  // (lead=undefined both times) still resets the form on the second open.
   useEffect(() => {
+    if (!open) return; // skip work when closing
     if (lead) {
       setForm({
         name: lead.name ?? "",
@@ -74,7 +77,7 @@ export function LeadDialog(props: LeadDialogProps) {
     } else {
       setForm(EMPTY_FORM);
     }
-  }, [lead]);
+  }, [open, lead]);
 
   function handleSave() {
     const trimmedName = form.name.trim();
@@ -130,6 +133,7 @@ export function LeadDialog(props: LeadDialogProps) {
               value={form.name}
               onChange={(e) => patch({ name: e.target.value })}
               placeholder="Contact or business name"
+              disabled={pending}
             />
           </Field>
 
@@ -139,6 +143,7 @@ export function LeadDialog(props: LeadDialogProps) {
               value={form.company}
               onChange={(e) => patch({ company: e.target.value })}
               placeholder="Company name"
+              disabled={pending}
             />
           </Field>
 
@@ -149,6 +154,7 @@ export function LeadDialog(props: LeadDialogProps) {
                 value={form.contact_phone}
                 onChange={(e) => patch({ contact_phone: e.target.value })}
                 placeholder="+91 98765 43210"
+                disabled={pending}
               />
             </Field>
             <Field label="Email">
@@ -157,6 +163,7 @@ export function LeadDialog(props: LeadDialogProps) {
                 value={form.contact_email}
                 onChange={(e) => patch({ contact_email: e.target.value })}
                 placeholder="name@company.com"
+                disabled={pending}
               />
             </Field>
           </div>
@@ -168,6 +175,7 @@ export function LeadDialog(props: LeadDialogProps) {
               onChange={(e) => patch({ address: e.target.value })}
               placeholder="Street, city, state"
               rows={2}
+              disabled={pending}
             />
           </Field>
 
@@ -180,6 +188,7 @@ export function LeadDialog(props: LeadDialogProps) {
                 value={form.value_inr}
                 onChange={(e) => patch({ value_inr: e.target.value })}
                 placeholder="0"
+                disabled={pending}
               />
             </Field>
             <Field label="Source">
@@ -187,6 +196,7 @@ export function LeadDialog(props: LeadDialogProps) {
                 value={form.source}
                 onChange={(e) => patch({ source: e.target.value })}
                 placeholder="Referral, Walk-in…"
+                disabled={pending}
               />
             </Field>
           </div>
@@ -198,6 +208,7 @@ export function LeadDialog(props: LeadDialogProps) {
                 value={form.stage}
                 onChange={(e) => patch({ stage: e.target.value as LeadStage })}
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                disabled={pending}
               >
                 {LEAD_STAGES.map((s) => (
                   <option key={s} value={s}>
@@ -212,6 +223,7 @@ export function LeadDialog(props: LeadDialogProps) {
                 value={form.assigned_to}
                 onChange={(e) => patch({ assigned_to: e.target.value })}
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                disabled={pending}
               >
                 <option value="">Unassigned</option>
                 {assigneeOptions.map((a) => (

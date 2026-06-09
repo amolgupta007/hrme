@@ -11,6 +11,7 @@ import {
   Sparkles,
   Clock as ClockIcon,
   Wallet as WalletIcon,
+  MapPin,
 } from "lucide-react";
 import { CollapsibleSection } from "@/components/settings/collapsible-section";
 import { LeavePoliciesSection } from "@/components/settings/leave-policies-section";
@@ -22,6 +23,7 @@ import { PerformanceSection } from "@/components/settings/performance-section";
 import { AssistantSettingsSection } from "@/components/settings/assistant-settings-section";
 import { AttendanceSection } from "@/components/settings/attendance-section";
 import { PayrollSection } from "@/components/settings/payroll-section";
+import { JambaGeoSection } from "@/components/settings/jambageo-section";
 import type { LeavePolicy, Department, Employee } from "@/types";
 import type { SalaryStructureConfig } from "@/actions/payroll";
 import type { RatioConfig } from "@/lib/ctc";
@@ -65,6 +67,8 @@ type SettingsContentProps = {
   payrollConfigHistory: SalaryStructureConfig[];
   payrollEnabled: boolean;
   razorpayxCredentials: MaskedRazorpayXCredentials | null;
+  jambaGeoEnabled: boolean;
+  jambaGeoSettings: { default_retention_days: number; default_ping_interval_min: number };
 };
 
 function pluralise(count: number, singular: string, plural: string): string {
@@ -97,6 +101,8 @@ export function SettingsContent({
   payrollConfigHistory,
   payrollEnabled,
   razorpayxCredentials,
+  jambaGeoEnabled,
+  jambaGeoSettings,
 }: SettingsContentProps) {
   const [openSection, setOpenSection] = React.useState<string | null>(null);
 
@@ -248,6 +254,22 @@ export function SettingsContent({
             activeConfig={payrollActiveConfig}
             history={payrollConfigHistory}
             razorpayxCredentials={razorpayxCredentials}
+          />
+        </CollapsibleSection>
+      )}
+
+      {jambaGeoEnabled && isAdmin && (
+        <CollapsibleSection
+          title="JambaGeo"
+          icon={<MapPin className="h-5 w-5 text-muted-foreground" />}
+          summary={jambaGeoEnabled ? "Enabled" : "Disabled"}
+          isOpen={openSection === "jambageo"}
+          onToggle={() => toggle("jambageo")}
+        >
+          <JambaGeoSection
+            enabled={jambaGeoEnabled}
+            defaultRetentionDays={jambaGeoSettings.default_retention_days}
+            defaultPingIntervalMin={jambaGeoSettings.default_ping_interval_min}
           />
         </CollapsibleSection>
       )}

@@ -21,6 +21,7 @@ import {
   Clock,
   MessageSquareWarning,
   UserPlus,
+  MapPin,
   Lock,
   MessageCircle,
   Bug,
@@ -51,6 +52,7 @@ const iconMap: Record<string, LucideIcon> = {
   Clock,
   MessageSquareWarning,
   UserPlus,
+  MapPin,
 };
 
 // Map nav href to badge key

@@ -18,6 +18,7 @@ export type UserContext = {
   attendanceEnabled: boolean;
   attendancePayrollEnabled: boolean;
   grievancesEnabled: boolean;
+  jambaGeoEnabled: boolean;
 };
 
 async function resolveClerkOrg(
@@ -76,6 +77,7 @@ export async function getCurrentUser(): Promise<UserContext | null> {
   const attendanceEnabled = !!settings?.attendance_enabled;
   const attendancePayrollEnabled = !!settings?.attendance_payroll_enabled;
   const grievancesEnabled = !!settings?.grievances_enabled;
+  const jambaGeoEnabled = !!settings?.jambageo_enabled;
 
   let { data: emp } = await supabase
     .from("employees")
@@ -127,7 +129,7 @@ export async function getCurrentUser(): Promise<UserContext | null> {
   const employeeId = empTyped ? empTyped.id : null;
   const firstName = empTyped ? empTyped.first_name : null;
 
-  return { orgId, orgName, clerkUserId: userId, role, employeeId, firstName, plan, customFeatures, jambaHireEnabled, assistantEnabled, assistantTenantDocsEnabled, attendanceEnabled, attendancePayrollEnabled, grievancesEnabled };
+  return { orgId, orgName, clerkUserId: userId, role, employeeId, firstName, plan, customFeatures, jambaHireEnabled, assistantEnabled, assistantTenantDocsEnabled, attendanceEnabled, attendancePayrollEnabled, grievancesEnabled, jambaGeoEnabled };
 }
 
 export function isAdmin(role: UserRole): boolean {

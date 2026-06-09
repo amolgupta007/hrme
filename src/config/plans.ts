@@ -16,7 +16,8 @@ export type PlanFeature =
   | "ats"
   | "interview_scheduling"
   | "offer_letters"
-  | "onboarding_workflows";
+  | "onboarding_workflows"
+  | "jambageo";
 
 export const PLAN_FEATURES: Record<OrgPlan, PlanFeature[]> = {
   starter: [],
@@ -45,6 +46,7 @@ export const PLAN_FEATURES: Record<OrgPlan, PlanFeature[]> = {
     "interview_scheduling",
     "offer_letters",
     "onboarding_workflows",
+    "jambageo",
   ],
   // Phase 3: per-org feature set read at runtime from custom_features JSONB column
   custom: [],

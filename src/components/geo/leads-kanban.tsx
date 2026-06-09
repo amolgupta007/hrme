@@ -41,6 +41,7 @@ export function LeadsKanban({ leads, canDrag }: KanbanProps) {
     const dragged = items.find((l) => l.id === draggedId);
     if (!dragged || dragged.stage === newStage) return;
 
+    const prevStage = dragged.stage;
     const prev = items;
     setItems(items.map((l) => (l.id === draggedId ? { ...l, stage: newStage } : l)));
 
@@ -48,22 +49,38 @@ export function LeadsKanban({ leads, canDrag }: KanbanProps) {
       const res = await updateLeadStage(draggedId, { stage: newStage });
       if (!res.success) {
         setItems(prev); // rollback
-        toast.error(res.error ?? "Failed to update stage");
+        // Server error wins when present (e.g. "Out of scope"). Fallback
+        // names what just happened: the card snapped back to its prior
+        // column, so the operator knows the move didn't take and where to
+        // try again.
+        toast.error(
+          res.error ??
+            `Move failed — “${dragged.name}” returned to ${stageLabel(
+              prevStage,
+            )}. Check your connection and try again.`,
+        );
       }
     });
   }
 
+  // Horizontal-scroll layout. Six stages × ~280px each = ~1700px — wider
+  // than every common laptop viewport, so we accept the scroll. Each column
+  // is snap-aligned so swipes/scrolls land cleanly on a column edge. The
+  // negative margin pulls the scroll container out to the page edge so
+  // scrollbars don't visually crop the gutter.
   return (
     <DndContext sensors={sensors} onDragEnd={onDragEnd}>
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        {LEAD_STAGES.map((stage) => (
-          <KanbanColumn
-            key={stage}
-            stage={stage}
-            leads={items.filter((l) => l.stage === stage)}
-            canDrag={canDrag}
-          />
-        ))}
+      <div className="-mx-6 overflow-x-auto px-6 pb-2 [scroll-snap-type:x_proximity]">
+        <div className="flex min-w-max gap-3">
+          {LEAD_STAGES.map((stage) => (
+            <KanbanColumn
+              key={stage}
+              stage={stage}
+              leads={items.filter((l) => l.stage === stage)}
+              canDrag={canDrag}
+            />
+          ))}
+        </div>
       </div>
     </DndContext>
   );
@@ -82,14 +99,17 @@ function KanbanColumn({
   return (
     <div
       ref={setNodeRef}
+      aria-label={`${stageLabel(stage)} column — ${leads.length} lead${leads.length === 1 ? "" : "s"}`}
       className={
-        "rounded-md bg-muted/30 p-2 min-h-[200px] " +
+        "w-[280px] shrink-0 rounded-md bg-muted/30 p-2 min-h-[200px] [scroll-snap-align:start] " +
         (isOver ? "ring-2 ring-primary" : "")
       }
     >
-      <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground px-1 mb-2 flex justify-between">
-        <span>{stageLabel(stage)}</span>
-        <span>{leads.length}</span>
+      <div className="mb-2 flex items-center justify-between px-1 text-sm">
+        <span className="font-semibold text-foreground">{stageLabel(stage)}</span>
+        <span className="tabular-nums text-xs text-muted-foreground">
+          {leads.length}
+        </span>
       </div>
       <div className="space-y-2">
         {leads.map((lead) =>

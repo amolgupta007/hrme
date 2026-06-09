@@ -148,8 +148,12 @@ export async function listLeads(
   if (filter.assigned_to === "unassigned") q = q.is("assigned_to", null);
   else if (filter.assigned_to) q = q.eq("assigned_to", filter.assigned_to);
   if (filter.search) {
-    const s = `%${filter.search}%`;
-    q = q.or(`name.ilike.${s},company.ilike.${s},contact_email.ilike.${s}`);
+    // Strip PostgREST structural chars to prevent .or() filter injection
+    const safe = filter.search.replace(/[(),%*]/g, "");
+    if (safe.length > 0) {
+      const s = `%${safe}%`;
+      q = q.or(`name.ilike.${s},company.ilike.${s},contact_email.ilike.${s}`);
+    }
   }
 
   // Scope filter
@@ -335,7 +339,14 @@ export async function updateLeadStage(
       note: parsed.data.note,
     });
     if (sys) {
-      await sb.from("lead_visits").insert(sys);
+      try {
+        const { error: insertErr } = await sb.from("lead_visits").insert(sys);
+        if (insertErr) {
+          console.warn("[jambageo] lead_visit audit insert failed", insertErr);
+        }
+      } catch (err) {
+        console.warn("[jambageo] lead_visit audit insert threw", err);
+      }
     }
   }
 
@@ -351,6 +362,10 @@ export async function assignLead(
   const ctx = await getJambaGeoContext();
   if (!ctx) return { success: false, error: "Not authorized" };
   if (!isManagerOrAbove(ctx.role)) return { success: false, error: "Manager+ only" };
+
+  // Scope-check the existing lead (manager only sees own-dept + unassigned)
+  const existing = await getLead(id);
+  if (!existing.success) return existing;
 
   const scopeErr = await assertAssigneeInScope(ctx, employee_id);
   if (scopeErr) return { success: false, error: scopeErr };

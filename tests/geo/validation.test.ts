@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { GeofenceCreateSchema } from "@/actions/geo-geofences";
+import { GeofenceCreateSchema } from "@/lib/geo/geo-schemas";
 
 describe("GeofenceCreateSchema", () => {
   const valid = {

@@ -1,17 +1,20 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
   CalendarPlus,
+  LocateFixed,
   Mail,
   MapPin,
   MessageCircle,
   Pencil,
   Phone,
   Plus,
+  ShieldPlus,
 } from "lucide-react";
 import {
   stageBadgeVariant,
@@ -21,11 +24,13 @@ import {
 } from "@/lib/geo/stages";
 import { formatPhoneForWhatsApp } from "@/lib/geo/contact";
 import { formatDate, formatRelativeDay } from "@/lib/utils";
+import { geocodeLead } from "@/actions/geo-leads";
 import { LogVisitDialog } from "./log-visit-dialog";
 import { LeadDialog } from "./lead-dialog";
 import { ScheduleFollowupDialog } from "./schedule-followup-dialog";
 import { StageStepper } from "./stage-stepper";
 import { VisitTimeline } from "./visit-timeline";
+import { AddGeofenceDialog } from "./add-geofence-dialog";
 
 interface VisitRow {
   id: string;
@@ -46,6 +51,10 @@ export interface LeadDetailProps {
     contact_phone: string | null;
     contact_email: string | null;
     address: string | null;
+    /** Latitude from server-side Mapbox geocoding (when address is set). */
+    lat: number | null;
+    /** Longitude from server-side Mapbox geocoding. */
+    lng: number | null;
     value_inr: number | null;
     source: string | null;
     stage: LeadStage;
@@ -110,6 +119,23 @@ export function LeadDetail({
   onLogVisitOpenChange,
 }: LeadDetailProps) {
   const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [geofenceDialogOpen, setGeofenceDialogOpen] = useState(false);
+  const [geocoding, startGeocodeTransition] = useTransition();
+
+  const hasCoords = lead.lat != null && lead.lng != null;
+  const canGeofence = canEdit && (hasCoords || !!lead.address);
+
+  function handleRegeocode() {
+    startGeocodeTransition(async () => {
+      const res = await geocodeLead(lead.id);
+      if (res.success) {
+        toast.success("Address geocoded — coordinates updated.");
+      } else {
+        toast.error(res.error);
+      }
+    });
+  }
+
   const wa = formatPhoneForWhatsApp(lead.contact_phone);
   const nextFollowUp = useMemo(() => findNextFollowUp(visits), [visits]);
   const mapsUrl = lead.address
@@ -259,6 +285,55 @@ export function LeadDetail({
                   {lead.address}
                 </span>
               </a>
+              {hasCoords ? (
+                <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground tabular-nums">
+                  <span>
+                    {lead.lat!.toFixed(5)}, {lead.lng!.toFixed(5)}
+                  </span>
+                  {canEdit && (
+                    <button
+                      type="button"
+                      onClick={handleRegeocode}
+                      disabled={geocoding}
+                      className="inline-flex items-center gap-1 rounded text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:opacity-60"
+                    >
+                      <LocateFixed className="h-3 w-3" aria-hidden />
+                      Re-geocode
+                    </button>
+                  )}
+                </div>
+              ) : (
+                canEdit && (
+                  <button
+                    type="button"
+                    onClick={handleRegeocode}
+                    disabled={geocoding}
+                    className="inline-flex items-center gap-1 rounded text-xs font-medium text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:opacity-60"
+                  >
+                    <LocateFixed className="h-3 w-3" aria-hidden />
+                    {geocoding ? "Geocoding…" : "Geocode address"}
+                  </button>
+                )
+              )}
+            </div>
+          )}
+
+          {/* "Create geofence here" affordance. Lives on the info card so
+              the spatial action sits next to the address + coords it acts
+              on. Disabled when there's no address or coords to anchor a
+              fence to. */}
+          {canGeofence && (
+            <div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setGeofenceDialogOpen(true)}
+                className="gap-1.5"
+              >
+                <ShieldPlus className="h-3.5 w-3.5" aria-hidden />
+                Create geofence here
+              </Button>
             </div>
           )}
 
@@ -327,6 +402,18 @@ export function LeadDetail({
         leadId={lead.id}
         leadName={lead.name}
       />
+      {canGeofence && (
+        <AddGeofenceDialog
+          open={geofenceDialogOpen}
+          onOpenChange={setGeofenceDialogOpen}
+          preset={{
+            type: "lead",
+            leadId: lead.id,
+            leadName: lead.name,
+            leadCompany: lead.company,
+          }}
+        />
+      )}
     </div>
   );
 }

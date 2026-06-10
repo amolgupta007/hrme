@@ -21,6 +21,7 @@ import {
 } from "@/lib/geo/geo-schemas";
 import { getManagerScopedEmployeeIds } from "@/lib/attendance/manager-scope";
 import { sendLeadAssignedEmail } from "@/components/emails/lead-assigned-sender";
+import { geocodeAddress } from "@/lib/geo/geocode";
 
 // ---- Row types ----
 
@@ -168,10 +169,22 @@ export async function createLead(
   const scopeErr = await assertAssigneeInScope(ctx, parsed.data.assigned_to ?? null);
   if (scopeErr) return { success: false, error: scopeErr };
 
+  // Auto-geocode: if the caller provided an address but no coordinates,
+  // attempt a Mapbox forward-geocode and persist the result alongside the
+  // lead. Best-effort — geocoder failures don't block the create.
+  const payload: z.infer<typeof LeadCreateSchema> = { ...parsed.data };
+  if (payload.address && payload.lat == null && payload.lng == null) {
+    const hit = await geocodeAddress(payload.address);
+    if (hit) {
+      payload.lat = hit.lat;
+      payload.lng = hit.lng;
+    }
+  }
+
   const sb = createAdminSupabase();
   const { data, error } = await sb
     .from("leads")
-    .insert({ ...parsed.data, org_id: ctx.orgId, created_by: ctx.employeeId })
+    .insert({ ...payload, org_id: ctx.orgId, created_by: ctx.employeeId })
     .select("*")
     .single();
   if (error) return { success: false, error: error.message };
@@ -208,10 +221,32 @@ export async function updateLead(
     if (scopeErr) return { success: false, error: scopeErr };
   }
 
+  // Auto-geocode on address change: if the patch sets a new address and
+  // doesn't explicitly override lat/lng, re-geocode. Comparing against the
+  // existing row prevents needless geocoder calls on patches that touch
+  // other fields. Best-effort — failure leaves lat/lng untouched.
+  const patchToApply: z.infer<typeof LeadUpdateSchema> = { ...parsed.data };
+  const addressChanged =
+    patchToApply.address !== undefined &&
+    patchToApply.address !== existing.data.address;
+  const coordsUntouched =
+    patchToApply.lat === undefined && patchToApply.lng === undefined;
+  if (addressChanged && coordsUntouched) {
+    const hit = await geocodeAddress(patchToApply.address);
+    if (hit) {
+      patchToApply.lat = hit.lat;
+      patchToApply.lng = hit.lng;
+    } else if (patchToApply.address === null) {
+      // Address cleared → drop coords too so we don't keep a stale pin.
+      patchToApply.lat = null;
+      patchToApply.lng = null;
+    }
+  }
+
   const sb = createAdminSupabase();
   const { data, error } = await sb
     .from("leads")
-    .update(parsed.data)
+    .update(patchToApply)
     .eq("id", id)
     .eq("org_id", ctx.orgId)
     .select("*")
@@ -219,6 +254,46 @@ export async function updateLead(
   if (error) return { success: false, error: error.message };
 
   revalidatePath("/geo/leads");
+  revalidatePath(`/geo/leads/${id}`);
+  return { success: true, data: data as LeadRow };
+}
+
+/**
+ * Manual re-geocode for a lead — used by the "Re-geocode address" link on
+ * the lead detail page when the auto-geocode silently failed (network
+ * hiccup, ambiguous address, etc.) and the admin wants to retry without
+ * editing the address.
+ */
+export async function geocodeLead(id: string): Promise<ActionResult<LeadRow>> {
+  const ctx = await getJambaGeoContext();
+  if (!ctx) return { success: false, error: "Not authorized" };
+  if (!isManagerOrAbove(ctx.role)) return { success: false, error: "Manager+ only" };
+
+  const existing = await getLead(id);
+  if (!existing.success) return existing;
+  if (!existing.data.address) {
+    return { success: false, error: "Lead has no address to geocode" };
+  }
+
+  const hit = await geocodeAddress(existing.data.address);
+  if (!hit) {
+    return {
+      success: false,
+      error:
+        "Couldn't geocode this address. Try editing it to be more specific or drop the pin manually on the geofences map.",
+    };
+  }
+
+  const sb = createAdminSupabase();
+  const { data, error } = await sb
+    .from("leads")
+    .update({ lat: hit.lat, lng: hit.lng })
+    .eq("id", id)
+    .eq("org_id", ctx.orgId)
+    .select("*")
+    .single();
+  if (error) return { success: false, error: error.message };
+
   revalidatePath(`/geo/leads/${id}`);
   return { success: true, data: data as LeadRow };
 }

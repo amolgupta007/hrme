@@ -8,17 +8,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-
-const RANGE_OPTIONS = [
-  { value: "7d", label: "Last 7 days" },
-  { value: "30d", label: "Last 30 days" },
-  { value: "quarter", label: "This quarter" },
-  { value: "all", label: "All time" },
-] as const;
-
-export type RangeKey = (typeof RANGE_OPTIONS)[number]["value"];
-
-const DEFAULT_RANGE: RangeKey = "30d";
+import {
+  DEFAULT_RANGE,
+  RANGE_OPTIONS,
+  type RangeKey,
+} from "@/lib/geo/report-range";
 
 /**
  * Time-range Select for the /geo/reports page. Updates the URL `range`
@@ -27,7 +21,9 @@ const DEFAULT_RANGE: RangeKey = "30d";
  *
  * Defaults to "Last 30 days" — long enough to see weekly cadences,
  * short enough that the funnel reflects active pipeline rather than
- * archaeological data.
+ * archaeological data. The pure helpers (RANGE_OPTIONS, resolveRangeFrom)
+ * live in src/lib/geo/report-range.ts so the server page can import
+ * them without pulling client-only hooks into its bundle.
  */
 export function ReportsRangeFilter() {
   const router = useRouter();
@@ -60,41 +56,4 @@ export function ReportsRangeFilter() {
       </SelectContent>
     </Select>
   );
-}
-
-/**
- * Resolve a range key to an ISO date string (YYYY-MM-DD) bounding the
- * lower edge of the window. Returns undefined for "all" — the action
- * should skip the filter in that case.
- *
- * Lives in the same module so the page and the filter agree on what
- * each key means.
- */
-export function resolveRangeFrom(range: string | undefined): string | undefined {
-  const key = (range as RangeKey) ?? DEFAULT_RANGE;
-  const today = new Date();
-  switch (key) {
-    case "7d": {
-      const d = new Date(today);
-      d.setDate(d.getDate() - 7);
-      return d.toISOString().slice(0, 10);
-    }
-    case "30d": {
-      const d = new Date(today);
-      d.setDate(d.getDate() - 30);
-      return d.toISOString().slice(0, 10);
-    }
-    case "quarter": {
-      const month = today.getMonth();
-      const quarterStartMonth = month - (month % 3);
-      const d = new Date(today.getFullYear(), quarterStartMonth, 1);
-      return d.toISOString().slice(0, 10);
-    }
-    case "all":
-      return undefined;
-    default:
-      // Unknown key → treat as default (30d) so a tampered URL still
-      // renders something useful instead of all-time data.
-      return resolveRangeFrom(DEFAULT_RANGE);
-  }
 }

@@ -61,7 +61,13 @@ export function LogVisitDialog({ open, onOpenChange, leadId }: Props) {
         reset();
         onOpenChange(false);
       } else {
-        toast.error(res.error ?? "Something went wrong");
+        // Same actionable vocabulary as the kanban + stepper paths:
+        // tell the operator their input is still in the form so they
+        // don't lose work to a connection blip.
+        toast.error(
+          res.error ??
+            "Couldn't save visit — your changes are still in the form. Check your connection and try again.",
+        );
       }
     });
   }

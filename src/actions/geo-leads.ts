@@ -354,3 +354,87 @@ export async function deleteLead(id: string): Promise<ActionResult<void>> {
   revalidatePath("/geo/leads");
   return { success: true, data: undefined };
 }
+
+interface SiblingSlot {
+  id: string;
+  name: string;
+}
+
+/**
+ * Resolve prev/next siblings + position for the lead detail page. Same
+ * scope semantics as listLeads (admin sees all, manager sees own dept +
+ * unassigned, employee sees own assignments only) and the same default
+ * order (updated_at DESC). Selects only id + name so the wire payload is
+ * ~50 bytes/row instead of ~500 — for orgs with 500+ leads this is ~10×
+ * cheaper than calling listLeads({}) on every detail render just to
+ * compute the position. A future window-function CTE would cut the row
+ * count to O(1); this is the no-migration path.
+ */
+export async function getLeadSiblings(
+  currentId: string,
+): Promise<
+  ActionResult<{
+    prev: SiblingSlot | null;
+    next: SiblingSlot | null;
+    position: { index: number; total: number } | null;
+  }>
+> {
+  const ctx = await getJambaGeoContext();
+  if (!ctx) return { success: false, error: "Not authorized" };
+
+  const sb = createAdminSupabase();
+  let q = sb
+    .from("leads")
+    .select("id, name")
+    .eq("org_id", ctx.orgId)
+    .order("updated_at", { ascending: false });
+
+  // Mirror the scope filter from listLeads so prev/next walks stay within
+  // what the caller is allowed to read.
+  const dept =
+    !isAdmin(ctx.role) && ctx.employeeId
+      ? await getManagerScopedEmployeeIds(ctx.orgId, ctx.employeeId)
+      : [];
+  const scope = computeLeadScope(
+    { role: ctx.role, employeeId: ctx.employeeId },
+    { dept },
+  );
+  if (scope) {
+    const parts: string[] = [];
+    if (scope.inAssignedTo.length > 0) {
+      parts.push(`assigned_to.in.(${scope.inAssignedTo.join(",")})`);
+    }
+    if (scope.includeUnassigned) {
+      parts.push(`assigned_to.is.null`);
+    }
+    if (parts.length === 0) {
+      return {
+        success: true,
+        data: { prev: null, next: null, position: null },
+      };
+    }
+    q = q.or(parts.join(","));
+  }
+
+  const { data, error } = await q;
+  if (error) return { success: false, error: error.message };
+
+  const rows = (data ?? []) as unknown as SiblingSlot[];
+  const idx = rows.findIndex((l) => l.id === currentId);
+  if (idx < 0) {
+    return {
+      success: true,
+      data: { prev: null, next: null, position: null },
+    };
+  }
+  const prev = idx > 0 ? rows[idx - 1] : null;
+  const next = idx < rows.length - 1 ? rows[idx + 1] : null;
+  return {
+    success: true,
+    data: {
+      prev,
+      next,
+      position: { index: idx + 1, total: rows.length },
+    },
+  };
+}

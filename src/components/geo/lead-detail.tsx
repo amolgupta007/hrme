@@ -1,10 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Mail, MessageCircle, Pencil, Phone, Plus } from "lucide-react";
+import {
+  CalendarPlus,
+  Mail,
+  MapPin,
+  MessageCircle,
+  Pencil,
+  Phone,
+  Plus,
+} from "lucide-react";
 import {
   stageBadgeVariant,
   stageLabel,
@@ -12,8 +20,10 @@ import {
   type LeadOutcome,
 } from "@/lib/geo/stages";
 import { formatPhoneForWhatsApp } from "@/lib/geo/contact";
+import { formatDate, formatRelativeDay } from "@/lib/utils";
 import { LogVisitDialog } from "./log-visit-dialog";
 import { LeadDialog } from "./lead-dialog";
+import { ScheduleFollowupDialog } from "./schedule-followup-dialog";
 import { StageStepper } from "./stage-stepper";
 import { VisitTimeline } from "./visit-timeline";
 
@@ -43,10 +53,48 @@ export interface LeadDetailProps {
     created_at: string;
   };
   visits: VisitRow[];
+  /**
+   * canEdit and canLogVisit are kept as distinct booleans even though they
+   * always evaluate equally today (manager+ OR assigned-to-me). Phase 2's
+   * mobile app will let a field employee log a visit on a lead without
+   * editing its details, so the split is the contract we want to preserve.
+   * Internally we collapse to a single `canAct` for terse render gates.
+   */
   canEdit: boolean;
   canLogVisit: boolean;
   /** Name resolved server-side from `lead.assigned_to`; null when unassigned. */
   assigneeName: string | null;
+  /** True when the visits server fetch failed; passed through to the timeline. */
+  visitsError?: boolean;
+  /** Controlled dialog state, owned by the LeadDetailShell so page-level
+   *  CTAs, the mobile sticky bar, and keyboard shortcuts can all open the
+   *  same dialog instance. */
+  editOpen: boolean;
+  onEditOpenChange: (open: boolean) => void;
+  logVisitOpen: boolean;
+  onLogVisitOpenChange: (open: boolean) => void;
+}
+
+interface NextFollowUp {
+  date: string;
+  employeeName: string | null;
+}
+
+/** Finds the soonest future follow-up across all logged visits. */
+function findNextFollowUp(visits: VisitRow[]): NextFollowUp | null {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  let best: { row: VisitRow; t: number } | null = null;
+  for (const v of visits) {
+    if (!v.follow_up_date) continue;
+    const d = new Date(v.follow_up_date);
+    d.setHours(0, 0, 0, 0);
+    const t = d.getTime();
+    if (t < today.getTime()) continue;
+    if (!best || t < best.t) best = { row: v, t };
+  }
+  if (!best) return null;
+  return { date: best.row.follow_up_date!, employeeName: best.row.employee_name };
 }
 
 export function LeadDetail({
@@ -55,11 +103,20 @@ export function LeadDetail({
   canEdit,
   canLogVisit,
   assigneeName,
+  visitsError,
+  editOpen,
+  onEditOpenChange,
+  logVisitOpen,
+  onLogVisitOpenChange,
 }: LeadDetailProps) {
-  const [editOpen, setEditOpen] = useState(false);
-  const [visitOpen, setVisitOpen] = useState(false);
-
+  const [scheduleOpen, setScheduleOpen] = useState(false);
   const wa = formatPhoneForWhatsApp(lead.contact_phone);
+  const nextFollowUp = useMemo(() => findNextFollowUp(visits), [visits]);
+  const mapsUrl = lead.address
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+        lead.address,
+      )}`
+    : null;
 
   return (
     <div className="grid md:grid-cols-2 gap-6">
@@ -81,10 +138,11 @@ export function LeadDetail({
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => setEditOpen(true)}
+              onClick={() => onEditOpenChange(true)}
               className="shrink-0"
+              aria-keyshortcuts="e"
             >
-              <Pencil className="h-3.5 w-3.5 mr-1" />
+              <Pencil className="h-4 w-4 mr-1" aria-hidden />
               Edit
             </Button>
           )}
@@ -93,15 +151,55 @@ export function LeadDetail({
         <CardContent className="space-y-3 text-sm">
           {/* Inline stage stepper. Keeps the operator in the detail surface
               instead of round-tripping through the kanban or the Edit
-              dialog to flip a stage. Disabled when the caller can't edit. */}
+              dialog to flip a stage. Disabled when the caller can't edit.
+              Terminal-stage capture happens inside the stepper. */}
           <div className="space-y-1">
             <div className="text-xs text-muted-foreground">Stage</div>
             <StageStepper
               leadId={lead.id}
               current={lead.stage}
               leadName={lead.name}
+              currentValueInr={lead.value_inr}
               disabled={!canEdit}
             />
+          </div>
+
+          {/* Next action row. The whole page is built around the operator's
+              foreground question — "when do I follow up?" — so we answer
+              it explicitly instead of burying the answer in the timeline. */}
+          <div className="space-y-1">
+            <div className="text-xs text-muted-foreground">Next follow-up</div>
+            {nextFollowUp ? (
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                <span className="font-medium">
+                  {formatDate(nextFollowUp.date)}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  · {formatRelativeDay(nextFollowUp.date)}
+                </span>
+                {nextFollowUp.employeeName && (
+                  <span className="text-xs text-muted-foreground">
+                    · {nextFollowUp.employeeName}
+                  </span>
+                )}
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span className="text-muted-foreground italic">
+                  No follow-up scheduled
+                </span>
+                {canLogVisit && (
+                  <button
+                    type="button"
+                    onClick={() => setScheduleOpen(true)}
+                    className="inline-flex items-center gap-1 rounded-md text-xs font-medium text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+                  >
+                    <CalendarPlus className="h-3.5 w-3.5" aria-hidden />
+                    Schedule one
+                  </button>
+                )}
+              </div>
+            )}
           </div>
 
           {lead.contact_phone && (
@@ -146,9 +244,24 @@ export function LeadDetail({
             </div>
           )}
 
-          {lead.address && (
-            <InfoRow label="Address" value={lead.address} />
+          {lead.address && mapsUrl && (
+            <div className="space-y-1">
+              <div className="text-xs text-muted-foreground">Address</div>
+              <a
+                href={mapsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-start gap-1.5 text-foreground hover:text-primary"
+                aria-label={`Open address for ${lead.name} in Google Maps`}
+              >
+                <MapPin className="h-3.5 w-3.5 mt-0.5 shrink-0" aria-hidden />
+                <span className="underline-offset-2 hover:underline">
+                  {lead.address}
+                </span>
+              </a>
+            </div>
           )}
+
           {/* Hide ₹0 to match the card and list (unset is the default). */}
           {lead.value_inr !== null && lead.value_inr > 0 && (
             <InfoRow
@@ -156,9 +269,7 @@ export function LeadDetail({
               value={`₹${lead.value_inr.toLocaleString("en-IN")}`}
             />
           )}
-          {lead.source && (
-            <InfoRow label="Source" value={lead.source} />
-          )}
+          {lead.source && <InfoRow label="Source" value={lead.source} />}
           <div className="space-y-1">
             <div className="text-xs text-muted-foreground">Assigned to</div>
             <div>
@@ -183,28 +294,38 @@ export function LeadDetail({
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
           <CardTitle className="text-lg">Visit timeline</CardTitle>
           {canLogVisit && (
-            <Button size="sm" onClick={() => setVisitOpen(true)}>
-              <Plus className="h-4 w-4 mr-1" />
+            <Button
+              size="sm"
+              onClick={() => onLogVisitOpenChange(true)}
+              aria-keyshortcuts="v"
+            >
+              <Plus className="h-4 w-4 mr-1" aria-hidden />
               Log visit
             </Button>
           )}
         </CardHeader>
         <CardContent>
-          <VisitTimeline visits={visits} />
+          <VisitTimeline visits={visits} error={visitsError} />
         </CardContent>
       </Card>
 
       {/* Dialogs */}
       <LeadDialog
         open={editOpen}
-        onOpenChange={setEditOpen}
+        onOpenChange={onEditOpenChange}
         mode="edit"
         lead={lead}
       />
       <LogVisitDialog
-        open={visitOpen}
-        onOpenChange={setVisitOpen}
+        open={logVisitOpen}
+        onOpenChange={onLogVisitOpenChange}
         leadId={lead.id}
+      />
+      <ScheduleFollowupDialog
+        open={scheduleOpen}
+        onOpenChange={setScheduleOpen}
+        leadId={lead.id}
+        leadName={lead.name}
       />
     </div>
   );

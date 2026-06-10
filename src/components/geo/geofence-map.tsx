@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Map, { Source, Layer, NavigationControl, type MapRef } from "react-map-gl/mapbox";
 import MapboxDraw from "@mapbox/mapbox-gl-draw";
+import { MapPin } from "lucide-react";
 import "mapbox-gl/dist/mapbox-gl.css";
 import "@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css";
 import { getMapboxToken, DEFAULT_INDIA_VIEWPORT, MAPBOX_STYLE } from "@/lib/mapbox";
@@ -56,10 +57,16 @@ export default function GeofenceMap(props: GeofenceMapProps) {
     }
   });
 
-  // Wire up the draw control (point drop → pending-create) when canEdit is true.
-  // We recreate it if canEdit changes, but in practice canEdit is stable per page load.
+  // Mapbox initializes its map instance asynchronously. addControl() before
+  // the `load` event fires silently no-ops, which is exactly the bug we were
+  // seeing — the draw control never appeared. Gate the wire-up on this
+  // state flag, which onLoad below flips true.
+  const [mapReady, setMapReady] = useState(false);
+
+  // Wire up the draw control (point drop → pending-create) when canEdit is
+  // true AND the underlying Mapbox map has fired its `load` event.
   useEffect(() => {
-    if (!props.canEdit || !mapRef.current) return;
+    if (!props.canEdit || !mapReady || !mapRef.current) return;
     const map = mapRef.current.getMap();
 
     const draw = new MapboxDraw({
@@ -92,7 +99,15 @@ export default function GeofenceMap(props: GeofenceMapProps) {
   // time so it always reads the latest closure. Re-mounting the draw control on every
   // onCreate change would cause flicker.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.canEdit]);
+  }, [props.canEdit, mapReady]);
+
+  // Imperative trigger for the visible "Drop pin" overlay button. We activate
+  // the same `draw_point` mode that the small top-right icon would, so the
+  // user gets a discoverable affordance without having to find the Mapbox
+  // built-in icon (which has been confusing for first-time admins).
+  function activateDrawPoint() {
+    drawRef.current?.changeMode("draw_point");
+  }
 
   if (!token) {
     return (
@@ -127,12 +142,15 @@ export default function GeofenceMap(props: GeofenceMapProps) {
   };
 
   return (
-    <div style={{ height: 500, width: "100%", borderRadius: 8, overflow: "hidden" }}>
+    <div
+      style={{ position: "relative", height: 500, width: "100%", borderRadius: 8, overflow: "hidden" }}
+    >
       <Map
         ref={mapRef}
         mapboxAccessToken={token}
         initialViewState={DEFAULT_INDIA_VIEWPORT}
         mapStyle={MAPBOX_STYLE}
+        onLoad={() => setMapReady(true)}
         onClick={(e) => {
           // Hit-test by haversine distance to centre (circle, not rendered polygon boundary)
           const { lat, lng } = e.lngLat;
@@ -177,6 +195,23 @@ export default function GeofenceMap(props: GeofenceMapProps) {
           />
         </Source>
       </Map>
+
+      {/* Discoverable "Drop pin" overlay button — the Mapbox built-in
+          point-tool icon at top-right is too easy to miss for first-time
+          admins. This activates the same `draw_point` mode but is visible
+          and labeled. Bottom-right so it doesn't collide with the
+          NavigationControl top-left or the Mapbox draw icons top-right. */}
+      {props.canEdit && mapReady && (
+        <button
+          type="button"
+          onClick={activateDrawPoint}
+          className="absolute bottom-3 right-3 z-10 inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground shadow-md hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+          aria-label="Drop a pin to create a new geofence"
+        >
+          <MapPin className="h-3.5 w-3.5" aria-hidden />
+          Drop pin
+        </button>
+      )}
     </div>
   );
 }

@@ -118,7 +118,7 @@ export function GeoHeader({ isManagerOrAbove, orgName }: GeoHeaderProps) {
       {/* Mobile nav — scrollable row directly under the brand bar */}
       <nav
         aria-label="JambaGeo sections"
-        className="-mt-1 flex items-center gap-1 overflow-x-auto px-6 pb-2 md:hidden"
+        className="-mt-1 flex items-center gap-1 overflow-x-auto scroll-thin px-6 pb-2 md:hidden"
       >
         {items.map((item) => {
           const active = isActive(pathname, item.href);

@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import {
   BarChart,
   Bar,
@@ -11,21 +12,40 @@ import {
 } from "recharts";
 import { stageLabel } from "@/lib/geo/stages";
 import type { LeadStage } from "@/lib/geo/stages";
-
-const STAGE_COLORS: Record<string, string> = {
-  new: "#94a3b8",
-  contacted: "#60a5fa",
-  visited: "#a78bfa",
-  negotiation: "#f59e0b",
-  converted: "#10b981",
-  lost: "#ef4444",
-};
+import { resolveAllStageColors } from "@/lib/geo/stage-colors";
 
 interface FunnelChartProps {
   data: { stage: LeadStage; count: number }[];
 }
 
+/**
+ * Funnel by stage. Bar fills resolve at mount from the design tokens
+ * (--success / --destructive / --warning / --primary / --muted-foreground)
+ * so the chart speaks the same color vocabulary as the stage chips on
+ * the rest of the module — one green for Converted, one amber for
+ * Negotiation, one red for Lost. A MutationObserver on the <html> class
+ * keeps colors tracking if the user toggles dark mode.
+ *
+ * Pre-mount the bars render with transparent fill (resolveAllStageColors
+ * returns "transparent" when window is undefined), so the SSR pass is a
+ * one-frame empty bar; useEffect populates immediately on hydration.
+ * Acceptable since the page wrapper paints first and the chart is a
+ * secondary surface, not the page hero.
+ */
 export function FunnelChart({ data }: FunnelChartProps) {
+  const [colors, setColors] = useState<Record<LeadStage, string> | null>(null);
+
+  useEffect(() => {
+    const resolve = () => setColors(resolveAllStageColors());
+    resolve();
+    const observer = new MutationObserver(resolve);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+    return () => observer.disconnect();
+  }, []);
+
   const total = data.reduce((s, d) => s + d.count, 0);
 
   if (total === 0) {
@@ -50,7 +70,10 @@ export function FunnelChart({ data }: FunnelChartProps) {
           <Tooltip />
           <Bar dataKey="count" radius={[4, 4, 0, 0]}>
             {data.map((d, i) => (
-              <Cell key={i} fill={STAGE_COLORS[d.stage] ?? "#64748b"} />
+              <Cell
+                key={i}
+                fill={colors?.[d.stage] ?? "transparent"}
+              />
             ))}
           </Bar>
         </BarChart>

@@ -1,7 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { requireJambaGeoAccess } from "@/lib/jambageo-access";
 import { getMyAssignedLeads } from "@/actions/geo-reports";
-import { stageLabel } from "@/lib/geo/stages";
+import { stageBadgeVariant, stageLabel } from "@/lib/geo/stages";
 import { GeoPageHeader } from "@/components/geo/geo-page-header";
 import Link from "next/link";
 import { formatDate } from "@/lib/utils";
@@ -44,7 +44,12 @@ export default async function MyLeadsPage() {
                 )}
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                <Badge variant="secondary">{stageLabel(l.stage)}</Badge>
+                <Badge
+                  variant={stageBadgeVariant(l.stage)}
+                  aria-label={`Stage: ${stageLabel(l.stage)}`}
+                >
+                  {stageLabel(l.stage)}
+                </Badge>
                 <span className="text-xs text-muted-foreground whitespace-nowrap tabular-nums">
                   {formatDate(l.updated_at)}
                 </span>

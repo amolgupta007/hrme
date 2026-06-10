@@ -68,9 +68,16 @@ export function LeadsKanban({ leads, canDrag }: KanbanProps) {
   // is snap-aligned so swipes/scrolls land cleanly on a column edge. The
   // negative margin pulls the scroll container out to the page edge so
   // scrollbars don't visually crop the gutter.
+  //
+  // .scroll-thin replaces the chunky OS scrollbar with a 6px muted thumb,
+  // and the edge-fade mask hints "more columns this way" so the affordance
+  // survives the slimmer bar. Persistent fades (not scroll-position-aware)
+  // — simpler and ~95% as effective.
   return (
     <DndContext sensors={sensors} onDragEnd={onDragEnd}>
-      <div className="-mx-6 overflow-x-auto px-6 pb-2 [scroll-snap-type:x_proximity]">
+      <div
+        className="-mx-6 overflow-x-auto scroll-thin px-6 pb-2 [scroll-snap-type:x_proximity] [mask-image:linear-gradient(to_right,transparent_0,black_24px,black_calc(100%-24px),transparent_100%)]"
+      >
         <div className="flex min-w-max gap-3">
           {LEAD_STAGES.map((stage) => (
             <KanbanColumn

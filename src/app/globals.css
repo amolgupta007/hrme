@@ -123,6 +123,25 @@
   .stagger-3 { animation-delay: 0.15s; }
   .stagger-4 { animation-delay: 0.2s; }
   .stagger-5 { animation-delay: 0.25s; }
+
+  /* Thin, brand-aligned scrollbar for intentional scroll containers
+   * (kanban row, mobile section nav, etc.). Replaces the chunky OS
+   * default (~16px on Windows) with a 6px muted-foreground thumb that
+   * doesn't read as page chrome. The default body/page scrollbar is
+   * intentionally left untouched — the OS bar is correct for the page. */
+  .scroll-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.3) transparent;
+  }
+  .scroll-thin::-webkit-scrollbar { height: 6px; width: 6px; }
+  .scroll-thin::-webkit-scrollbar-track { background: transparent; }
+  .scroll-thin::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.3);
+    border-radius: 3px;
+  }
+  .scroll-thin::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.5);
+  }
 }
 
 /* Blog post table styles */

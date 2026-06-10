@@ -57,9 +57,10 @@ export default async function GeofencesPage() {
               lead&apos;s stored coordinates (or geocodes its address on demand).
             </li>
             <li>
-              <strong className="text-foreground">Drop a pin on the map</strong> — use
-              the point tool (top-right of the map) to mark a location, then name it
-              in the sidebar.
+              <strong className="text-foreground">Drop a pin on the map</strong> —
+              click the &ldquo;Drop pin&rdquo; button at the bottom-right of the
+              map, then click anywhere on the map to place the pin and name it in
+              the sidebar.
             </li>
           </ul>
         </div>

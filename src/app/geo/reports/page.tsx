@@ -6,14 +6,26 @@ import { getLeadFunnel, getOverdueFollowUps } from "@/actions/geo-reports";
 import { FunnelChart } from "@/components/geo/funnel-chart";
 import { OverdueFollowUps } from "@/components/geo/overdue-followups";
 import { GeoPageHeader } from "@/components/geo/geo-page-header";
+import {
+  ReportsRangeFilter,
+  resolveRangeFrom,
+} from "@/components/geo/reports-range-filter";
 
-export default async function ReportsPage() {
+interface Props {
+  searchParams: { range?: string };
+}
+
+export default async function ReportsPage({ searchParams }: Props) {
   const ctx = await requireJambaGeoAccess();
   if (!isManagerOrAbove(ctx.role)) redirect("/geo/leads");
 
+  // Resolve the active range once and feed both actions. URL-driven so the
+  // current filter is shareable + survives reload.
+  const from = resolveRangeFrom(searchParams.range);
+
   const [funnelResult, overdueResult] = await Promise.all([
-    getLeadFunnel(),
-    getOverdueFollowUps(),
+    getLeadFunnel(from ? { from } : {}),
+    getOverdueFollowUps(from ? { from } : {}),
   ]);
 
   return (
@@ -21,6 +33,7 @@ export default async function ReportsPage() {
       <GeoPageHeader
         title="Reports"
         lede="Pipeline health at a glance. Funnel by stage and the overdue follow-ups worth chasing this week."
+        rightSlot={<ReportsRangeFilter />}
       />
 
       <div className="grid md:grid-cols-2 gap-6">

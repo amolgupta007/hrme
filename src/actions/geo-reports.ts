@@ -54,7 +54,9 @@ export async function getLeadFunnel(
   };
 }
 
-export async function getOverdueFollowUps(): Promise<
+export async function getOverdueFollowUps(
+  filter: { from?: string } = {},
+): Promise<
   ActionResult<{
     lead_id: string;
     lead_name: string;
@@ -68,7 +70,7 @@ export async function getOverdueFollowUps(): Promise<
 
   const today = new Date().toISOString().slice(0, 10);
   const sb = createAdminSupabase();
-  const { data, error } = await sb
+  let q = sb
     .from("lead_visits")
     .select(
       "follow_up_date, lead:leads!lead_visits_lead_id_fkey(id, name, assigned_to, assignee:employees!leads_assigned_to_fkey(first_name, last_name))",
@@ -80,6 +82,11 @@ export async function getOverdueFollowUps(): Promise<
     // Safety cap on unfiltered fetch; reports page renders the result as a list
     // so 500 is well past any practical admin-view size.
     .limit(500);
+  // Time-range filter: lower-bound follow_up_date when caller supplies it.
+  // Pairs with the Reports page's range Select ("Last 7 days" → 7d ago, etc).
+  if (filter.from) q = q.gte("follow_up_date", filter.from);
+
+  const { data, error } = await q;
 
   if (error) return { success: false, error: error.message };
 
@@ -122,7 +129,12 @@ export async function getOverdueFollowUps(): Promise<
 }
 
 export async function getMyAssignedLeads(): Promise<ActionResult<{
-  id: string; name: string; company: string | null; stage: LeadStage; updated_at: string;
+  id: string;
+  name: string;
+  company: string | null;
+  contact_phone: string | null;
+  stage: LeadStage;
+  updated_at: string;
 }[]>> {
   const ctx = await getJambaGeoContext();
   if (!ctx) return { success: false, error: "Not authorized" };
@@ -131,7 +143,7 @@ export async function getMyAssignedLeads(): Promise<ActionResult<{
   const sb = createAdminSupabase();
   const { data, error } = await sb
     .from("leads")
-    .select("id, name, company, stage, updated_at")
+    .select("id, name, company, contact_phone, stage, updated_at")
     .eq("org_id", ctx.orgId)
     .eq("assigned_to", ctx.employeeId)
     .order("updated_at", { ascending: false });

@@ -1,3 +1,4 @@
+import { Phone } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { requireJambaGeoAccess } from "@/lib/jambageo-access";
 import { getMyAssignedLeads } from "@/actions/geo-reports";
@@ -32,7 +33,7 @@ export default async function MyLeadsPage() {
             >
               <div className="min-w-0">
                 <Link
-                  href={`/geo/leads/${l.id}`}
+                  href={`/geo/leads/${l.id}?from=my-leads`}
                   className="font-medium hover:underline"
                 >
                   {l.name}
@@ -41,6 +42,16 @@ export default async function MyLeadsPage() {
                   <div className="text-xs text-muted-foreground truncate">
                     {l.company}
                   </div>
+                )}
+                {l.contact_phone && (
+                  <a
+                    href={`tel:${l.contact_phone}`}
+                    className="mt-0.5 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                    aria-label={`Call ${l.name} at ${l.contact_phone}`}
+                  >
+                    <Phone className="h-3 w-3" aria-hidden />
+                    {l.contact_phone}
+                  </a>
                 )}
               </div>
               <div className="flex items-center gap-2 shrink-0">

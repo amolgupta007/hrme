@@ -1,8 +1,16 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowLeft, MapPin } from "lucide-react";
+import { ArrowLeft, MapPin, Menu } from "lucide-react";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 
 interface GeoHeaderProps {
@@ -44,9 +52,65 @@ export function GeoHeader({ isManagerOrAbove, orgName }: GeoHeaderProps) {
   const pathname = usePathname();
   const items = buildNavItems(isManagerOrAbove).filter((i) => i.show);
 
+  // Mobile sheet open/close state. Closes whenever the active route changes
+  // so tapping a nav item navigates AND dismisses the sheet in one motion.
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [pathname]);
+
   return (
     <header className="sticky top-0 z-40 border-b border-slate-800 bg-slate-900 text-slate-100">
       <div className="mx-auto flex h-14 max-w-7xl items-center gap-6 px-6">
+        {/* Mobile hamburger — opens a left-side Sheet listing all sections.
+            Replaces the scrollable chip row from earlier passes, which forced
+            2-of-5 chips off-screen on narrow phones. */}
+        <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
+          <SheetTrigger asChild>
+            <button
+              type="button"
+              aria-label="Open JambaGeo sections"
+              className={cn(
+                "-ml-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-slate-300 transition-colors hover:bg-slate-800 hover:text-white md:hidden",
+                focusRing,
+              )}
+            >
+              <Menu className="h-5 w-5" aria-hidden />
+            </button>
+          </SheetTrigger>
+          <SheetContent
+            side="left"
+            className="w-72 border-r-slate-800 bg-slate-900 text-slate-100 p-0"
+          >
+            <SheetHeader className="border-b border-slate-800 px-5 py-4 text-left">
+              <SheetTitle className="text-base font-semibold text-slate-100">
+                JambaGeo
+              </SheetTitle>
+            </SheetHeader>
+            <nav aria-label="JambaGeo sections" className="flex flex-col p-2">
+              {items.map((item) => {
+                const active = isActive(pathname, item.href);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    aria-current={active ? "page" : undefined}
+                    className={cn(
+                      "rounded-md px-3 py-2.5 text-sm font-medium transition-colors",
+                      focusRing,
+                      active
+                        ? "bg-slate-800 text-white"
+                        : "text-slate-300 hover:bg-slate-800 hover:text-white",
+                    )}
+                  >
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </nav>
+          </SheetContent>
+        </Sheet>
+
         {/* Brand */}
         <Link
           href="/geo/leads"
@@ -114,32 +178,6 @@ export function GeoHeader({ isManagerOrAbove, orgName }: GeoHeaderProps) {
           </Link>
         </div>
       </div>
-
-      {/* Mobile nav — scrollable row directly under the brand bar */}
-      <nav
-        aria-label="JambaGeo sections"
-        className="-mt-1 flex items-center gap-1 overflow-x-auto scroll-thin px-6 pb-2 md:hidden"
-      >
-        {items.map((item) => {
-          const active = isActive(pathname, item.href);
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              aria-current={active ? "page" : undefined}
-              className={cn(
-                "shrink-0 rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
-                focusRing,
-                active
-                  ? "bg-slate-800 text-white"
-                  : "text-slate-300 hover:bg-slate-800",
-              )}
-            >
-              {item.label}
-            </Link>
-          );
-        })}
-      </nav>
     </header>
   );
 }

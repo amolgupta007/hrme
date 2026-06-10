@@ -17,7 +17,8 @@ export function OverdueFollowUps({ rows }: OverdueFollowUpsProps) {
   if (rows.length === 0) {
     return (
       <p className="text-sm text-muted-foreground py-4">
-        No overdue follow-ups. 🎉
+        No overdue follow-ups. Leads with a follow-up date in the past
+        will appear here when one slips.
       </p>
     );
   }

@@ -377,6 +377,27 @@ export const ROUTE_REGISTRY = {
     required_role: "manager",
     required_plan: "business",
   },
+  geo_close_lead: {
+    path: "/geo/leads/[id]",
+    label: "Mark a lead as Converted or Lost",
+    description: "Capture closing context (final value or loss reason) when a lead exits the funnel via the stage dropdown or a kanban drag.",
+    required_role: "employee",
+    required_plan: "business",
+  },
+  geo_next_followup: {
+    path: "/geo/leads/[id]",
+    label: "Schedule the next follow-up",
+    description: "See or schedule a lead's next follow-up without logging a full visit. Surfaces on the lead detail page's info card.",
+    required_role: "employee",
+    required_plan: "business",
+  },
+  geo_keyboard_shortcuts: {
+    path: "/geo/leads/[id]",
+    label: "Lead detail keyboard shortcuts",
+    description: "j/k walks siblings, e edits, v logs a visit, Esc goes back, ? shows the overlay. Shortcuts pause while typing in a field.",
+    required_role: "employee",
+    required_plan: "business",
+  },
 
   // Settings + billing
   upgrade_plan: {

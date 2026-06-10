@@ -1,9 +1,8 @@
 import { notFound } from "next/navigation";
 import { requireJambaGeoAccess } from "@/lib/jambageo-access";
-import { getLead, listLeads } from "@/actions/geo-leads";
+import { getLead, getLeadSiblings } from "@/actions/geo-leads";
 import { listLeadVisits } from "@/actions/geo-visits";
-import { LeadDetail } from "@/components/geo/lead-detail";
-import { LeadPageNav } from "@/components/geo/lead-page-nav";
+import { LeadDetailShell } from "@/components/geo/lead-detail-shell";
 import { isManagerOrAbove } from "@/lib/current-user";
 import { createAdminSupabase } from "@/lib/supabase/server";
 
@@ -17,42 +16,20 @@ export default async function LeadDetailPage({ params }: Props) {
   const leadRes = await getLead(params.id);
   if (!leadRes.success) notFound();
 
-  const [visitsRes, siblingsRes] = await Promise.all([
+  // Three parallel fetches: the visit history, the prev/next siblings
+  // (id+name only via getLeadSiblings — ~10× cheaper than listLeads({})
+  // for orgs with 500+ leads), and the assignee name resolution.
+  const [visitsRes, siblingsRes, assigneeName] = await Promise.all([
     listLeadVisits(params.id),
-    // Same default order as the kanban / list view (updated_at DESC). Scope is
-    // applied by listLeads server-side — admin sees all, manager sees own dept
-    // + unassigned, employee sees own assignments only. So the prev/next walk
-    // stays inside what the caller is allowed to read.
-    listLeads({}),
+    getLeadSiblings(params.id),
+    resolveAssigneeName(leadRes.data.assigned_to),
   ]);
+
   const visits = visitsRes.success ? visitsRes.data : [];
-  const siblings = siblingsRes.success ? siblingsRes.data : [];
-
-  // Resolve assignee name for the detail panel. `getLead` returns the
-  // foreign-key id only, so we do one targeted lookup here rather than
-  // widening the action surface (the kanban/list use a JOIN via `listLeads`,
-  // but the detail page hits `getLead` for the scope check it needs).
-  let assigneeName: string | null = null;
-  if (leadRes.data.assigned_to) {
-    const sb = createAdminSupabase();
-    const { data: emp } = await sb
-      .from("employees")
-      .select("first_name,last_name")
-      .eq("id", leadRes.data.assigned_to)
-      .maybeSingle();
-    if (emp) {
-      const composed = `${emp.first_name ?? ""} ${emp.last_name ?? ""}`.trim();
-      assigneeName = composed.length > 0 ? composed : null;
-    }
-  }
-
-  const idx = siblings.findIndex((l) => l.id === params.id);
-  const prev = idx > 0 ? { id: siblings[idx - 1].id, name: siblings[idx - 1].name } : null;
-  const next =
-    idx >= 0 && idx < siblings.length - 1
-      ? { id: siblings[idx + 1].id, name: siblings[idx + 1].name }
-      : null;
-  const position = idx >= 0 ? { index: idx + 1, total: siblings.length } : undefined;
+  const visitsError = !visitsRes.success;
+  const siblings = siblingsRes.success
+    ? siblingsRes.data
+    : { prev: null, next: null, position: null };
 
   // Manager+ can always edit/log; employees can only if assigned to them.
   const canEdit =
@@ -77,15 +54,33 @@ export default async function LeadDetailPage({ params }: Props) {
         )}
       </header>
 
-      <LeadPageNav prev={prev} next={next} position={position} />
-
-      <LeadDetail
+      <LeadDetailShell
         lead={leadRes.data}
         visits={visits as any}
         canEdit={canEdit}
         canLogVisit={canLogVisit}
         assigneeName={assigneeName}
+        visitsError={visitsError}
+        prev={siblings.prev}
+        next={siblings.next}
+        position={siblings.position ?? undefined}
       />
     </>
   );
+}
+
+/** Single targeted Supabase lookup for the assignee's display name. */
+async function resolveAssigneeName(
+  assignedTo: string | null,
+): Promise<string | null> {
+  if (!assignedTo) return null;
+  const sb = createAdminSupabase();
+  const { data: emp } = await sb
+    .from("employees")
+    .select("first_name,last_name")
+    .eq("id", assignedTo)
+    .maybeSingle();
+  if (!emp) return null;
+  const composed = `${emp.first_name ?? ""} ${emp.last_name ?? ""}`.trim();
+  return composed.length > 0 ? composed : null;
 }

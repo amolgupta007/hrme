@@ -8,7 +8,7 @@ import { GeoPageHeader } from "@/components/geo/geo-page-header";
 const LiveMap = dynamic(() => import("@/components/geo/live-map"), {
   ssr: false,
   loading: () => (
-    <div className="h-[600px] bg-muted/30 rounded animate-pulse" />
+    <div className="min-h-[400px] h-[60vh] max-h-[600px] bg-muted/30 rounded animate-pulse" />
   ),
 });
 

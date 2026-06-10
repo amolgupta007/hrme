@@ -82,7 +82,7 @@ export default function LiveMap() {
   );
 
   return (
-    <div style={{ height: 600, width: "100%", borderRadius: 8, overflow: "hidden" }}>
+    <div className="min-h-[400px] h-[60vh] max-h-[600px] w-full overflow-hidden rounded-lg">
       <Map
         mapboxAccessToken={token}
         initialViewState={DEFAULT_INDIA_VIEWPORT}

@@ -9,7 +9,7 @@ import { GeofenceList, type GeofenceListProps } from "@/components/geo/geofence-
 const GeofenceMap = dynamic(() => import("@/components/geo/geofence-map"), {
   ssr: false,
   loading: () => (
-    <div className="h-[500px] w-full rounded-lg bg-muted/30 animate-pulse" />
+    <div className="min-h-[400px] h-[60vh] max-h-[600px] w-full rounded-lg bg-muted/30 animate-pulse" />
   ),
 });
 

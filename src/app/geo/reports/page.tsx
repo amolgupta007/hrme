@@ -6,10 +6,8 @@ import { getLeadFunnel, getOverdueFollowUps } from "@/actions/geo-reports";
 import { FunnelChart } from "@/components/geo/funnel-chart";
 import { OverdueFollowUps } from "@/components/geo/overdue-followups";
 import { GeoPageHeader } from "@/components/geo/geo-page-header";
-import {
-  ReportsRangeFilter,
-  resolveRangeFrom,
-} from "@/components/geo/reports-range-filter";
+import { ReportsRangeFilter } from "@/components/geo/reports-range-filter";
+import { resolveRangeFrom } from "@/lib/geo/report-range";
 
 interface Props {
   searchParams: { range?: string };

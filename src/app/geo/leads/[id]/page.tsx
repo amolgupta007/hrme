@@ -3,6 +3,7 @@ import { requireJambaGeoAccess } from "@/lib/jambageo-access";
 import { getLead, getLeadSiblings } from "@/actions/geo-leads";
 import { listLeadVisits } from "@/actions/geo-visits";
 import { LeadDetailShell } from "@/components/geo/lead-detail-shell";
+import { GeoPageHeader } from "@/components/geo/geo-page-header";
 import { isManagerOrAbove } from "@/lib/current-user";
 import { createAdminSupabase } from "@/lib/supabase/server";
 
@@ -41,18 +42,11 @@ export default async function LeadDetailPage({ params }: Props) {
     <>
       {/* Page identity comes first so it scrolls away on long detail pages
           and the sticky LeadPageNav below takes its place as the persistent
-          context. Previously the lead name lived inside a <CardTitle>
-          (h3-ish), which left the document outline without a real h1. */}
-      <header className="mb-4">
-        <h1 className="text-2xl font-semibold tracking-tight text-balance">
-          {leadRes.data.name}
-        </h1>
-        {leadRes.data.company && (
-          <p className="mt-0.5 text-sm text-muted-foreground">
-            {leadRes.data.company}
-          </p>
-        )}
-      </header>
+          context. */}
+      <GeoPageHeader
+        title={leadRes.data.name}
+        lede={leadRes.data.company ?? undefined}
+      />
 
       <LeadDetailShell
         lead={leadRes.data}

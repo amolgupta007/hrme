@@ -41,19 +41,36 @@ export default function LiveMap() {
 
   useEffect(() => {
     let active = true;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let failureCount = 0;
+
+    // Exponential backoff on consecutive failures so a server outage
+    // doesn't hammer at 30s intervals. Base 30s; doubles on each failure
+    // (60s, 120s, 240s, ...) capped at 5min. Resets on the next success.
+    const BASE_INTERVAL_MS = 30_000;
+    const MAX_INTERVAL_MS = 5 * 60 * 1000;
 
     async function poll() {
       const res = await listActiveSessions();
       if (!active) return;
-      if (res.success) setSessions(res.data);
+      if (res.success) {
+        setSessions(res.data);
+        failureCount = 0;
+      } else {
+        failureCount += 1;
+      }
       setLoading(false);
+      const delay = Math.min(
+        BASE_INTERVAL_MS * Math.pow(2, failureCount),
+        MAX_INTERVAL_MS,
+      );
+      timer = setTimeout(poll, delay);
     }
 
     poll();
-    const id = setInterval(poll, 30_000);
     return () => {
       active = false;
-      clearInterval(id);
+      if (timer) clearTimeout(timer);
     };
   }, []);
 

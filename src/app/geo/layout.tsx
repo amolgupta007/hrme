@@ -42,11 +42,27 @@ export default async function GeoLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="min-h-screen bg-white dark:bg-zinc-950">
+      {/* Skip-to-content for keyboard users. sr-only by default; appears
+          as a focused chip at top-left when Tab lands on it from the URL
+          bar. Targets the <main> below, which carries the matching id
+          and tabIndex so focus actually moves on activation. */}
+      <a
+        href="#geo-main"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-[60] focus:rounded-md focus:bg-amber-500 focus:px-3 focus:py-1.5 focus:text-sm focus:font-medium focus:text-slate-900 focus:shadow-lg focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-2 focus:ring-offset-slate-900"
+      >
+        Skip to content
+      </a>
       <GeoHeader
         isManagerOrAbove={isManagerOrAbove(user.role)}
         orgName={org?.name ?? undefined}
       />
-      <main className="mx-auto max-w-7xl px-6 py-8">{children}</main>
+      <main
+        id="geo-main"
+        tabIndex={-1}
+        className="mx-auto max-w-7xl px-6 py-8 focus:outline-none"
+      >
+        {children}
+      </main>
       <AssistantLauncher enabled={assistantEnabled} role={user.role} />
     </div>
   );

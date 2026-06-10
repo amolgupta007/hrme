@@ -42,7 +42,7 @@ export default async function LiveMapPage() {
             <h2 className="text-sm font-semibold text-foreground">
               Consent-first tracking
             </h2>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-foreground/80">
               Field staff location data is collected only on opt-in via the
               JambaGeo mobile app. Web admins cannot enable tracking on a
               staff member&apos;s behalf — the contract lives on the device.

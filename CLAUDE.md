@@ -586,6 +586,28 @@ Feature-flagged via `organizations.settings.jambageo_enabled`. Lightweight lead 
   `hasFeature(plan, 'jambageo')` (Business only) AND
   `organizations.settings.jambageo_enabled = true`.
 
+### Phase 1.x — Module critique passes + geocoding (shipped 2026-06-10)
+
+Six-pass `$impeccable critique /geo` plus a geocoding feature wave. Module-level total projected ~37/40 ("Excellent").
+
+- **Shared chrome**: `src/components/geo/geo-page-header.tsx` (h1 + lede + optional rightSlot) used by every `/geo/*` page. Single source of truth for the typographic scale and spacing rhythm.
+- **Lead detail destination pattern**: `<LeadDetailShell>` hosts dialog state for Edit / LogVisit / Schedule-followup / Terminal-stage / AddGeofence — every entry point (card buttons, page-level CTA, mobile sticky bar, keyboard shortcuts) opens the same dialog instance. `<LeadPageNav>` is `md:sticky md:top-14` and reads `?from=` to swap the back-target (`reports` → "Back to Reports", `my-leads` → "Back to My Leads"). `<StageStepper>` for inline stage flip with terminal-stage capture (`<TerminalStageDialog>`). `<LeadMobileActions>` for sticky-bottom Log-visit/Call/WhatsApp CTAs (`md:hidden`). `<LeadShortcuts>` for `j/k/e/v/Esc/?` keyboard bindings with input-focus guard.
+- **Stage color vocabulary**: `src/lib/geo/stage-colors.ts` resolves stages → CSS vars at runtime (`getComputedStyle` on `--success`/`--destructive`/`--warning`/`--primary`/`--muted-foreground`). FunnelChart reads from it via `MutationObserver` on `<html>` class so dark-mode toggles re-color. Chip variants use `stageBadgeVariant()` from `src/lib/geo/stages.ts`. Single source — do not hardcode hex anywhere new.
+- **Mapbox geocoding**: `src/lib/geo/geocode.ts::geocodeAddress(addr)` is the IN-biased forward geocoder (`country=IN` + India-centered proximity, 5s timeout, returns null on failure). Auto-fires in `createLead` / `updateLead` when address is set and `lat`/`lng` aren't explicitly provided. `geocodeLead(id)` is the manual re-geocode for the detail-page link. `geocodeGeofenceAddress` is the admin-only endpoint for the geofence dialog's Find button. See gotcha #81.
+- **Geofence creation — 3 paths** all converge on `createGeofence` or `createGeofenceFromLead`:
+  1. **From address** — `<AddGeofenceButton>` → `<AddGeofenceDialog preset={{ type: "address" }}>` → type → Find → preview place_name + coords → name/type/radius → Save
+  2. **From a lead** — `<PickLeadForGeofenceButton>` → `<PickLeadForGeofenceDialog>` (searchable picker with "Geocoded"/"No location" badges) → `<AddGeofenceDialog preset={{ type: "lead", leadId, leadName, leadCompany }}>`. Resolves lead's stored `lat`/`lng` first, falls back to on-demand geocode of the lead's address.
+  3. **Drop pin** — visible "Drop pin" overlay button at the bottom-right of the map (programmatically activates `draw_point` mode) OR the built-in Mapbox draw icons at top-right → existing `pendingCreate` sidebar flow. See gotcha #79.
+- **Lead detail "Create geofence here"** — admin button on the info card opens `<AddGeofenceDialog preset="lead">` with the current lead pre-filled. Visible whenever the lead has coords OR a usable address.
+- **`getLeadSiblings(currentId)`** is the prev/next action for `/geo/leads/[id]` (slim `{id,name}` projection vs `listLeads({})`'s full row + JOIN). Same scope semantics. Used by `<LeadPageNav>` for prev/next, propagates `?from=` suffix into both URLs.
+- **Reports filter**: URL-driven `?range=7d|30d|quarter|all` via `<ReportsRangeFilter>`. Default (`30d`) intentionally NOT written to URL — shareable URLs stay clean. Helper + constants live in `src/lib/geo/report-range.ts` (non-`"use client"`) — see gotcha #78.
+- **Live Map polling**: self-rescheduling `setTimeout` with exponential backoff (30s → doubles on failure → 5min cap → resets on success). Replaced `setInterval(_, 30_000)` flat-rate hammering. Lives in `src/components/geo/live-map.tsx`.
+- **Responsive map heights**: canonical formula `min-h-[400px] h-[60vh] max-h-[600px]`. Applied to `live-map.tsx`, `geofences/client.tsx`, `live-map/page.tsx`.
+- **A11y**: skip-to-content link in `src/app/geo/layout.tsx` (`sr-only focus:not-sr-only` chip → `#geo-main` on `<main>` with `tabIndex={-1}`). Mobile section nav uses `<Sheet side="left">` hamburger pattern on `< md` (replaced the previous scrollable chip row which hid 2-of-5 nav items off-screen on phones).
+- **AssistantLauncher mounted on `/geo/layout.tsx`** (mirrors `/dashboard/layout.tsx` gating: `NEXT_PUBLIC_ASSISTANT_ENABLED` + `canUseAssistant`).
+- **Kanban + scrollbars polish**: `.scroll-thin` utility in globals.css applied to the kanban horizontal-scroll row and the GeoHeader mobile nav (6px muted thumb vs OS-default 16px). Edge-fade mask on the kanban container. Trimmed kanban LeadCard: no stage chip (column owns it), no WhatsApp pivot (lives on detail + mobile bar), tighter padding — 3 visible rows max.
+- **New help articles**: `geo_close_lead`, `geo_next_followup`, `geo_keyboard_shortcuts`, `geo_contact_lead` (restored). Stage-name corrections in `geo_overview`, `geo_kanban_drag`, `geo_create_lead`. See AI Assistant section for the corpus size + post-merge `embed:help` requirement.
+
 ---
 
 ## Social Agent (`/superadmin/social`) — Single-Tenant LinkedIn
@@ -778,6 +800,11 @@ npm run db:push       # Push migrations (needs CLI)
 75. **JambaGeo Mapbox SSR**: Mapbox GL JS imports `window`. All map components MUST be loaded via `dynamic(() => import('@/components/geo/...'), { ssr: false })`. Direct SSR import will crash the page. See `src/app/geo/geofences/page.tsx` / `live-map/page.tsx`.
 76. **JambaGeo system visit rows are immutable**: `lead_visits.system = true` rows are kanban-drag audit entries. `updateLeadVisit` / `deleteLeadVisit` reject them with "System rows are immutable" / "System rows cannot be deleted". To "undo" a stage move, drag the card back — that writes a new system row, preserving the audit trail.
 77. **JambaGeo retention sweep is Phase-1 no-op**: `/api/cron/jambageo-retention-sweep` ships in Phase 1 even though `location_pings` is empty. This is intentional: when mobile lands in Phase 2, DPDP retention is enforced from day one without a separate migration/deploy.
+78. **Pure helpers imported from "use client" files crash server components at runtime**: A Server Component importing a non-component utility (function/constant) from a file with `"use client"` directive works in dev but throws at request time in prod. Split pure logic to a non-`"use client"` `.ts` module. See `src/lib/geo/report-range.ts` (constants + `resolveRangeFrom`) as the canonical pattern; the client filter file and the server page both import from there.
+79. **Mapbox draw control / `addControl()` needs an `onLoad` gate**: Calling `map.addControl()` before the `<Map>`'s `load` event silently no-ops, and refs don't trigger re-renders so the effect never retries. Use `<Map onLoad={() => setMapReady(true)}>` + depend on the state in the `useEffect` that wires the draw control. See `src/components/geo/geofence-map.tsx`.
+80. **GitHub PR squash race**: When a PR is open against branch tip A and more commits are pushed without refreshing the PR HEAD, the merge can resolve against the stale ref — commits silently never land on `main`. Verify after merge with `git merge-base --is-ancestor <commit> main`. PR #6 in this repo hit it once (2026-06-10); `4f9cb87` (the assistant linkage commit) had to be cherry-picked manually.
+81. **Lead address auto-geocoded on save**: `createLead` / `updateLead` (and the explicit `geocodeLead(id)`) call `geocodeAddress` via Mapbox v5 when address is present and `lat`/`lng` aren't explicitly set. Best-effort, 5s timeout, silent failure. Uses the same `NEXT_PUBLIC_MAPBOX_TOKEN`. Mapbox free tier covers 100k/mo — well past SMB volume.
+82. **`GeoPageHeader` is the canonical h1+lede for every `/geo/*` page**: Don't inline `<header><h1>` blocks on new pages — use `<GeoPageHeader title="..." lede="..." rightSlot={...} />`. Owns the typographic scale (text-2xl semibold tracking-tight + max-w-prose lede + mb-6) so every destination page stays in rhythm. See `src/components/geo/geo-page-header.tsx`.
 
 ---
 
@@ -806,6 +833,8 @@ Read-only, plan-tier-gated chat assistant. Floating button on dashboard, side-pa
 - shadcn CLI for new UI primitives (OQ-14).
 
 **Migrations**: 022 (Phase 0 — conversations/messages/tool_calls/feedback), 023 (Phase 1 — pgvector + `app_help_chunks`), 024 (Phase 1 — `match_help_chunks` RPC), 025 (Phase 2 — `doc_chunks` + `documents.index_status/indexed_at/index_error`), 026 (Phase 2 — `match_doc_chunks` org-scoped RPC), 027 (Phase 4 — `assistant_budget` + `assistant_messages.created_at` index).
+
+**Article corpus is at 55** (as of 2026-06-10). The route-registry integrity test in `tests/assistant/help-loader.test.ts` enforces symmetry between `src/lib/assistant/help/articles/` files and `src/lib/assistant/route-registry.ts` entries — bump the `toBe(N)` count when adding articles, and add a `route_registry.ts` entry whose key matches the article's `id` frontmatter. **After merging any article add/edit, run `npm run embed:help` on production** to rebuild `app_help_chunks` via Voyage; otherwise the assistant serves the stale corpus indefinitely.
 
 **Crons**: `/api/cron/assistant-doc-reindex` (daily 6:00 UTC — Phase 2 doc reconcile), `/api/cron/assistant-redact` (daily 7:00 UTC — Phase 4 PII redaction + 90d delete).
 

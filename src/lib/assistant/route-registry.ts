@@ -345,7 +345,14 @@ export const ROUTE_REGISTRY = {
   geo_kanban_drag: {
     path: "/geo/leads",
     label: "Move a lead through the kanban",
-    description: "Drag a lead card between pipeline stages or use the stage dropdown.",
+    description: "Drag a lead card between pipeline stages on the board, or use the Stage dropdown on the lead detail page.",
+    required_role: "employee",
+    required_plan: "business",
+  },
+  geo_contact_lead: {
+    path: "/geo/leads",
+    label: "Call, message, or email a lead",
+    description: "Tap-to-dial, one-click WhatsApp (wa.me), and mailto shortcuts on every lead card, list row, and detail page.",
     required_role: "employee",
     required_plan: "business",
   },

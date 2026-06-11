@@ -199,10 +199,13 @@ export function StackedBars({
   data,
   series,
   formatValue,
+  grouped = false,
 }: {
   data: Record<string, number | string>[];
   series: StackedSeries[];
   formatValue?: (v: number) => string;
+  /** Render side-by-side bars instead of stacking. */
+  grouped?: boolean;
 }) {
   const hasData = data.some((row) =>
     series.some((s) => typeof row[s.key] === "number" && (row[s.key] as number) > 0)
@@ -226,9 +229,9 @@ export function StackedBars({
             <Bar
               key={s.key}
               dataKey={s.key}
-              stackId="stack"
+              stackId={grouped ? undefined : "stack"}
               fill={s.color}
-              radius={i === series.length - 1 ? [6, 6, 0, 0] : [0, 0, 0, 0]}
+              radius={grouped || i === series.length - 1 ? [6, 6, 0, 0] : [0, 0, 0, 0]}
               animationDuration={600}
             />
           ))}
@@ -280,7 +283,7 @@ export function JoinLeaveBars({ data }: { data: JoinLeavePoint[] }) {
 
 // ---- Donut (department distribution) ----
 
-export function Donut({ data }: { data: NamedCount[] }) {
+export function Donut({ data, centerLabel = "people" }: { data: NamedCount[]; centerLabel?: string }) {
   if (!data.length || !data.some((d) => d.value > 0)) return <EmptyChart />;
   const total = data.reduce((s, d) => s + d.value, 0);
   return (
@@ -307,7 +310,7 @@ export function Donut({ data }: { data: NamedCount[] }) {
         </ResponsiveContainer>
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
           <span className="text-3xl font-bold tabular-nums text-slate-100">{total}</span>
-          <span className="text-[10px] uppercase tracking-wider text-slate-500">people</span>
+          <span className="text-[10px] uppercase tracking-wider text-slate-500">{centerLabel}</span>
         </div>
       </div>
       <ul className="grid w-full grid-cols-1 gap-1.5 text-sm">

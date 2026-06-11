@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/lib/current-user";
 import { ReportFeedbackTriggerRoot } from "@/components/feedback/report-feedback-trigger";
 import { AssistantLauncher } from "@/components/assistant/assistant-launcher";
 import { canUseAssistant } from "@/lib/assistant/permissions";
+import { hasFeature } from "@/config/plans";
 
 export default async function DashboardLayout({
   children,
@@ -48,6 +49,7 @@ export default async function DashboardLayout({
           <Header
             jambaHireEnabled={jambaHireEnabled}
             jambaGeoEnabled={userCtx.jambaGeoEnabled}
+            insightsEnabled={hasFeature(plan, "analytics", userCtx.customFeatures ?? null)}
             badges={badges}
             role={role}
           />

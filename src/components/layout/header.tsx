@@ -1,6 +1,6 @@
 "use client";
 
-import { Search, Bell, Briefcase, FileText, Calendar, Target, MapPin } from "lucide-react";
+import { Bell, Briefcase, FileText, Calendar, Target, MapPin, BarChart3 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import type { PendingCounts } from "@/actions/notifications";
@@ -9,6 +9,7 @@ import type { UserRole } from "@/types";
 interface HeaderProps {
   jambaHireEnabled?: boolean;
   jambaGeoEnabled?: boolean;
+  insightsEnabled?: boolean;
   badges?: PendingCounts;
   role?: UserRole;
 }
@@ -16,10 +17,10 @@ interface HeaderProps {
 export function Header({
   jambaHireEnabled = false,
   jambaGeoEnabled = false,
+  insightsEnabled = false,
   badges,
   role = "employee",
 }: HeaderProps) {
-  const [searchQuery, setSearchQuery] = useState("");
   const [notifOpen, setNotifOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
 
@@ -63,21 +64,20 @@ export function Header({
   }, []);
 
   return (
-    <header className="sticky top-0 z-40 flex h-16 items-center justify-between border-b border-border bg-background/80 px-6 backdrop-blur-lg">
-      {/* Search */}
-      <div className="relative w-full max-w-md">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <input
-          type="text"
-          placeholder="Search employees, leaves, documents..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="h-10 w-full rounded-lg border border-input bg-muted/30 pl-10 pr-4 text-sm placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors"
-        />
-      </div>
-
+    <header className="sticky top-0 z-40 flex h-16 items-center justify-end border-b border-border bg-background/80 px-6 backdrop-blur-lg">
       {/* Actions */}
       <div className="flex items-center gap-2 ml-4">
+        {/* Insights switcher — owner/admin only, Business plan (gated upstream) */}
+        {insightsEnabled && (role === "owner" || role === "admin") && (
+          <Link
+            href="/insights"
+            className="flex items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700 transition-colors hover:bg-violet-100 dark:border-violet-800 dark:bg-violet-950/50 dark:text-violet-400 dark:hover:bg-violet-950"
+          >
+            <BarChart3 className="h-3.5 w-3.5" />
+            Insights
+          </Link>
+        )}
+
         {/* JambaGeo switcher — visible to any role when the org has enabled
             the module. /geo serves all role surfaces internally (manager
             roster, employee My Leads, etc.), so we don't restrict by role

@@ -45,7 +45,12 @@ export default async function DashboardLayout({
       <div className="flex min-h-screen">
         <Sidebar badges={badges} role={role} plan={plan} features={features} />
         <div className="flex flex-1 flex-col">
-          <Header jambaHireEnabled={jambaHireEnabled} badges={badges} role={role} />
+          <Header
+            jambaHireEnabled={jambaHireEnabled}
+            jambaGeoEnabled={userCtx.jambaGeoEnabled}
+            badges={badges}
+            role={role}
+          />
           <main className="flex-1 p-6">{children}</main>
         </div>
         <AssistantLauncher enabled={assistantEnabled} role={role} />

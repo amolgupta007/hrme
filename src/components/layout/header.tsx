@@ -1,6 +1,6 @@
 "use client";
 
-import { Search, Bell, Briefcase, FileText, Calendar, Target } from "lucide-react";
+import { Search, Bell, Briefcase, FileText, Calendar, Target, MapPin } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import type { PendingCounts } from "@/actions/notifications";
@@ -8,11 +8,17 @@ import type { UserRole } from "@/types";
 
 interface HeaderProps {
   jambaHireEnabled?: boolean;
+  jambaGeoEnabled?: boolean;
   badges?: PendingCounts;
   role?: UserRole;
 }
 
-export function Header({ jambaHireEnabled = false, badges, role = "employee" }: HeaderProps) {
+export function Header({
+  jambaHireEnabled = false,
+  jambaGeoEnabled = false,
+  badges,
+  role = "employee",
+}: HeaderProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [notifOpen, setNotifOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
@@ -72,6 +78,20 @@ export function Header({ jambaHireEnabled = false, badges, role = "employee" }: 
 
       {/* Actions */}
       <div className="flex items-center gap-2 ml-4">
+        {/* JambaGeo switcher — visible to any role when the org has enabled
+            the module. /geo serves all role surfaces internally (manager
+            roster, employee My Leads, etc.), so we don't restrict by role
+            here the way JambaHire does. */}
+        {jambaGeoEnabled && (
+          <Link
+            href="/geo"
+            className="flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-400 dark:hover:bg-emerald-950"
+          >
+            <MapPin className="h-3.5 w-3.5" />
+            JambaGeo
+          </Link>
+        )}
+
         {/* JambaHire switcher — admin-only */}
         {jambaHireEnabled && (role === "owner" || role === "admin") && (
           <Link

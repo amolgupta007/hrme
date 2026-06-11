@@ -258,7 +258,7 @@ export function SettingsContent({
         </CollapsibleSection>
       )}
 
-      {jambaGeoEnabled && isAdmin && (
+      {isAdmin && (
         <CollapsibleSection
           title="JambaGeo"
           icon={<MapPin className="h-5 w-5 text-muted-foreground" />}

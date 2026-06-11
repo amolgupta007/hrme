@@ -66,12 +66,6 @@ export const sidebarNav: NavItem[] = [
     featureFlag: "referrals",
   },
   {
-    title: "JambaGeo",
-    href: "/geo",
-    icon: "MapPin",
-    featureFlag: "jambageo",
-  },
-  {
     title: "Grievances",
     href: "/dashboard/grievances",
     icon: "MessageSquareWarning",

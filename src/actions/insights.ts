@@ -332,6 +332,419 @@ export async function getOverviewInsights(): Promise<ActionResult<OverviewInsigh
   };
 }
 
+// ---- Leave & Attendance ----
+
+export type LeaveTypeMonthlyRow = { month: string; label: string } & Record<string, number | string>;
+
+export type TopBalanceRow = {
+  name: string;
+  remaining: number;
+  total: number;
+};
+
+export type AttendanceInsights = {
+  enabled: boolean;
+  /** false when the rollup RPC (migration 059) isn't applied yet. */
+  available: boolean;
+  presentDays: MonthPoint[];
+  avgClockInMinutes: MonthPoint[]; // minutes since midnight, IST
+  avgDailyHours: MonthPoint[];
+  autoClosed: MonthPoint[];
+  otHoursByDept: NamedCount[];
+};
+
+export type LeaveAttendanceInsights = {
+  kpis: {
+    daysTaken12m: number;
+    utilizationPct: number;
+    avgDaysPerEmployee: number;
+    pendingNow: number;
+  };
+  leaveTypes: string[];
+  leaveByTypeMonthly: LeaveTypeMonthlyRow[];
+  topBalances: TopBalanceRow[];
+  attendance: AttendanceInsights;
+};
+
+export async function getLeaveAttendanceInsights(): Promise<ActionResult<LeaveAttendanceInsights>> {
+  const access = await requireInsightsAccess();
+  if (!access.ok) return { success: false, error: access.error };
+  const { user } = access;
+  const supabase = createAdminSupabase();
+  const orgId = user.orgId;
+
+  const months = lastNMonths(12);
+  const windowStart = `${months[0].month}-01`;
+  const today = new Date().toISOString().slice(0, 10);
+  const year = new Date().getFullYear();
+
+  const [leavesResult, balancesResult, { count: pendingNow }, { count: activeEmployees }] =
+    await Promise.all([
+      supabase
+        .from("leave_requests")
+        .select("leave_type, start_date, days")
+        .eq("org_id", orgId)
+        .eq("status", "approved")
+        .gte("start_date", windowStart),
+      supabase
+        .from("leave_balances")
+        .select("total_days, used_days, carried_forward_days, employees!employee_id(first_name, last_name, status)")
+        .eq("org_id", orgId)
+        .eq("year", year),
+      supabase
+        .from("leave_requests")
+        .select("*", { count: "exact", head: true })
+        .eq("org_id", orgId)
+        .eq("status", "pending"),
+      supabase
+        .from("employees")
+        .select("*", { count: "exact", head: true })
+        .eq("org_id", orgId)
+        .eq("status", "active"),
+    ]);
+
+  // Stacked leave-by-type per month
+  const leaves = (leavesResult.data ?? []) as { leave_type: string; start_date: string; days: number }[];
+  const typeTotals = new Map<string, number>();
+  for (const l of leaves) {
+    typeTotals.set(l.leave_type, (typeTotals.get(l.leave_type) ?? 0) + (l.days ?? 0));
+  }
+  const leaveTypes = [...typeTotals.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([t]) => t);
+  const leaveByTypeMonthly: LeaveTypeMonthlyRow[] = months.map((m) => {
+    const row: LeaveTypeMonthlyRow = { month: m.month, label: m.label };
+    for (const t of leaveTypes) row[t] = 0;
+    return row;
+  });
+  const rowByMonth = new Map(leaveByTypeMonthly.map((r) => [r.month, r]));
+  let daysTaken12m = 0;
+  for (const l of leaves) {
+    const row = rowByMonth.get(l.start_date.slice(0, 7));
+    if (!row) continue;
+    row[l.leave_type] = ((row[l.leave_type] as number) ?? 0) + (l.days ?? 0);
+    daysTaken12m += l.days ?? 0;
+  }
+
+  // Utilization + top remaining balances (active employees, summed across policies)
+  let totalAllocated = 0;
+  let totalUsed = 0;
+  const perEmployee = new Map<string, { remaining: number; total: number }>();
+  for (const b of (balancesResult.data ?? []) as any[]) {
+    const total = (b.total_days ?? 0) + (b.carried_forward_days ?? 0);
+    const used = b.used_days ?? 0;
+    totalAllocated += total;
+    totalUsed += used;
+    if (b.employees?.status === "terminated") continue;
+    const name = `${b.employees?.first_name ?? ""} ${b.employees?.last_name ?? ""}`.trim() || "Unknown";
+    const agg = perEmployee.get(name) ?? { remaining: 0, total: 0 };
+    agg.remaining += Math.max(0, total - used);
+    agg.total += total;
+    perEmployee.set(name, agg);
+  }
+  const topBalances: TopBalanceRow[] = [...perEmployee.entries()]
+    .map(([name, v]) => ({ name, remaining: v.remaining, total: v.total }))
+    .sort((a, b) => b.remaining - a.remaining)
+    .slice(0, 8);
+
+  const utilizationPct = totalAllocated > 0 ? Math.round((totalUsed / totalAllocated) * 100) : 0;
+  const avgDaysPerEmployee =
+    (activeEmployees ?? 0) > 0 ? Math.round((daysTaken12m / (activeEmployees ?? 1)) * 10) / 10 : 0;
+
+  // Attendance rollup — best-effort. Missing RPC (migration 059 not applied)
+  // must degrade to an explanatory empty state, never crash the page.
+  const attendance: AttendanceInsights = {
+    enabled: !!user.attendanceEnabled,
+    available: false,
+    presentDays: [],
+    avgClockInMinutes: [],
+    avgDailyHours: [],
+    autoClosed: [],
+    otHoursByDept: [],
+  };
+
+  if (user.attendanceEnabled) {
+    const [rollup, otResult, employeesResult, departmentsResult] = await Promise.all([
+      supabase.rpc("insights_attendance_monthly", {
+        p_org_id: orgId,
+        p_from: windowStart,
+        p_to: today,
+      }),
+      supabase
+        .from("ot_records")
+        .select("ot_minutes, employee_id, date, status")
+        .eq("org_id", orgId)
+        .in("status", ["approved", "pushed"])
+        .gte("date", windowStart),
+      supabase.from("employees").select("id, department_id").eq("org_id", orgId),
+      supabase.from("departments").select("id, name").eq("org_id", orgId),
+    ]);
+
+    if (!rollup.error) {
+      attendance.available = true;
+      type RollupRow = {
+        month: string;
+        present_days: number;
+        avg_clock_in_minutes_ist: number | null;
+        auto_closed_days: number;
+        total_worked_minutes: number;
+      };
+      const byMonth = new Map(
+        ((rollup.data ?? []) as RollupRow[]).map((r) => [r.month, r])
+      );
+      for (const m of months) {
+        const r = byMonth.get(m.month);
+        attendance.presentDays.push({ month: m.month, label: m.label, value: r?.present_days ?? 0 });
+        attendance.avgClockInMinutes.push({
+          month: m.month,
+          label: m.label,
+          value: r?.avg_clock_in_minutes_ist ? Math.round(Number(r.avg_clock_in_minutes_ist)) : 0,
+        });
+        attendance.avgDailyHours.push({
+          month: m.month,
+          label: m.label,
+          value:
+            r && r.present_days > 0
+              ? Math.round((r.total_worked_minutes / r.present_days / 60) * 10) / 10
+              : 0,
+        });
+        attendance.autoClosed.push({ month: m.month, label: m.label, value: r?.auto_closed_days ?? 0 });
+      }
+    }
+
+    // OT hours by department (ot_records is small — JS aggregation is fine)
+    const deptNames = new Map<string, string>(
+      ((departmentsResult.data ?? []) as { id: string; name: string }[]).map((d) => [d.id, d.name])
+    );
+    const empDept = new Map<string, string | null>(
+      ((employeesResult.data ?? []) as { id: string; department_id: string | null }[]).map((e) => [
+        e.id,
+        e.department_id,
+      ])
+    );
+    const otByDept = new Map<string, number>();
+    for (const r of (otResult.data ?? []) as { ot_minutes: number; employee_id: string }[]) {
+      const deptId = empDept.get(r.employee_id);
+      const name = deptId ? deptNames.get(deptId) ?? "Unknown" : "Unassigned";
+      otByDept.set(name, (otByDept.get(name) ?? 0) + (r.ot_minutes ?? 0));
+    }
+    attendance.otHoursByDept = [...otByDept.entries()]
+      .map(([name, minutes]) => ({ name, value: Math.round((minutes / 60) * 10) / 10 }))
+      .sort((a, b) => b.value - a.value);
+  }
+
+  return {
+    success: true,
+    data: {
+      kpis: {
+        daysTaken12m,
+        utilizationPct,
+        avgDaysPerEmployee,
+        pendingNow: pendingNow ?? 0,
+      },
+      leaveTypes,
+      leaveByTypeMonthly,
+      topBalances,
+      attendance,
+    },
+  };
+}
+
+// ---- Payroll Cost ----
+
+export type PayrollMonthlyRow = {
+  month: string;
+  label: string;
+  net: number;
+  tds: number;
+  pf: number;
+  gross: number;
+  employees: number;
+};
+
+export type PayrollInsights = {
+  kpis: {
+    latestNet: number;
+    latestGross: number;
+    latestTds: number;
+    avgNetPerEmployee: number;
+    projectedAnnualNet: number;
+    employeesOnPayroll: number;
+    latestMonth: string;
+  };
+  monthly: PayrollMonthlyRow[];
+  costByDept: NamedCount[];
+  salaryBands: NamedCount[];
+  otSpendMonthly: MonthPoint[];
+};
+
+/** Returns data:null when the org's plan doesn't include payroll. */
+export async function getPayrollInsights(): Promise<ActionResult<PayrollInsights | null>> {
+  const access = await requireInsightsAccess();
+  if (!access.ok) return { success: false, error: access.error };
+  const { user } = access;
+
+  if (!hasFeature(user.plan ?? "starter", "payroll", user.customFeatures ?? null)) {
+    return { success: true, data: null };
+  }
+
+  const supabase = createAdminSupabase();
+  const orgId = user.orgId;
+
+  const { data: runRows } = await supabase
+    .from("payroll_runs")
+    .select("id, month, status")
+    .eq("org_id", orgId)
+    .in("status", ["processed", "paid"])
+    .order("month", { ascending: false })
+    .limit(12);
+
+  const runs = ((runRows ?? []) as { id: string; month: string }[]).reverse();
+
+  const emptyKpis = {
+    latestNet: 0,
+    latestGross: 0,
+    latestTds: 0,
+    avgNetPerEmployee: 0,
+    projectedAnnualNet: 0,
+    employeesOnPayroll: 0,
+    latestMonth: "",
+  };
+
+  if (runs.length === 0) {
+    return {
+      success: true,
+      data: { kpis: emptyKpis, monthly: [], costByDept: [], salaryBands: [], otSpendMonthly: [] },
+    };
+  }
+
+  const runIds = runs.map((r) => r.id);
+  const [entriesResult, employeesResult, departmentsResult, structuresResult, lineItemsResult] =
+    await Promise.all([
+      supabase
+        .from("payroll_entries")
+        .select("id, payroll_run_id, employee_id, gross_salary, net_pay, tds, employee_pf")
+        .eq("org_id", orgId)
+        .in("payroll_run_id", runIds),
+      supabase.from("employees").select("id, department_id").eq("org_id", orgId),
+      supabase.from("departments").select("id, name").eq("org_id", orgId),
+      supabase.from("salary_structures").select("ctc").eq("org_id", orgId),
+      supabase
+        .from("payroll_line_items")
+        .select("amount, payroll_entry_id")
+        .eq("org_id", orgId)
+        .eq("category", "overtime"),
+    ]);
+
+  type EntryRow = {
+    id: string;
+    payroll_run_id: string;
+    employee_id: string;
+    gross_salary: number;
+    net_pay: number;
+    tds: number;
+    employee_pf: number;
+  };
+  const entries = (entriesResult.data ?? []) as EntryRow[];
+  const monthOfRun = new Map(runs.map((r) => [r.id, r.month]));
+
+  const monthlyMap = new Map<string, PayrollMonthlyRow>();
+  for (const r of runs) {
+    const m = Number(r.month.split("-")[1]);
+    monthlyMap.set(r.month, {
+      month: r.month,
+      label: MONTH_LABELS[(m || 1) - 1] ?? r.month,
+      net: 0,
+      tds: 0,
+      pf: 0,
+      gross: 0,
+      employees: 0,
+    });
+  }
+  for (const e of entries) {
+    const month = monthOfRun.get(e.payroll_run_id);
+    const row = month ? monthlyMap.get(month) : undefined;
+    if (!row) continue;
+    row.net += e.net_pay ?? 0;
+    row.tds += e.tds ?? 0;
+    row.pf += e.employee_pf ?? 0;
+    row.gross += e.gross_salary ?? 0;
+    row.employees += 1;
+  }
+  const monthly = [...monthlyMap.values()];
+
+  const latest = monthly[monthly.length - 1];
+  const kpis = latest
+    ? {
+        latestNet: Math.round(latest.net),
+        latestGross: Math.round(latest.gross),
+        latestTds: Math.round(latest.tds),
+        avgNetPerEmployee:
+          latest.employees > 0 ? Math.round(latest.net / latest.employees) : 0,
+        projectedAnnualNet: Math.round(latest.net * 12),
+        employeesOnPayroll: latest.employees,
+        latestMonth: latest.month,
+      }
+    : emptyKpis;
+
+  // Cost by department — latest run only
+  const latestRunId = runs[runs.length - 1].id;
+  const deptNames = new Map<string, string>(
+    ((departmentsResult.data ?? []) as { id: string; name: string }[]).map((d) => [d.id, d.name])
+  );
+  const empDept = new Map<string, string | null>(
+    ((employeesResult.data ?? []) as { id: string; department_id: string | null }[]).map((e) => [
+      e.id,
+      e.department_id,
+    ])
+  );
+  const deptCost = new Map<string, number>();
+  for (const e of entries) {
+    if (e.payroll_run_id !== latestRunId) continue;
+    const deptId = empDept.get(e.employee_id);
+    const name = deptId ? deptNames.get(deptId) ?? "Unknown" : "Unassigned";
+    deptCost.set(name, (deptCost.get(name) ?? 0) + (e.net_pay ?? 0));
+  }
+  const costByDept: NamedCount[] = [...deptCost.entries()]
+    .map(([name, value]) => ({ name, value: Math.round(value) }))
+    .sort((a, b) => b.value - a.value);
+
+  // Salary bands from configured CTCs
+  const bands = [
+    { name: "< ₹5L", min: 0, max: 5_00_000 },
+    { name: "₹5–10L", min: 5_00_000, max: 10_00_000 },
+    { name: "₹10–15L", min: 10_00_000, max: 15_00_000 },
+    { name: "₹15–25L", min: 15_00_000, max: 25_00_000 },
+    { name: "₹25–50L", min: 25_00_000, max: 50_00_000 },
+    { name: "₹50L+", min: 50_00_000, max: Infinity },
+  ];
+  const salaryBands: NamedCount[] = bands.map((b) => ({ name: b.name, value: 0 }));
+  for (const s of (structuresResult.data ?? []) as { ctc: number }[]) {
+    const idx = bands.findIndex((b) => (s.ctc ?? 0) >= b.min && (s.ctc ?? 0) < b.max);
+    if (idx >= 0) salaryBands[idx].value += 1;
+  }
+
+  // OT spend per month (line items → entry → run month)
+  const runOfEntry = new Map(entries.map((e) => [e.id, e.payroll_run_id]));
+  const otByMonth = new Map<string, number>();
+  for (const li of (lineItemsResult.data ?? []) as { amount: number; payroll_entry_id: string }[]) {
+    const runId = runOfEntry.get(li.payroll_entry_id);
+    const month = runId ? monthOfRun.get(runId) : undefined;
+    if (!month) continue;
+    otByMonth.set(month, (otByMonth.get(month) ?? 0) + (li.amount ?? 0));
+  }
+  const otSpendMonthly: MonthPoint[] = monthly.map((m) => ({
+    month: m.month,
+    label: m.label,
+    value: Math.round(otByMonth.get(m.month) ?? 0),
+  }));
+
+  return {
+    success: true,
+    data: { kpis, monthly, costByDept, salaryBands, otSpendMonthly },
+  };
+}
+
 export async function getWorkforceInsights(): Promise<ActionResult<WorkforceInsights>> {
   const access = await requireInsightsAccess();
   if (!access.ok) return { success: false, error: access.error };

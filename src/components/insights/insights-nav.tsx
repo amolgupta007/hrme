@@ -2,12 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, LayoutDashboard, Users, ArrowLeft } from "lucide-react";
+import { BarChart3, LayoutDashboard, Users, CalendarDays, Wallet, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { label: "Overview", href: "/insights", icon: LayoutDashboard, exact: true },
   { label: "Workforce", href: "/insights/workforce", icon: Users },
+  { label: "Leave & Attendance", href: "/insights/leave", icon: CalendarDays },
+  { label: "Payroll", href: "/insights/payroll", icon: Wallet },
 ];
 
 export function InsightsNav() {

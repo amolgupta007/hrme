@@ -75,16 +75,20 @@ export function TrendArea({
   data,
   color = INSIGHT_COLORS.violet,
   valueSuffix = "",
+  formatValue,
 }: {
   data: MonthPoint[];
   color?: string;
   valueSuffix?: string;
+  /** Overrides valueSuffix for both axis ticks and tooltip when given. */
+  formatValue?: (v: number) => string;
 }) {
   if (!data.some((d) => d.value > 0)) return <EmptyChart />;
   const id = `trend-${color.replace("#", "")}`;
+  const fmt = formatValue ?? ((v: number) => `${v}${valueSuffix}`);
   return (
     <ResponsiveContainer width="100%" height={260}>
-      <AreaChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -16 }}>
+      <AreaChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -8 }}>
         <defs>
           <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={color} stopOpacity={0.3} />
@@ -93,10 +97,10 @@ export function TrendArea({
         </defs>
         <CartesianGrid stroke={CHART_GRID_STROKE} vertical={false} />
         <XAxis dataKey="label" {...axisProps} />
-        <YAxis {...axisProps} allowDecimals={false} width={40} />
+        <YAxis {...axisProps} allowDecimals={false} width={48} tickFormatter={formatValue} />
         <Tooltip
           contentStyle={TOOLTIP_STYLE}
-          formatter={(v: number) => [`${v}${valueSuffix}`, ""]}
+          formatter={(v: number) => [fmt(v), ""]}
           separator=""
           cursor={{ stroke: "rgba(148,163,184,0.25)" }}
         />
@@ -115,17 +119,27 @@ export function TrendArea({
 
 // ---- Line trend (attrition %) ----
 
-export function TrendLine({ data, color = INSIGHT_COLORS.rose }: { data: MonthPoint[]; color?: string }) {
-  if (!data.length) return <EmptyChart />;
+export function TrendLine({
+  data,
+  color = INSIGHT_COLORS.rose,
+  formatValue,
+}: {
+  data: MonthPoint[];
+  color?: string;
+  /** Formats both Y-axis ticks and tooltip values. Defaults to percentage. */
+  formatValue?: (v: number) => string;
+}) {
+  if (!data.length || !data.some((d) => d.value > 0)) return <EmptyChart />;
+  const fmt = formatValue ?? ((v: number) => `${v}%`);
   return (
     <ResponsiveContainer width="100%" height={260}>
-      <LineChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -16 }}>
+      <LineChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -8 }}>
         <CartesianGrid stroke={CHART_GRID_STROKE} vertical={false} />
         <XAxis dataKey="label" {...axisProps} />
-        <YAxis {...axisProps} width={40} unit="%" />
+        <YAxis {...axisProps} width={48} tickFormatter={fmt} />
         <Tooltip
           contentStyle={TOOLTIP_STYLE}
-          formatter={(v: number) => [`${v}%`, ""]}
+          formatter={(v: number) => [fmt(v), ""]}
           separator=""
           cursor={{ stroke: "rgba(148,163,184,0.25)" }}
         />
@@ -148,28 +162,87 @@ export function SimpleBars({
   data,
   color = INSIGHT_COLORS.teal,
   valueSuffix = "",
+  formatValue,
 }: {
   data: { label?: string; name?: string; value: number }[];
   color?: string;
   valueSuffix?: string;
+  /** Overrides valueSuffix for both axis ticks and tooltip when given. */
+  formatValue?: (v: number) => string;
 }) {
   if (!data.some((d) => d.value > 0)) return <EmptyChart />;
   const key = data[0]?.label !== undefined ? "label" : "name";
+  const fmt = formatValue ?? ((v: number) => `${v}${valueSuffix}`);
   return (
     <ResponsiveContainer width="100%" height={260}>
-      <BarChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -16 }}>
+      <BarChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -8 }}>
         <CartesianGrid stroke={CHART_GRID_STROKE} vertical={false} />
         <XAxis dataKey={key} {...axisProps} interval={0} />
-        <YAxis {...axisProps} allowDecimals={false} width={40} />
+        <YAxis {...axisProps} allowDecimals={false} width={48} tickFormatter={formatValue} />
         <Tooltip
           contentStyle={TOOLTIP_STYLE}
-          formatter={(v: number) => [`${v}${valueSuffix}`, ""]}
+          formatter={(v: number) => [fmt(v), ""]}
           separator=""
           cursor={{ fill: "rgba(148,163,184,0.08)" }}
         />
         <Bar dataKey="value" fill={color} radius={[6, 6, 0, 0]} animationDuration={600} />
       </BarChart>
     </ResponsiveContainer>
+  );
+}
+
+// ---- Stacked bars (leave by type, payroll composition) ----
+
+export type StackedSeries = { key: string; label: string; color: string };
+
+export function StackedBars({
+  data,
+  series,
+  formatValue,
+}: {
+  data: Record<string, number | string>[];
+  series: StackedSeries[];
+  formatValue?: (v: number) => string;
+}) {
+  const hasData = data.some((row) =>
+    series.some((s) => typeof row[s.key] === "number" && (row[s.key] as number) > 0)
+  );
+  if (!hasData) return <EmptyChart />;
+  const fmt = formatValue ?? ((v: number) => String(v));
+  const labelFor = new Map(series.map((s) => [s.key, s.label]));
+  return (
+    <div>
+      <ResponsiveContainer width="100%" height={260}>
+        <BarChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -8 }}>
+          <CartesianGrid stroke={CHART_GRID_STROKE} vertical={false} />
+          <XAxis dataKey="label" {...axisProps} />
+          <YAxis {...axisProps} width={48} tickFormatter={fmt} allowDecimals={false} />
+          <Tooltip
+            contentStyle={TOOLTIP_STYLE}
+            formatter={(v: number, key: string) => [fmt(v), labelFor.get(key) ?? key]}
+            cursor={{ fill: "rgba(148,163,184,0.08)" }}
+          />
+          {series.map((s, i) => (
+            <Bar
+              key={s.key}
+              dataKey={s.key}
+              stackId="stack"
+              fill={s.color}
+              radius={i === series.length - 1 ? [6, 6, 0, 0] : [0, 0, 0, 0]}
+              animationDuration={600}
+            />
+          ))}
+        </BarChart>
+      </ResponsiveContainer>
+      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5">
+        {series.map((s) => (
+          <span key={s.key} className="flex items-center gap-1.5 text-xs text-slate-400">
+            <span className="h-2.5 w-2.5 rounded-full" style={{ background: s.color }} />
+            {s.label}
+          </span>
+        ))}
+      </div>
+    </div>
   );
 }
 

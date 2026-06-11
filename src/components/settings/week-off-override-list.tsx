@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DestructiveDialog } from "@/components/ui/destructive-dialog";
 import { deleteEmployeeWeekOffOverride, type EmployeeWeekOffOverrideRow } from "@/actions/week-off";
 import { WeekOffOverrideDialog } from "./week-off-override-dialog";
 import type { Employee } from "@/types";
@@ -24,10 +25,15 @@ const ALT_LABEL: Record<string, string> = {
 export function WeekOffOverrideList({ overrides, employees }: Props) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
+  const [pendingDelete, setPendingDelete] = React.useState<EmployeeWeekOffOverrideRow | null>(null);
+  const [deleting, setDeleting] = React.useState(false);
 
-  async function handleDelete(employeeId: string, name: string) {
-    if (!confirm(`Remove week-off override for ${name}? They'll revert to the org policy.`)) return;
-    const r = await deleteEmployeeWeekOffOverride(employeeId);
+  async function confirmDelete() {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    const r = await deleteEmployeeWeekOffOverride(pendingDelete.employee_id);
+    setDeleting(false);
+    setPendingDelete(null);
     if (!r.success) { toast.error(r.error); return; }
     toast.success("Override removed");
     router.refresh();
@@ -56,7 +62,12 @@ export function WeekOffOverrideList({ overrides, employees }: Props) {
                   {o.week_type}-day · {o.off_days.map((d) => DAY_LABEL[d]).join(", ")} off{ALT_LABEL[o.alt_saturday_rule ?? "none"]} · since {o.effective_from}
                 </p>
               </div>
-              <Button size="sm" variant="ghost" onClick={() => handleDelete(o.employee_id, o.employee_name)}>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setPendingDelete(o)}
+                aria-label={`Remove week-off override for ${o.employee_name}`}
+              >
                 <Trash2 className="h-3.5 w-3.5 text-destructive" />
               </Button>
             </li>
@@ -66,6 +77,18 @@ export function WeekOffOverrideList({ overrides, employees }: Props) {
       {open && (
         <WeekOffOverrideDialog employees={employees} onClose={() => setOpen(false)} />
       )}
+
+      <DestructiveDialog
+        open={pendingDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingDelete(null);
+        }}
+        title={pendingDelete ? `Remove week-off override for ${pendingDelete.employee_name}?` : ""}
+        description="They'll revert to the org-wide week-off policy. Past attendance and rosters are unaffected."
+        confirmLabel="Remove override"
+        loading={deleting}
+        onConfirm={confirmDelete}
+      />
     </div>
   );
 }

@@ -6,6 +6,7 @@ import * as Label from "@radix-ui/react-label";
 import { Plus, Pencil, Trash2, X, Building2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { DestructiveDialog } from "@/components/ui/destructive-dialog";
 import { addDepartment, updateDepartment, deleteDepartment } from "@/actions/departments";
 import type { Department } from "@/types";
 
@@ -21,6 +22,7 @@ export function DepartmentsSection({ departments }: DepartmentsSectionProps) {
   const [form, setForm] = React.useState(EMPTY);
   const [loading, setLoading] = React.useState(false);
   const [deleting, setDeleting] = React.useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = React.useState<Department | null>(null);
 
   function openAdd() {
     setEditing(null);
@@ -49,11 +51,13 @@ export function DepartmentsSection({ departments }: DepartmentsSectionProps) {
     }
   }
 
-  async function handleDelete(dept: Department) {
-    if (!confirm(`Delete "${dept.name}"?`)) return;
+  async function confirmDelete() {
+    if (!pendingDelete) return;
+    const dept = pendingDelete;
     setDeleting(dept.id);
     const result = await deleteDepartment(dept.id);
     setDeleting(null);
+    setPendingDelete(null);
     if (result.success) {
       toast.success("Department deleted");
     } else {
@@ -99,8 +103,9 @@ export function DepartmentsSection({ departments }: DepartmentsSectionProps) {
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8 text-destructive hover:text-destructive"
-                  onClick={() => handleDelete(dept)}
+                  onClick={() => setPendingDelete(dept)}
                   disabled={deleting === dept.id}
+                  aria-label={`Delete ${dept.name}`}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </Button>
@@ -159,6 +164,18 @@ export function DepartmentsSection({ departments }: DepartmentsSectionProps) {
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
+
+      <DestructiveDialog
+        open={pendingDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingDelete(null);
+        }}
+        title={pendingDelete ? `Delete "${pendingDelete.name}"?` : ""}
+        description="Employees keep their records but lose this department assignment. This can't be undone."
+        confirmLabel="Delete department"
+        loading={deleting !== null}
+        onConfirm={confirmDelete}
+      />
     </div>
   );
 }

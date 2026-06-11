@@ -4,6 +4,7 @@ import React from "react";
 import { toast } from "sonner";
 import { Copy, Eye, EyeOff, RefreshCw, Fingerprint } from "lucide-react";
 import { CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { DestructiveDialog } from "@/components/ui/destructive-dialog";
 import {
   toggleFingerprintEnabled,
   generateDeviceToken,
@@ -32,6 +33,7 @@ export function FingerprintSection({
   const [editingCodes, setEditingCodes] = React.useState<
     Record<string, string>
   >({});
+  const [confirmRegenerate, setConfirmRegenerate] = React.useState(false);
 
   async function handleToggleEnabled() {
     setTogglingEnabled(true);
@@ -48,14 +50,17 @@ export function FingerprintSection({
 
   async function handleGenerateToken() {
     if (token) {
-      const confirmed = window.confirm(
-        "Regenerating the token will immediately invalidate the current one. The device will stop working until reconfigured. Continue?"
-      );
-      if (!confirmed) return;
+      setConfirmRegenerate(true);
+      return;
     }
+    await runGenerateToken();
+  }
+
+  async function runGenerateToken() {
     setGeneratingToken(true);
     const result = await generateDeviceToken();
     setGeneratingToken(false);
+    setConfirmRegenerate(false);
     if (result.success) {
       setToken(result.data);
       setShowToken(true);
@@ -291,6 +296,18 @@ Content-Type: application/json
           </div>
         </div>
       </CardContent>
+
+      <DestructiveDialog
+        open={confirmRegenerate}
+        onOpenChange={(open) => {
+          if (!open) setConfirmRegenerate(false);
+        }}
+        title="Regenerate device token?"
+        description="The current token will be invalidated immediately. The fingerprint device will stop punching employees in until you reconfigure it with the new token."
+        confirmLabel="Regenerate token"
+        loading={generatingToken}
+        onConfirm={runGenerateToken}
+      />
     </>
   );
 }

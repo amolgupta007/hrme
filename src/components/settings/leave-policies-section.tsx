@@ -8,6 +8,7 @@ import { Plus, Pencil, Trash2, X, ChevronDown, CalendarDays } from "lucide-react
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { DestructiveDialog } from "@/components/ui/destructive-dialog";
 import { addLeavePolicy, updateLeavePolicy, deleteLeavePolicy } from "@/actions/settings";
 import type { LeavePolicy } from "@/types";
 
@@ -55,6 +56,7 @@ export function LeavePoliciesSection({ policies }: LeavePoliciesSectionProps) {
   const [form, setForm] = React.useState(EMPTY_FORM);
   const [loading, setLoading] = React.useState(false);
   const [deleting, setDeleting] = React.useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = React.useState<LeavePolicy | null>(null);
 
   function openAdd() {
     setEditing(null);
@@ -90,11 +92,13 @@ export function LeavePoliciesSection({ policies }: LeavePoliciesSectionProps) {
     }
   }
 
-  async function handleDelete(policy: LeavePolicy) {
-    if (!confirm(`Delete "${policy.name}"?`)) return;
+  async function confirmDelete() {
+    if (!pendingDelete) return;
+    const policy = pendingDelete;
     setDeleting(policy.id);
     const result = await deleteLeavePolicy(policy.id);
     setDeleting(null);
+    setPendingDelete(null);
     if (result.success) {
       toast.success("Policy deleted");
     } else {
@@ -154,8 +158,9 @@ export function LeavePoliciesSection({ policies }: LeavePoliciesSectionProps) {
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8 text-destructive hover:text-destructive"
-                  onClick={() => handleDelete(policy)}
+                  onClick={() => setPendingDelete(policy)}
                   disabled={deleting === policy.id}
+                  aria-label={`Delete ${policy.name}`}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </Button>
@@ -281,6 +286,18 @@ export function LeavePoliciesSection({ policies }: LeavePoliciesSectionProps) {
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
+
+      <DestructiveDialog
+        open={pendingDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingDelete(null);
+        }}
+        title={pendingDelete ? `Delete "${pendingDelete.name}"?` : ""}
+        description="Existing leave balances and approved requests stay intact. New requests can no longer use this policy."
+        confirmLabel="Delete policy"
+        loading={deleting !== null}
+        onConfirm={confirmDelete}
+      />
     </div>
   );
 }

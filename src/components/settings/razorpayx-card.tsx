@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { Wallet, CheckCircle, AlertCircle, RefreshCw, Plug, Unplug, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DestructiveDialog } from "@/components/ui/destructive-dialog";
 import {
   disconnectRazorpayX,
   testRazorpayXConnection,
@@ -23,6 +24,8 @@ export function RazorpayXCard({ credentials }: Props) {
   const [open, setOpen] = React.useState(false);
   const [testing, setTesting] = React.useState(false);
   const [bulkSyncing, setBulkSyncing] = React.useState(false);
+  const [confirmDisconnect, setConfirmDisconnect] = React.useState(false);
+  const [disconnecting, setDisconnecting] = React.useState(false);
 
   async function handleTest() {
     setTesting(true);
@@ -38,13 +41,14 @@ export function RazorpayXCard({ credentials }: Props) {
   }
 
   async function handleDisconnect() {
-    if (
-      !confirm(
-        "Disconnect RazorpayX? You'll need to re-enter credentials to use online payouts again.",
-      )
-    )
-      return;
+    setConfirmDisconnect(true);
+  }
+
+  async function runDisconnect() {
+    setDisconnecting(true);
     const r = await disconnectRazorpayX();
+    setDisconnecting(false);
+    setConfirmDisconnect(false);
     if (!r.success) {
       toast.error(r.error);
       return;
@@ -183,6 +187,18 @@ export function RazorpayXCard({ credentials }: Props) {
       )}
 
       {open && <RazorpayXConnectDialog onClose={() => setOpen(false)} />}
+
+      <DestructiveDialog
+        open={confirmDisconnect}
+        onOpenChange={(open) => {
+          if (!open) setConfirmDisconnect(false);
+        }}
+        title="Disconnect RazorpayX?"
+        description="Pay Now will be disabled on all payroll runs. Encrypted credentials are removed — you'll need to re-enter your API keys to reconnect. Disbursements already in flight are not affected."
+        confirmLabel="Disconnect"
+        loading={disconnecting}
+        onConfirm={runDisconnect}
+      />
     </div>
   );
 }

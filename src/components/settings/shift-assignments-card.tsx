@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DestructiveDialog } from "@/components/ui/destructive-dialog";
 import { deleteShiftAssignment } from "@/actions/shifts";
 import type { Shift, ShiftAssignment } from "@/actions/shifts";
 import type { Employee, Department } from "@/types";
@@ -19,14 +20,15 @@ export function ShiftAssignmentsCard({ assignments, shifts, employees, departmen
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<ShiftAssignment | null>(null);
 
-  async function handleDelete(id: string, employeeName: string | null, shiftName: string | null) {
-    if (!confirm(`Delete the ${shiftName ?? "shift"} assignment for ${employeeName ?? "this employee"}? They'll have no assigned shift after this (unless another assignment covers the date range). Historical attendance is preserved.`)) {
-      return;
-    }
-    setDeletingId(id);
-    const r = await deleteShiftAssignment(id);
+  async function confirmDelete() {
+    if (!pendingDelete) return;
+    const a = pendingDelete;
+    setDeletingId(a.id);
+    const r = await deleteShiftAssignment(a.id);
     setDeletingId(null);
+    setPendingDelete(null);
     if (!r.success) { toast.error(r.error); return; }
     toast.success("Assignment removed");
     router.refresh();
@@ -53,9 +55,10 @@ export function ShiftAssignmentsCard({ assignments, shifts, employees, departmen
               <Button
                 size="sm"
                 variant="ghost"
-                onClick={() => handleDelete(a.id, a.employee_name ?? null, a.shift_name ?? null)}
+                onClick={() => setPendingDelete(a)}
                 disabled={deletingId === a.id}
                 title="Delete assignment"
+                aria-label={`Delete ${a.shift_name ?? "shift"} assignment for ${a.employee_name ?? "employee"}`}
               >
                 <Trash2 className="h-3.5 w-3.5 text-destructive" />
               </Button>
@@ -66,6 +69,22 @@ export function ShiftAssignmentsCard({ assignments, shifts, employees, departmen
       {open && (
         <AssignShiftDialog shifts={shifts} employees={employees} departments={departments} onClose={() => setOpen(false)} />
       )}
+
+      <DestructiveDialog
+        open={pendingDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingDelete(null);
+        }}
+        title={
+          pendingDelete
+            ? `Delete the ${pendingDelete.shift_name ?? "shift"} assignment for ${pendingDelete.employee_name ?? "this employee"}?`
+            : ""
+        }
+        description="They'll have no assigned shift unless another assignment covers the date range. Historical attendance is preserved."
+        confirmLabel="Delete assignment"
+        loading={deletingId !== null}
+        onConfirm={confirmDelete}
+      />
     </div>
   );
 }

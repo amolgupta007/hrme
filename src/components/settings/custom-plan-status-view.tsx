@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { DestructiveDialog } from "@/components/ui/destructive-dialog";
 import {
   cancelMyCustomPlanRequest,
   acceptCounterOffer,
@@ -22,9 +23,13 @@ interface Props {
 
 export function CustomPlanStatusView({ request, employeeCount }: Props) {
   const [busy, setBusy] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
 
-  async function handleCancel() {
-    if (!confirm("Cancel this custom plan request?")) return;
+  function handleCancel() {
+    setConfirmCancel(true);
+  }
+
+  async function runCancel() {
     setBusy(true);
     try {
       const r = await cancelMyCustomPlanRequest(request.id);
@@ -36,6 +41,7 @@ export function CustomPlanStatusView({ request, employeeCount }: Props) {
       window.location.reload();
     } finally {
       setBusy(false);
+      setConfirmCancel(false);
     }
   }
 
@@ -72,16 +78,24 @@ export function CustomPlanStatusView({ request, employeeCount }: Props) {
 
   if (request.status === "pending") {
     return (
-      <div className="rounded-xl border border-amber-300/60 bg-amber-50/40 dark:bg-amber-900/10 p-6">
-        <h3 className="font-semibold mb-2">Under review</h3>
-        <p className="text-sm text-muted-foreground mb-4">
-          Submitted {new Date(request.created_at).toLocaleDateString("en-IN")}. We respond within 1 business day.
-        </p>
-        <RequestSummary request={request} />
-        <Button variant="outline" size="sm" onClick={handleCancel} disabled={busy} className="mt-4">
-          Cancel request
-        </Button>
-      </div>
+      <>
+        <div className="rounded-xl border border-amber-300/60 bg-amber-50/40 dark:bg-amber-900/10 p-6">
+          <h3 className="font-semibold mb-2">Under review</h3>
+          <p className="text-sm text-muted-foreground mb-4">
+            Submitted {new Date(request.created_at).toLocaleDateString("en-IN")}. We respond within 1 business day.
+          </p>
+          <RequestSummary request={request} />
+          <Button variant="outline" size="sm" onClick={handleCancel} disabled={busy} className="mt-4">
+            Cancel request
+          </Button>
+        </div>
+        <CancelDialog
+          open={confirmCancel}
+          onOpenChange={(open) => { if (!open) setConfirmCancel(false); }}
+          loading={busy}
+          onConfirm={runCancel}
+        />
+      </>
     );
   }
 
@@ -135,6 +149,13 @@ export function CustomPlanStatusView({ request, employeeCount }: Props) {
           <Button onClick={handleAccept} disabled={busy}>Accept counter-offer</Button>
           <Button variant="outline" onClick={handleCancel} disabled={busy}>Decline</Button>
         </div>
+        <CancelDialog
+          open={confirmCancel}
+          onOpenChange={(open) => { if (!open) setConfirmCancel(false); }}
+          loading={busy}
+          onConfirm={runCancel}
+          isDecline
+        />
       </div>
     );
   }
@@ -162,6 +183,37 @@ export function CustomPlanStatusView({ request, employeeCount }: Props) {
   }
 
   return null;
+}
+
+function CancelDialog({
+  open,
+  onOpenChange,
+  loading,
+  onConfirm,
+  isDecline = false,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  loading: boolean;
+  onConfirm: () => void | Promise<void>;
+  isDecline?: boolean;
+}) {
+  return (
+    <DestructiveDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={isDecline ? "Decline counter-offer?" : "Cancel custom plan request?"}
+      description={
+        isDecline
+          ? "Your request will be withdrawn. You can submit a fresh request later if you want different terms."
+          : "Your request will be withdrawn. You can submit a fresh request anytime."
+      }
+      confirmLabel={isDecline ? "Decline offer" : "Cancel request"}
+      cancelLabel="Keep request"
+      loading={loading}
+      onConfirm={onConfirm}
+    />
+  );
 }
 
 function RequestSummary({ request }: { request: CustomPlanRequest }) {

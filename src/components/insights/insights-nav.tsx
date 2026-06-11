@@ -2,14 +2,25 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, LayoutDashboard, Users, CalendarDays, Wallet, ArrowLeft } from "lucide-react";
+import {
+  BarChart3,
+  LayoutDashboard,
+  Users,
+  CalendarDays,
+  Wallet,
+  Briefcase,
+  Star,
+  ArrowLeft,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { label: "Overview", href: "/insights", icon: LayoutDashboard, exact: true },
   { label: "Workforce", href: "/insights/workforce", icon: Users },
-  { label: "Leave & Attendance", href: "/insights/leave", icon: CalendarDays },
+  { label: "Leave", href: "/insights/leave", icon: CalendarDays },
   { label: "Payroll", href: "/insights/payroll", icon: Wallet },
+  { label: "Hiring", href: "/insights/hiring", icon: Briefcase },
+  { label: "Performance", href: "/insights/performance", icon: Star },
 ];
 
 export function InsightsNav() {
@@ -50,9 +61,6 @@ export function InsightsNav() {
                 </Link>
               );
             })}
-            <span className="ml-1 rounded-full border border-white/10 px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-slate-500">
-              More coming
-            </span>
           </div>
         </div>
 
@@ -66,7 +74,7 @@ export function InsightsNav() {
       </div>
 
       {/* Mobile tab row */}
-      <div className="flex items-center gap-1 px-4 pb-2 md:hidden">
+      <div className="scroll-thin flex items-center gap-1 overflow-x-auto px-4 pb-2 md:hidden">
         {NAV_ITEMS.map((item) => {
           const active =
             "exact" in item && item.exact
@@ -77,7 +85,7 @@ export function InsightsNav() {
               key={item.href}
               href={item.href}
               className={cn(
-                "rounded-lg px-3 py-1.5 text-sm font-medium",
+                "shrink-0 rounded-lg px-3 py-1.5 text-sm font-medium",
                 active ? "bg-violet-500/15 text-violet-200" : "text-slate-400"
               )}
             >

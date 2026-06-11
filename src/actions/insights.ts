@@ -745,6 +745,443 @@ export async function getPayrollInsights(): Promise<ActionResult<PayrollInsights
   };
 }
 
+// ---- Hiring ----
+
+const HIRE_STAGE_ORDER: Record<string, number> = {
+  applied: 0,
+  screening: 1,
+  shortlisted: 2,
+  interview_1: 3,
+  interview_2: 4,
+  final_round: 5,
+  offer: 6,
+  hired: 7,
+};
+
+const HIRE_STAGE_LABELS: Record<string, string> = {
+  applied: "Applied",
+  screening: "Screening",
+  shortlisted: "Shortlisted",
+  interview_1: "Interview 1",
+  interview_2: "Interview 2",
+  final_round: "Final Round",
+  offer: "Offer",
+  hired: "Hired",
+};
+
+export type FunnelStage = {
+  name: string;
+  value: number;
+  /** Conversion from the previous stage, 0–100. 100 for the first stage. */
+  conversionPct: number;
+};
+
+export type SourceRow = { label: string; total: number; hired: number };
+
+export type HiringInsights = {
+  kpis: {
+    openJobs: number;
+    applications12m: number;
+    hires12m: number;
+    avgTimeToHireDays: number;
+    offerAcceptancePct: number;
+  };
+  funnel: FunnelStage[];
+  avgDaysInStage: NamedCount[];
+  sources: SourceRow[];
+  offerStatusDist: NamedCount[];
+  loiDist: NamedCount[];
+  rejectionByStage: NamedCount[];
+};
+
+/** Returns data:null when JambaHire isn't enabled for the org. */
+export async function getHiringInsights(): Promise<ActionResult<HiringInsights | null>> {
+  const access = await requireInsightsAccess();
+  if (!access.ok) return { success: false, error: access.error };
+  const { user } = access;
+  if (!user.jambaHireEnabled) return { success: true, data: null };
+
+  const supabase = createAdminSupabase();
+  const orgId = user.orgId;
+  const twelveMonthsAgo = new Date(Date.now() - 365 * 24 * 3600 * 1000).toISOString();
+
+  const [applicationsResult, transitionsResult, candidatesResult, offersResult, { count: openJobs }] =
+    await Promise.all([
+      supabase
+        .from("applications")
+        .select("id, stage, applied_at, candidate_id, loi_status")
+        .eq("org_id", orgId),
+      supabase
+        .from("candidate_stage_transitions")
+        .select("application_id, from_stage, to_stage, direction, created_at")
+        .eq("org_id", orgId)
+        .order("created_at", { ascending: true }),
+      supabase.from("candidates").select("id, source").eq("org_id", orgId),
+      supabase.from("offers").select("status").eq("org_id", orgId),
+      supabase
+        .from("jobs")
+        .select("id", { count: "exact", head: true })
+        .eq("org_id", orgId)
+        .eq("status", "active"),
+    ]);
+
+  type AppRow = {
+    id: string;
+    stage: string;
+    applied_at: string;
+    candidate_id: string;
+    loi_status: string | null;
+  };
+  type TransitionRow = {
+    application_id: string;
+    from_stage: string | null;
+    to_stage: string;
+    direction: string;
+    created_at: string;
+  };
+  const applications = (applicationsResult.data ?? []) as AppRow[];
+  const transitions = (transitionsResult.data ?? []) as TransitionRow[];
+
+  const transitionsByApp = new Map<string, TransitionRow[]>();
+  for (const t of transitions) {
+    const arr = transitionsByApp.get(t.application_id) ?? [];
+    arr.push(t);
+    transitionsByApp.set(t.application_id, arr);
+  }
+
+  // Funnel: an application "reached" stage S if its current stage or any
+  // recorded to_stage is at/past S in the canonical order.
+  const maxReached = new Map<string, number>();
+  for (const a of applications) {
+    let max = HIRE_STAGE_ORDER[a.stage] ?? 0;
+    for (const t of transitionsByApp.get(a.id) ?? []) {
+      const o = HIRE_STAGE_ORDER[t.to_stage];
+      if (o !== undefined && o > max) max = o;
+    }
+    maxReached.set(a.id, max);
+  }
+  const stageKeys = Object.keys(HIRE_STAGE_ORDER);
+  const funnel: FunnelStage[] = stageKeys.map((key, idx) => {
+    const value = [...maxReached.values()].filter((m) => m >= idx).length;
+    const prev = idx === 0 ? value : [...maxReached.values()].filter((m) => m >= idx - 1).length;
+    return {
+      name: HIRE_STAGE_LABELS[key],
+      value,
+      conversionPct: idx === 0 ? 100 : prev > 0 ? Math.round((value / prev) * 100) : 0,
+    };
+  });
+
+  // Time-to-hire + time-in-stage
+  const DAY_MS = 24 * 3600 * 1000;
+  const hireDurations: number[] = [];
+  const stageDurations = new Map<string, number[]>();
+  for (const a of applications) {
+    const ts = (transitionsByApp.get(a.id) ?? []).filter((t) => t.direction !== "initial");
+    let prevAt = a.applied_at;
+    let prevStage = "applied";
+    for (const t of ts) {
+      const days = (new Date(t.created_at).getTime() - new Date(prevAt).getTime()) / DAY_MS;
+      if (days >= 0 && days < 365) {
+        const arr = stageDurations.get(prevStage) ?? [];
+        arr.push(days);
+        stageDurations.set(prevStage, arr);
+      }
+      if (t.to_stage === "hired") {
+        const total = (new Date(t.created_at).getTime() - new Date(a.applied_at).getTime()) / DAY_MS;
+        if (total >= 0 && total < 730) hireDurations.push(total);
+      }
+      prevAt = t.created_at;
+      prevStage = t.to_stage;
+    }
+  }
+  const avgTimeToHireDays =
+    hireDurations.length > 0
+      ? Math.round((hireDurations.reduce((s, v) => s + v, 0) / hireDurations.length) * 10) / 10
+      : 0;
+  const avgDaysInStage: NamedCount[] = stageKeys
+    .filter((k) => k !== "hired")
+    .map((k) => {
+      const arr = stageDurations.get(k) ?? [];
+      return {
+        name: HIRE_STAGE_LABELS[k],
+        value:
+          arr.length > 0
+            ? Math.round((arr.reduce((s, v) => s + v, 0) / arr.length) * 10) / 10
+            : 0,
+      };
+    });
+
+  // Source effectiveness
+  const sourceOfCandidate = new Map<string, string>(
+    ((candidatesResult.data ?? []) as { id: string; source: string }[]).map((c) => [
+      c.id,
+      c.source || "other",
+    ])
+  );
+  const sourceAgg = new Map<string, { total: number; hired: number }>();
+  for (const a of applications) {
+    const src = sourceOfCandidate.get(a.candidate_id) ?? "other";
+    const agg = sourceAgg.get(src) ?? { total: 0, hired: 0 };
+    agg.total += 1;
+    if ((maxReached.get(a.id) ?? 0) >= HIRE_STAGE_ORDER.hired) agg.hired += 1;
+    sourceAgg.set(src, agg);
+  }
+  const sources: SourceRow[] = [...sourceAgg.entries()]
+    .map(([label, v]) => ({ label: label.charAt(0).toUpperCase() + label.slice(1), ...v }))
+    .sort((a, b) => b.total - a.total);
+
+  // Offers
+  const offerCounts = new Map<string, number>();
+  for (const o of (offersResult.data ?? []) as { status: string }[]) {
+    offerCounts.set(o.status, (offerCounts.get(o.status) ?? 0) + 1);
+  }
+  const offerStatusDist: NamedCount[] = [...offerCounts.entries()]
+    .map(([name, value]) => ({ name: name.charAt(0).toUpperCase() + name.slice(1), value }))
+    .sort((a, b) => b.value - a.value);
+  const accepted = offerCounts.get("accepted") ?? 0;
+  const declined = offerCounts.get("declined") ?? 0;
+  const offerAcceptancePct =
+    accepted + declined > 0 ? Math.round((accepted / (accepted + declined)) * 100) : 0;
+
+  // LOI response distribution
+  const loiCounts = new Map<string, number>();
+  for (const a of applications) {
+    if (!a.loi_status) continue;
+    loiCounts.set(a.loi_status, (loiCounts.get(a.loi_status) ?? 0) + 1);
+  }
+  const loiDist: NamedCount[] = [...loiCounts.entries()]
+    .map(([name, value]) => ({ name: name.charAt(0).toUpperCase() + name.slice(1), value }))
+    .sort((a, b) => b.value - a.value);
+
+  // Rejections by the stage they happened from
+  const rejCounts = new Map<string, number>();
+  for (const t of transitions) {
+    if (t.direction !== "reject" || !t.from_stage) continue;
+    const label = HIRE_STAGE_LABELS[t.from_stage] ?? t.from_stage;
+    rejCounts.set(label, (rejCounts.get(label) ?? 0) + 1);
+  }
+  const rejectionByStage: NamedCount[] = stageKeys
+    .map((k) => ({ name: HIRE_STAGE_LABELS[k], value: rejCounts.get(HIRE_STAGE_LABELS[k]) ?? 0 }))
+    .filter((r) => r.value > 0);
+
+  const applications12m = applications.filter((a) => a.applied_at >= twelveMonthsAgo).length;
+  const hires12m = transitions.filter(
+    (t) => t.to_stage === "hired" && t.created_at >= twelveMonthsAgo
+  ).length;
+
+  return {
+    success: true,
+    data: {
+      kpis: {
+        openJobs: openJobs ?? 0,
+        applications12m,
+        hires12m,
+        avgTimeToHireDays,
+        offerAcceptancePct,
+      },
+      funnel,
+      avgDaysInStage,
+      sources,
+      offerStatusDist,
+      loiDist,
+      rejectionByStage,
+    },
+  };
+}
+
+// ---- Performance & Training ----
+
+export type RatingDistRow = { label: string; self: number; manager: number };
+
+export type PerformanceTrainingInsights = {
+  kpis: {
+    avgManagerRating: number;
+    ratingScale: number;
+    reviewsCompletionPct: number;
+    objectivesAchievementPct: number;
+    trainingCompliancePct: number;
+    overdueEnrollments: number;
+  };
+  latestCycleName: string | null;
+  ratingDist: RatingDistRow[];
+  objectivesByDept: NamedCount[];
+  trainingByDept: NamedCount[];
+  overdueByCourse: NamedCount[];
+};
+
+export async function getPerformanceTrainingInsights(): Promise<
+  ActionResult<PerformanceTrainingInsights>
+> {
+  const access = await requireInsightsAccess();
+  if (!access.ok) return { success: false, error: access.error };
+  const { user } = access;
+  const supabase = createAdminSupabase();
+  const orgId = user.orgId;
+
+  const [cyclesResult, reviewsResult, objectivesResult, enrollmentsResult, coursesResult, employeesResult, departmentsResult] =
+    await Promise.all([
+      supabase
+        .from("review_cycles")
+        .select("id, name, rating_scale, end_date")
+        .eq("org_id", orgId)
+        .order("end_date", { ascending: false }),
+      supabase
+        .from("reviews")
+        .select("cycle_id, status, self_rating, manager_rating")
+        .eq("org_id", orgId),
+      supabase
+        .from("objectives")
+        .select("employee_id, status, items")
+        .eq("org_id", orgId)
+        .eq("status", "approved"),
+      supabase
+        .from("training_enrollments")
+        .select("employee_id, course_id, status")
+        .eq("org_id", orgId),
+      supabase.from("training_courses").select("id, title").eq("org_id", orgId),
+      supabase.from("employees").select("id, department_id").eq("org_id", orgId),
+      supabase.from("departments").select("id, name").eq("org_id", orgId),
+    ]);
+
+  type ReviewRow = {
+    cycle_id: string;
+    status: string;
+    self_rating: number | null;
+    manager_rating: number | null;
+  };
+  const reviews = (reviewsResult.data ?? []) as ReviewRow[];
+  const cycles = (cyclesResult.data ?? []) as {
+    id: string;
+    name: string;
+    rating_scale: number | null;
+  }[];
+
+  // Latest cycle that actually has reviews
+  const latestCycle = cycles.find((c) => reviews.some((r) => r.cycle_id === c.id)) ?? null;
+  const cycleReviews = latestCycle ? reviews.filter((r) => r.cycle_id === latestCycle.id) : [];
+  const ratingScale = latestCycle?.rating_scale ?? 5;
+
+  const ratingDist: RatingDistRow[] = [];
+  for (let n = 1; n <= ratingScale; n++) {
+    ratingDist.push({
+      label: String(n),
+      self: cycleReviews.filter((r) => Math.round(r.self_rating ?? 0) === n).length,
+      manager: cycleReviews.filter((r) => Math.round(r.manager_rating ?? 0) === n).length,
+    });
+  }
+  const managerRatings = cycleReviews
+    .map((r) => r.manager_rating)
+    .filter((v): v is number => v !== null);
+  const avgManagerRating =
+    managerRatings.length > 0
+      ? Math.round((managerRatings.reduce((s, v) => s + v, 0) / managerRatings.length) * 10) / 10
+      : 0;
+  const reviewsCompletionPct =
+    cycleReviews.length > 0
+      ? Math.round(
+          (cycleReviews.filter((r) => r.status === "completed").length / cycleReviews.length) * 100
+        )
+      : 0;
+
+  // Dept lookups
+  const deptNames = new Map<string, string>(
+    ((departmentsResult.data ?? []) as { id: string; name: string }[]).map((d) => [d.id, d.name])
+  );
+  const empDept = new Map<string, string | null>(
+    ((employeesResult.data ?? []) as { id: string; department_id: string | null }[]).map((e) => [
+      e.id,
+      e.department_id,
+    ])
+  );
+  const deptOf = (employeeId: string): string => {
+    const id = empDept.get(employeeId);
+    return id ? deptNames.get(id) ?? "Unknown" : "Unassigned";
+  };
+
+  // Objectives achievement (items JSONB: count self_status === 'achieved')
+  let objAchieved = 0;
+  let objTotal = 0;
+  const objByDept = new Map<string, { achieved: number; total: number }>();
+  for (const o of (objectivesResult.data ?? []) as { employee_id: string; items: unknown }[]) {
+    const items = Array.isArray(o.items) ? (o.items as { self_status?: string }[]) : [];
+    if (items.length === 0) continue;
+    const achieved = items.filter((i) => i.self_status === "achieved").length;
+    objAchieved += achieved;
+    objTotal += items.length;
+    const dept = deptOf(o.employee_id);
+    const agg = objByDept.get(dept) ?? { achieved: 0, total: 0 };
+    agg.achieved += achieved;
+    agg.total += items.length;
+    objByDept.set(dept, agg);
+  }
+  const objectivesAchievementPct = objTotal > 0 ? Math.round((objAchieved / objTotal) * 100) : 0;
+  const objectivesByDept: NamedCount[] = [...objByDept.entries()]
+    .map(([name, v]) => ({
+      name,
+      value: v.total > 0 ? Math.round((v.achieved / v.total) * 100) : 0,
+    }))
+    .sort((a, b) => b.value - a.value);
+
+  // Training compliance by department + overdue by course
+  type EnrollmentRow = { employee_id: string; course_id: string; status: string };
+  const enrollments = (enrollmentsResult.data ?? []) as EnrollmentRow[];
+  const trainByDept = new Map<string, { completed: number; total: number }>();
+  for (const e of enrollments) {
+    const dept = deptOf(e.employee_id);
+    const agg = trainByDept.get(dept) ?? { completed: 0, total: 0 };
+    agg.total += 1;
+    if (e.status === "completed") agg.completed += 1;
+    trainByDept.set(dept, agg);
+  }
+  const trainingByDept: NamedCount[] = [...trainByDept.entries()]
+    .map(([name, v]) => ({
+      name,
+      value: v.total > 0 ? Math.round((v.completed / v.total) * 100) : 0,
+    }))
+    .sort((a, b) => b.value - a.value);
+  const trainingCompliancePct =
+    enrollments.length > 0
+      ? Math.round(
+          (enrollments.filter((e) => e.status === "completed").length / enrollments.length) * 100
+        )
+      : 0;
+
+  const courseTitles = new Map<string, string>(
+    ((coursesResult.data ?? []) as { id: string; title: string }[]).map((c) => [c.id, c.title])
+  );
+  const overdueByCourseMap = new Map<string, number>();
+  let overdueEnrollments = 0;
+  for (const e of enrollments) {
+    if (e.status !== "overdue") continue;
+    overdueEnrollments += 1;
+    const title = courseTitles.get(e.course_id) ?? "Unknown course";
+    overdueByCourseMap.set(title, (overdueByCourseMap.get(title) ?? 0) + 1);
+  }
+  const overdueByCourse: NamedCount[] = [...overdueByCourseMap.entries()]
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 8);
+
+  return {
+    success: true,
+    data: {
+      kpis: {
+        avgManagerRating,
+        ratingScale,
+        reviewsCompletionPct,
+        objectivesAchievementPct,
+        trainingCompliancePct,
+        overdueEnrollments,
+      },
+      latestCycleName: latestCycle?.name ?? null,
+      ratingDist,
+      objectivesByDept,
+      trainingByDept,
+      overdueByCourse,
+    },
+  };
+}
+
 export async function getWorkforceInsights(): Promise<ActionResult<WorkforceInsights>> {
   const access = await requireInsightsAccess();
   if (!access.ok) return { success: false, error: access.error };

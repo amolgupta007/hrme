@@ -4,7 +4,7 @@ import {
   Clock, ChevronRight, Target,
   ClipboardList, UserCheck, Megaphone, Pin,
   TrendingUp, BookOpen, FileText, UserPlus,
-  CheckSquare, Network, PartyPopper, Star,
+  CheckSquare, Network, PartyPopper, Star, Wallet,
 } from "lucide-react";
 import { getDashboardData } from "@/actions/dashboard";
 import { getMyOnboardingStatus } from "@/actions/onboarding";
@@ -75,9 +75,19 @@ function getTodayLabel(): string {
 // ---- Role-aware stat cards ----
 
 function buildStatCards(data: DashboardData) {
-  const { stats, userRole, myLeaveBalances, myPendingLeavesCount, myOverdueTrainingCount, pendingObjectivesCount, grievancesCount } = data;
+  const { stats, userRole, myLeaveBalances, myPendingLeavesCount, myOverdueTrainingCount, myTrainingCompletion, pendingObjectivesCount, grievancesCount, presentToday, lastPayrollRun } = data;
 
   const totalRemaining = myLeaveBalances.reduce((s, b) => s + b.remaining, 0);
+  const employeesSub =
+    stats.joinedThisMonth > 0
+      ? `+${stats.joinedThisMonth} joined this month`
+      : "Active team members";
+  const pendingLeavesSub =
+    stats.pendingLeaves === 0
+      ? "All clear"
+      : stats.pendingLeavesThisWeek > 0
+        ? `${stats.pendingLeavesThisWeek} new this week`
+        : "Awaiting approval";
 
   if (userRole === "employee") {
     return [
@@ -101,8 +111,8 @@ function buildStatCards(data: DashboardData) {
       },
       {
         label: "My Training",
-        value: `${stats.trainingCompletion}%`,
-        sub: "Completion rate",
+        value: `${myTrainingCompletion}%`,
+        sub: "My completion rate",
         icon: GraduationCap,
         color: "text-green-600",
         bg: "bg-green-500/10",
@@ -125,7 +135,7 @@ function buildStatCards(data: DashboardData) {
       {
         label: "Total Employees",
         value: String(stats.totalEmployees),
-        sub: "Active team members",
+        sub: employeesSub,
         icon: Users,
         color: "text-primary",
         bg: "bg-primary/10",
@@ -134,7 +144,7 @@ function buildStatCards(data: DashboardData) {
       {
         label: "Pending Leaves",
         value: String(stats.pendingLeaves),
-        sub: stats.pendingLeaves === 0 ? "All clear" : "Awaiting your approval",
+        sub: pendingLeavesSub,
         icon: CalendarDays,
         color: "text-accent",
         bg: "bg-accent/10",
@@ -162,11 +172,11 @@ function buildStatCards(data: DashboardData) {
   }
 
   // Admin / Owner
-  return [
+  const adminCards = [
     {
       label: "Total Employees",
       value: String(stats.totalEmployees),
-      sub: "Active team members",
+      sub: employeesSub,
       icon: Users,
       color: "text-primary",
       bg: "bg-primary/10",
@@ -175,7 +185,7 @@ function buildStatCards(data: DashboardData) {
     {
       label: "Pending Leaves",
       value: String(stats.pendingLeaves),
-      sub: stats.pendingLeaves === 0 ? "All clear" : "Awaiting approval",
+      sub: pendingLeavesSub,
       icon: CalendarDays,
       color: "text-accent",
       bg: "bg-accent/10",
@@ -210,6 +220,38 @@ function buildStatCards(data: DashboardData) {
           href: "/dashboard/training",
         },
   ];
+
+  if (presentToday) {
+    adminCards.push({
+      label: "Present Today",
+      value: `${presentToday.present}/${presentToday.total}`,
+      sub: "Clocked in so far",
+      icon: Clock,
+      color: "text-blue-600",
+      bg: "bg-blue-500/10",
+      href: "/dashboard/attendance",
+    });
+  }
+
+  if (lastPayrollRun) {
+    adminCards.push({
+      label: "Last Payroll Run",
+      value: lastPayrollRun.status.charAt(0).toUpperCase() + lastPayrollRun.status.slice(1),
+      sub: formatPayrollMonth(lastPayrollRun.month),
+      icon: Wallet,
+      color: lastPayrollRun.status === "paid" ? "text-green-600" : "text-amber-600",
+      bg: lastPayrollRun.status === "paid" ? "bg-green-500/10" : "bg-amber-500/10",
+      href: "/dashboard/payroll",
+    });
+  }
+
+  return adminCards;
+}
+
+function formatPayrollMonth(ym: string): string {
+  const [y, m] = ym.split("-").map(Number);
+  if (!y || !m) return ym;
+  return new Date(y, m - 1, 1).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
 }
 
 // ---- Role-aware quick actions ----
@@ -253,7 +295,7 @@ export default async function DashboardPage() {
     );
   }
 
-  const { userRole, userFirstName, whoIsOut, latestAnnouncements, activeReviewCycles, myLeaveBalances, myActiveObjectives, myLatestReview, upcomingHolidays } = data;
+  const { userRole, userFirstName, whoIsOut, whoIsOutTotal, latestAnnouncements, activeReviewCycles, myLeaveBalances, myActiveObjectives, myLatestReview, upcomingHolidays } = data;
   const isEmployeeRole = userRole === "employee";
   const statCards = buildStatCards(data);
   const quickActions = getQuickActions(userRole);
@@ -394,6 +436,14 @@ export default async function DashboardPage() {
                   </div>
                 </div>
               ))}
+              {whoIsOutTotal > whoIsOut.length && (
+                <Link
+                  href="/dashboard/leaves"
+                  className="block px-4 py-2.5 text-center text-xs font-medium text-primary hover:bg-muted/40 transition-colors"
+                >
+                  +{whoIsOutTotal - whoIsOut.length} more out today
+                </Link>
+              )}
             </div>
           )}
         </div>

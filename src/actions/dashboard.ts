@@ -3,6 +3,7 @@
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { getCurrentUser, isAdmin, isManagerOrAbove } from "@/lib/current-user";
+import { hasFeature } from "@/config/plans";
 import type { UserRole } from "@/types";
 
 async function getClerkOrgId(): Promise<string | null> {
@@ -21,6 +22,18 @@ export type DashboardStats = {
   pendingLeaves: number;
   trainingCompletion: number;
   complianceAlerts: number;
+  joinedThisMonth: number;
+  pendingLeavesThisWeek: number;
+};
+
+export type PresentToday = {
+  present: number;
+  total: number;
+};
+
+export type LastPayrollRun = {
+  month: string; // YYYY-MM
+  status: string;
 };
 
 export type RecentLeave = {
@@ -108,15 +121,19 @@ export type DashboardData = {
   userRole: UserRole;
   userFirstName: string;
   whoIsOut: WhoIsOut[];
+  whoIsOutTotal: number;
   latestAnnouncements: LatestAnnouncement[];
   pendingObjectivesCount: number;
   myLeaveBalances: MyLeaveBalance[];
   myPendingLeavesCount: number;
   myOverdueTrainingCount: number;
+  myTrainingCompletion: number;
   grievancesCount: number;
   myActiveObjectives: MyActiveObjectives | null;
   myLatestReview: MyLatestReview | null;
   upcomingHolidays: UpcomingHoliday[];
+  presentToday: PresentToday | null;
+  lastPayrollRun: LastPayrollRun | null;
 };
 
 // ---- Main action ----
@@ -150,6 +167,10 @@ export async function getDashboardData(): Promise<DashboardData | null> {
   const today = now.toISOString().split("T")[0];
   const in7Days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
   const in30Days = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+  const monthStart = `${today.slice(0, 7)}-01`;
+  const sevenDaysAgoIso = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  // attendance_records.date is written as the IST calendar date (see attendance.ts)
+  const istToday = new Date(now.getTime() + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
   // ---- Parallel queries ----
   const [
@@ -158,7 +179,10 @@ export async function getDashboardData(): Promise<DashboardData | null> {
     { count: totalEnrollments },
     { count: completedEnrollments },
     { count: overdueEnrollments },
-    leavesResult,
+    { count: joinedThisMonth },
+    { count: pendingLeavesThisWeek },
+    pendingLeavesListResult,
+    recentLeavesListResult,
     trainingDueSoonResult,
     reviewCyclesResult,
     objectivePendingResult,
@@ -191,13 +215,35 @@ export async function getDashboardData(): Promise<DashboardData | null> {
       .select("*", { count: "exact", head: true })
       .eq("org_id", orgId)
       .eq("status", "overdue"),
+    supabase
+      .from("employees")
+      .select("*", { count: "exact", head: true })
+      .eq("org_id", orgId)
+      .eq("status", "active")
+      .gte("date_of_joining", monthStart),
+    supabase
+      .from("leave_requests")
+      .select("*", { count: "exact", head: true })
+      .eq("org_id", orgId)
+      .eq("status", "pending")
+      .gte("created_at", sevenDaysAgoIso),
 
-    // Recent leave requests (pending first, then latest)
+    // Pending leave requests fetched separately so they can never be pushed
+    // out of the feed window by a burst of newer approved/rejected rows.
     supabase
       .from("leave_requests")
       .select("id, leave_type, start_date, end_date, days, status, created_at, employees!employee_id(first_name, last_name)")
       .eq("org_id", orgId)
-      .order("status", { ascending: true }) // pending sorts before approved/rejected alphabetically? No — let's do two fields
+      .eq("status", "pending")
+      .order("created_at", { ascending: false })
+      .limit(6),
+
+    // Latest non-pending requests backfill the remaining slots
+    supabase
+      .from("leave_requests")
+      .select("id, leave_type, start_date, end_date, days, status, created_at, employees!employee_id(first_name, last_name)")
+      .eq("org_id", orgId)
+      .neq("status", "pending")
       .order("created_at", { ascending: false })
       .limit(6),
 
@@ -227,10 +273,10 @@ export async function getDashboardData(): Promise<DashboardData | null> {
       .eq("org_id", orgId)
       .eq("status", "submitted"),
 
-    // Who's out today
+    // Who's out today (count: "exact" so the UI can show a "+N more" tail)
     supabase
       .from("leave_requests")
-      .select("id, leave_type, end_date, employees!employee_id(first_name, last_name, avatar_url)")
+      .select("id, leave_type, end_date, employees!employee_id(first_name, last_name, avatar_url)", { count: "exact" })
       .eq("org_id", orgId)
       .eq("status", "approved")
       .lte("start_date", today)
@@ -259,6 +305,7 @@ export async function getDashboardData(): Promise<DashboardData | null> {
   let myLeaveBalances: MyLeaveBalance[] = [];
   let myPendingLeavesCount = 0;
   let myOverdueTrainingCount = 0;
+  let myTrainingCompletion = 0;
   let userFirstName = "";
   let myActiveObjectives: MyActiveObjectives | null = null;
   let myLatestReview: MyLatestReview | null = null;
@@ -271,6 +318,8 @@ export async function getDashboardData(): Promise<DashboardData | null> {
       myOverdueResult,
       myObjectivesResult,
       myReviewResult,
+      myEnrollmentsResult,
+      myCompletedEnrollmentsResult,
     ] = await Promise.all([
       supabase
         .from("employees")
@@ -312,11 +361,25 @@ export async function getDashboardData(): Promise<DashboardData | null> {
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle(),
+      supabase
+        .from("training_enrollments")
+        .select("id", { count: "exact", head: true })
+        .eq("org_id", orgId)
+        .eq("employee_id", employeeId),
+      supabase
+        .from("training_enrollments")
+        .select("id", { count: "exact", head: true })
+        .eq("org_id", orgId)
+        .eq("employee_id", employeeId)
+        .eq("status", "completed"),
     ]);
 
     userFirstName = (empResult.data as any)?.first_name ?? "";
     myPendingLeavesCount = myPendingResult.count ?? 0;
     myOverdueTrainingCount = myOverdueResult.count ?? 0;
+    const myTotal = myEnrollmentsResult.count ?? 0;
+    myTrainingCompletion =
+      myTotal > 0 ? Math.round(((myCompletedEnrollmentsResult.count ?? 0) / myTotal) * 100) : 0;
 
     myLeaveBalances = (leaveBalancesResult.data ?? []).map((b: any) => {
       const total = (b.total_days ?? 0) + (b.carried_forward_days ?? 0);
@@ -376,8 +439,43 @@ export async function getDashboardData(): Promise<DashboardData | null> {
       ? Math.round(((completedEnrollments ?? 0) / (totalEnrollments ?? 1)) * 100)
       : 0;
 
-  // Map recent leaves — sort pending to top
-  const rawLeaves = (leavesResult.data ?? []).map((r: any) => ({
+  // ---- Module-aware admin cards (only queried when relevant) ----
+  let presentToday: PresentToday | null = null;
+  let lastPayrollRun: LastPayrollRun | null = null;
+  if (isAdmin(role)) {
+    const [attendanceResult, payrollResult] = await Promise.all([
+      user?.attendanceEnabled
+        ? supabase
+            .from("attendance_records")
+            .select("id", { count: "exact", head: true })
+            .eq("org_id", orgId)
+            .eq("date", istToday)
+            .not("clock_in_at", "is", null)
+        : Promise.resolve(null),
+      hasFeature(user?.plan ?? "starter", "payroll", user?.customFeatures ?? null)
+        ? supabase
+            .from("payroll_runs")
+            .select("month, status")
+            .eq("org_id", orgId)
+            .order("month", { ascending: false })
+            .limit(1)
+            .maybeSingle()
+        : Promise.resolve(null),
+    ]);
+    if (attendanceResult) {
+      presentToday = {
+        present: attendanceResult.count ?? 0,
+        total: totalEmployees ?? 0,
+      };
+    }
+    const runRow = payrollResult?.data as { month: string; status: string } | null | undefined;
+    if (runRow) {
+      lastPayrollRun = { month: runRow.month, status: runRow.status };
+    }
+  }
+
+  // Pending requests always lead the feed; latest decided ones backfill.
+  const mapLeave = (r: any): RecentLeave => ({
     id: r.id,
     employee_name: `${r.employees?.first_name ?? ""} ${r.employees?.last_name ?? ""}`.trim(),
     leave_type: r.leave_type,
@@ -386,12 +484,10 @@ export async function getDashboardData(): Promise<DashboardData | null> {
     days: r.days,
     status: r.status,
     created_at: r.created_at,
-  })) as RecentLeave[];
-
-  // Put pending first
+  });
   const recentLeaves = [
-    ...rawLeaves.filter((l) => l.status === "pending"),
-    ...rawLeaves.filter((l) => l.status !== "pending"),
+    ...(pendingLeavesListResult.data ?? []).map(mapLeave),
+    ...(recentLeavesListResult.data ?? []).map(mapLeave),
   ].slice(0, 6);
 
   // Who's out today
@@ -450,23 +546,32 @@ export async function getDashboardData(): Promise<DashboardData | null> {
     return a.due_date.localeCompare(b.due_date);
   });
 
-  // Active review cycles with completion stats
+  // Active review cycles with completion stats — single query, grouped in JS
   const activeReviewCycles: ActiveReviewCycle[] = [];
-  for (const cycle of reviewCyclesResult.data ?? []) {
-    const { data: reviews } = await supabase
+  const cycleRows = reviewCyclesResult.data ?? [];
+  if (cycleRows.length > 0) {
+    const { data: cycleReviews } = await supabase
       .from("reviews")
-      .select("status")
-      .eq("cycle_id", cycle.id)
-      .eq("org_id", orgId);
-    const total = reviews?.length ?? 0;
-    const completed = reviews?.filter((r: any) => r.status === "completed").length ?? 0;
-    activeReviewCycles.push({
-      id: cycle.id,
-      name: cycle.name,
-      completed,
-      total,
-      end_date: cycle.end_date,
-    });
+      .select("status, cycle_id")
+      .eq("org_id", orgId)
+      .in("cycle_id", cycleRows.map((c: any) => c.id));
+    const byCycle = new Map<string, { total: number; completed: number }>();
+    for (const r of (cycleReviews ?? []) as any[]) {
+      const agg = byCycle.get(r.cycle_id) ?? { total: 0, completed: 0 };
+      agg.total += 1;
+      if (r.status === "completed") agg.completed += 1;
+      byCycle.set(r.cycle_id, agg);
+    }
+    for (const cycle of cycleRows) {
+      const agg = byCycle.get(cycle.id) ?? { total: 0, completed: 0 };
+      activeReviewCycles.push({
+        id: cycle.id,
+        name: cycle.name,
+        completed: agg.completed,
+        total: agg.total,
+        end_date: cycle.end_date,
+      });
+    }
   }
 
   return {
@@ -475,6 +580,8 @@ export async function getDashboardData(): Promise<DashboardData | null> {
       pendingLeaves: pendingLeaves ?? 0,
       trainingCompletion: trainingPct,
       complianceAlerts: overdueEnrollments ?? 0,
+      joinedThisMonth: joinedThisMonth ?? 0,
+      pendingLeavesThisWeek: pendingLeavesThisWeek ?? 0,
     },
     recentLeaves,
     upcomingDeadlines: deadlines.slice(0, 6),
@@ -483,14 +590,18 @@ export async function getDashboardData(): Promise<DashboardData | null> {
     userRole: role,
     userFirstName,
     whoIsOut,
+    whoIsOutTotal: whoIsOutResult.count ?? whoIsOut.length,
     latestAnnouncements,
     pendingObjectivesCount: objectivePendingResult.count ?? 0,
     myLeaveBalances,
     myPendingLeavesCount,
     myOverdueTrainingCount,
+    myTrainingCompletion,
     grievancesCount: isAdmin(role) ? (grievancesResult.count ?? 0) : 0,
     myActiveObjectives,
     myLatestReview,
     upcomingHolidays,
+    presentToday,
+    lastPayrollRun,
   };
 }

@@ -114,6 +114,8 @@ export default async function PayrollInsightsPage() {
               title="Monthly cost composition"
               sub="Net pay + TDS + employee PF per processed run"
               className="lg:col-span-2"
+              exportRows={d.monthly}
+              exportName="payroll-monthly"
             >
               <StackedBars
                 data={d.monthly}
@@ -122,14 +124,24 @@ export default async function PayrollInsightsPage() {
               />
             </ChartCard>
 
-            <ChartCard title="Cost by department" sub="Net pay in the latest run">
+            <ChartCard
+              title="Cost by department"
+              sub="Net pay in the latest run"
+              exportRows={d.costByDept}
+              exportName="cost-by-department"
+            >
               <SimpleBars
                 data={d.costByDept}
                 color={INSIGHT_COLORS.teal}
                 formatValue={formatINRCompact}
               />
             </ChartCard>
-            <ChartCard title="Salary bands" sub="Configured CTCs across the org">
+            <ChartCard
+              title="Salary bands"
+              sub="Configured CTCs across the org"
+              exportRows={d.salaryBands}
+              exportName="salary-bands"
+            >
               <SimpleBars data={d.salaryBands} color={INSIGHT_COLORS.sky} valueSuffix=" people" />
             </ChartCard>
 
@@ -137,6 +149,8 @@ export default async function PayrollInsightsPage() {
               title="Overtime spend"
               sub="OT line items pushed to payroll, per month"
               className="lg:col-span-2"
+              exportRows={d.otSpendMonthly}
+              exportName="ot-spend-monthly"
             >
               <TrendArea
                 data={d.otSpendMonthly}

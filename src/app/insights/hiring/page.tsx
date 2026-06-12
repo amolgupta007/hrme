@@ -125,21 +125,43 @@ export default async function HiringInsightsPage() {
           title="Pipeline funnel"
           sub="Applications that reached each stage (all time)"
           className="lg:col-span-2"
+          exportRows={d.funnel}
+          exportName="pipeline-funnel"
         >
           <Funnel stages={d.funnel} />
         </ChartCard>
 
-        <ChartCard title="Time in stage" sub="Average days spent before moving on">
+        <ChartCard
+          title="Time in stage"
+          sub="Average days spent before moving on"
+          exportRows={d.avgDaysInStage}
+          exportName="time-in-stage"
+        >
           <SimpleBars data={d.avgDaysInStage} color={INSIGHT_COLORS.amber} valueSuffix=" days" />
         </ChartCard>
-        <ChartCard title="Source effectiveness" sub="Applications and hires by candidate source">
+        <ChartCard
+          title="Source effectiveness"
+          sub="Applications and hires by candidate source"
+          exportRows={d.sources}
+          exportName="source-effectiveness"
+        >
           <StackedBars data={d.sources} series={sourceSeries} grouped />
         </ChartCard>
 
-        <ChartCard title="Offer outcomes" sub="Every offer ever sent">
+        <ChartCard
+          title="Offer outcomes"
+          sub="Every offer ever sent"
+          exportRows={d.offerStatusDist}
+          exportName="offer-outcomes"
+        >
           <Donut data={d.offerStatusDist} centerLabel="offers" />
         </ChartCard>
-        <ChartCard title="Rejections by stage" sub="Where candidates drop out of your process">
+        <ChartCard
+          title="Rejections by stage"
+          sub="Where candidates drop out of your process"
+          exportRows={d.rejectionByStage}
+          exportName="rejections-by-stage"
+        >
           <SimpleBars data={d.rejectionByStage} color={INSIGHT_COLORS.rose} />
         </ChartCard>
 
@@ -148,6 +170,8 @@ export default async function HiringInsightsPage() {
             title="LOI responses"
             sub="Letter-of-intent outcomes at the shortlist gate"
             className="lg:col-span-2"
+            exportRows={d.loiDist}
+            exportName="loi-responses"
           >
             <SimpleBars data={d.loiDist} color={INSIGHT_COLORS.teal} />
           </ChartCard>

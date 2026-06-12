@@ -72,23 +72,42 @@ export default async function WorkforceInsightsPage() {
           title="Headcount trend"
           sub="Active employees at each month end"
           className="lg:col-span-2"
+          exportRows={d.headcountTrend}
+          exportName="headcount-trend"
         >
           <TrendArea data={d.headcountTrend} color={INSIGHT_COLORS.violet} />
         </ChartCard>
 
-        <ChartCard title="Department distribution" sub="Active employees by department">
+        <ChartCard
+          title="Department distribution"
+          sub="Active employees by department"
+          exportRows={d.deptDistribution}
+          exportName="department-distribution"
+        >
           <Donut data={d.deptDistribution} />
         </ChartCard>
-        <ChartCard title="Employment type" sub="Full-time, part-time, contract, intern">
+        <ChartCard
+          title="Employment type"
+          sub="Full-time, part-time, contract, intern"
+          exportRows={d.typeSplit}
+          exportName="employment-type"
+        >
           <SimpleBars data={d.typeSplit} color={INSIGHT_COLORS.sky} />
         </ChartCard>
 
-        <ChartCard title="Joiners vs leavers" sub="Monthly inflow and outflow">
+        <ChartCard
+          title="Joiners vs leavers"
+          sub="Monthly inflow and outflow"
+          exportRows={d.joinersLeavers}
+          exportName="joiners-vs-leavers"
+        >
           <JoinLeaveBars data={d.joinersLeavers} />
         </ChartCard>
         <ChartCard
           title="Attrition trend"
           sub="Cumulative exits over the window as a share of headcount"
+          exportRows={d.attritionTrend}
+          exportName="attrition-trend"
         >
           <TrendLine data={d.attritionTrend} color={INSIGHT_COLORS.rose} />
         </ChartCard>
@@ -97,6 +116,8 @@ export default async function WorkforceInsightsPage() {
           title="Tenure distribution"
           sub="How long your current team has been with you"
           className="lg:col-span-2"
+          exportRows={d.tenureBuckets}
+          exportName="tenure-distribution"
         >
           <SimpleBars data={d.tenureBuckets} color={INSIGHT_COLORS.amber} valueSuffix=" people" />
         </ChartCard>

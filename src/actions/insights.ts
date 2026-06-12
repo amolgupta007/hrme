@@ -41,6 +41,15 @@ export type OverviewInsights = {
   deptDistribution: NamedCount[];
   leaveByMonth: MonthPoint[];
   joinersLeavers: JoinLeavePoint[];
+  compare: {
+    /** % headcount change vs 12 months ago. */
+    headcountYoYPct: number;
+    /** Attrition rate over the PRIOR 12-month window. */
+    attritionPrevPct: number;
+    leaveDaysPrev12m: number;
+    /** Net total of the run before the latest one, if any. */
+    payrollPrevNet: number | null;
+  };
 };
 
 export type WorkforceInsights = {
@@ -170,7 +179,10 @@ export async function getOverviewInsights(): Promise<ActionResult<OverviewInsigh
   const orgId = user.orgId;
 
   const months = lastNMonths(12);
+  const months24 = lastNMonths(24);
+  const prevMonths = months24.slice(0, 12);
   const windowStart = `${months[0].month}-01`;
+  const windowStart24 = `${months24[0].month}-01`;
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
     .toISOString()
     .slice(0, 10);
@@ -200,7 +212,7 @@ export async function getOverviewInsights(): Promise<ActionResult<OverviewInsigh
       .select("start_date, days")
       .eq("org_id", orgId)
       .eq("status", "approved")
-      .gte("start_date", windowStart),
+      .gte("start_date", windowStart24),
     supabase
       .from("leave_balances")
       .select("total_days, used_days, carried_forward_days")
@@ -240,8 +252,7 @@ export async function getOverviewInsights(): Promise<ActionResult<OverviewInsigh
           .eq("org_id", orgId)
           .in("status", ["processed", "paid"])
           .order("month", { ascending: false })
-          .limit(1)
-          .maybeSingle()
+          .limit(2)
       : Promise.resolve(null),
   ]);
 
@@ -274,6 +285,10 @@ export async function getOverviewInsights(): Promise<ActionResult<OverviewInsigh
     value: leaveByMonthMap.get(m.month) ?? 0,
   }));
   const leaveDaysTaken12m = leaveByMonth.reduce((s, p) => s + p.value, 0);
+  const leaveDaysPrev12m = prevMonths.reduce(
+    (s, m) => s + (leaveByMonthMap.get(m.month) ?? 0),
+    0
+  );
 
   // Leave utilization (this calendar year)
   let totalAllocated = 0;
@@ -290,25 +305,45 @@ export async function getOverviewInsights(): Promise<ActionResult<OverviewInsigh
       ? Math.round(((completedEnrollments ?? 0) / (totalEnrollments ?? 1)) * 100)
       : 0;
 
-  // Payroll cost: sum net_pay of the latest processed/paid run
+  // Payroll cost: latest processed/paid run + the one before it for the delta
   let monthlyPayrollCost: number | null = null;
   let payrollMonth: string | null = null;
-  const runRow = payrollRunResult?.data as { id: string; month: string } | null | undefined;
-  if (runRow) {
+  let payrollPrevNet: number | null = null;
+  const runRows = (payrollRunResult?.data ?? []) as { id: string; month: string }[];
+  if (runRows.length > 0) {
     const { data: entries } = await supabase
       .from("payroll_entries")
-      .select("net_pay")
-      .eq("payroll_run_id", runRow.id);
-    monthlyPayrollCost = ((entries ?? []) as { net_pay: number }[]).reduce(
-      (s, e) => s + (e.net_pay ?? 0),
-      0
-    );
-    payrollMonth = runRow.month;
+      .select("net_pay, payroll_run_id")
+      .in("payroll_run_id", runRows.map((r) => r.id));
+    const sumFor = (runId: string) =>
+      ((entries ?? []) as { net_pay: number; payroll_run_id: string }[])
+        .filter((e) => e.payroll_run_id === runId)
+        .reduce((s, e) => s + (e.net_pay ?? 0), 0);
+    monthlyPayrollCost = sumFor(runRows[0].id);
+    payrollMonth = runRows[0].month;
+    if (runRows[1]) payrollPrevNet = sumFor(runRows[1].id);
   }
 
   const headcountDelta30d = active.filter(
     (e) => (e.date_of_joining ?? "") >= thirtyDaysAgo
   ).length;
+
+  // Prior-12-month comparators
+  const headcount12mAgo = headcountTrend[0]?.value ?? 0;
+  const headcountYoYPct =
+    headcount12mAgo > 0
+      ? Math.round(((active.length - headcount12mAgo) / headcount12mAgo) * 100)
+      : 0;
+  const prevMonthKeys = new Set(prevMonths.map((m) => m.month));
+  const prevExits = employees.filter((e) => {
+    const ex = exitMonth(e);
+    return ex !== null && prevMonthKeys.has(ex);
+  }).length;
+  const prevAvgHeadcount =
+    prevMonths.reduce((s, m) => s + headcountAt(employees, m.end), 0) /
+    Math.max(1, prevMonths.length);
+  const attritionPrevPct =
+    prevAvgHeadcount > 0 ? Math.round((prevExits / prevAvgHeadcount) * 1000) / 10 : 0;
 
   return {
     success: true,
@@ -328,6 +363,12 @@ export async function getOverviewInsights(): Promise<ActionResult<OverviewInsigh
       deptDistribution,
       leaveByMonth,
       joinersLeavers,
+      compare: {
+        headcountYoYPct,
+        attritionPrevPct,
+        leaveDaysPrev12m,
+        payrollPrevNet,
+      },
     },
   };
 }

@@ -13,6 +13,7 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { PrintReportButton } from "./print-report-button";
 
 const NAV_ITEMS = [
   { label: "Overview", href: "/insights", icon: LayoutDashboard, exact: true },
@@ -64,13 +65,16 @@ export function InsightsNav() {
           </div>
         </div>
 
-        <Link
-          href="/dashboard"
-          className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-slate-400 transition-colors hover:bg-white/5 hover:text-slate-200"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Dashboard
-        </Link>
+        <div className="flex items-center gap-1">
+          <PrintReportButton />
+          <Link
+            href="/dashboard"
+            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-slate-400 transition-colors hover:bg-white/5 hover:text-slate-200"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Dashboard
+          </Link>
+        </div>
       </div>
 
       {/* Mobile tab row */}

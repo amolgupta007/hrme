@@ -366,18 +366,20 @@ export default async function DashboardPage() {
         ))}
       </div>
 
-      {/* Insights funnel — admin/owner on the analytics-enabled plan */}
+      {/* Insights funnel — admin/owner on the analytics-enabled plan.
+          Brand gradient: primary teal #2E8A7D → accent orange #F98C10
+          (exact hex of the app's HSL tokens). */}
       {data.showInsightsCard && (
         <Link
           href="/insights"
-          className="group flex items-center gap-4 rounded-xl bg-gradient-to-r from-violet-600 via-violet-600 to-fuchsia-600 px-5 py-4 text-white shadow-lg shadow-violet-600/20 transition-shadow hover:shadow-violet-600/40"
+          className="group flex items-center gap-4 rounded-xl bg-gradient-to-r from-[#2E8A7D] via-[#2E8A7D] to-[#F98C10] px-5 py-4 text-white shadow-lg shadow-[#2E8A7D]/20 transition-shadow hover:shadow-[#2E8A7D]/40"
         >
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/15">
             <BarChart3 className="h-5 w-5" />
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold">Org Insights</p>
-            <p className="truncate text-xs text-violet-100/80">
+            <p className="truncate text-xs text-white/80">
               Headcount, attrition, payroll cost, hiring funnel — the full analytics suite.
             </p>
           </div>

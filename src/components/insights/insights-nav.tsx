@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
-  BarChart3,
   LayoutDashboard,
   Users,
   CalendarDays,
@@ -31,12 +31,21 @@ export function InsightsNav() {
     <nav className="sticky top-0 z-40 border-b border-white/10 bg-slate-950/80 backdrop-blur-xl">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
         <div className="flex items-center gap-6">
-          <Link href="/insights" className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500 to-fuchsia-600 shadow-lg shadow-violet-500/25">
-              <BarChart3 className="h-4 w-4 text-white" />
-            </div>
-            <span className="text-base font-bold tracking-tight text-violet-200">
-              Insights
+          <Link href="/insights" className="flex items-center gap-2.5">
+            <Image
+              src="/Jamba.png"
+              alt="JambaHR"
+              width={32}
+              height={32}
+              className="rounded-lg shadow-lg shadow-violet-500/20"
+            />
+            <span className="flex flex-col gap-0.5 leading-none">
+              <span className="text-[9px] font-semibold uppercase tracking-[0.2em] text-slate-500">
+                JambaHR
+              </span>
+              <span className="text-base font-bold tracking-tight text-violet-200">
+                Insights
+              </span>
             </span>
           </Link>
 

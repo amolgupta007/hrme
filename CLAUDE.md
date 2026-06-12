@@ -52,6 +52,7 @@ hr-portal/src/
 │   ├── careers/[slug]/page.tsx     # Public job listings (no auth)
 │   ├── offers/[token]/page.tsx     # Candidate accept/decline (no auth)
 │   ├── hire/                       # JambaHire ATS (Business tier, layout + 6 pages)
+│   ├── insights/                   # Analytics module (Business tier, dark canvas, layout + 6 tabs)
 │   ├── api/webhooks/clerk|razorpay|stripe
 │   ├── api/cron/doc-reminders|onboarding-nudges
 │   └── dashboard/                  # All protected pages
@@ -69,6 +70,7 @@ hr-portal/src/
 │   ├── dashboard/ leaves/ documents/ reviews/ objectives/ training/
 │   ├── announcements/ attendance/ grievances/ settings/
 │   ├── hire/                       # 12 files (hire-nav, jobs, candidates, pipeline, interviews, offers, etc.)
+│   ├── insights/                   # insights-nav, kpi-card, chart-card, charts (recharts wrappers), csv/print buttons
 │   └── emails/                     # React Email templates (leave-request, leave-status, offer-letter,
 │                                   #   founder-alert, welcome, onboarding-nudge, upgrade-push, doc-reminder, payment-failed)
 ├── config/navigation.ts, plans.ts
@@ -610,6 +612,33 @@ Six-pass `$impeccable critique /geo` plus a geocoding feature wave. Module-level
 
 ---
 
+## Insights Module (`/insights`) — Business+ Analytics
+
+The "Advanced analytics dashboard" the Business tier had always promised (`analytics` feature key in `plans.ts`). Shipped in 4 phases, 2026-06-12. Owner/admin only.
+
+**Route group**: `/insights/*` with its own layout — deliberately distinct **dark slate canvas** (`bg-slate-950`, violet ambient glow), independent of the light dashboard theme. Gating in `src/app/insights/layout.tsx`: no user → `/sign-in`; non-admin → `/dashboard`; plan without `analytics` → `/dashboard/settings#billing`.
+
+**Six tabs** (sticky glass `InsightsNav`): Overview (`/insights`), Workforce, Leave & Attendance (`/insights/leave`), Payroll (`/insights/payroll`), Hiring, Performance.
+
+**Entry points**: violet "Insights" pill in the dashboard header (owner/admin + analytics plan, left of JambaGeo) and a violet gradient "Org Insights" banner under the admin stat cards (`showInsightsCard` flag in `getDashboardData`).
+
+**Data layer** (`src/actions/insights.ts`): one action per tab, all guarded by `requireInsightsAccess()` (auth + isAdmin + analytics feature). Aggregation strategy is two-tier:
+- **JS aggregation** over org-scoped rows for small tables (employees, leave_requests, reviews, applications, transitions, ot_records, payroll_entries ≤ ~6k rows) — fine at 10–500 employee SMB scale.
+- **Postgres RPC** for `attendance_records` (~180k rows/yr at 500 emp): migration `059_insights_attendance_rollup.sql` adds `insights_attendance_monthly(p_org_id, p_from, p_to)`. Plain `LANGUAGE sql STABLE` (no SECURITY DEFINER — service-role caller bypasses RLS per gotcha #5).
+
+**Module-gated tabs degrade, never hide**: Payroll tab without the payroll feature → upgrade card; Hiring without `jambahire_enabled` → enable hint (`data: null` from the action); attendance section when the org has attendance off → enable hint; when migration 059 isn't applied the RPC error renders a "run migration 059" provision hint (`attendance.available=false`) instead of crashing.
+
+**Charts**: Recharts wrappers in `src/components/insights/charts.tsx` (TrendArea, TrendLine, SimpleBars, StackedBars w/ `grouped` mode, JoinLeaveBars, Donut, Sparkline), themed via `src/lib/insights/chart-theme.ts` (single source — palette, tooltip style, `formatINRCompact` L/Cr formatter). Every chart has a designed empty state. The hiring funnel is a hand-rolled CSS gradient funnel (recharts is weak there). `KpiCard` delta chips know metric semantics via `goodWhenUp` (rising attrition/cost = rose, rising headcount = emerald).
+
+**Phase 4 features**: CSV export button on every `ChartCard` (`exportRows`/`exportName` props → client-side Blob download with UTF-8 BOM); "Print report" button + `@media print` rules in globals.css that flatten the dark canvas to a white report (`#insights-root` + `.insight-card` + `.print-hide` hooks); period-over-period deltas on Overview (headcount % YoY, attrition ±pt vs prior 12m, payroll % MoM, leave % vs prior 12m).
+
+**Known caveats**:
+- **No `terminated_at` column exists** — exit dates proxy from `updated_at` of `status='terminated'` rows (terminating is almost always the last write). Headcount trend / attrition / leavers are approximations; a dedicated column is the precision upgrade.
+- Migration 059 must be applied via the Supabase SQL Editor (Windows, gotcha #4).
+- `/insights/*` pages are NOT in the AI-assistant route registry (the integrity test only covers `/dashboard/*`); help articles for the module are a future nice-to-have.
+
+---
+
 ## Social Agent (`/superadmin/social`) — Single-Tenant LinkedIn
 
 Founder-only LinkedIn content automation for JambaHR's own company page. Lives under `/superadmin` (cookie-auth via `SUPERADMIN_SECRET`), not `/dashboard`. Disabled by default — set `SOCIAL_AGENT_ENABLED=true` in env to activate.
@@ -805,6 +834,7 @@ npm run db:push       # Push migrations (needs CLI)
 80. **GitHub PR squash race**: When a PR is open against branch tip A and more commits are pushed without refreshing the PR HEAD, the merge can resolve against the stale ref — commits silently never land on `main`. Verify after merge with `git merge-base --is-ancestor <commit> main`. PR #6 in this repo hit it once (2026-06-10); `4f9cb87` (the assistant linkage commit) had to be cherry-picked manually.
 81. **Lead address auto-geocoded on save**: `createLead` / `updateLead` (and the explicit `geocodeLead(id)`) call `geocodeAddress` via Mapbox v5 when address is present and `lat`/`lng` aren't explicitly set. Best-effort, 5s timeout, silent failure. Uses the same `NEXT_PUBLIC_MAPBOX_TOKEN`. Mapbox free tier covers 100k/mo — well past SMB volume.
 82. **`GeoPageHeader` is the canonical h1+lede for every `/geo/*` page**: Don't inline `<header><h1>` blocks on new pages — use `<GeoPageHeader title="..." lede="..." rightSlot={...} />`. Owns the typographic scale (text-2xl semibold tracking-tight + max-w-prose lede + mb-6) so every destination page stays in rhythm. See `src/components/geo/geo-page-header.tsx`.
+83. **Function props from Server Components to Client Components crash at REQUEST time, not build time**: `next build` passes, then the page 500s ("Functions cannot be passed directly to Client Components"). Hit on 2026-06-12 when `/insights/leave` and `/insights/payroll` passed `formatValue={fn}` to recharts wrappers. Fix pattern: pass a serializable token (`format="inr" | "timeOfDay" | "percent" | "plain"`) and resolve the formatter inside the client component — see `makeFormatter()` in `src/components/insights/charts.tsx`. Audit any new server page that hands props to `"use client"` chart/dialog components.
 
 ---
 

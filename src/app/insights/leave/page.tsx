@@ -16,15 +16,6 @@ const LEAVE_TYPE_LABELS: Record<string, string> = {
   custom: "Custom",
 };
 
-function minutesToTime(v: number): string {
-  if (v <= 0) return "—";
-  const h = Math.floor(v / 60);
-  const m = Math.round(v % 60);
-  const ampm = h >= 12 ? "pm" : "am";
-  const h12 = h % 12 === 0 ? 12 : h % 12;
-  return `${h12}:${String(m).padStart(2, "0")}${ampm}`;
-}
-
 export default async function LeaveInsightsPage() {
   const result = await getLeaveAttendanceInsights();
 
@@ -166,7 +157,7 @@ export default async function LeaveInsightsPage() {
               <TrendLine
                 data={att.avgClockInMinutes}
                 color={INSIGHT_COLORS.amber}
-                formatValue={minutesToTime}
+                format="timeOfDay"
               />
             </ChartCard>
             <ChartCard
@@ -178,7 +169,8 @@ export default async function LeaveInsightsPage() {
               <TrendLine
                 data={att.avgDailyHours}
                 color={INSIGHT_COLORS.teal}
-                formatValue={(v) => `${v}h`}
+                format="plain"
+                valueSuffix="h"
               />
             </ChartCard>
             <ChartCard

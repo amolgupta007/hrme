@@ -117,11 +117,7 @@ export default async function PayrollInsightsPage() {
               exportRows={d.monthly}
               exportName="payroll-monthly"
             >
-              <StackedBars
-                data={d.monthly}
-                series={compositionSeries}
-                formatValue={formatINRCompact}
-              />
+              <StackedBars data={d.monthly} series={compositionSeries} format="inr" />
             </ChartCard>
 
             <ChartCard
@@ -130,11 +126,7 @@ export default async function PayrollInsightsPage() {
               exportRows={d.costByDept}
               exportName="cost-by-department"
             >
-              <SimpleBars
-                data={d.costByDept}
-                color={INSIGHT_COLORS.teal}
-                formatValue={formatINRCompact}
-              />
+              <SimpleBars data={d.costByDept} color={INSIGHT_COLORS.teal} format="inr" />
             </ChartCard>
             <ChartCard
               title="Salary bands"
@@ -152,11 +144,7 @@ export default async function PayrollInsightsPage() {
               exportRows={d.otSpendMonthly}
               exportName="ot-spend-monthly"
             >
-              <TrendArea
-                data={d.otSpendMonthly}
-                color={INSIGHT_COLORS.amber}
-                formatValue={formatINRCompact}
-              />
+              <TrendArea data={d.otSpendMonthly} color={INSIGHT_COLORS.amber} format="inr" />
             </ChartCard>
           </div>
         </>

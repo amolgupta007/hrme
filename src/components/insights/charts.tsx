@@ -23,8 +23,37 @@ import {
   CHART_GRID_STROKE,
   CHART_AXIS_COLOR,
   TOOLTIP_STYLE,
+  formatINRCompact,
 } from "@/lib/insights/chart-theme";
 import type { MonthPoint, NamedCount, JoinLeavePoint } from "@/actions/insights";
+
+// Server pages can't pass formatter FUNCTIONS to these client components —
+// Next.js rejects non-serializable props at request time (build still
+// passes, so this fails only in the browser). Pages pass a string token
+// instead and we resolve it here.
+export type ValueFormat = "plain" | "percent" | "inr" | "timeOfDay";
+
+function minutesToTimeOfDay(v: number): string {
+  if (v <= 0) return "—";
+  const h = Math.floor(v / 60);
+  const m = Math.round(v % 60);
+  const ampm = h >= 12 ? "pm" : "am";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${String(m).padStart(2, "0")}${ampm}`;
+}
+
+function makeFormatter(format: ValueFormat = "plain", suffix = ""): (v: number) => string {
+  switch (format) {
+    case "percent":
+      return (v) => `${v}%`;
+    case "inr":
+      return formatINRCompact;
+    case "timeOfDay":
+      return minutesToTimeOfDay;
+    default:
+      return (v) => `${v}${suffix}`;
+  }
+}
 
 function EmptyChart({ message = "Not enough data yet" }: { message?: string }) {
   return (
@@ -75,17 +104,17 @@ export function TrendArea({
   data,
   color = INSIGHT_COLORS.violet,
   valueSuffix = "",
-  formatValue,
+  format = "plain",
 }: {
   data: MonthPoint[];
   color?: string;
   valueSuffix?: string;
   /** Overrides valueSuffix for both axis ticks and tooltip when given. */
-  formatValue?: (v: number) => string;
+  format?: ValueFormat;
 }) {
   if (!data.some((d) => d.value > 0)) return <EmptyChart />;
   const id = `trend-${color.replace("#", "")}`;
-  const fmt = formatValue ?? ((v: number) => `${v}${valueSuffix}`);
+  const fmt = makeFormatter(format, valueSuffix);
   return (
     <ResponsiveContainer width="100%" height={260}>
       <AreaChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -8 }}>
@@ -97,7 +126,12 @@ export function TrendArea({
         </defs>
         <CartesianGrid stroke={CHART_GRID_STROKE} vertical={false} />
         <XAxis dataKey="label" {...axisProps} />
-        <YAxis {...axisProps} allowDecimals={false} width={48} tickFormatter={formatValue} />
+        <YAxis
+          {...axisProps}
+          allowDecimals={false}
+          width={48}
+          tickFormatter={format !== "plain" ? fmt : undefined}
+        />
         <Tooltip
           contentStyle={TOOLTIP_STYLE}
           formatter={(v: number) => [fmt(v), ""]}
@@ -122,15 +156,17 @@ export function TrendArea({
 export function TrendLine({
   data,
   color = INSIGHT_COLORS.rose,
-  formatValue,
+  format = "percent",
+  valueSuffix = "",
 }: {
   data: MonthPoint[];
   color?: string;
   /** Formats both Y-axis ticks and tooltip values. Defaults to percentage. */
-  formatValue?: (v: number) => string;
+  format?: ValueFormat;
+  valueSuffix?: string;
 }) {
   if (!data.length || !data.some((d) => d.value > 0)) return <EmptyChart />;
-  const fmt = formatValue ?? ((v: number) => `${v}%`);
+  const fmt = makeFormatter(format, valueSuffix);
   return (
     <ResponsiveContainer width="100%" height={260}>
       <LineChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -8 }}>
@@ -162,23 +198,28 @@ export function SimpleBars({
   data,
   color = INSIGHT_COLORS.teal,
   valueSuffix = "",
-  formatValue,
+  format = "plain",
 }: {
   data: { label?: string; name?: string; value: number }[];
   color?: string;
   valueSuffix?: string;
   /** Overrides valueSuffix for both axis ticks and tooltip when given. */
-  formatValue?: (v: number) => string;
+  format?: ValueFormat;
 }) {
   if (!data.some((d) => d.value > 0)) return <EmptyChart />;
   const key = data[0]?.label !== undefined ? "label" : "name";
-  const fmt = formatValue ?? ((v: number) => `${v}${valueSuffix}`);
+  const fmt = makeFormatter(format, valueSuffix);
   return (
     <ResponsiveContainer width="100%" height={260}>
       <BarChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -8 }}>
         <CartesianGrid stroke={CHART_GRID_STROKE} vertical={false} />
         <XAxis dataKey={key} {...axisProps} interval={0} />
-        <YAxis {...axisProps} allowDecimals={false} width={48} tickFormatter={formatValue} />
+        <YAxis
+          {...axisProps}
+          allowDecimals={false}
+          width={48}
+          tickFormatter={format !== "plain" ? fmt : undefined}
+        />
         <Tooltip
           contentStyle={TOOLTIP_STYLE}
           formatter={(v: number) => [fmt(v), ""]}
@@ -198,12 +239,12 @@ export type StackedSeries = { key: string; label: string; color: string };
 export function StackedBars({
   data,
   series,
-  formatValue,
+  format = "plain",
   grouped = false,
 }: {
   data: Record<string, number | string>[];
   series: StackedSeries[];
-  formatValue?: (v: number) => string;
+  format?: ValueFormat;
   /** Render side-by-side bars instead of stacking. */
   grouped?: boolean;
 }) {
@@ -211,7 +252,7 @@ export function StackedBars({
     series.some((s) => typeof row[s.key] === "number" && (row[s.key] as number) > 0)
   );
   if (!hasData) return <EmptyChart />;
-  const fmt = formatValue ?? ((v: number) => String(v));
+  const fmt = makeFormatter(format);
   const labelFor = new Map(series.map((s) => [s.key, s.label]));
   return (
     <div>

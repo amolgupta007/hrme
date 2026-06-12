@@ -134,6 +134,7 @@ export type DashboardData = {
   upcomingHolidays: UpcomingHoliday[];
   presentToday: PresentToday | null;
   lastPayrollRun: LastPayrollRun | null;
+  showInsightsCard: boolean;
 };
 
 // ---- Main action ----
@@ -603,5 +604,8 @@ export async function getDashboardData(): Promise<DashboardData | null> {
     upcomingHolidays,
     presentToday,
     lastPayrollRun,
+    showInsightsCard:
+      isAdmin(role) &&
+      hasFeature(user?.plan ?? "starter", "analytics", user?.customFeatures ?? null),
   };
 }

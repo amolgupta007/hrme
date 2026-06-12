@@ -21,13 +21,25 @@ export default async function InsightsOverviewPage() {
     );
   }
   const d = result.data;
+  const c = d.compare;
+
+  const attritionDeltaPts = Math.round((d.attritionRatePct - c.attritionPrevPct) * 10) / 10;
+  const payrollDeltaPct =
+    d.monthlyPayrollCost !== null && c.payrollPrevNet !== null && c.payrollPrevNet > 0
+      ? Math.round(((d.monthlyPayrollCost - c.payrollPrevNet) / c.payrollPrevNet) * 100)
+      : null;
+  const leaveDeltaPct =
+    c.leaveDaysPrev12m > 0
+      ? Math.round(((d.leaveDaysTaken12m - c.leaveDaysPrev12m) / c.leaveDaysPrev12m) * 100)
+      : null;
 
   return (
     <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-slate-50">Overview</h1>
         <p className="mt-1 max-w-prose text-sm text-slate-400">
-          The state of your organisation at a glance — trailing 12 months unless noted.
+          The state of your organisation at a glance — trailing 12 months unless noted, deltas
+          vs the period before.
         </p>
       </div>
 
@@ -38,8 +50,11 @@ export default async function InsightsOverviewPage() {
           value={String(d.headcount)}
           sub={d.headcountDelta30d > 0 ? `+${d.headcountDelta30d} in 30 days` : "Active employees"}
           delta={
-            d.headcountDelta30d > 0
-              ? { value: `+${d.headcountDelta30d}`, direction: "up" }
+            c.headcountYoYPct !== 0
+              ? {
+                  value: `${c.headcountYoYPct > 0 ? "+" : ""}${c.headcountYoYPct}% YoY`,
+                  direction: c.headcountYoYPct > 0 ? "up" : "down",
+                }
               : undefined
           }
           spark={d.headcountTrend}
@@ -48,10 +63,14 @@ export default async function InsightsOverviewPage() {
         <KpiCard
           label="Attrition"
           value={`${d.attritionRatePct}%`}
-          sub="Trailing 12 months"
+          sub={`Prior period: ${c.attritionPrevPct}%`}
           delta={
-            d.attritionRatePct > 0
-              ? { value: `${d.attritionRatePct}%`, direction: "up", goodWhenUp: false }
+            attritionDeltaPts !== 0
+              ? {
+                  value: `${attritionDeltaPts > 0 ? "+" : ""}${attritionDeltaPts}pt`,
+                  direction: attritionDeltaPts > 0 ? "up" : "down",
+                  goodWhenUp: false,
+                }
               : undefined
           }
         />
@@ -63,11 +82,28 @@ export default async function InsightsOverviewPage() {
               ? `Net · ${payrollMonthLabel(d.payrollMonth)}`
               : "No processed runs yet"
           }
+          delta={
+            payrollDeltaPct !== null && payrollDeltaPct !== 0
+              ? {
+                  value: `${payrollDeltaPct > 0 ? "+" : ""}${payrollDeltaPct}% MoM`,
+                  direction: payrollDeltaPct > 0 ? "up" : "down",
+                  goodWhenUp: false,
+                }
+              : undefined
+          }
         />
         <KpiCard
           label="Leave Utilisation"
           value={`${d.leaveUtilizationPct}%`}
           sub={`${d.leaveDaysTaken12m} days taken in 12 mo`}
+          delta={
+            leaveDeltaPct !== null && leaveDeltaPct !== 0
+              ? {
+                  value: `${leaveDeltaPct > 0 ? "+" : ""}${leaveDeltaPct}%`,
+                  direction: leaveDeltaPct > 0 ? "up" : "down",
+                }
+              : undefined
+          }
         />
         <KpiCard
           label="Training"
@@ -96,16 +132,36 @@ export default async function InsightsOverviewPage() {
 
       {/* Chart grid */}
       <div className="grid gap-4 lg:grid-cols-2">
-        <ChartCard title="Headcount trend" sub="Active employees at each month end">
+        <ChartCard
+          title="Headcount trend"
+          sub="Active employees at each month end"
+          exportRows={d.headcountTrend}
+          exportName="headcount-trend"
+        >
           <TrendArea data={d.headcountTrend} color={INSIGHT_COLORS.violet} />
         </ChartCard>
-        <ChartCard title="Department distribution" sub="Active employees by department">
+        <ChartCard
+          title="Department distribution"
+          sub="Active employees by department"
+          exportRows={d.deptDistribution}
+          exportName="department-distribution"
+        >
           <Donut data={d.deptDistribution} />
         </ChartCard>
-        <ChartCard title="Leave taken per month" sub="Approved leave days, by start month">
+        <ChartCard
+          title="Leave taken per month"
+          sub="Approved leave days, by start month"
+          exportRows={d.leaveByMonth}
+          exportName="leave-by-month"
+        >
           <SimpleBars data={d.leaveByMonth} color={INSIGHT_COLORS.teal} valueSuffix=" days" />
         </ChartCard>
-        <ChartCard title="Joiners vs leavers" sub="Monthly inflow and outflow">
+        <ChartCard
+          title="Joiners vs leavers"
+          sub="Monthly inflow and outflow"
+          exportRows={d.joinersLeavers}
+          exportName="joiners-vs-leavers"
+        >
           <JoinLeaveBars data={d.joinersLeavers} />
         </ChartCard>
       </div>

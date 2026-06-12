@@ -5,6 +5,7 @@ import {
   ClipboardList, UserCheck, Megaphone, Pin,
   TrendingUp, BookOpen, FileText, UserPlus,
   CheckSquare, Network, PartyPopper, Star, Wallet,
+  BarChart3,
 } from "lucide-react";
 import { getDashboardData } from "@/actions/dashboard";
 import { getMyOnboardingStatus } from "@/actions/onboarding";
@@ -364,6 +365,27 @@ export default async function DashboardPage() {
           </Link>
         ))}
       </div>
+
+      {/* Insights funnel — admin/owner on the analytics-enabled plan */}
+      {data.showInsightsCard && (
+        <Link
+          href="/insights"
+          className="group flex items-center gap-4 rounded-xl bg-gradient-to-r from-violet-600 via-violet-600 to-fuchsia-600 px-5 py-4 text-white shadow-lg shadow-violet-600/20 transition-shadow hover:shadow-violet-600/40"
+        >
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/15">
+            <BarChart3 className="h-5 w-5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold">Org Insights</p>
+            <p className="truncate text-xs text-violet-100/80">
+              Headcount, attrition, payroll cost, hiring funnel — the full analytics suite.
+            </p>
+          </div>
+          <span className="shrink-0 rounded-lg bg-white/15 px-3 py-1.5 text-xs font-semibold transition-colors group-hover:bg-white/25">
+            Open Insights →
+          </span>
+        </Link>
+      )}
 
       {/* Main 2-col grid */}
       <div className="grid gap-6 lg:grid-cols-2">

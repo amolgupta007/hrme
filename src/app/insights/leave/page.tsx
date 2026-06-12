@@ -84,6 +84,8 @@ export default async function LeaveInsightsPage() {
           title="Leave by type"
           sub="Approved days per month, stacked by leave type"
           className="lg:col-span-2"
+          exportRows={d.leaveByTypeMonthly}
+          exportName="leave-by-type-monthly"
         >
           <StackedBars data={d.leaveByTypeMonthly} series={leaveSeries} />
         </ChartCard>
@@ -92,6 +94,8 @@ export default async function LeaveInsightsPage() {
           title="Balances at risk of lapse"
           sub="Highest remaining balances this year — nudge these people to take time off"
           className="lg:col-span-2"
+          exportRows={d.topBalances}
+          exportName="balances-at-risk"
         >
           {d.topBalances.length === 0 ? (
             <p className="py-8 text-center text-sm text-slate-500">No balance data yet.</p>
@@ -145,17 +149,32 @@ export default async function LeaveInsightsPage() {
           </div>
         ) : (
           <div className="mt-3 grid gap-4 lg:grid-cols-2">
-            <ChartCard title="Presence" sub="Clocked-in days per month">
+            <ChartCard
+              title="Presence"
+              sub="Clocked-in days per month"
+              exportRows={att.presentDays}
+              exportName="presence"
+            >
               <TrendArea data={att.presentDays} color={INSIGHT_COLORS.sky} valueSuffix=" days" />
             </ChartCard>
-            <ChartCard title="Average clock-in" sub="Mean first punch, IST">
+            <ChartCard
+              title="Average clock-in"
+              sub="Mean first punch, IST"
+              exportRows={att.avgClockInMinutes}
+              exportName="avg-clock-in"
+            >
               <TrendLine
                 data={att.avgClockInMinutes}
                 color={INSIGHT_COLORS.amber}
                 formatValue={minutesToTime}
               />
             </ChartCard>
-            <ChartCard title="Average daily hours" sub="Worked minutes per present day">
+            <ChartCard
+              title="Average daily hours"
+              sub="Worked minutes per present day"
+              exportRows={att.avgDailyHours}
+              exportName="avg-daily-hours"
+            >
               <TrendLine
                 data={att.avgDailyHours}
                 color={INSIGHT_COLORS.teal}
@@ -165,6 +184,8 @@ export default async function LeaveInsightsPage() {
             <ChartCard
               title="Forgotten clock-outs"
               sub="Shifts auto-closed by the midnight sweep — high numbers mean low punch discipline"
+              exportRows={att.autoClosed}
+              exportName="auto-closed-shifts"
             >
               <SimpleBars data={att.autoClosed} color={INSIGHT_COLORS.rose} valueSuffix=" shifts" />
             </ChartCard>
@@ -172,6 +193,8 @@ export default async function LeaveInsightsPage() {
               title="Overtime by department"
               sub="Approved + pushed OT hours, 12 months"
               className="lg:col-span-2"
+              exportRows={att.otHoursByDept}
+              exportName="ot-hours-by-dept"
             >
               <SimpleBars data={att.otHoursByDept} color={INSIGHT_COLORS.violet} valueSuffix=" hrs" />
             </ChartCard>

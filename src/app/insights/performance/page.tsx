@@ -80,14 +80,26 @@ export default async function PerformanceInsightsPage() {
               : "Self vs manager ratings"
           }
           className="lg:col-span-2"
+          exportRows={d.ratingDist}
+          exportName="rating-distribution"
         >
           <StackedBars data={d.ratingDist} series={ratingSeries} grouped />
         </ChartCard>
 
-        <ChartCard title="Objectives by department" sub="Items marked achieved, % of total">
+        <ChartCard
+          title="Objectives by department"
+          sub="Items marked achieved, % of total"
+          exportRows={d.objectivesByDept}
+          exportName="objectives-by-department"
+        >
           <SimpleBars data={d.objectivesByDept} color={INSIGHT_COLORS.emerald} valueSuffix="%" />
         </ChartCard>
-        <ChartCard title="Training compliance by department" sub="Completed enrollments, % of assigned">
+        <ChartCard
+          title="Training compliance by department"
+          sub="Completed enrollments, % of assigned"
+          exportRows={d.trainingByDept}
+          exportName="training-by-department"
+        >
           <SimpleBars data={d.trainingByDept} color={INSIGHT_COLORS.teal} valueSuffix="%" />
         </ChartCard>
 
@@ -95,6 +107,8 @@ export default async function PerformanceInsightsPage() {
           title="Overdue training by course"
           sub="Which courses are blocking compliance"
           className="lg:col-span-2"
+          exportRows={d.overdueByCourse}
+          exportName="overdue-by-course"
         >
           {d.overdueByCourse.length === 0 ? (
             <p className="py-10 text-center text-sm text-slate-500">

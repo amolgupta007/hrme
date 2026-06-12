@@ -197,3 +197,42 @@
   font-weight: 500;
   color: #111827;
 }
+
+/* ---- Insights module: print-to-PDF report view ----
+   The module renders on a dark canvas; print flattens it to a white
+   report. Chart SVGs keep their fills via print-color-adjust. */
+@media print {
+  #insights-root {
+    background: #fff !important;
+    color: #0f172a !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  #insights-root nav,
+  #insights-root .print-hide {
+    display: none !important;
+  }
+
+  /* Text utilities used inside the module all flatten to readable ink */
+  #insights-root [class*="text-slate-"] {
+    color: #0f172a !important;
+  }
+  #insights-root [class*="text-slate-4"],
+  #insights-root [class*="text-slate-5"],
+  #insights-root [class*="text-slate-6"] {
+    color: #475569 !important;
+  }
+
+  #insights-root .insight-card {
+    background: #fff !important;
+    border: 1px solid #e2e8f0;
+    box-shadow: none !important;
+    break-inside: avoid;
+  }
+
+  #insights-root main {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+}

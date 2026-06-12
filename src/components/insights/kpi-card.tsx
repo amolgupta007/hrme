@@ -25,7 +25,7 @@ export function KpiCard({ label, value, sub, delta, spark, sparkColor }: KpiCard
     delta?.direction === "flat" ? null : (delta?.direction === "up") === goodWhenUp;
 
   return (
-    <div className="relative overflow-hidden rounded-2xl bg-white/[0.04] p-5 ring-1 ring-white/10 transition-colors hover:ring-white/20">
+    <div className="insight-card relative overflow-hidden rounded-2xl bg-white/[0.04] p-5 ring-1 ring-white/10 transition-colors hover:ring-white/20">
       <p className="text-[11px] font-medium uppercase tracking-wider text-slate-400">{label}</p>
       <div className="mt-2 flex items-baseline gap-2">
         <p className="text-3xl font-bold tabular-nums tracking-tight text-slate-50 lg:text-4xl">

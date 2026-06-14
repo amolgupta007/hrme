@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>The Man Project · Demo Scenarios</title>
+<style>
+  :root {
+    --teal:#2e8a7d; --teal-deep:#1f5e55; --teal-light:#f0faf7;
+    --orange:#f98c10; --orange-light:#fff4e6;
+    --ink:#0f172a; --muted:#64748b; --border:#e2e8f0; --bg:#fafaf8;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,"SF Pro Text","Segoe UI",system-ui,sans-serif;background:var(--bg);color:var(--ink);line-height:1.55;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:920px;margin:0 auto;padding:0 24px}
+  header.hero{background:linear-gradient(135deg,var(--teal) 0%,var(--teal-deep) 60%,var(--orange) 130%);color:white;padding:48px 0 60px;position:relative;overflow:hidden}
+  header.hero::before{content:"";position:absolute;inset:0;background:radial-gradient(ellipse at top right,rgba(249,140,16,0.35),transparent 60%);pointer-events:none}
+  .crest{display:inline-flex;align-items:center;gap:10px;font-size:11px;letter-spacing:0.25em;text-transform:uppercase;opacity:0.85;margin-bottom:16px}
+  .crest .dot{width:6px;height:6px;border-radius:50%;background:var(--orange)}
+  h1.title{font-size:clamp(28px,4.5vw,42px);font-weight:800;letter-spacing:-0.02em;line-height:1.05}
+  .lede{margin-top:10px;font-size:16px;opacity:0.92;max-width:620px}
+
+  nav.toc{background:white;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:20}
+  nav.toc .inner{max-width:920px;margin:0 auto;display:flex;gap:4px;padding:10px 24px;overflow-x:auto}
+  nav.toc a{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:8px;font-size:13px;font-weight:600;color:var(--muted);text-decoration:none;white-space:nowrap}
+  nav.toc a:hover{background:var(--teal-light);color:var(--teal)}
+
+  section.scene{background:white;border:1px solid var(--border);border-radius:14px;margin:32px 0;overflow:hidden}
+  .scene-head{padding:20px 26px 16px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,white 0%,var(--teal-light) 200%)}
+  .scene-tag{display:inline-flex;gap:8px;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:var(--teal);font-weight:700;margin-bottom:6px}
+  .scene-tag .pill{background:var(--teal);color:white;padding:2px 8px;border-radius:10px;letter-spacing:0.05em}
+  .scene-head h2{font-size:20px;font-weight:700;letter-spacing:-0.01em}
+  .scene-head .mins{color:var(--muted);font-size:13px;margin-top:4px}
+  .scene-body{padding:22px 26px}
+
+  .step{display:grid;grid-template-columns:90px 1fr;gap:18px;padding:14px 0;border-bottom:1px solid var(--border)}
+  .step:last-child{border-bottom:none}
+  .step .verb{font-size:11px;letter-spacing:0.15em;text-transform:uppercase;font-weight:700;color:var(--teal);padding-top:4px}
+  .step .verb.say{color:var(--orange)}
+  .step .verb.show{color:#7c3aed}
+  .step .body{font-size:15px}
+  .step .body code{background:var(--teal-light);padding:1px 6px;border-radius:4px;font-size:13px;color:var(--teal-deep)}
+  .step .body em{color:var(--orange);font-style:italic;font-weight:600}
+  .step .body .quote{display:block;margin-top:6px;padding:12px 16px;background:var(--orange-light);border-left:3px solid var(--orange);border-radius:0 6px 6px 0;font-style:italic;color:#7a4500}
+
+  .data-fact{background:var(--teal-light);border-left:3px solid var(--teal);padding:12px 16px;border-radius:0 6px 6px 0;margin-top:12px;font-size:13.5px}
+  .data-fact strong{color:var(--teal-deep)}
+
+  table.cheat{width:100%;border-collapse:collapse;margin-top:12px;font-size:14px}
+  table.cheat th, table.cheat td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--border)}
+  table.cheat th{background:var(--ink);color:white;font-size:11px;letter-spacing:0.12em;text-transform:uppercase}
+  table.cheat tbody td:first-child{font-weight:600;color:var(--teal-deep)}
+
+  .login{margin:48px 0;background:linear-gradient(135deg,var(--teal),var(--orange));border-radius:16px;padding:32px;color:white;text-align:center}
+  .login h2{font-size:22px;font-weight:700;margin-bottom:8px}
+  .login .url{font-family:"SF Mono",Consolas,monospace;background:rgba(0,0,0,0.2);padding:8px 14px;border-radius:8px;display:inline-block;margin-top:8px;font-size:14px}
+
+  footer{margin-top:60px;padding:24px 0;border-top:1px solid var(--border);text-align:center;color:var(--muted);font-size:12px}
+  @media print{nav.toc{display:none}section.scene{break-inside:avoid;box-shadow:none}body{background:white}}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="crest"><span class="dot"></span> The Man Project · Tomorrow's demo</div>
+    <h1 class="title">The 7 scenarios you'll play.<br/>Verbatim quotes paired with each click.</h1>
+    <p class="lede">
+      Every screen has been pre-loaded for Nilesh's company. Walk Nilesh through these 7 moments in order
+      and the demo will sell itself.
+    </p>
+  </div>
+</header>
+
+<nav class="toc">
+  <div class="inner">
+    <a href="#login">Setup</a>
+    <a href="#s1">1. Greeting</a>
+    <a href="#s2">2. Pending leaves</a>
+    <a href="#s3">3. Who's out</a>
+    <a href="#s4">4. Insights</a>
+    <a href="#s5">5. Payroll story</a>
+    <a href="#s6">6. Compliance gap</a>
+    <a href="#s7">7. Grievance</a>
+    <a href="#cheat">Cheat sheet</a>
+  </div>
+</nav>
+
+<main class="wrap">
+
+  <div id="login" class="login">
+    <h2>Before he sits down — log in here</h2>
+    <p style="opacity:0.92">Use your owner account (amolgupta007@gmail.com) — every screen will greet you as <strong>Nilesh Gupta</strong>, founder of <strong>The Man Project</strong>.</p>
+    <div class="url">http://localhost:3000/dashboard</div>
+    <p style="margin-top:14px;font-size:13px;opacity:0.85">
+      Also open these in a second tab so you can quick-switch:
+      <code style="background:rgba(0,0,0,0.18);padding:2px 8px;border-radius:4px;margin-left:6px">/insights</code>
+      <code style="background:rgba(0,0,0,0.18);padding:2px 8px;border-radius:4px;margin-left:6px">/dashboard/payroll</code>
+      <code style="background:rgba(0,0,0,0.18);padding:2px 8px;border-radius:4px;margin-left:6px">/dashboard/grievances</code>
+    </p>
+  </div>
+
+  <!-- SCENE 1 -->
+  <section id="s1" class="scene">
+    <div class="scene-head">
+      <div class="scene-tag"><span class="pill">Scene 1</span> The opener</div>
+      <h2>Land on /dashboard. Let him absorb the chrome.</h2>
+      <p class="mins">~1 minute</p>
+    </div>
+    <div class="scene-body">
+      <div class="step"><div class="verb show">SHOW</div><div class="body">
+        Top-right: <em>"JambaGeo · Insights · 🔔"</em>. Bottom-left: <em>"Nilesh Gupta · Founder & CEO"</em>.
+      </div></div>
+      <div class="step"><div class="verb say">SAY</div><div class="body">
+        <span class="quote">"Imagine this is your Monday morning as the founder of The Man Project. Every card on this screen is a decision you'd otherwise make over WhatsApp."</span>
+      </div></div>
+      <div class="data-fact"><strong>What's loaded:</strong> 30 active employees, 7 departments, 12 months of payroll, your name as owner, your team's avatars (real photos in <code>/public/pics/</code>).</div>
+    </div>
+  </section>
+
+  <!-- SCENE 2 -->
+  <section id="s2" class="scene">
+    <div class="scene-head">
+      <div class="scene-tag"><span class="pill">Scene 2</span> Approve a leave LIVE</div>
+      <h2>The "two clicks instead of WhatsApp" moment.</h2>
+      <p class="mins">~2 minutes</p>
+    </div>
+    <div class="scene-body">
+      <div class="step"><div class="verb">CLICK</div><div class="body">Sidebar → <code>Leaves</code>. Look for the <strong>2 pending</strong> at the top.</div></div>
+      <div class="step"><div class="verb">SHOW</div><div class="body">
+        <strong>Aanya Khanna</strong> — VP Brand & Content — wants 5 days for a wedding in Jaipur.<br/>
+        <strong>Mohit Singhal</strong> — Engineer — wants 2 days, fever.
+      </div></div>
+      <div class="step"><div class="verb say">SAY</div><div class="body">
+        <span class="quote">"Aanya runs your Brand team. Right now you'd be DMing her. Watch."</span>
+      </div></div>
+      <div class="step"><div class="verb">CLICK</div><div class="body">
+        <strong>Approve</strong> on Aanya. Toast appears. <em>"Email out to her. Calendar updated. Balance reduced."</em>
+      </div></div>
+      <div class="step"><div class="verb say">SAY</div><div class="body">
+        <span class="quote">"That's the rest of your team's leave noise — gone. No follow-ups, no spreadsheet, no 'wait did you approve it?'"</span>
+      </div></div>
+      <div class="step"><div class="verb">CLICK</div><div class="body">
+        Approve Mohit too. Now zero pending. Go back to <code>/dashboard</code>.
+      </div></div>
+    </div>
+  </section>
+
+  <!-- SCENE 3 -->
+  <section id="s3" class="scene">
+    <div class="scene-head">
+      <div class="scene-tag"><span class="pill">Scene 3</span> "Who's out today"</div>
+      <h2>The card that turns a question into a glance.</h2>
+      <p class="mins">~30 seconds</p>
+    </div>
+    <div class="scene-body">
+      <div class="step"><div class="verb">POINT</div><div class="body">The <strong>Who's Out Today</strong> card on the dashboard.</div></div>
+      <div class="step"><div class="verb say">SAY</div><div class="body">
+        <span class="quote">"Right now if you walk into the office and ask 'who's out today?' — someone has to check WhatsApp groups. Here you know without asking."</span>
+      </div></div>
+      <div class="step"><div class="verb">POINT</div><div class="body">
+        Hover on the pinned announcement <em>"🪔 Diwali Sale Prep"</em> at the top of the dashboard.
+      </div></div>
+      <div class="step"><div class="verb say">SAY</div><div class="body">
+        <span class="quote">"And you can broadcast to the whole team — no email-storm, no missing voices. Pin it and everyone sees it on their first screen."</span>
+      </div></div>
+    </div>
+  </section>
+
+  <!-- SCENE 4 — INSIGHTS -->
+  <section id="s4" class="scene">
+    <div class="scene-head">
+      <div class="scene-tag"><span class="pill">Scene 4</span> Insights — the moment that closes the deal</div>
+      <h2>Top-right Insights pill. Open in a new tab.</h2>
+      <p class="mins">~5 minutes · This is the scene that does the heavy lifting</p>
+    </div>
+    <div class="scene-body">
+      <div class="step"><div class="verb">CLICK</div><div class="body">Top-right violet <strong>Insights</strong> pill. Lands on <code>/insights</code> — dark canvas, violet glow.</div></div>
+      <div class="step"><div class="verb say">SAY</div><div class="body">
+        <span class="quote">"This is what other HR tools don't give you. They give you forms. We give you a CFO-grade dashboard."</span>
+      </div></div>
+      <div class="step"><div class="verb">POINT</div><div class="body">
+        The 6 KPI hero cards. Especially <strong>Attrition</strong> (showing real % from your 5 exits) and <strong>Payroll Cost</strong> (showing the October bump in the chart below).
+      </div></div>
+      <div class="step"><div class="verb">CLICK</div><div class="body">Tab → <code>Workforce</code>. The headcount trend tells the year's story.</div></div>
+      <div class="step"><div class="verb show">SHOW</div><div class="body">
+        Department donut (7 wedges). Joiners vs leavers (5 leavers spread across the year — Karan, Vikram, Pooja, Devansh, Tanya). Tenure histogram.
+      </div></div>
+      <div class="step"><div class="verb say">SAY</div><div class="body">
+        <span class="quote">"You can see where your retention's bleeding. CX lost 2 people in Q4. Operations head turnover. Now you can spot it BEFORE your CFO does."</span>
+      </div></div>
+      <div class="data-fact"><strong>The story in the data:</strong> 14% attrition over 12 months, 5 exits spread across the year. CX dept lost 2 people. Operations had a senior manager exit.</div>
+    </div>
+  </section>
+
+  <!-- SCENE 5 — PAYROLL -->
+  <section id="s5" class="scene">
+    <div class="scene-head">
+      <div class="scene-tag"><span class="pill">Scene 5</span> The October moment — payroll cost</div>
+      <h2>The chart that makes a CFO sit up.</h2>
+      <p class="mins">~3 minutes</p>
+    </div>
+    <div class="scene-body">
+      <div class="step"><div class="verb">CLICK</div><div class="body">Insights → <code>Payroll</code> tab.</div></div>
+      <div class="step"><div class="verb show">SHOW</div><div class="body">
+        The <strong>Monthly Cost Composition</strong> chart. October towers — <strong>₹71.7L</strong> vs typical ₹33-35L.
+      </div></div>
+      <div class="step"><div class="verb say">SAY</div><div class="body">
+        <span class="quote">"Look at October. That's your Diwali bonus month. Without this view, you'd plan cash flow blind. With it, you know 4 months in advance that October's going to cost you 2x."</span>
+      </div></div>
+      <div class="step"><div class="verb">POINT</div><div class="body">
+        <strong>Cost by Department</strong> chart. Operations is the most expensive (warehouse + supply chain), Tech second.
+      </div></div>
+      <div class="step"><div class="verb say">SAY</div><div class="body">
+        <span class="quote">"Where is your spend concentrated? Decisions about hiring, raises, headcount — they start here. Not in a spreadsheet you have to rebuild every quarter."</span>
+      </div></div>
+      <div class="step"><div class="verb">CLICK</div><div class="body">Tiny <strong>download</strong> icon on any chart. CSV opens in Excel.</div></div>
+      <div class="step"><div class="verb say">SAY</div><div class="body">
+        <span class="quote">"Your CA will love this. Print report — bottom-right. PDF for the board."</span>
+      </div></div>
+      <div class="data-fact"><strong>The story in the data:</strong> 12 months of payroll runs, Oct 2025 spike from Diwali bonuses (1 month gross for everyone with 6+ months tenure), OT line items on Operations + CX for peak prep.</div>
+    </div>
+  </section>
+
+  <!-- SCENE 6 — COMPLIANCE GAP -->
+  <section id="s6" class="scene">
+    <div class="scene-head">
+      <div class="scene-tag"><span class="pill">Scene 6</span> The compliance gap</div>
+      <h2>Operations is at 33% training completion. Show this LAST in Insights.</h2>
+      <p class="mins">~2 minutes</p>
+    </div>
+    <div class="scene-body">
+      <div class="step"><div class="verb">CLICK</div><div class="body">Insights → <code>Performance</code> tab.</div></div>
+      <div class="step"><div class="verb show">SHOW</div><div class="body">
+        <strong>Training compliance by department</strong> bar chart. Operations & Supply Chain sits visibly below everyone else (33% vs 75-88% for the rest).
+      </div></div>
+      <div class="step"><div class="verb say">SAY</div><div class="body">
+        <span class="quote">"Your warehouse safety training is mandatory under Indian law. If something happens at your Pune warehouse tomorrow and someone audits you — Operations is 33% compliant. The system is telling you to fix it BEFORE the auditor finds it."</span>
+      </div></div>
+      <div class="step"><div class="verb">SCROLL</div><div class="body">
+        Down to <strong>Overdue training by course</strong>. "Warehouse Safety Standards" leads.
+      </div></div>
+      <div class="step"><div class="verb say">SAY</div><div class="body">
+        <span class="quote">"Now you can WhatsApp Manish — your Head of Ops — with this screenshot. 'Fix this by Friday.' That's leverage you don't have today."</span>
+      </div></div>
+    </div>
+  </section>
+
+  <!-- SCENE 7 — GRIEVANCE -->
+  <section id="s7" class="scene">
+    <div class="scene-head">
+      <div class="scene-tag"><span class="pill">Scene 7</span> The grievance — show range, then close</div>
+      <h2>One anonymous open grievance. Show the trust angle, then ask the question.</h2>
+      <p class="mins">~2 minutes</p>
+    </div>
+    <div class="scene-body">
+      <div class="step"><div class="verb">CLICK</div><div class="body">Sidebar → <code>Grievances</code>.</div></div>
+      <div class="step"><div class="verb show">SHOW</div><div class="body">
+        The anonymous complaint about workload distribution. Token <code>GRV-X7K9P2</code>.
+      </div></div>
+      <div class="step"><div class="verb say">SAY</div><div class="body">
+        <span class="quote">"Someone on your team feels work isn't being distributed fairly. They can't say it to your face — and that's fine. But they CAN say it through the system, anonymously, with a tracking token. You can respond without ever knowing who they are."</span>
+      </div></div>
+      <div class="step"><div class="verb say">SAY</div><div class="body">
+        <span class="quote">"For a 35-person company growing fast, this is how you build trust. Not by having an HR head you can't afford. By having a system that gives your team a safe channel."</span>
+      </div></div>
+      <div class="step"><div class="verb show">SHOW</div><div class="body">
+        Close the laptop halfway. Lean back.
+      </div></div>
+      <div class="step"><div class="verb say">SAY</div><div class="body">
+        <span class="quote">"Nilesh — what's the smallest thing in your HR that, if it disappeared tomorrow, would make a real difference to you?"</span>
+        <br/><br/>
+        Whatever he says — write it on paper. Slide the paper across.
+        <span class="quote">"That's what I ship for you first. Pen?"</span>
+      </div></div>
+    </div>
+  </section>
+
+  <!-- CHEAT SHEET -->
+  <section id="cheat" class="scene">
+    <div class="scene-head">
+      <div class="scene-tag"><span class="pill">Cheat sheet</span> What's seeded</div>
+      <h2>The specifics, so you can answer "where did this number come from?"</h2>
+    </div>
+    <div class="scene-body">
+      <table class="cheat">
+        <thead><tr><th>Data</th><th>What's there</th><th>Where it shows</th></tr></thead>
+        <tbody>
+          <tr><td>Employees</td><td>30 active, 5 exited (Karan, Vikram, Pooja, Devansh, Tanya)</td><td>Dashboard stat card · Workforce attrition</td></tr>
+          <tr><td>Departments</td><td>Brand · Performance · Product Dev · Operations · CX · Tech · Finance/HR</td><td>Workforce donut · Cost by dept</td></tr>
+          <tr><td>Pending leaves</td><td>Aanya Khanna (5 days), Mohit Singhal (2 days)</td><td>Dashboard stat · Leaves page</td></tr>
+          <tr><td>Diwali bonus</td><td>Oct 2025 payroll spike → ₹71.7L vs ₹33-35L baseline</td><td>Payroll Cost Composition chart</td></tr>
+          <tr><td>Overtime</td><td>Concentrated on Ops + CX for peak (Sep-Nov, March)</td><td>OT by Dept · OT Spend trend</td></tr>
+          <tr><td>Attendance</td><td>22 employees, 878 clock-ins over 60 days, 4 auto-closed shifts</td><td>Insights → Leave & Attendance section</td></tr>
+          <tr><td>Training compliance</td><td>Operations 33% (the gap), Tech 88%, others 67-75%</td><td>Insights → Performance → Training by Dept</td></tr>
+          <tr><td>Pinned announcement</td><td>"Diwali Sale Prep — All Hands"</td><td>Top of dashboard</td></tr>
+          <tr><td>Anonymous grievance</td><td>Workload distribution complaint, token GRV-X7K9P2</td><td>Grievances → Inbox</td></tr>
+          <tr><td>Owner persona</td><td>Nilesh Gupta · Founder & CEO · DOJ 2021</td><td>Sidebar avatar · Every greeting</td></tr>
+          <tr><td>Demo employee</td><td>Arjun Sharma · Performance Marketing Lead (for amolgupta134 sign-in)</td><td>Employee-side flow if needed</td></tr>
+        </tbody>
+      </table>
+
+      <div class="data-fact" style="margin-top:24px">
+        <strong>If a chart looks empty:</strong> the period filter might be too narrow — Insights uses the trailing 12 months by default; the seeded window is Jun 2025 → Jun 2026.
+        <br/><br/>
+        <strong>If avatars don't show:</strong> the dev server needs to be running. Pics live in <code>/public/pics/</code>.
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <p>The Man Project · Demo guide for tomorrow · Pair with <a href="/demo-playbook.html" style="color:var(--teal);font-weight:600;text-decoration:none">/demo-playbook.html</a> · <a href="javascript:window.print()" style="color:var(--teal);font-weight:600;text-decoration:none">Print this</a></p>
+</footer>
+
+</body>
+</html>

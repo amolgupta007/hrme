@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>JambaHR — Founder Demo Playbook</title>
+<style>
+  :root {
+    --teal: #2e8a7d;
+    --teal-light: #f0faf7;
+    --teal-deep: #1f5e55;
+    --orange: #f98c10;
+    --orange-light: #fff4e6;
+    --ink: #0f172a;
+    --muted: #64748b;
+    --border: #e2e8f0;
+    --bg: #fafaf8;
+    --gold: #b8860b;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: -apple-system, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 0 24px; }
+
+  /* Hero */
+  header.hero {
+    background: linear-gradient(135deg, var(--teal) 0%, var(--teal-deep) 60%, var(--orange) 130%);
+    color: white;
+    padding: 56px 0 72px;
+    position: relative;
+    overflow: hidden;
+  }
+  header.hero::before {
+    content: "";
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse at top right, rgba(249,140,16,0.35), transparent 60%);
+    pointer-events: none;
+  }
+  .crest {
+    display: inline-flex; align-items: center; gap: 10px;
+    font-size: 11px; letter-spacing: 0.25em; text-transform: uppercase;
+    opacity: 0.85; margin-bottom: 16px;
+  }
+  .crest .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--orange); }
+  h1.title {
+    font-size: clamp(32px, 5vw, 48px);
+    font-weight: 800; letter-spacing: -0.02em; line-height: 1.05;
+  }
+  .lede {
+    margin-top: 12px; font-size: 17px; opacity: 0.92; max-width: 620px;
+  }
+  .mantras {
+    margin-top: 28px;
+    display: grid; gap: 8px; max-width: 620px;
+    padding: 16px 18px;
+    border-left: 3px solid var(--orange);
+    background: rgba(255,255,255,0.08);
+    border-radius: 4px;
+    backdrop-filter: blur(6px);
+  }
+  .mantras p { font-size: 14px; opacity: 0.95; }
+  .mantras p::before { content: "→ "; color: var(--orange); font-weight: 700; }
+
+  /* Stage nav */
+  nav.stages {
+    background: white;
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0;
+    z-index: 20;
+    box-shadow: 0 1px 0 rgba(0,0,0,0.02);
+  }
+  nav.stages .inner {
+    max-width: 900px; margin: 0 auto;
+    display: flex; gap: 4px; padding: 10px 24px;
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+  nav.stages a {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 8px 12px; border-radius: 8px;
+    font-size: 13px; font-weight: 600;
+    color: var(--muted); text-decoration: none;
+    white-space: nowrap;
+    transition: all 0.15s;
+  }
+  nav.stages a:hover { background: var(--teal-light); color: var(--teal); }
+  nav.stages a .num {
+    width: 20px; height: 20px; border-radius: 50%;
+    background: var(--border); color: white;
+    font-size: 11px;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  nav.stages a:hover .num { background: var(--teal); }
+
+  /* Phase card */
+  section.phase {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    margin: 40px 0;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+  }
+  .phase-head {
+    padding: 22px 28px 20px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, white 0%, var(--teal-light) 200%);
+  }
+  .phase-tag {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--teal); font-weight: 700;
+    margin-bottom: 6px;
+  }
+  .phase-tag .pill {
+    background: var(--teal); color: white;
+    padding: 2px 8px; border-radius: 10px;
+    letter-spacing: 0.05em;
+  }
+  .phase-head h2 {
+    font-size: 22px; font-weight: 700; letter-spacing: -0.01em;
+  }
+  .phase-head .duration {
+    color: var(--muted); font-size: 13px; margin-top: 4px;
+  }
+  .phase-body { padding: 24px 28px; }
+  .phase-body h3 {
+    font-size: 12px; letter-spacing: 0.15em; text-transform: uppercase;
+    color: var(--muted); font-weight: 700;
+    margin: 20px 0 10px;
+  }
+  .phase-body h3:first-child { margin-top: 0; }
+
+  .action-list { list-style: none; }
+  .action-list li {
+    padding: 8px 0 8px 24px; position: relative;
+    font-size: 15px;
+  }
+  .action-list li::before {
+    content: ""; position: absolute; left: 0; top: 16px;
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--orange);
+  }
+
+  /* Verbatim quote — what you say */
+  .quote {
+    background: var(--teal-light);
+    border-left: 4px solid var(--teal);
+    padding: 18px 22px;
+    border-radius: 0 8px 8px 0;
+    margin: 12px 0;
+    font-size: 15px;
+    color: var(--teal-deep);
+    font-style: italic;
+    line-height: 1.6;
+  }
+  .quote::before {
+    content: "“"; font-size: 32px; line-height: 0; vertical-align: -10px;
+    color: var(--teal); margin-right: 4px; font-style: normal;
+  }
+  .quote.long { white-space: pre-line; }
+
+  /* Listen for — highlight */
+  .listen {
+    background: var(--orange-light);
+    border: 1px dashed var(--orange);
+    padding: 14px 18px;
+    border-radius: 8px;
+    font-size: 14px;
+    margin: 12px 0;
+  }
+  .listen strong { color: var(--orange); }
+  .listen ul { list-style: none; margin-top: 6px; }
+  .listen li { padding-left: 16px; position: relative; padding-top: 4px; }
+  .listen li::before {
+    content: "👂"; position: absolute; left: -4px; font-size: 12px;
+  }
+
+  /* Discovery question card */
+  .q-grid { display: grid; gap: 12px; margin-top: 12px; }
+  .q-card {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+    transition: border-color 0.15s;
+  }
+  .q-card:hover { border-color: var(--teal); }
+  .q-card .q-num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 24px; height: 24px; border-radius: 50%;
+    background: var(--teal); color: white;
+    font-size: 12px; font-weight: 700;
+    margin-right: 10px; vertical-align: middle;
+  }
+  .q-card .q-text { font-weight: 600; font-size: 15px; }
+  .q-card .q-why {
+    margin-top: 6px; margin-left: 34px;
+    font-size: 13px; color: var(--muted);
+  }
+
+  /* Step-through narration */
+  .narrate {
+    margin: 12px 0;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .narrate-step {
+    display: grid; grid-template-columns: 80px 1fr;
+    border-bottom: 1px solid var(--border);
+  }
+  .narrate-step:last-child { border-bottom: none; }
+  .narrate-step .action {
+    background: var(--teal-light);
+    color: var(--teal-deep);
+    padding: 14px 12px;
+    font-size: 12px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.1em;
+    text-align: center;
+  }
+  .narrate-step .said {
+    padding: 14px 18px;
+    font-size: 14.5px;
+    font-style: italic;
+    color: var(--ink);
+  }
+
+  /* Transition line */
+  .transition {
+    margin-top: 20px;
+    padding: 14px 18px;
+    background: white;
+    border: 1px solid var(--gold);
+    border-radius: 8px;
+    font-size: 14px;
+    position: relative;
+  }
+  .transition::before {
+    content: "BRIDGE TO NEXT PHASE";
+    position: absolute; top: -10px; left: 16px;
+    background: white;
+    padding: 0 8px;
+    font-size: 10px; letter-spacing: 0.2em;
+    color: var(--gold); font-weight: 700;
+  }
+
+  /* Objections */
+  .obj-grid {
+    display: grid; gap: 16px;
+    grid-template-columns: 1fr;
+  }
+  @media (min-width: 720px) {
+    .obj-grid { grid-template-columns: 1fr 1fr; }
+  }
+  .obj-card {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+  }
+  .obj-card .raises {
+    font-size: 13px; color: var(--muted);
+    margin-bottom: 4px;
+  }
+  .obj-card .says {
+    font-size: 15px; font-weight: 700;
+    color: var(--ink);
+    margin-bottom: 10px;
+  }
+  .obj-card .reply {
+    padding: 12px 14px;
+    background: var(--teal-light);
+    border-left: 3px solid var(--teal);
+    border-radius: 0 6px 6px 0;
+    font-size: 14px;
+    color: var(--teal-deep);
+    font-style: italic;
+  }
+
+  /* Final ask */
+  .ask {
+    margin: 56px 0;
+    background: linear-gradient(135deg, var(--teal) 0%, var(--orange) 130%);
+    color: white;
+    border-radius: 18px;
+    padding: 48px 32px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .ask::before {
+    content: "";
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse at bottom, rgba(255,255,255,0.15), transparent 60%);
+    pointer-events: none;
+  }
+  .ask .label {
+    font-size: 11px; letter-spacing: 0.3em; text-transform: uppercase;
+    opacity: 0.85; margin-bottom: 16px;
+  }
+  .ask h2 {
+    font-size: 28px; font-weight: 700; letter-spacing: -0.01em;
+    max-width: 560px; margin: 0 auto;
+  }
+  .ask .move {
+    margin-top: 22px; font-size: 15px;
+    background: rgba(255,255,255,0.13);
+    border-radius: 10px;
+    padding: 14px 20px;
+    display: inline-block;
+    max-width: 600px;
+    backdrop-filter: blur(4px);
+  }
+  .ask .move strong { color: white; font-weight: 700; }
+
+  /* Diff bar — competitive positioning */
+  .diff {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 24px 28px;
+    margin: 32px 0;
+  }
+  .diff h3 {
+    font-size: 13px; letter-spacing: 0.15em; text-transform: uppercase;
+    color: var(--orange); font-weight: 700; margin-bottom: 16px;
+  }
+  .diff-table {
+    display: grid; gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .diff-row {
+    display: grid;
+    grid-template-columns: 1.2fr 1fr 1fr;
+    background: var(--bg);
+  }
+  .diff-row.head {
+    background: var(--ink);
+    color: white;
+    font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase;
+    font-weight: 700;
+  }
+  .diff-row > div {
+    padding: 12px 14px;
+    background: white;
+    font-size: 13.5px;
+  }
+  .diff-row.head > div { background: transparent; }
+  .diff-row > div:first-child { font-weight: 600; }
+  .diff-row > div:last-child { color: var(--teal); font-weight: 600; background: var(--teal-light); }
+
+  /* Footer */
+  footer {
+    margin-top: 80px; padding: 24px 0 48px;
+    border-top: 1px solid var(--border);
+    text-align: center;
+    color: var(--muted); font-size: 12px;
+  }
+  footer .brand {
+    color: var(--teal); font-weight: 700;
+  }
+
+  /* Print */
+  @media print {
+    nav.stages { display: none; }
+    header.hero { color: white; }
+    section.phase { break-inside: avoid; box-shadow: none; }
+    .ask { break-inside: avoid; }
+    body { background: white; }
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="crest"><span class="dot"></span> JambaHR · Founder demo playbook</div>
+    <h1 class="title">A 45-minute conversation,<br/>not a software demo.</h1>
+    <p class="lede">
+      He came to meet you because something in his HR is broken. Your job is to help him say it
+      out loud, then offer him a co-founder, not a vendor.
+    </p>
+    <div class="mantras">
+      <p>He's here because he has a problem. You don't have to create the wound.</p>
+      <p>You're not selling software. You're offering yourself as his outsourced HR head.</p>
+      <p>Every "no" is "not yet" or "I don't see it yet." Silence wins.</p>
+    </div>
+  </div>
+</header>
+
+<nav class="stages">
+  <div class="inner">
+    <a href="#p1"><span class="num">1</span> Open</a>
+    <a href="#p2"><span class="num">2</span> Discovery</a>
+    <a href="#p3"><span class="num">3</span> Mirror</a>
+    <a href="#p4"><span class="num">4</span> Show</a>
+    <a href="#diff"><span class="num">⚡</span> Differentiator</a>
+    <a href="#obj"><span class="num">❓</span> Objections</a>
+    <a href="#ask"><span class="num">→</span> Close</a>
+  </div>
+</nav>
+
+<main class="wrap">
+
+  <!-- PHASE 1 -->
+  <section id="p1" class="phase">
+    <div class="phase-head">
+      <div class="phase-tag"><span class="pill">Phase 1</span> Open with rapport</div>
+      <h2>The first 5 minutes are about him, not your product.</h2>
+      <p class="duration">~5 minutes · No laptop open. Eye contact. Sit at right-angles, not face-to-face.</p>
+    </div>
+    <div class="phase-body">
+      <h3>What you do</h3>
+      <ul class="action-list">
+        <li>Offer water/chai. Compliment something specific about his office or his business.</li>
+        <li>Lower your tone half a step. You're not in pitch mode, you're a peer founder.</li>
+        <li>Keep the laptop closed. He'll mention his business — let him.</li>
+      </ul>
+
+      <h3>What you say (opener)</h3>
+      <div class="quote">
+        Before we get into anything I've built — tell me, what does a typical Monday morning look like for you?
+      </div>
+
+      <div class="listen">
+        <strong>Listen for these wounds.</strong> If he says any of these, mark it mentally — you'll come back to it in Phase 4.
+        <ul>
+          <li>"I do everything myself" / "I don't have an HR person"</li>
+          <li>"My CA handles payroll" / "We do it in Excel"</li>
+          <li>"Someone just left" / "Hiring is taking forever"</li>
+          <li>"Compliance / TDS / PF" — anything tax-adjacent</li>
+          <li>"WhatsApp" — leave requests, documents, payslips on WhatsApp</li>
+        </ul>
+      </div>
+
+      <div class="transition">
+        Once he's talked for 3–4 minutes, lean forward slightly and say: <em>"Mind if I ask a few quick questions before I show you anything? It'll help me figure out what's actually useful for you."</em>
+      </div>
+    </div>
+  </section>
+
+  <!-- PHASE 2 -->
+  <section id="p2" class="phase">
+    <div class="phase-head">
+      <div class="phase-tag"><span class="pill">Phase 2</span> Discovery — let him diagnose himself</div>
+      <h2>Five questions, in order. He'll say the pain out loud.</h2>
+      <p class="duration">~10 minutes · Do NOT take notes on a laptop. A pen + small notebook is fine.</p>
+    </div>
+    <div class="phase-body">
+      <h3>The five questions</h3>
+      <div class="q-grid">
+        <div class="q-card">
+          <div><span class="q-num">1</span><span class="q-text">How many people are on your team right now?</span></div>
+          <div class="q-why">Warm-up. Sets the size frame. (10–50 = your sweet spot. 50–200 = perfect. 200+ = mention scaling features.)</div>
+        </div>
+        <div class="q-card">
+          <div><span class="q-num">2</span><span class="q-text">When someone applies for leave, how does it happen today?</span></div>
+          <div class="q-why">Almost certainly WhatsApp or Excel. He'll say it himself. That's the chaos exposed.</div>
+        </div>
+        <div class="q-card">
+          <div><span class="q-num">3</span><span class="q-text">Last time you onboarded someone — what was the longest part?</span></div>
+          <div class="q-why">Documents, signatures, ID proofs. Sets up Document Vault + Onboarding Checklist.</div>
+        </div>
+        <div class="q-card">
+          <div><span class="q-num">4</span><span class="q-text">How do you handle payroll today — CA, in-house, outsourced?</span></div>
+          <div class="q-why">Every answer is a wedge. CA = ₹5–10k/month bill. In-house = TDS errors. Outsourced = no visibility.</div>
+        </div>
+        <div class="q-card">
+          <div><span class="q-num">5</span><span class="q-text">If I gave you back 5 hours every week — what would you do with that time?</span></div>
+          <div class="q-why">Emotional anchor. He'll say "sales" or "spend time with family." Now you're selling time, not software.</div>
+        </div>
+      </div>
+
+      <div class="listen">
+        <strong>Watch his eyes on Q5.</strong> If he pauses and looks up — you've hit the nerve.
+        Don't fill the silence. Let him answer in his own words.
+      </div>
+
+      <div class="transition">
+        After Q5, put the pen down. Lean back. <em>"Okay, I think I understand the picture. Can I check if I got it right?"</em>
+      </div>
+    </div>
+  </section>
+
+  <!-- PHASE 3 -->
+  <section id="p3" class="phase">
+    <div class="phase-head">
+      <div class="phase-tag"><span class="pill">Phase 3</span> Mirror it back</div>
+      <h2>Make him agree, out loud, that his life is messy.</h2>
+      <p class="duration">~2 minutes · Once he agrees, he can't un-agree.</p>
+    </div>
+    <div class="phase-body">
+      <h3>What you say (verbatim, replace with HIS words)</h3>
+      <div class="quote long">So if I heard you right — leave requests come to you on WhatsApp, you forwarded three this week alone.
+Payroll takes [X] hours every month and you mentioned the TDS got flagged last quarter.
+Onboarding the last person took [Y] days because of document collection.
+And if you had 5 hours back, you'd spend it on [whatever he said].
+
+Did I get all that right?</div>
+
+      <div class="listen">
+        <strong>He WILL say yes.</strong> Because you used his words. The moment he says yes, the sale is half done.
+        Do NOT pitch yet. Pause. Sip water.
+      </div>
+
+      <div class="transition">
+        <em>"Let me show you what your Monday could look like instead. Two minutes."</em> — Now open the laptop.
+      </div>
+    </div>
+  </section>
+
+  <!-- PHASE 4 -->
+  <section id="p4" class="phase">
+    <div class="phase-head">
+      <div class="phase-tag"><span class="pill">Phase 4</span> Show, don't demo</div>
+      <h2>Open the dashboard. Narrate. Don't click everything.</h2>
+      <p class="duration">~15 minutes · Login as the <strong>test1</strong> org so it looks lived-in.</p>
+    </div>
+    <div class="phase-body">
+      <h3>The narration arc — keep it tight</h3>
+      <div class="narrate">
+        <div class="narrate-step">
+          <div class="action">Open</div>
+          <div class="said">/dashboard — "Imagine this is YOUR screen on a Monday morning."</div>
+        </div>
+        <div class="narrate-step">
+          <div class="action">Point</div>
+          <div class="said">"Three leaves waiting for you. Accept right here. No WhatsApp."</div>
+        </div>
+        <div class="narrate-step">
+          <div class="action">Point</div>
+          <div class="said">"Two people are out today. You knew that without asking anyone."</div>
+        </div>
+        <div class="narrate-step">
+          <div class="action">Point</div>
+          <div class="said">"Training compliance — 92%. Your CA will love this for audits."</div>
+        </div>
+        <div class="narrate-step">
+          <div class="action">Point</div>
+          <div class="said">"Last payroll: paid. ₹4.2 lakhs. Done. The whole thing took 6 minutes."</div>
+        </div>
+        <div class="narrate-step">
+          <div class="action">Click</div>
+          <div class="said">Top-right INSIGHTS pill. Pause. "This is the part most HR products don't give you."</div>
+        </div>
+        <div class="narrate-step">
+          <div class="action">Walk</div>
+          <div class="said">Workforce → headcount trend → attrition. "You can see where your retention is bleeding."</div>
+        </div>
+        <div class="narrate-step">
+          <div class="action">Walk</div>
+          <div class="said">Hiring funnel. "Where are candidates dropping off? You see it here."</div>
+        </div>
+        <div class="narrate-step">
+          <div class="action">Close</div>
+          <div class="said">Don't show everything. Leave him hungry. "There's more, but I'd rather you tell me what matters."</div>
+        </div>
+      </div>
+
+      <div class="listen">
+        <strong>Rules for the demo:</strong>
+        <ul>
+          <li>Don't open Settings. Don't show admin clutter. Decision-maker screens only.</li>
+          <li>If something glitches, smile and say "yep, founder-built — I'll have that fixed by Friday."</li>
+          <li>Don't say "feature." Say "this saves you 20 minutes every Monday."</li>
+        </ul>
+      </div>
+
+      <div class="transition">
+        Close the laptop halfway. <em>"That's the product. Let me tell you why I'm a better bet than the bigger guys."</em>
+      </div>
+    </div>
+  </section>
+
+  <!-- DIFFERENTIATOR -->
+  <section id="diff" class="diff">
+    <h3>The competitive frame — say this out loud</h3>
+    <div class="quote">
+      You've probably seen Zoho People, Keka, greytHR. They're fine. They're built for 5000-person
+      enterprises and they sell to companies like yours because there's nobody else.
+      I'm not going to compete with their feature list. I'm going to do something they can't —
+      every Monday for six months, you and I get on a 30-minute call. You tell me what's broken.
+      I build it that week. That's a co-founder, not a vendor.
+    </div>
+
+    <div class="diff-table" style="margin-top: 16px;">
+      <div class="diff-row head">
+        <div>What you get</div>
+        <div>Zoho / Keka / greytHR</div>
+        <div>JambaHR</div>
+      </div>
+      <div class="diff-row">
+        <div>Support response</div>
+        <div>Ticket queue, 24–48 hrs</div>
+        <div>WhatsApp the founder</div>
+      </div>
+      <div class="diff-row">
+        <div>Custom feature request</div>
+        <div>"On the roadmap"</div>
+        <div>Built this week, free</div>
+      </div>
+      <div class="diff-row">
+        <div>Onboarding</div>
+        <div>Self-serve docs</div>
+        <div>I sit with you for 2 hours</div>
+      </div>
+      <div class="diff-row">
+        <div>Pricing</div>
+        <div>Per-seat, locked in</div>
+        <div>Half their price, founder-priced</div>
+      </div>
+      <div class="diff-row">
+        <div>Your data</div>
+        <div>Export later, maybe</div>
+        <div>CSV button on every chart, day one</div>
+      </div>
+    </div>
+
+    <div class="quote" style="margin-top: 20px;">
+      I can do this because I'm not a 200-person company. I'm a founder.
+      You're not buying software — you're hiring me.
+      And the price is less than your CA bill.
+    </div>
+  </section>
+
+  <!-- OBJECTIONS -->
+  <section id="obj" class="phase">
+    <div class="phase-head">
+      <div class="phase-tag"><span class="pill">Objection bank</span> Scripted responses</div>
+      <h2>Four objections he'll probably raise. Pre-loaded answers.</h2>
+      <p class="duration">Read these tonight before the meeting. Don't read them DURING.</p>
+    </div>
+    <div class="phase-body">
+      <div class="obj-grid">
+
+        <div class="obj-card">
+          <div class="raises">Most likely</div>
+          <div class="says">"How do I know you'll still be here in 2 years?"</div>
+          <div class="reply">
+            Fair question. Two answers. One — your data export is yours from day one, I'll show
+            you the CSV button right now. If I disappear, your data leaves with you. Two — I'm not
+            raising VC money, I'm building this on revenue from people like you. The only way I
+            disappear is if I'm wrong about the product. And I have 14 paying customers who say I'm not.
+          </div>
+        </div>
+
+        <div class="obj-card">
+          <div class="raises">Cheapskate move</div>
+          <div class="says">"It's cheaper to keep using Excel."</div>
+          <div class="reply">
+            What's expensive isn't the tool. It's the Tuesday morning where your senior engineer
+            asks why his TDS doesn't match and you spend an hour explaining. That hour's worth more
+            than my annual fee. I'll do a 30-day trial — you don't pay anything until you tell me
+            it's worth it.
+          </div>
+        </div>
+
+        <div class="obj-card">
+          <div class="raises">Stalling</div>
+          <div class="says">"I need to discuss with my partner."</div>
+          <div class="reply">
+            Of course. Here's what'd be useful — let me set you up in the demo right now, with
+            your team's actual departments and 3 fake employees. You and your partner play with
+            it together this week. If by Friday it doesn't feel right, I delete the account. Deal?
+          </div>
+        </div>
+
+        <div class="obj-card">
+          <div class="raises">Feature gap</div>
+          <div class="says">"What about [specific feature you don't have]?"</div>
+          <div class="reply">
+            It's not there yet. Honest answer: if you sign, it's the next thing I build. If you
+            don't, it's the thing I build for someone else who signs. You're picking your spot
+            in the queue.
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ASK -->
+  <section id="ask" class="ask">
+    <div class="label">The close</div>
+    <h2>Don't ask "do you want to buy?" Ask this instead.</h2>
+    <div class="move">
+      <strong>"What's the smallest thing in your HR that, if it disappeared tomorrow, would make a real difference?"</strong>
+      <br/><br/>
+      Whatever he says — write it on paper.<br/>
+      Slide the paper to him.<br/><br/>
+      <strong>"That's the first thing I ship for you. Pen?"</strong>
+    </div>
+  </section>
+
+  <!-- ONE-PAGER CHEAT SHEET -->
+  <section class="phase">
+    <div class="phase-head">
+      <div class="phase-tag"><span class="pill">Cheat sheet</span> Print this</div>
+      <h2>Pocket reference — glance in the bathroom before walking in.</h2>
+    </div>
+    <div class="phase-body">
+      <ol style="font-size: 15px; padding-left: 22px; line-height: 1.9;">
+        <li><strong>Open with HIM</strong> — "What's a typical Monday?"</li>
+        <li><strong>5 questions in order</strong> — headcount → leave flow → onboarding → payroll → "what would you do with 5 hrs back?"</li>
+        <li><strong>Mirror back</strong> using his words → "did I get that right?"</li>
+        <li><strong>Open /dashboard</strong> → narrate → click Insights → 3 charts → close laptop halfway</li>
+        <li><strong>Drop the line</strong> → "I'm not selling software, I'm hiring myself out to you"</li>
+        <li><strong>Listen for objections</strong> → use scripted replies</li>
+        <li><strong>The ask</strong> → "smallest thing that'd make a real difference?" → write it → slide paper → "pen?"</li>
+      </ol>
+
+      <div class="quote" style="margin-top: 20px;">
+        <strong>Two things to never say:</strong><br/>
+        "Industry-leading." "AI-powered." Both make you sound like a vendor.<br/><br/>
+        <strong>One thing to always say:</strong><br/>
+        "I'll build that for you" — even if it takes you the weekend.
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <p><span class="brand">JambaHR</span> · Founder playbook · Print-friendly · <a href="javascript:window.print()" style="color:var(--teal);text-decoration:none;font-weight:600;">Print this page</a></p>
+  <p style="margin-top:8px;opacity:0.7;">Open at <code>http://localhost:3000/demo-playbook.html</code> from the dev server, or directly from disk.</p>
+</footer>
+
+</body>
+</html>

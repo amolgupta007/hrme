@@ -19,6 +19,8 @@ import { listEmployees } from "@/actions/employees";
 import { getSalaryStructureConfig } from "@/actions/payroll";
 import { getOvertimeSettings } from "@/actions/overtime";
 import { getRazorpayXCredentials } from "@/actions/razorpayx-credentials";
+import { getLatePolicy } from "@/actions/late-policy";
+import { getWhatsAppCredentials } from "@/actions/whatsapp-credentials";
 import type { OvertimeSettings } from "@/lib/attendance/overtime-types";
 
 const DEFAULT_OT_SETTINGS_FALLBACK: OvertimeSettings = {
@@ -47,6 +49,8 @@ export default async function SettingsPage() {
     payrollConfigResult,
     overtimeSettingsResult,
     razorpayxCredentialsResult,
+    latePolicyResult,
+    whatsappCredsResult,
   ] = await Promise.all([
     listDepartments(),
     getOrgProfile(),
@@ -64,6 +68,8 @@ export default async function SettingsPage() {
     getSalaryStructureConfig(),
     getOvertimeSettings(),
     getRazorpayXCredentials(),
+    getLatePolicy(),
+    getWhatsAppCredentials(),
   ]);
 
   const departments = departmentsResult.success ? departmentsResult.data : [];
@@ -96,6 +102,15 @@ export default async function SettingsPage() {
   const razorpayxCredentials = razorpayxCredentialsResult.success
     ? razorpayxCredentialsResult.data
     : null;
+  const latePolicy = latePolicyResult.success ? latePolicyResult.data.policy : null;
+  const latePolicyTargets = latePolicyResult.success ? latePolicyResult.data.targets : [];
+  const whatsappCreds = whatsappCredsResult.success ? whatsappCredsResult.data : null;
+  const lateDepartments = departments.map((d) => ({ id: d.id, name: d.name }));
+  const lateEmployees = employees.map((e) => ({
+    id: e.id,
+    name: `${e.first_name ?? ""} ${e.last_name ?? ""}`.trim() || e.email,
+    department_id: e.department_id,
+  }));
 
   const supabase = createAdminSupabase();
   const orgSettingsResult = userCtx
@@ -148,6 +163,11 @@ export default async function SettingsPage() {
         weekOffPolicy={weekOffPolicy}
         weekOffOverrides={weekOffOverrides}
         employees={employees}
+        latePolicy={latePolicy}
+        latePolicyTargets={latePolicyTargets}
+        whatsappCreds={whatsappCreds}
+        lateDepartments={lateDepartments}
+        lateEmployees={lateEmployees}
         payrollActiveConfig={payrollActiveConfig}
         payrollConfigHistory={payrollConfigHistory}
         payrollEnabled={payrollEnabled}

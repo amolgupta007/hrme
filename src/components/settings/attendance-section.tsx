@@ -6,11 +6,16 @@ import { ShiftAssignmentsCard } from "./shift-assignments-card";
 import { WeekOffCard } from "./week-off-card";
 import { WeekOffOverrideList } from "./week-off-override-list";
 import { OvertimeCard } from "./overtime-card";
+import { LatePolicyCard } from "./late-policy-card";
+import { WhatsAppProviderCard } from "./whatsapp-provider-card";
+import type { TargetRow } from "./late-policy-targets-select";
 import type { AttendanceSettings } from "@/actions/attendance";
 import type { Shift, ShiftAssignment } from "@/actions/shifts";
 import type { WeekOffPolicy } from "@/lib/attendance/week-off";
 import type { OvertimeSettings } from "@/lib/attendance/overtime-types";
 import type { EmployeeWeekOffOverrideRow } from "@/actions/week-off";
+import type { LatePolicy } from "@/actions/late-policy";
+import type { WhatsAppCredsView } from "@/actions/whatsapp-credentials";
 import type { Employee, Department } from "@/types";
 
 interface Props {
@@ -22,9 +27,14 @@ interface Props {
   employees: Employee[];
   departments: Department[];
   overtimeSettings: OvertimeSettings;
+  latePolicy: LatePolicy | null;
+  latePolicyTargets: TargetRow[];
+  whatsappCreds: WhatsAppCredsView | null;
+  lateDepartments: Array<{ id: string; name: string }>;
+  lateEmployees: Array<{ id: string; name: string; department_id: string | null }>;
 }
 
-export function AttendanceSection({ attendanceSettings, shifts, assignments, weekOffPolicy, weekOffOverrides, employees, departments, overtimeSettings }: Props) {
+export function AttendanceSection({ attendanceSettings, shifts, assignments, weekOffPolicy, weekOffOverrides, employees, departments, overtimeSettings, latePolicy, latePolicyTargets, whatsappCreds, lateDepartments, lateEmployees }: Props) {
   return (
     <div className="space-y-4 p-6">
       <h2 className="text-lg font-semibold">Attendance</h2>
@@ -38,6 +48,8 @@ export function AttendanceSection({ attendanceSettings, shifts, assignments, wee
       <WeekOffCard initial={weekOffPolicy} />
       <WeekOffOverrideList overrides={weekOffOverrides} employees={employees} />
       <OvertimeCard settings={overtimeSettings} />
+      <LatePolicyCard initialPolicy={latePolicy} initialTargets={latePolicyTargets} departments={lateDepartments} employees={lateEmployees} />
+      <WhatsAppProviderCard initial={whatsappCreds} />
     </div>
   );
 }

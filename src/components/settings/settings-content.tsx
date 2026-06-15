@@ -36,6 +36,9 @@ import type { Shift, ShiftAssignment } from "@/actions/shifts";
 import type { WeekOffPolicy } from "@/lib/attendance/week-off";
 import type { EmployeeWeekOffOverrideRow } from "@/actions/week-off";
 import type { OvertimeSettings } from "@/lib/attendance/overtime-types";
+import type { LatePolicy } from "@/actions/late-policy";
+import type { WhatsAppCredsView } from "@/actions/whatsapp-credentials";
+import type { TargetRow } from "@/components/settings/late-policy-targets-select";
 
 type UserCtx = {
   role: string;
@@ -63,6 +66,11 @@ type SettingsContentProps = {
   weekOffOverrides: EmployeeWeekOffOverrideRow[];
   employees: Employee[];
   overtimeSettings: OvertimeSettings;
+  latePolicy: LatePolicy | null;
+  latePolicyTargets: TargetRow[];
+  whatsappCreds: WhatsAppCredsView | null;
+  lateDepartments: Array<{ id: string; name: string }>;
+  lateEmployees: Array<{ id: string; name: string; department_id: string | null }>;
   payrollActiveConfig: RatioConfig | null;
   payrollConfigHistory: SalaryStructureConfig[];
   payrollEnabled: boolean;
@@ -97,6 +105,11 @@ export function SettingsContent({
   weekOffOverrides,
   employees,
   overtimeSettings,
+  latePolicy,
+  latePolicyTargets,
+  whatsappCreds,
+  lateDepartments,
+  lateEmployees,
   payrollActiveConfig,
   payrollConfigHistory,
   payrollEnabled,
@@ -201,6 +214,11 @@ export function SettingsContent({
             employees={employees}
             departments={departments}
             overtimeSettings={overtimeSettings}
+            latePolicy={latePolicy}
+            latePolicyTargets={latePolicyTargets}
+            whatsappCreds={whatsappCreds}
+            lateDepartments={lateDepartments}
+            lateEmployees={lateEmployees}
           />
         </CollapsibleSection>
       )}

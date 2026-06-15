@@ -458,6 +458,30 @@ Feature-flagged via `organizations.settings.attendance_enabled`. Optional payrol
 
 ---
 
+## Late-Punch Policy Module (Settings → Attendance) — shipped 2026-06-16
+
+Optional, per-org rule: employees who clock in late more than N days in an IST calendar month become bonus-ineligible that month; notified via email + WhatsApp. Off by default (`late_policies.enabled`). Whole feature dark when disabled. Spec/plan/operator doc: `docs/superpowers/specs/2026-06-16-late-punch-policy-design.md`, `docs/superpowers/plans/2026-06-16-late-punch-policy.md`, `docs/late-punch-policy.md`.
+
+**Lateness** (computed at clock-in inside `clockIn` via `waitUntil`, non-blocking): late ⇔ `clock_in_at` IST > `shift.start_time + grace_minutes`; falls back to the rule's `fallback_cutoff_time` when the employee has no shift; **overnight shifts NOT evaluated in v1**. Writes `attendance_records.{is_late, late_minutes, late_policy_id}`. Pure helper `computeLateness` in `src/lib/attendance/lateness.ts`.
+
+**Monthly flagging**: when the count of `is_late` rows in the IST month reaches `threshold_days`, upsert `late_policy_flags` (`status='flagged'`, unique on `(org_id, employee_id, month)`). Never re-flags an `overridden` month.
+
+**Consequence (bonus block)**: `addPayrollLineItem` rejects `category='bonus'` for a flagged employee in the run's month unless `override:true`. Admin overrides via the Payroll "Bonus-ineligible · N late days" badge (reason required) → `overrideLateFlag` flips `status` to `overridden`. Only `bonus` is blocked; allowances/reimbursements/overtime/other and tax math are unaffected.
+
+**Targeting**: covered employees = (members of targeted departments) ∪ (targeted employees), via `late_policy_targets`; empty = nobody. Helper `resolveCoveredEmployeeIds` in `src/lib/attendance/late-policy-targets.ts`. UI is a nested department+employee multi-select.
+
+**Notifications** (`src/lib/attendance/late-policy-dispatch.ts` — plain module, NOT a server action; best-effort, idempotent claim-then-send keyed on `late_punch_notifications` unique `(attendance_record_id, kind, channel)`): kinds `late` / `warn` (at `warn_at`, below threshold) / `threshold`. Email always available (Resend, `FROM_EMAIL`); WhatsApp only when the org has an active provider AND `employees.whatsapp_opt_in=true` AND a phone. Which kinds fire is decided by `planNotificationKinds` (`src/lib/attendance/late-policy-notify.ts`). Email templates: `late-punch-alert.tsx`, `bonus-ineligible-alert.tsx`.
+
+**WhatsApp — per-org BYO adapter registry** (`src/lib/whatsapp/`): `resolveProvider(cfg)` returns an `aisensy` / `wati` / `centralized` adapter; `omni` and `meta` return null (Omni adapter deferred until its API is confirmed). Per-org config in `org_whatsapp_credentials` (API key AES-256-GCM encrypted, reusing `RAZORPAYX_CRED_ENCRYPTION_KEY`). Centralized fallback via env: `WHATSAPP_CENTRALIZED_{PROVIDER,API_KEY,ENDPOINT,TPL_LATE,TPL_INELIGIBLE,TPL_WARN}`. Three Meta-approved **Utility** templates required: `late_punch_alert`, `bonus_ineligible_alert`, `late_warning`. No provider configured → email-only, no errors. Actions in `src/actions/whatsapp-credentials.ts` (`getWhatsAppCredentials` exposes only `hasApiKey`, never the secret; `sendTestWhatsApp`).
+
+**Config UI**: Settings → Attendance → "Late Policy" card + "WhatsApp provider" card (admin + `attendanceEnabled` only). Policy actions in `src/actions/late-policy.ts` (`getLatePolicy`, `upsertLatePolicy`, `getLateFlagsForMonth`, `overrideLateFlag`). Profile gains a WhatsApp opt-in consent toggle (`employees.whatsapp_opt_in`).
+
+**Migrations 061–065** (applied to live HRme DB via MCP): `late_policies` + `late_policy_targets` (061), `late_policy_flags` (062), `late_punch_notifications` (063), `org_whatsapp_credentials` (064), `attendance_records.{is_late,late_minutes,late_policy_id}` + `employees.{whatsapp_opt_in,whatsapp_opt_in_at}` (065). RLS uses the Clerk-JWT pattern; service-role bypasses by design.
+
+**Cron**: `/api/cron/late-policy-reconcile` (daily — see Cron Jobs table).
+
+**v1 limitations**: overnight shifts not evaluated; calendar-month period only; bonus-block consequence only (no penalty deductions); single org-wide rule (targeting selects who it covers); Omni WhatsApp adapter pending.
+
 ## Payroll Module (`/dashboard/payroll`) — Business+
 
 - `src/lib/ctc.ts` — CTC breakdown: PF caps, PT per state (10 states), TDS slabs FY 2025-26, Rebate u/s 87A
@@ -716,6 +740,7 @@ Primary: teal `172 50% 36%`. Accent: warm orange `32 95% 52%`. Use CSS variables
 | `/api/cron/loi-expiry` | `15 4 * * *` | 9:45am | M4 — flips JambaHire `applications.loi_status` from `pending` to `expired` where `loi_expires_at < now()`. No email sent on expiry (admin can resend from the card). |
 | `/api/cron/jambageo-followup-reminders` | `30 3 * * *` | 9:00am | Email staff with `leads.follow_up_date = today` (one digest per recipient) |
 | `/api/cron/jambageo-retention-sweep` | `0 19 * * *` | 12:30am | Delete `location_pings` older than per-employee retention (Phase 1 no-op; ready for Phase 2 mobile pings) |
+| `/api/cron/late-policy-reconcile` | `0 20 * * *` | 1:30am | Recompute current-IST-month late-day counts for enabled late policies; upsert missed `late_policy_flags` (never re-flags `overridden`). Safety net for the inline clock-in flagging. |
 
 All cron routes require `Authorization: Bearer CRON_SECRET` header. `CRON_SECRET` env var must be set in Vercel.
 
@@ -835,6 +860,11 @@ npm run db:push       # Push migrations (needs CLI)
 81. **Lead address auto-geocoded on save**: `createLead` / `updateLead` (and the explicit `geocodeLead(id)`) call `geocodeAddress` via Mapbox v5 when address is present and `lat`/`lng` aren't explicitly set. Best-effort, 5s timeout, silent failure. Uses the same `NEXT_PUBLIC_MAPBOX_TOKEN`. Mapbox free tier covers 100k/mo — well past SMB volume.
 82. **`GeoPageHeader` is the canonical h1+lede for every `/geo/*` page**: Don't inline `<header><h1>` blocks on new pages — use `<GeoPageHeader title="..." lede="..." rightSlot={...} />`. Owns the typographic scale (text-2xl semibold tracking-tight + max-w-prose lede + mb-6) so every destination page stays in rhythm. See `src/components/geo/geo-page-header.tsx`.
 83. **Function props from Server Components to Client Components crash at REQUEST time, not build time**: `next build` passes, then the page 500s ("Functions cannot be passed directly to Client Components"). Hit on 2026-06-12 when `/insights/leave` and `/insights/payroll` passed `formatValue={fn}` to recharts wrappers. Fix pattern: pass a serializable token (`format="inr" | "timeOfDay" | "percent" | "plain"`) and resolve the formatter inside the client component — see `makeFormatter()` in `src/components/insights/charts.tsx`. Audit any new server page that hands props to `"use client"` chart/dialog components.
+84. **Late-policy WhatsApp is per-org BYO + email fallback**: WhatsApp sends nothing until an org configures an active provider in `org_whatsapp_credentials` (or sets the `WHATSAPP_CENTRALIZED_*` env vars for the centralized adapter) AND the 3 Utility templates are Meta-approved AND the employee has `whatsapp_opt_in=true` + a phone. Otherwise the late policy runs **email-only with no errors**. The `omni` provider is a deferred stub — `resolveProvider` returns null for it.
+85. **Late-policy secret/PII helpers must stay OUT of `"use server"`**: `loadProviderConfig` (returns a decrypted WhatsApp key) lives in `src/lib/whatsapp/load-config.ts` and `dispatchLateNotifications` (sends + handles employee PII) lives in `src/lib/attendance/late-policy-dispatch.ts` — both plain modules. Any `export` from a `"use server"` file becomes a browser-callable RPC, so moving these into `src/actions/` would expose the secret/PII. (Caught in pre-merge code review; mirrors the `disbursement-reconcile.ts` precedent.)
+86. **Lateness skips overnight shifts in v1**: `computeLateness` returns `evaluated:false` for `is_overnight` shifts (and when there's no shift AND no `fallback_cutoff_time`). Those punches are never marked late. Boundary-wrap handling is deferred.
+87. **Bonus block reads `late_policy_flags`; override is a separate action**: `addPayrollLineItem` blocks `category='bonus'` for a `status='flagged'` employee in the run's `month` unless `override:true`. The normal admin path is the Payroll badge → `overrideLateFlag` (flips to `overridden`); the `override` arg on the line item is the secondary escape hatch. Only `bonus` is blocked.
+88. **Late-policy counting is IST calendar-month**: the clock-in path counts `is_late` rows with `date` in `[YYYY-MM-01, recordDate]`; the reconcile cron bounds `[YYYY-MM-01, YYYY-MM-31]`. One policy per org (DB-unique on `org_id`); flags unique on `(org_id, employee_id, month)`.
 
 ---
 

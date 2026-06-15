@@ -191,6 +191,29 @@ export async function acknowledgeDocument(
 
   const employeeId = (employee as { id: string }).id;
 
+  // Verify the caller is actually allowed to see this document before recording
+  // an acknowledgment. Admins can ack anything in their org; everyone else can
+  // ack a company-wide doc or their own personal doc only (mirrors listDocuments).
+  const { data: doc } = await supabase
+    .from("documents")
+    .select("space, employee_id")
+    .eq("id", documentId)
+    .eq("org_id", ctx.orgId)
+    .single();
+
+  if (!doc) return { success: false, error: "Document not found" };
+
+  const targetDoc = doc as { space: string | null; employee_id: string | null };
+  const user = await getCurrentUser();
+  const canSeeDoc =
+    (user != null && isAdmin(user.role)) ||
+    targetDoc.space === "company_wide" ||
+    (targetDoc.space === "personal" && targetDoc.employee_id === employeeId);
+
+  if (!canSeeDoc) {
+    return { success: false, error: "You don't have access to this document" };
+  }
+
   const { error } = await supabase
     .from("document_acknowledgments")
     .upsert(

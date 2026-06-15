@@ -17,6 +17,7 @@ import { PayslipDialog } from "./payslip-dialog";
 import { CTCBreakdownCard } from "./ctc-breakdown-card";
 import { PayNowButton } from "./pay-now-button";
 import { DisbursementTab } from "./disbursement-tab";
+import { BonusIneligibleBadge } from "./bonus-ineligible-badge";
 import {
   processPayrollRun,
   markPayrollPaid,
@@ -51,6 +52,10 @@ interface Props {
   currentEmployeeName: string;
   activeConfigCreatedAt?: string | null;
   razorpayxConnected?: boolean;
+  lateFlagsByMonth?: Record<
+    string,
+    Array<{ employee_id: string; late_days_count: number; status: "flagged" | "overridden" }>
+  >;
 }
 
 const MONTHS = [
@@ -80,6 +85,7 @@ export function PayrollClient({
   currentEmployeeName,
   activeConfigCreatedAt,
   razorpayxConnected = false,
+  lateFlagsByMonth = {},
 }: Props) {
   const router = useRouter();
   const tabs = isAdmin
@@ -437,12 +443,27 @@ export function PayrollClient({
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-border">
-                          {(runEntries[run.id] ?? []).map((entry) => (
+                          {(runEntries[run.id] ?? []).map((entry) => {
+                            const lateFlag = (lateFlagsByMonth[run.month] ?? []).find(
+                              (f) => f.employee_id === entry.employee_id
+                            );
+                            return (
                             <tr key={entry.id} className="hover:bg-muted/20">
                               <td className="px-4 py-2.5">
                                 <p className="font-medium">{entry.employee_name}</p>
                                 {entry.department && (
                                   <p className="text-xs text-muted-foreground">{entry.department}</p>
+                                )}
+                                {lateFlag && (
+                                  <div className="mt-1">
+                                    <BonusIneligibleBadge
+                                      employeeId={entry.employee_id}
+                                      month={run.month}
+                                      lateDays={lateFlag.late_days_count}
+                                      status={lateFlag.status}
+                                      onOverridden={() => router.refresh()}
+                                    />
+                                  </div>
                                 )}
                               </td>
                               <td className="px-4 py-2.5 text-right font-mono">{formatINR(entry.gross_salary)}</td>
@@ -489,7 +510,8 @@ export function PayrollClient({
                                 </div>
                               </td>
                             </tr>
-                          ))}
+                            );
+                          })}
                         </tbody>
                         {/* Summary row */}
                         <tfoot className="border-t border-border bg-muted/30">

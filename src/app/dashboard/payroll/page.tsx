@@ -13,6 +13,7 @@ import {
 import { PayrollClient } from "@/components/payroll/payroll-client";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { getRazorpayXCredentials } from "@/actions/razorpayx-credentials";
+import { getLateFlagsForMonth } from "@/actions/late-policy";
 
 export default async function PayrollPage() {
   const userCtx = await getCurrentUser();
@@ -46,6 +47,20 @@ export default async function PayrollPage() {
   const myPayslips = mySlipsResult.success ? mySlipsResult.data : [];
   const myCompensation = myCompResult.success ? myCompResult.data : null;
 
+  // Late-policy flags keyed by run month (admin-only). Drives the bonus-ineligible badge.
+  const lateFlagsByMonth: Record<
+    string,
+    Array<{ employee_id: string; late_days_count: number; status: "flagged" | "overridden" }>
+  > = {};
+  if (adminUser) {
+    const months = Array.from(new Set((payrollRuns as { month: string }[]).map((r) => r.month)));
+    const flagResults = await Promise.all(months.map((m) => getLateFlagsForMonth(m)));
+    months.forEach((m, i) => {
+      const res = flagResults[i];
+      lateFlagsByMonth[m] = res.success ? res.data : [];
+    });
+  }
+
   // Get org name
   let orgName = "Your Company";
   if (userCtx) {
@@ -77,6 +92,7 @@ export default async function PayrollPage() {
       currentEmployeeName={currentEmployeeName}
       activeConfigCreatedAt={activeConfigCreatedAt}
       razorpayxConnected={razorpayxConnected}
+      lateFlagsByMonth={lateFlagsByMonth}
     />
   );
 }

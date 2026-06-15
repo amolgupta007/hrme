@@ -92,6 +92,8 @@ export type EmployeeProfile = Employee & {
   emergency_contact_name: string | null;
   emergency_contact_phone: string | null;
   emergency_contact_relationship: string | null;
+  whatsapp_opt_in: boolean | null;
+  whatsapp_opt_in_at: string | null;
 };
 
 // ---- Helpers ----
@@ -183,6 +185,7 @@ const profileSchema = z.object({
   aadharNumber: z.string().optional(),
   communicationAddress: addressSchema.optional(),
   permanentAddress: addressSchema.optional(),
+  whatsapp_opt_in: z.boolean().optional(),
 });
 
 export type ProfileSaveResult =
@@ -223,7 +226,13 @@ export async function updateMyProfile(
       aadhar_number: d.aadharNumber || null,
       communication_address: d.communicationAddress ?? null,
       permanent_address: d.permanentAddress ?? null,
-    })
+      ...(d.whatsapp_opt_in !== undefined
+        ? {
+            whatsapp_opt_in: d.whatsapp_opt_in,
+            whatsapp_opt_in_at: d.whatsapp_opt_in ? new Date().toISOString() : null,
+          }
+        : {}),
+    } as any)
     .eq("id", employeeId)
     .eq("org_id", user.orgId);
 

@@ -57,6 +57,8 @@ export function ProfileClient({ profile }: { profile: EmployeeProfile }) {
     emergencyContactRelationship: profile.emergency_contact_relationship ?? "",
   });
 
+  const [whatsappOptIn, setWhatsappOptIn] = React.useState(profile.whatsapp_opt_in ?? false);
+
   function clearError(...keys: string[]) {
     setFieldErrors((prev) => {
       if (keys.every((k) => !(k in prev)) && !("_form" in prev)) return prev;
@@ -95,6 +97,7 @@ export function ProfileClient({ profile }: { profile: EmployeeProfile }) {
       updateMyProfile(profile.id, {
         ...form,
         maritalStatus: form.maritalStatus,
+        whatsapp_opt_in: whatsappOptIn,
       }),
       updateEmergencyContact({
         name: form.emergencyContactName,
@@ -257,6 +260,18 @@ export function ProfileClient({ profile }: { profile: EmployeeProfile }) {
               ? <input type="tel" className={fieldErrors.phone ? inputErrCn : inputCn} value={form.phone} onChange={(e) => setField("phone", e.target.value)} placeholder="+91 98765 43210" />
               : <Value>{profile.phone}</Value>}
           </Field>
+          <div className="col-span-3">
+            {editing ? (
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={whatsappOptIn} onChange={(e) => setWhatsappOptIn(e.target.checked)} />
+                Receive WhatsApp notifications (requires a valid phone number on file)
+              </label>
+            ) : (
+              <Field label="WhatsApp Notifications">
+                <Value>{profile.whatsapp_opt_in ? "Enabled" : "Disabled"}</Value>
+              </Field>
+            )}
+          </div>
         </div>
 
         <div className="mt-5 pt-5 border-t border-border space-y-4">

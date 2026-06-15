@@ -1,11 +1,16 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { waitUntil } from "@vercel/functions";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { getCurrentUser, isAdmin, isManagerOrAbove } from "@/lib/current-user";
 import type { ActionResult } from "@/types";
 import { getActiveShiftForEmployee } from "@/actions/shifts";
 import { attributedDateForClockIn } from "@/lib/attendance/attribute-date";
+import { computeLateness } from "@/lib/attendance/lateness";
+import { resolveCoveredEmployeeIds } from "@/lib/attendance/late-policy-targets";
+import { planNotificationKinds } from "@/lib/attendance/late-policy-notify";
+import { dispatchLateNotifications } from "@/actions/late-policy-dispatch";
 
 export type AttendanceSettings = {
   standardWorkdayHours: number;
@@ -156,6 +161,17 @@ export async function clockIn(ipAddress?: string): Promise<ActionResult<Attendan
     .single();
 
   if (error) return { success: false, error: error.message };
+
+  waitUntil(
+    evaluateLatePolicyForClockIn({
+      orgId: user.orgId,
+      employeeId: user.employeeId,
+      attendanceRecordId: (data as any).id,
+      clockInAtUtc: nowUtc,
+      recordDate,
+      shift: shift ? { start_time: shift.start_time, grace_minutes: shift.grace_minutes, is_overnight: shift.is_overnight } : null,
+    }).catch((e) => console.error("late-policy eval failed", e)),
+  );
 
   revalidatePath("/dashboard/attendance");
   return { success: true, data: formatRecord(data) };
@@ -325,4 +341,96 @@ function formatRecord(raw: any): AttendanceRecord {
     shift_id: raw.shift_id ?? null,
     attributed_date: raw.attributed_date ?? null,
   };
+}
+
+// --- Late policy evaluation (runs after a successful clock-in, via waitUntil) ---
+async function evaluateLatePolicyForClockIn(args: {
+  orgId: string;
+  employeeId: string;
+  attendanceRecordId: string;
+  clockInAtUtc: string;
+  recordDate: string;
+  shift: { start_time: string; grace_minutes: number; is_overnight: boolean } | null;
+}): Promise<void> {
+  const supabase = createAdminSupabase();
+
+  const { data: policy } = await supabase
+    .from("late_policies").select("*").eq("org_id", args.orgId).eq("enabled", true).maybeSingle();
+  if (!policy) return;
+  const p = policy as any;
+
+  const { data: targets } = await supabase
+    .from("late_policy_targets").select("target_type, target_id").eq("policy_id", p.id);
+  const { data: emps } = await supabase
+    .from("employees").select("id, department_id").eq("org_id", args.orgId);
+  const covered = resolveCoveredEmployeeIds({ targets: (targets ?? []) as any, employees: (emps ?? []) as any });
+  if (!covered.has(args.employeeId)) return;
+
+  const lateness = computeLateness({
+    clockInAtUtc: args.clockInAtUtc,
+    shift: args.shift,
+    fallbackCutoff: p.fallback_cutoff_time,
+  });
+  if (!lateness.evaluated) return;
+
+  await supabase
+    .from("attendance_records")
+    .update({ is_late: lateness.isLate, late_minutes: lateness.lateMinutes, late_policy_id: p.id } as any)
+    .eq("id", args.attendanceRecordId);
+
+  if (!lateness.isLate) return;
+
+  const month = args.recordDate.slice(0, 7);
+  const monthStart = `${month}-01`;
+  const { count: newCountRaw } = await supabase
+    .from("attendance_records")
+    .select("id", { count: "exact", head: true })
+    .eq("org_id", args.orgId).eq("employee_id", args.employeeId).eq("is_late", true)
+    .gte("date", monthStart).lte("date", args.recordDate);
+  const newCount = newCountRaw ?? 1;
+  const prevCount = Math.max(0, newCount - 1);
+
+  if (newCount >= p.threshold_days) {
+    const { data: existingFlag } = await supabase
+      .from("late_policy_flags").select("id, status").eq("org_id", args.orgId)
+      .eq("employee_id", args.employeeId).eq("month", month).maybeSingle();
+    if (existingFlag) {
+      if ((existingFlag as any).status !== "overridden") {
+        await supabase.from("late_policy_flags")
+          .update({ late_days_count: newCount, updated_at: new Date().toISOString() } as any)
+          .eq("id", (existingFlag as any).id);
+      }
+    } else {
+      await supabase.from("late_policy_flags").insert({
+        org_id: args.orgId, policy_id: p.id, employee_id: args.employeeId, month,
+        late_days_count: newCount, status: "flagged",
+      } as any);
+    }
+  }
+
+  const kinds = planNotificationKinds({
+    policy: { threshold_days: p.threshold_days, warn_at: p.warn_at, notify_on_late: p.notify_on_late, notify_on_threshold: p.notify_on_threshold },
+    isLate: true, prevCount, newCount,
+  });
+  if (kinds.length === 0) return;
+
+  const { data: emp } = await supabase
+    .from("employees").select("first_name, last_name, email, phone, whatsapp_opt_in").eq("id", args.employeeId).single();
+  const { data: org } = await supabase.from("organizations").select("name").eq("id", args.orgId).single();
+  const e = emp as any;
+  const istTime = new Date(new Date(args.clockInAtUtc).getTime() + 5.5 * 3600 * 1000).toISOString().slice(11, 16);
+  const monthLabel = new Date(`${month}-01T00:00:00Z`).toLocaleString("en-IN", { month: "long", year: "numeric", timeZone: "UTC" });
+
+  await dispatchLateNotifications({
+    orgId: args.orgId,
+    orgName: (org as any)?.name ?? "your organization",
+    attendanceRecordId: args.attendanceRecordId,
+    employee: {
+      id: args.employeeId, name: `${e.first_name} ${e.last_name}`.trim(),
+      email: e.email ?? null, phone: e.phone ?? null, whatsappOptIn: !!e.whatsapp_opt_in,
+    },
+    kinds,
+    channels: { email: p.channel_email, whatsapp: p.channel_whatsapp },
+    data: { clockInTime: istTime, lateMinutes: lateness.lateMinutes, lateDaysThisMonth: newCount, thresholdDays: p.threshold_days, monthLabel },
+  });
 }

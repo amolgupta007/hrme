@@ -64,6 +64,10 @@
     {
       "path": "/api/cron/jambageo-retention-sweep",
       "schedule": "0 19 * * *"
+    },
+    {
+      "path": "/api/cron/late-policy-reconcile",
+      "schedule": "0 20 * * *"
     }
   ]
 }

@@ -10,7 +10,7 @@ import { attributedDateForClockIn } from "@/lib/attendance/attribute-date";
 import { computeLateness } from "@/lib/attendance/lateness";
 import { resolveCoveredEmployeeIds } from "@/lib/attendance/late-policy-targets";
 import { planNotificationKinds } from "@/lib/attendance/late-policy-notify";
-import { dispatchLateNotifications } from "@/actions/late-policy-dispatch";
+import { dispatchLateNotifications } from "@/lib/attendance/late-policy-dispatch";
 
 export type AttendanceSettings = {
   standardWorkdayHours: number;

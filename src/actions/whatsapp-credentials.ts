@@ -4,8 +4,9 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { getCurrentUser, isAdmin } from "@/lib/current-user";
 import { createAdminSupabase } from "@/lib/supabase/server";
-import { encrypt, decrypt } from "@/lib/crypto/aes-gcm";
+import { encrypt } from "@/lib/crypto/aes-gcm";
 import { resolveProvider, type ProviderConfig } from "@/lib/whatsapp";
+import { loadProviderConfig } from "@/lib/whatsapp/load-config";
 import type { ActionResult } from "@/types";
 
 const CredsSchema = z.object({
@@ -70,25 +71,6 @@ export async function upsertWhatsAppCredentials(input: z.infer<typeof CredsSchem
   if (error) return { success: false, error: error.message };
   revalidatePath("/dashboard/settings");
   return { success: true, data: undefined };
-}
-
-/** Load + decrypt the org's provider config for the dispatcher (server-internal). */
-export async function loadProviderConfig(orgId: string): Promise<ProviderConfig | null> {
-  const sb = createAdminSupabase();
-  const { data } = await sb
-    .from("org_whatsapp_credentials")
-    .select("provider, api_key_encrypted, endpoint, template_map, active")
-    .eq("org_id", orgId)
-    .maybeSingle();
-  if (!data) return null;
-  const row = data as any;
-  return {
-    provider: row.provider,
-    apiKey: row.api_key_encrypted ? decrypt(row.api_key_encrypted) : null,
-    endpoint: row.endpoint,
-    templateMap: row.template_map ?? {},
-    active: row.active,
-  };
 }
 
 export async function sendTestWhatsApp(toPhone: string): Promise<ActionResult<void>> {

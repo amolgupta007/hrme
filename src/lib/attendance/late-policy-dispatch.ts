@@ -1,10 +1,8 @@
-"use server";
-
 import { render } from "@react-email/render";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { resend, FROM_EMAIL } from "@/lib/resend";
 import { resolveProvider, type WhatsAppTemplateKey } from "@/lib/whatsapp";
-import { loadProviderConfig } from "@/actions/whatsapp-credentials";
+import { loadProviderConfig } from "@/lib/whatsapp/load-config";
 import { LatePunchAlert } from "@/components/emails/late-punch-alert";
 import { BonusIneligibleAlert } from "@/components/emails/bonus-ineligible-alert";
 import type { NotifyKind } from "@/lib/attendance/late-policy-notify";
@@ -25,22 +23,36 @@ const TEMPLATE_KEY: Record<NotifyKind, WhatsAppTemplateKey> = {
   threshold: "bonus_ineligible_alert",
 };
 
-/** Best-effort, idempotent. Never throws into the caller. */
+/**
+ * Server-internal best-effort dispatcher. NOT a server action.
+ * Idempotent via the unique index (attendance_record_id, kind, channel):
+ * we CLAIM the row first (upsert ignoreDuplicates) and only send if WE inserted it,
+ * so a waitUntil retry cannot double-send.
+ */
 export async function dispatchLateNotifications(input: DispatchInput): Promise<void> {
   const sb = createAdminSupabase();
   const cfg = input.channels.whatsapp ? await loadProviderConfig(input.orgId) : null;
   const provider = resolveProvider(cfg);
 
   for (const kind of input.kinds) {
+    // EMAIL
     if (input.channels.email && input.employee.email) {
-      const already = await sb
+      const claim = await sb
         .from("late_punch_notifications")
-        .select("id")
-        .eq("attendance_record_id", input.attendanceRecordId)
-        .eq("kind", kind)
-        .eq("channel", "email")
-        .maybeSingle();
-      if (!already.data) {
+        .upsert(
+          {
+            org_id: input.orgId,
+            attendance_record_id: input.attendanceRecordId,
+            employee_id: input.employee.id,
+            kind,
+            channel: "email",
+            status: "sent",
+          } as any,
+          { onConflict: "attendance_record_id,kind,channel", ignoreDuplicates: true },
+        )
+        .select("id");
+      const claimedId = claim.data && claim.data.length > 0 ? (claim.data[0] as any).id : null;
+      if (claimedId) {
         let status: "sent" | "failed" = "sent";
         let error: string | null = null;
         try {
@@ -67,27 +79,39 @@ export async function dispatchLateNotifications(input: DispatchInput): Promise<v
                 );
           const subject = kind === "threshold" ? `Bonus eligibility update — ${input.data.monthLabel}` : "Late punch-in recorded";
           const r = await resend.emails.send({ from: FROM_EMAIL, to: input.employee.email, subject, html });
-          if ((r as any)?.error) { status = "failed"; error = String((r as any).error?.message ?? "send error"); }
+          if ((r as any)?.error) {
+            status = "failed";
+            error = String((r as any).error?.message ?? "send error");
+          }
         } catch (e) {
           status = "failed";
           error = e instanceof Error ? e.message : "email failed";
         }
-        await sb.from("late_punch_notifications").insert({
-          org_id: input.orgId, attendance_record_id: input.attendanceRecordId, employee_id: input.employee.id,
-          kind, channel: "email", status, error,
-        } as any);
+        if (status === "failed") {
+          await sb.from("late_punch_notifications").update({ status, error } as any).eq("id", claimedId);
+        }
       }
     }
 
+    // WHATSAPP
     if (input.channels.whatsapp && provider && input.employee.whatsappOptIn && input.employee.phone) {
-      const already = await sb
+      const claim = await sb
         .from("late_punch_notifications")
-        .select("id")
-        .eq("attendance_record_id", input.attendanceRecordId)
-        .eq("kind", kind)
-        .eq("channel", "whatsapp")
-        .maybeSingle();
-      if (!already.data) {
+        .upsert(
+          {
+            org_id: input.orgId,
+            attendance_record_id: input.attendanceRecordId,
+            employee_id: input.employee.id,
+            kind,
+            channel: "whatsapp",
+            status: "sent",
+            provider: cfg?.provider ?? provider.name,
+          } as any,
+          { onConflict: "attendance_record_id,kind,channel", ignoreDuplicates: true },
+        )
+        .select("id");
+      const claimedId = claim.data && claim.data.length > 0 ? (claim.data[0] as any).id : null;
+      if (claimedId) {
         const res = await provider.sendTemplate({
           to: input.employee.phone,
           templateKey: TEMPLATE_KEY[kind],
@@ -98,11 +122,14 @@ export async function dispatchLateNotifications(input: DispatchInput): Promise<v
             threshold: String(input.data.thresholdDays),
           },
         });
-        await sb.from("late_punch_notifications").insert({
-          org_id: input.orgId, attendance_record_id: input.attendanceRecordId, employee_id: input.employee.id,
-          kind, channel: "whatsapp", status: res.ok ? "sent" : "failed",
-          provider: provider.name, provider_message_id: res.providerMessageId ?? null, error: res.ok ? null : res.error ?? null,
-        } as any);
+        await sb
+          .from("late_punch_notifications")
+          .update({
+            status: res.ok ? "sent" : "failed",
+            provider_message_id: res.providerMessageId ?? null,
+            error: res.ok ? null : res.error ?? null,
+          } as any)
+          .eq("id", claimedId);
       }
     }
   }

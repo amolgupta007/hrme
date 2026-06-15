@@ -20,7 +20,7 @@ export async function GET(req: Request) {
       .from("attendance_records")
       .select("employee_id")
       .eq("org_id", p.org_id).eq("is_late", true)
-      .gte("date", monthStart);
+      .gte("date", monthStart).lte("date", `${month}-31`);
     const counts = new Map<string, number>();
     for (const r of (lateRows ?? []) as any[]) counts.set(r.employee_id, (counts.get(r.employee_id) ?? 0) + 1);
     for (const [employeeId, count] of counts) {

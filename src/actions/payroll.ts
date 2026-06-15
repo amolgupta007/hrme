@@ -1110,6 +1110,7 @@ const LineItemSchema = z.object({
   amount: z.number().int().min(0).max(10_000_000),
   taxable: z.boolean().default(true),
   note: z.string().max(280).nullable().optional(),
+  override: z.boolean().optional(), // bypass late-policy bonus block (admin)
 });
 
 export async function listPayrollLineItems(entryId: string): Promise<ActionResult<PayrollLineItemRow[]>> {
@@ -1170,6 +1171,28 @@ export async function addPayrollLineItem(input: z.infer<typeof LineItemSchema>):
     .eq("id", (entry as any).payroll_run_id)
     .single();
   if ((run as any)?.status === "paid") return { success: false, error: "Cannot add line items to a paid run" };
+
+  // Late-policy bonus block: refuse a bonus for an employee flagged this month.
+  if (parsed.data.category === "bonus" && !parsed.data.override) {
+    const { data: runRow } = await sb
+      .from("payroll_runs").select("month").eq("id", (entry as any).payroll_run_id).single();
+    const { data: entryRow } = await sb
+      .from("payroll_entries").select("employee_id").eq("id", (entry as any).id).single();
+    if (runRow && entryRow) {
+      const { data: flag } = await sb
+        .from("late_policy_flags").select("late_days_count, status")
+        .eq("org_id", user.orgId)
+        .eq("employee_id", (entryRow as any).employee_id)
+        .eq("month", (runRow as any).month)
+        .maybeSingle();
+      if (flag && (flag as any).status === "flagged") {
+        return {
+          success: false,
+          error: `Employee is bonus-ineligible this month (${(flag as any).late_days_count} late days). Override required.`,
+        };
+      }
+    }
+  }
 
   const { data, error } = await sb
     .from("payroll_line_items")

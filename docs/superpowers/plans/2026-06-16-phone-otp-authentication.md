@@ -370,8 +370,11 @@ git commit -m "feat(auth): Clerk phone-only user provisioning helper"
 
 ## Task 4: Employee schema — require email OR phone
 
+> **`"use server"` constraint:** `src/actions/employees.ts` is a `"use server"` file, which may only export async functions. The schema therefore must NOT be exported from it. Extract `employeeSchema` to a new plain module `src/lib/employees/employee-schema.ts` (no `"use server"`), export it from there, and import it back into `employees.ts`. `employeeSchema` is currently used only inside `employees.ts` (lines 139, 147, 224, 232), so this extraction is safe.
+
 **Files:**
-- Modify: `src/actions/employees.ts` (schema block, lines ~47-57)
+- Create: `src/lib/employees/employee-schema.ts` (the extracted + refined schema)
+- Modify: `src/actions/employees.ts` — delete the local `const employeeSchema = ...` block (lines ~47-58) and add `import { employeeSchema } from "@/lib/employees/employee-schema";`. The existing `z.infer<typeof employeeSchema>` usages keep working against the imported schema.
 - Test: `tests/employees/employee-schema.test.ts`
 
 - [ ] **Step 1: Write the failing test**
@@ -379,7 +382,7 @@ git commit -m "feat(auth): Clerk phone-only user provisioning helper"
 ```typescript
 // tests/employees/employee-schema.test.ts
 import { describe, it, expect } from "vitest";
-import { employeeSchema } from "@/actions/employees";
+import { employeeSchema } from "@/lib/employees/employee-schema";
 
 const base = {
   firstName: "Asha",
@@ -418,13 +421,15 @@ describe("employeeSchema identity refinement", () => {
 Run: `npx vitest run tests/employees/employee-schema.test.ts`
 Expected: FAIL — `employeeSchema` is not exported / refinement absent.
 
-- [ ] **Step 3: Edit the schema in `src/actions/employees.ts`**
+- [ ] **Step 3: Create `src/lib/employees/employee-schema.ts`**
 
-Add `import { isValidPhone } from "@/lib/phone";` near the top imports.
-
-Replace the current schema definition (the `const employeeSchema = z.object({ ... })` block, lines ~47-58) with an exported, refined version. The email field becomes optional; phone is validated:
+Create the new plain module (NO `"use server"` directive) containing the refined schema. It imports `isValidPhone` from `@/lib/phone`. The email field becomes optional; phone is validated. Then in `src/actions/employees.ts` delete the local `const employeeSchema = ...` block and add `import { employeeSchema } from "@/lib/employees/employee-schema";`.
 
 ```typescript
+// src/lib/employees/employee-schema.ts
+import { z } from "zod";
+import { isValidPhone } from "@/lib/phone";
+
 export const employeeSchema = z
   .object({
     firstName: z.string().min(1, "First name is required"),
@@ -460,8 +465,8 @@ Expected: PASS (5 cases).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/actions/employees.ts tests/employees/employee-schema.test.ts
-git commit -m "feat(auth): employeeSchema requires email or phone"
+git add src/lib/employees/employee-schema.ts src/actions/employees.ts tests/employees/employee-schema.test.ts
+git commit -m "feat(auth): extract employeeSchema to lib module, require email or phone"
 ```
 
 ---

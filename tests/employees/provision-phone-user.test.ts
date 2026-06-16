@@ -76,4 +76,22 @@ describe("provisionPhoneOnlyUser", () => {
     });
     expect(res).toEqual({ clerkUserId: "user_new" });
   });
+
+  it("is idempotent when an existing user is already a member", async () => {
+    const client = makeClient({
+      users: { getUserList: vi.fn().mockResolvedValue({ data: [{ id: "user_existing" }], totalCount: 1 }) },
+      organizations: {
+        createOrganizationMembership: vi
+          .fn()
+          .mockRejectedValue({ errors: [{ code: "already_a_member_of_organization" }] }),
+      },
+    });
+    const res = await provisionPhoneOnlyUser(client as any, {
+      phoneE164: "+919876543210",
+      clerkOrgId: "org_1",
+      role: "manager",
+    });
+    expect(client.users.createUser).not.toHaveBeenCalled();
+    expect(res).toEqual({ clerkUserId: "user_existing" });
+  });
 });

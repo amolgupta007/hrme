@@ -32,6 +32,15 @@ describe("normalizePhone", () => {
     expect(normalizePhone(null)).toBeNull();
     expect(normalizePhone(undefined)).toBeNull();
   });
+  it("strips dashes from a non-India E.164 number", () => {
+    expect(normalizePhone("+1-415-555-2671")).toBe("+14155552671");
+  });
+  it("returns null for a whitespace-only string", () => {
+    expect(normalizePhone("   ")).toBeNull();
+  });
+  it("rejects an E.164 number with too few digits", () => {
+    expect(normalizePhone("+1234567")).toBeNull();
+  });
 });
 
 describe("isValidPhone", () => {

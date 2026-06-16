@@ -21,6 +21,7 @@ export function normalizePhone(raw: string | null | undefined): string | null {
   if (local.length === 12 && local.startsWith("91")) local = local.slice(2);
   else if (local.length === 11 && local.startsWith("0")) local = local.slice(1);
 
+  // Indian mobile subscriber numbers are 10 digits starting 6–9.
   if (local.length === 10 && /^[6-9]/.test(local)) return "+91" + local;
   return null;
 }

@@ -383,15 +383,20 @@ export async function bulkImportEmployees(
 
   const remainingSlots = maxEmployees - activeCount;
 
-  // Fetch existing emails in org (for duplicate detection)
+  // Fetch existing emails and phones in org (for duplicate detection)
   const { data: existingEmps } = await supabase
     .from("employees")
-    .select("email, status")
+    .select("email, status, phone")
     .eq("org_id", orgId);
   const existingEmailMap = new Map(
     (existingEmps ?? [])
       .filter((e: any) => e.email != null)
       .map((e: any) => [e.email.toLowerCase(), e.status])
+  );
+  const existingPhoneSet = new Set<string>(
+    (existingEmps ?? [])
+      .map((e: any) => e.phone)
+      .filter((p: any): p is string => !!p)
   );
 
   // Fetch departments (for name→id lookup)
@@ -419,6 +424,7 @@ export async function bulkImportEmployees(
   const toInsert: any[] = [];
   // Tracks phone-only rows so we can provision Clerk accounts after batch insert
   const phoneOnlyIndices: { insertIndex: number; phoneE164: string; role: "admin" | "manager" | "employee" }[] = [];
+  const phoneOnlyPhonesSeen = new Set<string>();
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
@@ -483,6 +489,13 @@ export async function bulkImportEmployees(
       continue;
     }
 
+    if (!emailOk && rowPhone) {
+      if (existingPhoneSet.has(rowPhone) || phoneOnlyPhonesSeen.has(rowPhone)) {
+        errors.push({ row: rowNum, reason: "Duplicate phone (already exists)", data: row });
+        continue;
+      }
+    }
+
     // Track phone-only rows by their index in toInsert for post-insert provisioning
     const insertIndex = toInsert.length;
     toInsert.push({
@@ -502,6 +515,7 @@ export async function bulkImportEmployees(
     });
     if (!emailOk && rowPhone) {
       phoneOnlyIndices.push({ insertIndex, phoneE164: rowPhone, role: row.role });
+      phoneOnlyPhonesSeen.add(rowPhone); // prevent within-batch duplicate
     }
     if (emailOk) {
       existingEmailMap.set(rowEmail.toLowerCase(), "active"); // prevent within-batch duplicate
@@ -512,18 +526,21 @@ export async function bulkImportEmployees(
     const { data: inserted, error: insertError } = await supabase
       .from("employees")
       .insert(toInsert)
-      .select("id");
+      .select("id, phone");
     if (insertError) {
       return { success: false, error: insertError.message };
     }
 
     // Provision Clerk accounts for phone-only rows (best-effort, non-fatal)
     if (phoneOnlyIndices.length > 0 && inserted) {
-      const insertedIds = inserted as { id: string }[];
+      const insertedRows = inserted as { id: string; phone: string | null }[];
       const client = await clerkClient();
       for (const { insertIndex, phoneE164, role } of phoneOnlyIndices) {
-        const insertedId = insertedIds[insertIndex]?.id;
-        if (!insertedId) continue;
+        const insertedRow = insertedRows[insertIndex];
+        if (!insertedRow || insertedRow.phone !== phoneE164) {
+          console.warn(`Import phone provisioning: positional mismatch at index ${insertIndex}; skipping back-fill`);
+          continue;
+        }
         try {
           const { clerkUserId } = await provisionPhoneOnlyUser(client, {
             phoneE164,
@@ -533,7 +550,7 @@ export async function bulkImportEmployees(
           await supabase
             .from("employees")
             .update({ clerk_user_id: clerkUserId })
-            .eq("id", insertedId);
+            .eq("id", insertedRow.id);
         } catch (e: any) {
           console.warn("Import phone provisioning failed (non-fatal):", e?.message ?? e);
         }

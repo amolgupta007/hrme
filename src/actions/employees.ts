@@ -7,6 +7,8 @@ import { createAdminSupabase } from "@/lib/supabase/server";
 import { getCurrentUser, isAdmin } from "@/lib/current-user";
 import type { ActionResult, Employee, Department } from "@/types";
 import { employeeSchema } from "@/lib/employees/employee-schema";
+import { normalizePhone } from "@/lib/phone";
+import { provisionPhoneOnlyUser } from "@/lib/clerk/provision-phone-user";
 
 // ---- Helpers ----
 
@@ -137,6 +139,13 @@ export async function addEmployee(
     return { success: false, error: validated.error.errors[0]?.message ?? "Validation failed" };
   }
 
+  const email =
+    validated.data.email && validated.data.email.trim() !== ""
+      ? validated.data.email.trim()
+      : null;
+  const phone = normalizePhone(validated.data.phone);
+  const isPhoneOnly = !email && !!phone;
+
   const supabase = createAdminSupabase();
 
   const { data: org, error: orgError } = await supabase
@@ -168,8 +177,8 @@ export async function addEmployee(
       org_id: typedOrg.id,
       first_name: validated.data.firstName,
       last_name: validated.data.lastName,
-      email: validated.data.email,
-      phone: validated.data.phone || null,
+      email: email,
+      phone: phone,
       department_id: validated.data.departmentId || null,
       designation: validated.data.designation || null,
       date_of_joining: validated.data.dateOfJoining,
@@ -184,23 +193,42 @@ export async function addEmployee(
 
   if (error) {
     if (error.code === "23505") {
-      return { success: false, error: "An employee with this email already exists" };
+      const dupField = error.message?.includes("phone") ? "phone number" : "email";
+      return { success: false, error: `An employee with this ${dupField} already exists` };
     }
     return { success: false, error: error.message };
   }
 
-  // Send Clerk org invitation so the employee can sign in and access the dashboard
-  try {
-    const client = await clerkClient();
-    await client.organizations.createOrganizationInvitation({
-      organizationId: ids.clerkOrgId,
-      emailAddress: validated.data.email,
-      role: "org:member",
-      redirectUrl: `${process.env.NEXT_PUBLIC_APP_URL ?? "https://jambahr.com"}/dashboard`,
-    });
-  } catch (inviteErr: any) {
-    // Invitation failure is non-fatal — employee record is created, invite can be resent manually
-    console.warn("Clerk invitation failed (non-fatal):", inviteErr?.message ?? inviteErr);
+  if (isPhoneOnly) {
+    // Phone-only: provision the Clerk user + org membership directly and link synchronously.
+    try {
+      const client = await clerkClient();
+      const { clerkUserId } = await provisionPhoneOnlyUser(client, {
+        phoneE164: phone!,
+        clerkOrgId: ids.clerkOrgId,
+        role: validated.data.role,
+      });
+      await supabase
+        .from("employees")
+        .update({ clerk_user_id: clerkUserId })
+        .eq("id", (data as { id: string }).id);
+    } catch (provErr: any) {
+      // Non-fatal: the employee row exists; an admin can retry from the directory.
+      console.warn("Phone provisioning failed (non-fatal):", provErr?.message ?? provErr);
+    }
+  } else if (email) {
+    // Has email: existing behaviour — Clerk org invitation.
+    try {
+      const client = await clerkClient();
+      await client.organizations.createOrganizationInvitation({
+        organizationId: ids.clerkOrgId,
+        emailAddress: email,
+        role: "org:member",
+        redirectUrl: `${process.env.NEXT_PUBLIC_APP_URL ?? "https://jambahr.com"}/dashboard`,
+      });
+    } catch (inviteErr: any) {
+      console.warn("Clerk invitation failed (non-fatal):", inviteErr?.message ?? inviteErr);
+    }
   }
 
   revalidatePath("/dashboard/employees");

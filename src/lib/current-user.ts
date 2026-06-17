@@ -1,6 +1,8 @@
 import { auth, clerkClient } from "@clerk/nextjs/server";
+import { cookies } from "next/headers";
 import { normalizePhone } from "@/lib/phone";
 import { createAdminSupabase } from "@/lib/supabase/server";
+import { resolveActiveOrg, ACTIVE_ORG_COOKIE } from "@/lib/auth/active-org";
 import type { UserRole } from "@/types";
 import type { OrgPlan } from "@/config/plans";
 
@@ -22,77 +24,36 @@ export type UserContext = {
   jambaGeoEnabled: boolean;
 };
 
-async function resolveClerkOrg(
-  userId: string,
-  sessionOrgId: string | null | undefined
-): Promise<{ orgId: string; clerkOrgId: string } | null> {
-  let clerkOrgId = sessionOrgId ?? null;
-  if (!clerkOrgId) {
-    const client = await clerkClient();
-    const memberships = await client.users.getOrganizationMembershipList({ userId });
-    clerkOrgId = memberships.data[0]?.organization.id ?? null;
-  }
-  if (!clerkOrgId) return null;
-
-  const supabase = createAdminSupabase();
-  const { data } = await supabase
-    .from("organizations")
-    .select("id")
-    .eq("clerk_org_id", clerkOrgId)
-    .single();
-
-  if (!data) return null;
-  return { orgId: (data as { id: string }).id, clerkOrgId };
-}
-
 /**
  * Returns the current user's org context including their role and plan.
- * Falls back to "admin" role and "starter" plan if no employee record found.
+ * Org is resolved from the caller's employees rows + active-org cookie.
+ * Clerk is used only for userId (no sessionOrgId / Clerk org membership).
  */
 export async function getCurrentUser(): Promise<UserContext | null> {
-  const { orgId: sessionOrgId, userId } = auth();
+  const { userId } = auth();
   if (!userId) return null;
 
-  const resolved = await resolveClerkOrg(userId, sessionOrgId);
-  if (!resolved) return null;
-
   const supabase = createAdminSupabase();
-  const { data: org } = await supabase
-    .from("organizations")
-    .select("id, name, plan, settings, custom_features")
-    .eq("clerk_org_id", resolved.clerkOrgId)
-    .single();
-  if (!org) return null;
 
-  const orgId = resolved.orgId;
-  const orgName = ((org as any).name as string) ?? "your organisation";
-  const plan = ((org as any).plan as OrgPlan) ?? "starter";
-  const settings = ((org as any).settings as any) ?? {};
-  const rawCustomFeatures = (org as any).custom_features;
-  const customFeatures: string[] | null = Array.isArray(rawCustomFeatures)
-    ? (rawCustomFeatures as string[])
-    : null;
-  const jambaHireEnabled = !!settings?.jambahire_enabled;
-  const assistantEnabled = !!settings?.assistant_enabled;
-  const assistantTenantDocsEnabled = !!settings?.assistant_tenant_docs_enabled;
-  const attendanceEnabled = !!settings?.attendance_enabled;
-  const attendancePayrollEnabled = !!settings?.attendance_payroll_enabled;
-  const grievancesEnabled = !!settings?.grievances_enabled;
-  const jambaGeoEnabled = !!settings?.jambageo_enabled;
+  async function loadMemberships() {
+    const { data } = await supabase
+      .from("employees")
+      .select(
+        "id, role, first_name, org_id, organizations!inner(id, name, plan, settings, custom_features)"
+      )
+      .eq("clerk_user_id", userId as string)
+      .neq("status", "terminated")
+      .order("created_at", { ascending: true });
+    return (data ?? []) as any[];
+  }
 
-  let { data: emp } = await supabase
-    .from("employees")
-    .select("id, role, first_name")
-    .eq("clerk_user_id", userId)
-    .eq("org_id", orgId)
-    .single();
+  let memberships = await loadMemberships();
 
   // Webhook race fallback: a freshly-invited employee can hit the dashboard
   // before Clerk's organizationMembership.created webhook has linked their
-  // clerk_user_id. Match by email and back-fill the link so subsequent
-  // requests resolve correctly. Without this we'd drop them into the
-  // admin-default branch and render the wrong sidebar.
-  if (!emp) {
+  // clerk_user_id. Match by email/phone and back-fill the link so subsequent
+  // requests resolve correctly.
+  if (memberships.length === 0) {
     try {
       const client = await clerkClient();
       const clerkUser = await client.users.getUser(userId);
@@ -104,8 +65,7 @@ export async function getCurrentUser(): Promise<UserContext | null> {
       if (email) {
         const { data: empByEmail } = await supabase
           .from("employees")
-          .select("id, role, first_name")
-          .eq("org_id", orgId)
+          .select("id, role, first_name, org_id")
           .eq("email", email)
           .is("clerk_user_id", null)
           .neq("status", "terminated")
@@ -117,46 +77,89 @@ export async function getCurrentUser(): Promise<UserContext | null> {
             .from("employees")
             .update({ clerk_user_id: userId })
             .eq("id", (empByEmail as { id: string }).id);
-          emp = empByEmail as any;
         }
       }
 
       // Phone fallback: phone-only Clerk users have no email address.
       // Reuse the already-fetched clerkUser — do NOT call getUser again.
-      if (!emp) {
-        const phone =
-          normalizePhone(clerkUser.primaryPhoneNumber?.phoneNumber) ??
-          normalizePhone(clerkUser.phoneNumbers?.[0]?.phoneNumber);
-        if (phone) {
-          const { data: empByPhone } = await supabase
+      const phone =
+        normalizePhone(clerkUser.primaryPhoneNumber?.phoneNumber) ??
+        normalizePhone(clerkUser.phoneNumbers?.[0]?.phoneNumber);
+      if (phone) {
+        const { data: empByPhone } = await supabase
+          .from("employees")
+          .select("id, role, first_name, org_id")
+          .eq("phone", phone)
+          .is("clerk_user_id", null)
+          .neq("status", "terminated")
+          .limit(1)
+          .maybeSingle();
+        if (empByPhone) {
+          await supabase
             .from("employees")
-            .select("id, role, first_name")
-            .eq("org_id", orgId)
-            .eq("phone", phone)
-            .is("clerk_user_id", null)
-            .neq("status", "terminated")
-            .limit(1)
-            .maybeSingle();
-          if (empByPhone) {
-            await supabase
-              .from("employees")
-              .update({ clerk_user_id: userId })
-              .eq("id", (empByPhone as { id: string }).id);
-            emp = empByPhone as any;
-          }
+            .update({ clerk_user_id: userId })
+            .eq("id", (empByPhone as { id: string }).id);
         }
       }
     } catch (err) {
-      console.warn("getCurrentUser email-fallback lookup failed:", err);
+      console.warn("getCurrentUser email/phone-fallback lookup failed:", err);
     }
+
+    // Re-load after back-filling clerk_user_id
+    memberships = await loadMemberships();
   }
 
-  const empTyped = emp as { id: string; role: string; first_name: string | null } | null;
-  const role: UserRole = empTyped ? (empTyped.role as UserRole) : "admin";
-  const employeeId = empTyped ? empTyped.id : null;
-  const firstName = empTyped ? empTyped.first_name : null;
+  // Signed-in user with no org membership → route to /onboarding
+  if (memberships.length === 0) return null;
 
-  return { orgId, orgName, clerkUserId: userId, role, employeeId, firstName, plan, customFeatures, jambaHireEnabled, assistantEnabled, assistantTenantDocsEnabled, attendanceEnabled, attendancePayrollEnabled, grievancesEnabled, jambaGeoEnabled };
+  // Resolve the active org via cookie, falling back to the first membership
+  const cookieOrg = cookies().get(ACTIVE_ORG_COOKIE)?.value ?? null;
+  const activeOrgId = resolveActiveOrg(
+    memberships.map((m) => ({ orgId: m.org_id as string })),
+    cookieOrg
+  );
+  const active = memberships.find((m) => m.org_id === activeOrgId)!;
+  const org = (active as any).organizations as any;
+
+  const orgId: string = org.id ?? (active as any).org_id;
+  const orgName: string = (org.name as string) ?? "your organisation";
+  const plan: OrgPlan = (org.plan as OrgPlan) ?? "starter";
+  const settings: any = (org.settings as any) ?? {};
+  const rawCustomFeatures = org.custom_features;
+  const customFeatures: string[] | null = Array.isArray(rawCustomFeatures)
+    ? (rawCustomFeatures as string[])
+    : null;
+
+  const jambaHireEnabled = !!settings?.jambahire_enabled;
+  const assistantEnabled = !!settings?.assistant_enabled;
+  const assistantTenantDocsEnabled = !!settings?.assistant_tenant_docs_enabled;
+  const attendanceEnabled = !!settings?.attendance_enabled;
+  const attendancePayrollEnabled = !!settings?.attendance_payroll_enabled;
+  const grievancesEnabled = !!settings?.grievances_enabled;
+  const jambaGeoEnabled = !!settings?.jambageo_enabled;
+
+  const empTyped = active as { id: string; role: string; first_name: string | null };
+  const role: UserRole = empTyped ? (empTyped.role as UserRole) : "admin";
+  const employeeId: string | null = empTyped ? empTyped.id : null;
+  const firstName: string | null = empTyped ? empTyped.first_name : null;
+
+  return {
+    orgId,
+    orgName,
+    clerkUserId: userId,
+    role,
+    employeeId,
+    firstName,
+    plan,
+    customFeatures,
+    jambaHireEnabled,
+    assistantEnabled,
+    assistantTenantDocsEnabled,
+    attendanceEnabled,
+    attendancePayrollEnabled,
+    grievancesEnabled,
+    jambaGeoEnabled,
+  };
 }
 
 export function isAdmin(role: UserRole): boolean {
@@ -169,14 +172,30 @@ export function isManagerOrAbove(role: UserRole): boolean {
 
 /**
  * Lightweight org context — orgId + clerkUserId.
+ * Resolves via the employees-table membership + active-org cookie.
  * Use getCurrentUser() when you also need role/plan/employeeId.
  */
 export async function getOrgContext(): Promise<{ orgId: string; clerkUserId: string } | null> {
-  const { orgId: sessionOrgId, userId } = auth();
+  const { userId } = auth();
   if (!userId) return null;
 
-  const resolved = await resolveClerkOrg(userId, sessionOrgId);
-  if (!resolved) return null;
+  const supabase = createAdminSupabase();
+  const { data } = await supabase
+    .from("employees")
+    .select("org_id")
+    .eq("clerk_user_id", userId)
+    .neq("status", "terminated")
+    .order("created_at", { ascending: true });
 
-  return { orgId: resolved.orgId, clerkUserId: userId };
+  const rows = (data ?? []) as { org_id: string }[];
+  if (rows.length === 0) return null;
+
+  const cookieOrg = cookies().get(ACTIVE_ORG_COOKIE)?.value ?? null;
+  const activeOrgId = resolveActiveOrg(
+    rows.map((r) => ({ orgId: r.org_id })),
+    cookieOrg
+  );
+  if (!activeOrgId) return null;
+
+  return { orgId: activeOrgId, clerkUserId: userId };
 }

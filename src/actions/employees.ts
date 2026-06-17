@@ -262,8 +262,11 @@ export async function updateEmployee(
     .update({
       first_name: validated.data.firstName,
       last_name: validated.data.lastName,
-      email: validated.data.email,
-      phone: validated.data.phone || null,
+      email:
+        validated.data.email && validated.data.email.trim() !== ""
+          ? validated.data.email.trim()
+          : null,
+      phone: normalizePhone(validated.data.phone ?? null),
       department_id: validated.data.departmentId || null,
       designation: validated.data.designation || null,
       date_of_joining: validated.data.dateOfJoining,
@@ -276,7 +279,12 @@ export async function updateEmployee(
 
   if (error) {
     if (error.code === "23505") {
-      return { success: false, error: "An employee with this email already exists" };
+      const msg = `${error.message ?? ""} ${(error as any).details ?? ""}`;
+      const isPhoneDup = msg.includes("employees_org_phone_unique") || /\bphone\b/.test(msg);
+      return {
+        success: false,
+        error: `An employee with this ${isPhoneDup ? "phone number" : "email"} already exists`,
+      };
     }
     return { success: false, error: error.message };
   }

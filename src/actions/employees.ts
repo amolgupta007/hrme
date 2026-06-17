@@ -333,7 +333,7 @@ export async function terminateEmployee(id: string): Promise<ActionResult<void>>
 export type ImportRow = {
   first_name: string;
   last_name: string;
-  email: string;
+  email?: string;
   role: "admin" | "manager" | "employee";
   employment_type: "full_time" | "part_time" | "contract" | "intern";
   date_of_joining: string;
@@ -357,8 +357,11 @@ export async function bulkImportEmployees(
   if (!user) return { success: false, error: "Not authenticated" };
   if (!isAdmin(user.role)) return { success: false, error: "Unauthorized" };
 
-  const orgId = user.orgId;
-  if (!orgId) return { success: false, error: "Organization not found" };
+  // Resolve both internal org id and Clerk org id (needed for phone-only provisioning)
+  const ids = await getOrgIds();
+  if (!ids) return { success: false, error: "Organization not found" };
+  const orgId = ids.internalOrgId;
+  const clerkOrgId = ids.clerkOrgId;
 
   const supabase = createAdminSupabase();
 
@@ -386,7 +389,9 @@ export async function bulkImportEmployees(
     .select("email, status")
     .eq("org_id", orgId);
   const existingEmailMap = new Map(
-    (existingEmps ?? []).map((e: any) => [e.email.toLowerCase(), e.status])
+    (existingEmps ?? [])
+      .filter((e: any) => e.email != null)
+      .map((e: any) => [e.email.toLowerCase(), e.status])
   );
 
   // Fetch departments (for name→id lookup)
@@ -405,11 +410,15 @@ export async function bulkImportEmployees(
     .eq("org_id", orgId)
     .neq("status", "terminated");
   const managerEmailMap = new Map(
-    (managers ?? []).map((m: any) => [m.email.toLowerCase(), m.id])
+    (managers ?? [])
+      .filter((m: any) => m.email != null)
+      .map((m: any) => [m.email.toLowerCase(), m.id])
   );
 
   const errors: ImportResult["errors"] = [];
   const toInsert: any[] = [];
+  // Tracks phone-only rows so we can provision Clerk accounts after batch insert
+  const phoneOnlyIndices: { insertIndex: number; phoneE164: string; role: "admin" | "manager" | "employee" }[] = [];
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
@@ -423,8 +432,12 @@ export async function bulkImportEmployees(
       errors.push({ row: rowNum, reason: "Missing last_name", data: row });
       continue;
     }
-    if (!row.email?.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)) {
-      errors.push({ row: rowNum, reason: "Missing or invalid email", data: row });
+    const rowEmail = row.email?.trim() || "";
+    const rowPhone = normalizePhone(row.phone);
+    const emailOk = rowEmail !== "" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rowEmail);
+
+    if (!emailOk && !rowPhone) {
+      errors.push({ row: rowNum, reason: "Each row needs a valid email or phone", data: row });
       continue;
     }
     if (!["admin", "manager", "employee"].includes(row.role)) {
@@ -440,15 +453,17 @@ export async function bulkImportEmployees(
       continue;
     }
 
-    const emailLower = row.email.toLowerCase();
-    const existingStatus = existingEmailMap.get(emailLower);
-    if (existingStatus === "terminated") {
-      errors.push({ row: rowNum, reason: "Email belongs to a terminated employee — re-activate manually", data: row });
-      continue;
-    }
-    if (existingStatus) {
-      errors.push({ row: rowNum, reason: "Email already exists in this organization", data: row });
-      continue;
+    if (emailOk) {
+      const emailLower = rowEmail.toLowerCase();
+      const existingStatus = existingEmailMap.get(emailLower);
+      if (existingStatus === "terminated") {
+        errors.push({ row: rowNum, reason: "Email belongs to a terminated employee — re-activate manually", data: row });
+        continue;
+      }
+      if (existingStatus) {
+        errors.push({ row: rowNum, reason: "Email already exists in this organization", data: row });
+        continue;
+      }
     }
 
     if (toInsert.length >= remainingSlots) {
@@ -468,28 +483,61 @@ export async function bulkImportEmployees(
       continue;
     }
 
+    // Track phone-only rows by their index in toInsert for post-insert provisioning
+    const insertIndex = toInsert.length;
     toInsert.push({
       org_id: orgId,
       first_name: row.first_name.trim(),
       last_name: row.last_name.trim(),
-      email: row.email.toLowerCase().trim(),
+      email: emailOk ? rowEmail.toLowerCase() : null,
       role: row.role,
       employment_type: row.employment_type,
       date_of_joining: row.date_of_joining,
-      phone: row.phone?.trim() || null,
+      phone: rowPhone,
       department_id: departmentId,
       designation: row.designation?.trim() || null,
       date_of_birth: row.date_of_birth || null,
       reporting_manager_id: reportingManagerId,
       status: "active",
     });
-    existingEmailMap.set(emailLower, "active"); // prevent within-batch duplicate
+    if (!emailOk && rowPhone) {
+      phoneOnlyIndices.push({ insertIndex, phoneE164: rowPhone, role: row.role });
+    }
+    if (emailOk) {
+      existingEmailMap.set(rowEmail.toLowerCase(), "active"); // prevent within-batch duplicate
+    }
   }
 
   if (toInsert.length > 0) {
-    const { error: insertError } = await supabase.from("employees").insert(toInsert);
+    const { data: inserted, error: insertError } = await supabase
+      .from("employees")
+      .insert(toInsert)
+      .select("id");
     if (insertError) {
       return { success: false, error: insertError.message };
+    }
+
+    // Provision Clerk accounts for phone-only rows (best-effort, non-fatal)
+    if (phoneOnlyIndices.length > 0 && inserted) {
+      const insertedIds = inserted as { id: string }[];
+      const client = await clerkClient();
+      for (const { insertIndex, phoneE164, role } of phoneOnlyIndices) {
+        const insertedId = insertedIds[insertIndex]?.id;
+        if (!insertedId) continue;
+        try {
+          const { clerkUserId } = await provisionPhoneOnlyUser(client, {
+            phoneE164,
+            clerkOrgId,
+            role,
+          });
+          await supabase
+            .from("employees")
+            .update({ clerk_user_id: clerkUserId })
+            .eq("id", insertedId);
+        } catch (e: any) {
+          console.warn("Import phone provisioning failed (non-fatal):", e?.message ?? e);
+        }
+      }
     }
   }
 

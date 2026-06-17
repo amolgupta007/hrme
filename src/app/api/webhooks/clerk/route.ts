@@ -7,6 +7,7 @@ import { render } from "@react-email/render";
 import { FounderAlertEmail } from "@/components/emails/founder-alert";
 import { WelcomeEmail } from "@/components/emails/welcome";
 import { DEFAULT_ONBOARDING_STEPS } from "@/config/onboarding";
+import { normalizePhone } from "@/lib/phone";
 
 const FOUNDER_EMAIL = "amol@jambahr.com";
 
@@ -207,7 +208,7 @@ export async function POST(req: Request) {
           membershipData.public_user_data?.email_address ?? // fallback
           "";
 
-        if (!clerkUserId || !clerkOrgId || !memberEmail) break;
+        if (!clerkUserId || !clerkOrgId) break;
 
         // Look up the org in Supabase
         const { data: org } = await supabase
@@ -218,12 +219,18 @@ export async function POST(req: Request) {
 
         if (!org) break;
 
-        // Find matching employee by email and write their clerk_user_id
+        // Find matching employee and write their clerk_user_id.
+        // Phone-only Clerk users have a phone E.164 string as identifier; fall back to email match.
+        const identifier = membershipData.public_user_data?.identifier ?? "";
+        const phoneFromIdentifier = normalizePhone(identifier);
+        const matchColumn = phoneFromIdentifier ? "phone" : "email";
+        const matchValue = phoneFromIdentifier ?? memberEmail;
+
         await supabase
           .from("employees")
           .update({ clerk_user_id: clerkUserId })
           .eq("org_id", (org as { id: string }).id)
-          .eq("email", memberEmail)
+          .eq(matchColumn, matchValue)
           .is("clerk_user_id", null); // only set if not already linked
 
         // Stamp accepted_at on the employee_invites record

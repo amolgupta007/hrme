@@ -62,6 +62,8 @@ export async function getCurrentUser(): Promise<UserContext | null> {
         clerkUser.emailAddresses?.[0]?.emailAddress ??
         null;
 
+      let linked = false;
+
       if (email) {
         const { data: empByEmail } = await supabase
           .from("employees")
@@ -77,28 +79,33 @@ export async function getCurrentUser(): Promise<UserContext | null> {
             .from("employees")
             .update({ clerk_user_id: userId })
             .eq("id", (empByEmail as { id: string }).id);
+          linked = true;
         }
       }
 
       // Phone fallback: phone-only Clerk users have no email address.
       // Reuse the already-fetched clerkUser — do NOT call getUser again.
-      const phone =
-        normalizePhone(clerkUser.primaryPhoneNumber?.phoneNumber) ??
-        normalizePhone(clerkUser.phoneNumbers?.[0]?.phoneNumber);
-      if (phone) {
-        const { data: empByPhone } = await supabase
-          .from("employees")
-          .select("id, role, first_name, org_id")
-          .eq("phone", phone)
-          .is("clerk_user_id", null)
-          .neq("status", "terminated")
-          .limit(1)
-          .maybeSingle();
-        if (empByPhone) {
-          await supabase
+      // Only runs when email did NOT link, to avoid double-linking two different
+      // unlinked rows (potentially in different orgs).
+      if (!linked) {
+        const phone =
+          normalizePhone(clerkUser.primaryPhoneNumber?.phoneNumber) ??
+          normalizePhone(clerkUser.phoneNumbers?.[0]?.phoneNumber);
+        if (phone) {
+          const { data: empByPhone } = await supabase
             .from("employees")
-            .update({ clerk_user_id: userId })
-            .eq("id", (empByPhone as { id: string }).id);
+            .select("id, role, first_name, org_id")
+            .eq("phone", phone)
+            .is("clerk_user_id", null)
+            .neq("status", "terminated")
+            .limit(1)
+            .maybeSingle();
+          if (empByPhone) {
+            await supabase
+              .from("employees")
+              .update({ clerk_user_id: userId })
+              .eq("id", (empByPhone as { id: string }).id);
+          }
         }
       }
     } catch (err) {
@@ -121,7 +128,7 @@ export async function getCurrentUser(): Promise<UserContext | null> {
   const active = memberships.find((m) => m.org_id === activeOrgId)!;
   const org = (active as any).organizations as any;
 
-  const orgId: string = org.id ?? (active as any).org_id;
+  const orgId: string = org.id;
   const orgName: string = (org.name as string) ?? "your organisation";
   const plan: OrgPlan = (org.plan as OrgPlan) ?? "starter";
   const settings: any = (org.settings as any) ?? {};
@@ -138,10 +145,9 @@ export async function getCurrentUser(): Promise<UserContext | null> {
   const grievancesEnabled = !!settings?.grievances_enabled;
   const jambaGeoEnabled = !!settings?.jambageo_enabled;
 
-  const empTyped = active as { id: string; role: string; first_name: string | null };
-  const role: UserRole = empTyped ? (empTyped.role as UserRole) : "admin";
-  const employeeId: string | null = empTyped ? empTyped.id : null;
-  const firstName: string | null = empTyped ? empTyped.first_name : null;
+  const role: UserRole = active.role as UserRole;
+  const employeeId: string | null = active.id;
+  const firstName: string | null = active.first_name;
 
   return {
     orgId,

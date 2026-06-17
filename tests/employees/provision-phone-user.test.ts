@@ -132,6 +132,6 @@ describe("provisionPhoneOnlyUser", () => {
         clerkOrgId: "org_1",
         role: "employee",
       })
-    ).rejects.toBeTruthy();
+    ).rejects.toMatchObject({ errors: [{ code: "something_else" }] });
   });
 });

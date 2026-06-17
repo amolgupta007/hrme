@@ -1,4 +1,5 @@
 import { auth, clerkClient } from "@clerk/nextjs/server";
+import { normalizePhone } from "@/lib/phone";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import type { UserRole } from "@/types";
 import type { OrgPlan } from "@/config/plans";
@@ -117,6 +118,32 @@ export async function getCurrentUser(): Promise<UserContext | null> {
             .update({ clerk_user_id: userId })
             .eq("id", (empByEmail as { id: string }).id);
           emp = empByEmail as any;
+        }
+      }
+
+      // Phone fallback: phone-only Clerk users have no email address.
+      // Reuse the already-fetched clerkUser — do NOT call getUser again.
+      if (!emp) {
+        const phone =
+          normalizePhone(clerkUser.primaryPhoneNumber?.phoneNumber) ??
+          normalizePhone(clerkUser.phoneNumbers?.[0]?.phoneNumber);
+        if (phone) {
+          const { data: empByPhone } = await supabase
+            .from("employees")
+            .select("id, role, first_name")
+            .eq("org_id", orgId)
+            .eq("phone", phone)
+            .is("clerk_user_id", null)
+            .neq("status", "terminated")
+            .limit(1)
+            .maybeSingle();
+          if (empByPhone) {
+            await supabase
+              .from("employees")
+              .update({ clerk_user_id: userId })
+              .eq("id", (empByPhone as { id: string }).id);
+            emp = empByPhone as any;
+          }
         }
       }
     } catch (err) {

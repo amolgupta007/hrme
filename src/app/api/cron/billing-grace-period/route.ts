@@ -79,6 +79,11 @@ export async function GET(req: Request) {
 
     if (!admins || admins.length === 0) continue;
 
+    const adminEmails = (admins as { email: string | null }[])
+      .map((a) => a.email?.trim() ?? "")
+      .filter(Boolean);
+    if (adminEmails.length === 0) continue; // no reachable admin — skip this org (Phase 2: WhatsApp)
+
     try {
       const html = await render(
         SubscriptionGracePeriodEndingEmail({
@@ -89,7 +94,7 @@ export async function GET(req: Request) {
       );
       await resend.emails.send({
         from: FROM_EMAIL,
-        to: (admins as { email: string }[]).map((a) => a.email),
+        to: adminEmails,
         subject: "JambaHR – Your subscription access ends in 3 days",
         html,
       });

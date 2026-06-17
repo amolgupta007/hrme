@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { provisionPhoneOnlyUser } from "@/lib/clerk/provision-phone-user";
+import { provisionPhoneOnlyUser, ORG_MEMBERSHIP_CAP } from "@/lib/clerk/provision-phone-user";
 
 function makeClient(overrides: any = {}) {
   return {
@@ -10,6 +10,7 @@ function makeClient(overrides: any = {}) {
     },
     organizations: {
       createOrganizationMembership: vi.fn().mockResolvedValue({ id: "mem_1" }),
+      updateOrganization: vi.fn().mockResolvedValue({ id: "org_1" }),
       ...overrides.organizations,
     },
   };
@@ -93,5 +94,44 @@ describe("provisionPhoneOnlyUser", () => {
     });
     expect(client.users.createUser).not.toHaveBeenCalled();
     expect(res).toEqual({ clerkUserId: "user_existing" });
+  });
+
+  it("raises the org member cap and retries when membership quota is exceeded", async () => {
+    const client = makeClient({
+      organizations: {
+        createOrganizationMembership: vi
+          .fn()
+          .mockRejectedValueOnce({ errors: [{ code: "organization_membership_quota_exceeded", message: "membership quota exceeded" }] })
+          .mockResolvedValueOnce({ id: "mem_2" }),
+        updateOrganization: vi.fn().mockResolvedValue({ id: "org_1" }),
+      },
+    });
+    const res = await provisionPhoneOnlyUser(client as any, {
+      phoneE164: "+919876543210",
+      clerkOrgId: "org_1",
+      role: "employee",
+    });
+    expect(client.organizations.updateOrganization).toHaveBeenCalledWith("org_1", {
+      maxAllowedMemberships: ORG_MEMBERSHIP_CAP,
+    });
+    expect(client.organizations.createOrganizationMembership).toHaveBeenCalledTimes(2);
+    expect(res).toEqual({ clerkUserId: "user_new" });
+  });
+
+  it("rethrows a non-quota, non-membership Clerk error", async () => {
+    const client = makeClient({
+      organizations: {
+        createOrganizationMembership: vi
+          .fn()
+          .mockRejectedValue({ errors: [{ code: "something_else", message: "boom" }] }),
+      },
+    });
+    await expect(
+      provisionPhoneOnlyUser(client as any, {
+        phoneE164: "+919876543210",
+        clerkOrgId: "org_1",
+        role: "employee",
+      })
+    ).rejects.toBeTruthy();
   });
 });

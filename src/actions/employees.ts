@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { getCurrentUser, isAdmin } from "@/lib/current-user";
-import type { ActionResult, Employee, Department } from "@/types";
+import type { ActionResult, Employee, Department, UserRole } from "@/types";
 import { employeeSchema } from "@/lib/employees/employee-schema";
 import { normalizePhone } from "@/lib/phone";
 import { provisionPhoneOnlyUser } from "@/lib/clerk/provision-phone-user";
@@ -336,6 +336,64 @@ export async function terminateEmployee(id: string): Promise<ActionResult<void>>
 
   revalidatePath("/dashboard/employees");
   return { success: true, data: undefined };
+}
+
+/**
+ * Re-run Clerk provisioning for a phone-only employee whose initial provisioning
+ * failed (clerk_user_id still null). Unlike addEmployee's best-effort path, this
+ * RETURNS the real Clerk error so the admin can see why it failed.
+ * Idempotent: provisionPhoneOnlyUser reuses an existing Clerk user / membership.
+ */
+export async function reprovisionPhoneEmployee(
+  employeeId: string
+): Promise<ActionResult<void>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can activate employees" };
+  const ids = await getOrgIds();
+  if (!ids) return { success: false, error: "Not authenticated" };
+
+  const supabase = createAdminSupabase();
+  const { data: emp } = await supabase
+    .from("employees")
+    .select("id, email, phone, role, clerk_user_id")
+    .eq("id", employeeId)
+    .eq("org_id", ids.internalOrgId)
+    .single();
+
+  if (!emp) return { success: false, error: "Employee not found" };
+  const e = emp as {
+    id: string;
+    email: string | null;
+    phone: string | null;
+    role: string;
+    clerk_user_id: string | null;
+  };
+
+  if (e.clerk_user_id) return { success: true, data: undefined }; // already activated
+  if (e.email) {
+    return { success: false, error: "This employee has an email — send an invite instead." };
+  }
+  const phone = normalizePhone(e.phone);
+  if (!phone) {
+    return { success: false, error: "This employee has no valid phone number to activate." };
+  }
+
+  try {
+    const client = await clerkClient();
+    const { clerkUserId } = await provisionPhoneOnlyUser(client, {
+      phoneE164: phone,
+      clerkOrgId: ids.clerkOrgId,
+      role: e.role as UserRole,
+    });
+    await supabase.from("employees").update({ clerk_user_id: clerkUserId }).eq("id", e.id);
+    revalidatePath("/dashboard/employees");
+    return { success: true, data: undefined };
+  } catch (err: any) {
+    // Surface the actual Clerk error (NOT swallowed) so the root cause is visible.
+    const msg = err?.errors?.[0]?.message ?? err?.message ?? "Clerk provisioning failed";
+    return { success: false, error: msg };
+  }
 }
 
 export type ImportRow = {

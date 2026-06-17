@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { terminateEmployee } from "@/actions/employees";
 import { sendInvite, resendInvite } from "@/actions/invites";
+import { reprovisionPhoneEmployee } from "@/actions/employees";
 import { EmployeeBankAccountDialog } from "./employee-bank-account-dialog";
 import type { Employee, Department } from "@/types";
 
@@ -43,6 +44,7 @@ export function EmployeeTable({
   const [terminating, setTerminating] = React.useState<string | null>(null);
   const [confirmTarget, setConfirmTarget] = React.useState<{ id: string; name: string } | null>(null);
   const [inviting, setInviting] = React.useState<string | null>(null);
+  const [activating, setActivating] = React.useState<string | null>(null);
   const [bankDialogTarget, setBankDialogTarget] = React.useState<{ id: string; name: string } | null>(null);
 
   async function handleTerminate() {
@@ -69,6 +71,20 @@ export function EmployeeTable({
       }
     } finally {
       setInviting(null);
+    }
+  }
+
+  async function handleActivate(employeeId: string) {
+    setActivating(employeeId);
+    try {
+      const result = await reprovisionPhoneEmployee(employeeId);
+      if (result.success) {
+        toast.success("Phone login activated");
+      } else {
+        toast.error(result.error);
+      }
+    } finally {
+      setActivating(null);
     }
   }
 
@@ -176,7 +192,22 @@ export function EmployeeTable({
                               <Pencil className="h-3.5 w-3.5" />
                               Edit
                             </DropdownMenu.Item>
-                            {canManage && (emp as EmployeeWithDept).invite_status !== null && (emp as EmployeeWithDept).invite_status !== undefined && (
+                            {/* Phone-only employee not yet linked to Clerk → activate (re-provision) */}
+                            {canManage && (emp as EmployeeWithDept).invite_status === "none" && !emp.email && !!emp.phone && (
+                              <DropdownMenu.Item
+                                className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none hover:bg-accent data-[disabled]:opacity-50 data-[disabled]:pointer-events-none"
+                                onSelect={() => handleActivate(emp.id)}
+                                disabled={activating === emp.id}
+                              >
+                                <Mail className="h-3.5 w-3.5" />
+                                {activating === emp.id ? "Activating…" : "Activate phone login"}
+                              </DropdownMenu.Item>
+                            )}
+                            {/* Email employee → invite flow (skip the phone-only "none" case above) */}
+                            {canManage &&
+                              ((emp as EmployeeWithDept).invite_status === "sent" ||
+                                (emp as EmployeeWithDept).invite_status === "expired" ||
+                                ((emp as EmployeeWithDept).invite_status === "none" && !!emp.email)) && (
                               <DropdownMenu.Item
                                 className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none hover:bg-accent data-[disabled]:opacity-50 data-[disabled]:pointer-events-none"
                                 onSelect={() => handleSendInvite(

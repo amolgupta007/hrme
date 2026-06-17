@@ -50,6 +50,10 @@ export async function sendInvite(employeeId: string): Promise<ActionResult<void>
   if (!emp) return { success: false, error: "Employee not found" };
   if ((emp as any).clerk_user_id) return { success: false, error: "Employee already has an active account" };
 
+  if (!(emp as any).email) {
+    return { success: false, error: "This employee signs in by phone — no email invite needed." };
+  }
+
   const email = (emp as any).email as string;
   const role = (emp as any).role as string;
 

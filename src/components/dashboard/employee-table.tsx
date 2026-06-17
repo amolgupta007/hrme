@@ -128,7 +128,9 @@ export function EmployeeTable({
                           <span className="font-medium">{fullName}</span>
                           <RoleBadge role={emp.role} />
                         </div>
-                        <div className="text-xs text-muted-foreground">{emp.email}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {emp.email || emp.phone || "—"}
+                        </div>
                       </div>
                     </div>
                   </td>

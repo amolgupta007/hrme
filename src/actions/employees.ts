@@ -193,8 +193,12 @@ export async function addEmployee(
 
   if (error) {
     if (error.code === "23505") {
-      const dupField = error.message?.includes("phone") ? "phone number" : "email";
-      return { success: false, error: `An employee with this ${dupField} already exists` };
+      const msg = `${error.message ?? ""} ${(error as any).details ?? ""}`;
+      const isPhoneDup = msg.includes("employees_org_phone_unique") || /\bphone\b/.test(msg);
+      return {
+        success: false,
+        error: `An employee with this ${isPhoneDup ? "phone number" : "email"} already exists`,
+      };
     }
     return { success: false, error: error.message };
   }
@@ -213,7 +217,9 @@ export async function addEmployee(
         .update({ clerk_user_id: clerkUserId })
         .eq("id", (data as { id: string }).id);
     } catch (provErr: any) {
-      // Non-fatal: the employee row exists; an admin can retry from the directory.
+      // Non-fatal: the employee row exists but Clerk linking failed (clerk_user_id stays null).
+      // provisionPhoneOnlyUser is idempotent; recovery today is to delete and re-add the employee.
+      // (A directory "retry provisioning" action is a known Phase-1 follow-up.)
       console.warn("Phone provisioning failed (non-fatal):", provErr?.message ?? provErr);
     }
   } else if (email) {

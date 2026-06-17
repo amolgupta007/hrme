@@ -81,6 +81,9 @@ export async function GET(req: Request) {
     let sent = 0;
     for (const { employee, docs: pending } of Object.values(pendingByEmployee)) {
       if (pending.length === 0) continue;
+      // Phase 1: skip phone-only employees (no email). Phase 2 will route to WhatsApp.
+      const to = employee.email?.trim();
+      if (!to) continue;
       try {
         const html = await render(
           DocReminderEmail({
@@ -92,7 +95,7 @@ export async function GET(req: Request) {
 
         await resend.emails.send({
           from: FROM_EMAIL,
-          to: employee.email,
+          to,
           subject: `JambaHR – ${pending.length} document${pending.length > 1 ? "s" : ""} awaiting your acknowledgment`,
           html,
         });

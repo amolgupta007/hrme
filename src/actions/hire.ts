@@ -1162,8 +1162,9 @@ export async function respondToLOI(
     ]);
 
     try {
-      const recipients = ((admins ?? []) as Array<{ first_name: string; last_name: string; email: string }>)
-        .map((e) => e.email)
+      // Phase 1: filter out admins with no email (phone-only staff). Phase 2 will route to WhatsApp.
+      const recipients = ((admins ?? []) as Array<{ first_name: string; last_name: string; email: string | null }>)
+        .map((e) => e.email?.trim() ?? "")
         .filter(Boolean);
       if (recipients.length > 0) {
         const { resend, FROM_EMAIL } = await import("@/lib/resend");

@@ -252,7 +252,8 @@ export async function requestLeave(
         .eq("status", "active"),
     ]);
 
-    const managerEmails = (managers ?? []).map((m: { email: string }) => m.email).filter(Boolean);
+    // Phase 1: filter out managers/admins with no email (phone-only staff). Phase 2 will route to WhatsApp.
+    const managerEmails = (managers ?? []).map((m: { email: string | null }) => m.email?.trim() ?? "").filter(Boolean);
     if (managerEmails.length > 0 && employee && policy) {
       const employeeName = `${(employee as any).first_name} ${(employee as any).last_name}`.trim();
       const html = await render(

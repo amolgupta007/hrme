@@ -112,6 +112,9 @@ export async function GET(req: Request) {
     let sent = 0;
     for (const { employee, courses } of Object.values(pendingByEmployee)) {
       if (courses.length === 0) continue;
+      // Phase 1: skip phone-only employees (no email). Phase 2 will route to WhatsApp.
+      const to = employee.email?.trim();
+      if (!to) continue;
       try {
         const overdueCount = courses.filter((c) => c.isOverdue).length;
         const subject =
@@ -129,7 +132,7 @@ export async function GET(req: Request) {
 
         await resend.emails.send({
           from: FROM_EMAIL,
-          to: employee.email,
+          to,
           subject,
           html,
         });

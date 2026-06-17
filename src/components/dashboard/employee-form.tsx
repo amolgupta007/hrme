@@ -43,8 +43,9 @@ export function EmployeeForm({ open, onOpenChange, employee, departments, employ
       setForm({
         firstName: employee.first_name,
         lastName: employee.last_name,
-        email: employee.email,
-        phone: employee.phone ?? "",
+        email: employee.email ?? "",
+        // Stored phone is E.164 (+91XXXXXXXXXX); show just the 10-digit subscriber number.
+        phone: (employee.phone ?? "").replace(/\D/g, "").slice(-10),
         departmentId: employee.department_id ?? "",
         designation: employee.designation ?? "",
         dateOfJoining: employee.date_of_joining,
@@ -63,6 +64,20 @@ export function EmployeeForm({ open, onOpenChange, employee, departments, employ
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+
+    // Identity: an employee needs an email OR a phone (phone-only = staff without email).
+    const emailVal = form.email.trim();
+    const phoneVal = form.phone.trim();
+    if (!emailVal && !phoneVal) {
+      toast.error("Enter an email or a phone number");
+      return;
+    }
+    // When a phone is given it must be a valid 10-digit Indian mobile (the +91 is added for them).
+    if (phoneVal && !/^[6-9]\d{9}$/.test(phoneVal)) {
+      toast.error("Enter a valid 10-digit mobile number");
+      return;
+    }
+
     setLoading(true);
 
     const result = isEdit
@@ -115,24 +130,41 @@ export function EmployeeForm({ open, onOpenChange, employee, departments, employ
               </Field>
             </div>
 
-            <Field label="Email" required>
+            <Field label="Email">
               <input
                 type="email"
                 className={inputCn}
                 value={form.email}
                 onChange={(e) => set("email", e.target.value)}
-                required
+                placeholder="Optional if a phone number is provided"
               />
+              <p className="text-xs text-muted-foreground">
+                Enter an email or a phone number. Staff without an email sign in by phone.
+              </p>
             </Field>
 
             <div className="grid grid-cols-2 gap-4">
               <Field label="Phone">
-                <input
-                  type="tel"
-                  className={inputCn}
-                  value={form.phone}
-                  onChange={(e) => set("phone", e.target.value)}
-                />
+                <div className="flex">
+                  <span className="inline-flex items-center rounded-l-lg border border-r-0 border-input bg-muted px-3 text-sm text-muted-foreground">
+                    +91
+                  </span>
+                  <input
+                    type="tel"
+                    inputMode="numeric"
+                    className={cn(inputCn, "rounded-l-none")}
+                    value={form.phone}
+                    onChange={(e) => {
+                      // Keep only the 10-digit subscriber number, even if the user
+                      // pastes a leading 0 or a 91 / +91 country code.
+                      let d = e.target.value.replace(/\D/g, "");
+                      if (d.length === 12 && d.startsWith("91")) d = d.slice(2);
+                      else if (d.length === 11 && d.startsWith("0")) d = d.slice(1);
+                      set("phone", d.slice(0, 10));
+                    }}
+                    placeholder="10-digit mobile"
+                  />
+                </div>
               </Field>
               <Field label="Date of Joining" required>
                 <input

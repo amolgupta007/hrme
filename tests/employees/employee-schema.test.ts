@@ -30,4 +30,12 @@ describe("employeeSchema identity refinement", () => {
     const r = employeeSchema.safeParse({ ...base, phone: "123" });
     expect(r.success).toBe(false);
   });
+  it("accepts an empty-string email when a valid phone is given", () => {
+    const r = employeeSchema.safeParse({ ...base, email: "", phone: "9876543210" });
+    expect(r.success).toBe(true);
+  });
+  it("accepts both email and phone together", () => {
+    const r = employeeSchema.safeParse({ ...base, email: "asha@x.com", phone: "9876543210" });
+    expect(r.success).toBe(true);
+  });
 });

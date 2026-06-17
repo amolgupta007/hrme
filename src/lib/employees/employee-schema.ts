@@ -11,7 +11,11 @@ export const employeeSchema = z
     phone: z
       .string()
       .optional()
-      .refine((v) => !v || v.trim() === "" || isValidPhone(v), "Invalid phone number"),
+      .transform((v) => {
+        const t = v?.trim();
+        return t ? t : undefined;
+      })
+      .refine((v) => v === undefined || isValidPhone(v), "Invalid phone number"),
     departmentId: z.string().uuid().optional().or(z.literal("")),
     designation: z.string().optional(),
     dateOfJoining: z.string().min(1, "Date of joining is required"),
@@ -20,7 +24,7 @@ export const employeeSchema = z
     reportingManagerId: z.string().uuid().optional().or(z.literal("")),
   })
   .refine(
-    (d) => (d.email && d.email.trim() !== "") || (d.phone && d.phone.trim() !== ""),
+    (d) => (!!d.email && d.email.trim() !== "") || !!d.phone,
     { message: "Provide an email or a phone number", path: ["email"] }
   );
 

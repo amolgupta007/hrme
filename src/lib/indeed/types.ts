@@ -30,7 +30,8 @@ export const IndeedApplicationSchema = z
         jobLocation: z.string().optional(),
         jobUrl: z.string().optional(),
       })
-      .passthrough(),
+      .passthrough()
+      .optional(),
     applicant: z
       .object({
         fullName: z.string().optional().default(""),

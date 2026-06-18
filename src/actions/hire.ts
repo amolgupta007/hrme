@@ -14,6 +14,8 @@ import { computeDirection, type TransitionDirection } from "@/lib/hire/stage-dir
 import { planActionsForTransition, roundLabelForStage, type ActionKey } from "@/lib/hire/transitions";
 import { canMoveStage, isOwnerOrAdmin } from "@/lib/hire/permissions";
 import { checkOfferToHiredGates } from "@/lib/hire/gates";
+import { waitUntil } from "@vercel/functions";
+import { maybePushJobToIndeed } from "@/lib/indeed/sync";
 import type { ActionResult } from "@/types";
 
 // ---- Types ----
@@ -223,6 +225,8 @@ export async function createJob(input: z.infer<typeof JobSchema>): Promise<Actio
 
   if (error) return { success: false, error: error.message };
 
+  // best-effort Indeed sync (no-op unless the job is later opted in)
+  waitUntil((async () => { maybePushJobToIndeed((data as any).id); })());
   revalidatePath("/hire/jobs");
   return { success: true, data: { id: (data as any).id } };
 }
@@ -250,6 +254,7 @@ export async function updateJob(id: string, input: z.infer<typeof JobSchema>): P
 
   if (error) return { success: false, error: error.message };
 
+  waitUntil((async () => { maybePushJobToIndeed(id); })());
   revalidatePath("/hire/jobs");
   revalidatePath(`/hire/jobs/${id}`);
   return { success: true, data: undefined };
@@ -269,6 +274,7 @@ export async function updateJobStatus(id: string, status: JobStatus): Promise<Ac
 
   if (error) return { success: false, error: error.message };
 
+  waitUntil((async () => { maybePushJobToIndeed(id); })());
   revalidatePath("/hire/jobs");
   revalidatePath(`/hire/jobs/${id}`);
   return { success: true, data: undefined };

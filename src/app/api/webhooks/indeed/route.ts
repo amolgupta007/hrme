@@ -36,6 +36,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ status: result }, { status: 200 });
   } catch (err) {
     console.error("[indeed] ingest failed", err);
+    // Roll back the dedup claim so Indeed's retry (triggered by the 500) can reprocess.
+    try {
+      await supabase.from("webhook_events").delete().eq("id", `indeed_${payload.id}`);
+    } catch (rollbackErr) {
+      console.error("[indeed] failed to roll back webhook_events dedup row", rollbackErr);
+    }
     return NextResponse.json({ error: "ingest failed" }, { status: 500 });
   }
 }

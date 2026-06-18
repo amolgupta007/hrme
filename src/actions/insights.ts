@@ -1278,40 +1278,40 @@ export type PerformanceTrainingInsights = {
   objectivesByDept: NamedCount[];
   trainingByDept: NamedCount[];
   overdueByCourse: NamedCount[];
+  byOrg: ByOrg<{ enrollments: number; completed: number; compliancePct: number }>;
 };
 
-export async function getPerformanceTrainingInsights(): Promise<
-  ActionResult<PerformanceTrainingInsights>
-> {
-  const access = await requireInsightsAccess();
+export async function getPerformanceTrainingInsights(
+  orgIds?: string[]
+): Promise<ActionResult<PerformanceTrainingInsights>> {
+  const access = await requireInsightsAccess(orgIds);
   if (!access.ok) return { success: false, error: access.error };
-  const { user } = access;
   const supabase = createAdminSupabase();
-  const orgId = user.orgId;
+  const ids = access.orgIds;
 
   const [cyclesResult, reviewsResult, objectivesResult, enrollmentsResult, coursesResult, employeesResult, departmentsResult] =
     await Promise.all([
       supabase
         .from("review_cycles")
         .select("id, name, rating_scale, end_date")
-        .eq("org_id", orgId)
+        .in("org_id", ids)
         .order("end_date", { ascending: false }),
       supabase
         .from("reviews")
         .select("cycle_id, status, self_rating, manager_rating")
-        .eq("org_id", orgId),
+        .in("org_id", ids),
       supabase
         .from("objectives")
         .select("employee_id, status, items")
-        .eq("org_id", orgId)
+        .in("org_id", ids)
         .eq("status", "approved"),
       supabase
         .from("training_enrollments")
-        .select("employee_id, course_id, status")
-        .eq("org_id", orgId),
-      supabase.from("training_courses").select("id, title").eq("org_id", orgId),
-      supabase.from("employees").select("id, department_id").eq("org_id", orgId),
-      supabase.from("departments").select("id, name").eq("org_id", orgId),
+        .select("org_id, employee_id, course_id, status")
+        .in("org_id", ids),
+      supabase.from("training_courses").select("id, title").in("org_id", ids),
+      supabase.from("employees").select("id, department_id").in("org_id", ids),
+      supabase.from("departments").select("id, name").in("org_id", ids),
     ]);
 
   type ReviewRow = {
@@ -1394,7 +1394,7 @@ export async function getPerformanceTrainingInsights(): Promise<
     .sort((a, b) => b.value - a.value);
 
   // Training compliance by department + overdue by course
-  type EnrollmentRow = { employee_id: string; course_id: string; status: string };
+  type EnrollmentRow = { org_id: string; employee_id: string; course_id: string; status: string };
   const enrollments = (enrollmentsResult.data ?? []) as EnrollmentRow[];
   const trainByDept = new Map<string, { completed: number; total: number }>();
   for (const e of enrollments) {
@@ -1433,6 +1433,20 @@ export async function getPerformanceTrainingInsights(): Promise<
     .sort((a, b) => b.value - a.value)
     .slice(0, 8);
 
+  const byOrg = groupByOrg(
+    enrollments,
+    access.orgs,
+    (r) => r.org_id,
+    (rows) => ({
+      enrollments: rows.length,
+      completed: rows.filter((r) => r.status === "completed").length,
+      compliancePct:
+        rows.length
+          ? Math.round((rows.filter((r) => r.status === "completed").length / rows.length) * 1000) / 10
+          : 0,
+    })
+  );
+
   return {
     success: true,
     data: {
@@ -1449,6 +1463,7 @@ export async function getPerformanceTrainingInsights(): Promise<
       objectivesByDept,
       trainingByDept,
       overdueByCourse,
+      byOrg,
     },
   };
 }

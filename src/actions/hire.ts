@@ -49,6 +49,12 @@ export type Job = {
   created_at: string;
   // M5 — null until admin assigns a hiring manager
   hiring_manager_id: string | null;
+  // Indeed integration (migration 068) — null/false until org opts a job in
+  indeed_enabled: boolean;
+  indeed_job_id: string | null;
+  indeed_status: "pending" | "posted" | "expired" | "error" | null;
+  indeed_synced_at: string | null;
+  indeed_sync_error: string | null;
 };
 
 export type Candidate = {

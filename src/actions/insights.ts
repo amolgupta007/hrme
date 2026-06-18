@@ -484,7 +484,6 @@ export type LeaveAttendanceInsights = {
   topBalances: TopBalanceRow[];
   attendance: AttendanceInsights;
   byOrg: ByOrg<{
-    totalRequests: number;
     approved: number;
     daysTaken: number;
   }>;
@@ -726,7 +725,6 @@ export async function getLeaveAttendanceInsights(orgIds?: string[]): Promise<Act
   }
 
   const byOrg = groupByOrg(leaves, access.orgs, (r) => r.org_id, (rows) => ({
-    totalRequests: rows.length,
     approved: rows.length, // already filtered to approved above
     daysTaken: rows.reduce((s, r) => s + (r.days ?? 0), 0),
   }));

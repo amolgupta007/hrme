@@ -14,7 +14,9 @@ export async function pushJobToIndeed(jobId: string): Promise<void> {
       .eq("id", jobId)
       .single();
     if (error || !job) return;
-    if (!(job as any).indeed_enabled) return;
+    // Fast path: nothing to do for a job that was never opted in and never posted.
+    // (A previously-posted job that is now disabled must still be expired below.)
+    if (!(job as any).indeed_enabled && !(job as any).indeed_job_id) return;
 
     const { data: org } = await supabase
       .from("organizations")
@@ -28,7 +30,7 @@ export async function pushJobToIndeed(jobId: string): Promise<void> {
     const client = getIndeedClient();
 
     const status = (job as any).status as string;
-    const shouldBeLive = status === "active";
+    const shouldBeLive = (job as any).indeed_enabled && status === "active";
 
     if (shouldBeLive) {
       const { indeedJobId } = await client.upsertJob(

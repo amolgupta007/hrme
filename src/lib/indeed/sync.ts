@@ -49,8 +49,10 @@ export async function pushJobToIndeed(jobId: string): Promise<void> {
         })
         .eq("id", jobId);
     } else {
-      const postingId = (job as any).indeed_job_id || jobId;
-      await client.expireJob(postingId);
+      const postingId = (job as any).indeed_job_id;
+      if (postingId) {
+        await client.expireJob(postingId);
+      }
       await supabase
         .from("jobs")
         .update({
@@ -62,13 +64,17 @@ export async function pushJobToIndeed(jobId: string): Promise<void> {
     }
   } catch (err) {
     console.error("[indeed] pushJobToIndeed failed", jobId, err);
-    await supabase
-      .from("jobs")
-      .update({
-        indeed_status: "error",
-        indeed_sync_error: err instanceof Error ? err.message : String(err),
-      })
-      .eq("id", jobId);
+    try {
+      await supabase
+        .from("jobs")
+        .update({
+          indeed_status: "error",
+          indeed_sync_error: err instanceof Error ? err.message : String(err),
+        })
+        .eq("id", jobId);
+    } catch (writeErr) {
+      console.error("[indeed] could not persist Indeed error state", jobId, writeErr);
+    }
   }
 }
 

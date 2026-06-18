@@ -2,12 +2,18 @@
 
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { cookies } from "next/headers";
+import { render } from "@react-email/render";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { slugify } from "@/lib/utils";
+import { resend, FOUNDER_EMAIL_FROM } from "@/lib/resend";
+import { FounderAlertEmail } from "@/components/emails/founder-alert";
+import { WelcomeEmail } from "@/components/emails/welcome";
 import { ACTIVE_ORG_COOKIE } from "@/lib/auth/active-org";
 import { DEFAULT_ONBOARDING_STEPS } from "@/config/onboarding";
 import { DEFAULT_LEAVE_POLICIES, DEFAULT_HOLIDAYS_2026 } from "@/config/onboarding-seed";
 import type { ActionResult } from "@/types";
+
+const FOUNDER_EMAIL = "amol@jambahr.com";
 
 export async function syncOrgToSupabase(data: {
   clerkOrgId: string;
@@ -137,13 +143,16 @@ export async function createOrganization(data: {
   const orgId = (org as { id: string }).id;
 
   // 2. Owner employee row from Clerk user identity
+  let ownerEmail: string | null = null;
+  let ownerFirstName = "there";
   try {
     const client = await clerkClient();
     const user = await client.users.getUser(userId);
-    const email =
+    ownerEmail =
       user.primaryEmailAddress?.emailAddress ??
       user.emailAddresses?.[0]?.emailAddress ??
       null;
+    ownerFirstName = user.firstName ?? "there";
     const phone =
       user.primaryPhoneNumber?.phoneNumber ??
       user.phoneNumbers?.[0]?.phoneNumber ??
@@ -153,7 +162,7 @@ export async function createOrganization(data: {
       clerk_user_id: userId,
       first_name: user.firstName ?? "",
       last_name: user.lastName ?? "",
-      email,
+      email: ownerEmail,
       phone,
       avatar_url: user.imageUrl ?? null,
       role: "owner",
@@ -171,6 +180,47 @@ export async function createOrganization(data: {
   await supabase
     .from("holidays")
     .insert(DEFAULT_HOLIDAYS_2026.map((h) => ({ ...h, org_id: orgId })));
+
+  // 3b. New-signup notifications (best-effort, non-fatal) — moved from the
+  // deleted Clerk organization.created webhook so signups still alert the
+  // founder and welcome the new owner.
+  try {
+    resend.emails
+      .send({
+        from: FOUNDER_EMAIL_FROM,
+        to: FOUNDER_EMAIL,
+        subject: `🎉 New signup: ${data.name.trim()}`,
+        html: await render(
+          FounderAlertEmail({
+            orgName: data.name.trim(),
+            industry: "Unknown",
+            companySize: "Unknown",
+            ownerEmail: ownerEmail ?? "unknown",
+            signupTime: new Date().toISOString(),
+          })
+        ),
+      })
+      .catch((e: unknown) => console.error("Founder alert email failed:", e));
+
+    if (ownerEmail) {
+      resend.emails
+        .send({
+          from: FOUNDER_EMAIL_FROM,
+          to: ownerEmail,
+          subject: "Welcome to JambaHR — your workspace is ready",
+          html: await render(
+            WelcomeEmail({
+              orgName: data.name.trim(),
+              ownerFirstName,
+              dashboardUrl: "https://jambahr.com/dashboard",
+            })
+          ),
+        })
+        .catch((e: unknown) => console.error("Welcome email failed:", e));
+    }
+  } catch (err) {
+    console.error("Signup notification emails failed (non-fatal):", err);
+  }
 
   // 4. Make the new org active
   cookies().set(ACTIVE_ORG_COOKIE, orgId, {

@@ -4,6 +4,8 @@ import { getCurrentUser, isAdmin } from "@/lib/current-user";
 import { hasFeature } from "@/config/plans";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import type { ActionResult } from "@/types";
+import { getMyOrgs } from "@/actions/active-org";
+import { resolveScopedOrgIds } from "@/lib/insights/org-scope";
 
 // ---- Types ----
 
@@ -159,14 +161,25 @@ function buildWorkforceSeries(employees: EmployeeRow[]) {
   return { headcountTrend, joinersLeavers, joiners12m, leavers12m, attritionRatePct, attritionTrend };
 }
 
-async function requireInsightsAccess() {
+async function requireInsightsAccess(requestedOrgIds?: string[]) {
   const user = await getCurrentUser();
   if (!user) return { ok: false as const, error: "Not authenticated" };
   if (!isAdmin(user.role)) return { ok: false as const, error: "Unauthorized" };
   if (!hasFeature(user.plan ?? "starter", "analytics", user.customFeatures ?? null)) {
     return { ok: false as const, error: "Insights requires the Business plan" };
   }
-  return { ok: true as const, user };
+  // Eligible set = orgs the caller owns or admins. Active org always included
+  // (it licensed entry); other owner/admin orgs may be combined in.
+  const memberships = await getMyOrgs();
+  const eligible = memberships
+    .filter((m) => m.role === "owner" || m.role === "admin")
+    .map((m) => ({ id: m.orgId, name: m.name }));
+  // Guarantee the active org is in the eligible map even if a role row lagged.
+  if (!eligible.some((o) => o.id === user.orgId)) {
+    eligible.unshift({ id: user.orgId, name: user.orgName });
+  }
+  const { orgIds, orgs } = resolveScopedOrgIds(eligible, requestedOrgIds, user.orgId);
+  return { ok: true as const, user, orgIds, orgs };
 }
 
 // ---- Actions ----

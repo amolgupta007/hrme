@@ -21,7 +21,7 @@ Feature specs live in `/docs/prds/`. Always read the relevant PRD before plannin
 |-------|------|
 | Framework | Next.js 14 (App Router), TypeScript strict |
 | Styling | Tailwind CSS 3.4 + Radix UI + CVA + tailwind-merge |
-| Auth | Clerk (with Organizations) |
+| Auth | Clerk (user identity / sessions / phone-OTP only — **Clerk Organizations decoupled** 2026-06-18; multi-tenancy lives in Supabase `organizations` + `employees`) |
 | Database | Supabase (Postgres + RLS) |
 | Payments | Razorpay (INR, per-employee pricing) |
 | Email | Resend + React Email |
@@ -152,10 +152,19 @@ See `PAYROLL_AUDIT.md` for the per-finding closure log and `docs/payroll-overhau
 
 ## Authentication & Authorization
 
-### Clerk
-- Production instance on `jambahr.com`; Organizations enabled; org slugs enabled
+### Clerk — identity only (Organizations decoupled 2026-06-18)
+- Production instance on `jambahr.com`. **Clerk Organizations are NO LONGER used** (dropped because per-org membership was capped at 20 with an expensive add-on tier). Clerk supplies `userId` + sessions + sign-in/up UI + `<UserButton>` + email auth + phone-OTP only. `auth().orgId` is never read anywhere.
 - Roles: `owner` | `admin` | `manager` | `employee` (see `src/types/index.ts`)
 - `ROLE_HIERARCHY` + `hasPermission()` in types
+
+### Multi-tenancy & active-org model (Option 0 — `src/lib/auth/active-org.ts`)
+- An org membership = a non-terminated `employees` row linking `clerk_user_id` → `org_id` + `role`. **One login can belong to many orgs.**
+- Active org = the org named by the signed cookie `jambahr_active_org` **iff** the caller has a membership in it; otherwise the first membership by `employees.created_at ASC`. `resolveActiveOrg(memberships, cookieOrgId)` is the pure resolver. The cookie is only a hint — `getCurrentUser` re-validates it against real membership every request, so a tampered cookie can't reach a non-member org. Cookie is `httpOnly`/`secure`/`sameSite=lax`/1yr.
+- `getMyOrgs()` + `switchActiveOrg(orgId)` (`src/actions/active-org.ts`) power the **top-left org switcher** (`src/components/layout/org-switcher.tsx`, mounted in `Header`) + "Create organization" dialog (`create-org-dialog.tsx`).
+- `createOrganization({ name, ...legal })` (`src/actions/organizations.ts`) is the single org-creation path (onboarding + create-additional-org): inserts the org row with **no `clerk_org_id`**, seeds owner `employees` row + leave policies + holidays (from `src/config/onboarding-seed.ts`) + onboarding steps, records legal acceptance, fires founder+welcome emails best-effort, sets the active cookie. The old client-side Clerk `createOrganization` + `syncOrgToSupabase` are gone.
+- **Invitations are our own Resend emails** (`AccountSetupEmail`), not Clerk org invitations. Admin adds an email/phone employee → Resend "set up your account" email → on first sign-in `getCurrentUser`'s email/phone auto-link backfills `clerk_user_id` onto the row (this is how an invitee "joins"). Phone-only employees are provisioned directly (`provisionPhoneOnlyUser` now makes **no** Clerk org-membership call — that was the quota bug). All `createOrganizationInvitation`/`revokeOrganizationInvitation` removed.
+- Clerk webhook (`api/webhooks/clerk/route.ts`) now handles **only** `user.created` (log) + `user.updated` (name/avatar sync). All `organization.*` / `organizationMembership.*` cases removed.
+- `organizations.clerk_org_id` column is **vestigial** (kept, unused; drop later). No table queries resolve tenancy by it anymore — every action resolves the internal org id via `getCurrentUser()`.
 
 ### Route protection (`middleware.ts`)
 Public: `/`, `/sign-in(.*)`, `/sign-up(.*)`, `/api/webhooks(.*)`, `/api/cron(.*)`, `/blog(.*)`, `/careers(.*)`, `/offers(.*)`, `/apply/r(.*)`, `/pricing`, `/api/attendance/punch`, `/sitemap.xml`, `/robots.txt`, `/privacy`, `/terms`
@@ -166,7 +175,7 @@ Public: `/`, `/sign-in(.*)`, `/sign-up(.*)`, `/api/webhooks(.*)`, `/api/cron(.*)
 - `getCurrentUser()` → `{ orgId, clerkUserId, role, employeeId, plan, jambaHireEnabled, attendanceEnabled, grievancesEnabled }`
 - `isAdmin(role)` → owner | admin
 - `isManagerOrAbove(role)` → owner | admin | manager
-- Fallback: if no employee record, defaults to `admin` role (protects org creators pre-onboarding)
+- Resolution: loads ALL `employees` rows for the `clerk_user_id` (joined to organizations), resolves the active org via the cookie, returns that org's role. If zero memberships exist it runs the email→phone auto-link once, then returns **`null`** (signed-in but org-less → dashboard layout redirects to `/onboarding`). The old synthetic-`admin` fallback was removed (2026-06-18) — a missing employee row no longer silently grants admin.
 
 ### Server action guards (security layer)
 | Action | Required Role |

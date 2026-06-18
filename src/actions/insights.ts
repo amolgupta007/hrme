@@ -280,7 +280,6 @@ export async function getOverviewInsights(
           .in("org_id", ids)
           .in("status", ["processed", "paid"])
           .order("month", { ascending: false })
-          .limit(ids.length * 2)
       : Promise.resolve(null),
   ]);
 

@@ -192,6 +192,37 @@ export function TrendLine({
   );
 }
 
+// ---- Multi-line trend (one series per org) ----
+
+export function MultiTrendLine({
+  data,
+  series,
+  format = "plain",
+  valueSuffix = "",
+}: {
+  data: Array<{ label: string } & Record<string, number | string>>;
+  series: { key: string; label: string; color: string }[];
+  format?: ValueFormat;
+  valueSuffix?: string;
+}) {
+  if (!data.length || !series.length) return <EmptyChart />;
+  const fmt = makeFormatter(format, valueSuffix);
+  return (
+    <ResponsiveContainer width="100%" height={260}>
+      <LineChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -8 }}>
+        <CartesianGrid stroke={CHART_GRID_STROKE} vertical={false} />
+        <XAxis dataKey="label" {...axisProps} />
+        <YAxis {...axisProps} width={48} tickFormatter={format !== "plain" ? fmt : undefined} />
+        <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v: number, n) => [fmt(v), String(n)]} cursor={{ stroke: "rgba(148,163,184,0.25)" }} />
+        {series.map((s) => (
+          <Line key={s.key} type="monotone" dataKey={s.key} name={s.label} stroke={s.color}
+            strokeWidth={2} dot={{ r: 2, fill: s.color, strokeWidth: 0 }} animationDuration={600} />
+        ))}
+      </LineChart>
+    </ResponsiveContainer>
+  );
+}
+
 // ---- Simple vertical bars (leave by month, tenure, type split) ----
 
 export function SimpleBars({

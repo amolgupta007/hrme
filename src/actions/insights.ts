@@ -7,7 +7,7 @@ import type { ActionResult } from "@/types";
 import { getMyOrgs } from "@/actions/active-org";
 import { resolveScopedOrgIds } from "@/lib/insights/org-scope";
 import { groupByOrg } from "@/lib/insights/by-org";
-import type { ByOrg } from "@/lib/insights/by-org";
+import type { ByOrg, ExcludedOrg } from "@/lib/insights/by-org";
 
 // ---- Types ----
 
@@ -469,6 +469,7 @@ export type AttendanceInsights = {
   avgDailyHours: MonthPoint[];
   autoClosed: MonthPoint[];
   otHoursByDept: NamedCount[];
+  excludedOrgs: ExcludedOrg[];
 };
 
 export type LeaveAttendanceInsights = {
@@ -482,14 +483,19 @@ export type LeaveAttendanceInsights = {
   leaveByTypeMonthly: LeaveTypeMonthlyRow[];
   topBalances: TopBalanceRow[];
   attendance: AttendanceInsights;
+  byOrg: ByOrg<{
+    totalRequests: number;
+    approved: number;
+    daysTaken: number;
+  }>;
 };
 
-export async function getLeaveAttendanceInsights(): Promise<ActionResult<LeaveAttendanceInsights>> {
-  const access = await requireInsightsAccess();
+export async function getLeaveAttendanceInsights(orgIds?: string[]): Promise<ActionResult<LeaveAttendanceInsights>> {
+  const access = await requireInsightsAccess(orgIds);
   if (!access.ok) return { success: false, error: access.error };
   const { user } = access;
+  const ids = access.orgIds;
   const supabase = createAdminSupabase();
-  const orgId = user.orgId;
 
   const months = lastNMonths(12);
   const windowStart = `${months[0].month}-01`;
@@ -500,29 +506,29 @@ export async function getLeaveAttendanceInsights(): Promise<ActionResult<LeaveAt
     await Promise.all([
       supabase
         .from("leave_requests")
-        .select("leave_type, start_date, days")
-        .eq("org_id", orgId)
+        .select("org_id, leave_type, start_date, days")
+        .in("org_id", ids)
         .eq("status", "approved")
         .gte("start_date", windowStart),
       supabase
         .from("leave_balances")
         .select("total_days, used_days, carried_forward_days, employees!employee_id(first_name, last_name, status)")
-        .eq("org_id", orgId)
+        .in("org_id", ids)
         .eq("year", year),
       supabase
         .from("leave_requests")
         .select("*", { count: "exact", head: true })
-        .eq("org_id", orgId)
+        .in("org_id", ids)
         .eq("status", "pending"),
       supabase
         .from("employees")
         .select("*", { count: "exact", head: true })
-        .eq("org_id", orgId)
+        .in("org_id", ids)
         .eq("status", "active"),
     ]);
 
   // Stacked leave-by-type per month
-  const leaves = (leavesResult.data ?? []) as { leave_type: string; start_date: string; days: number }[];
+  const leaves = (leavesResult.data ?? []) as { org_id: string; leave_type: string; start_date: string; days: number }[];
   const typeTotals = new Map<string, number>();
   for (const l of leaves) {
     typeTotals.set(l.leave_type, (typeTotals.get(l.leave_type) ?? 0) + (l.days ?? 0));
@@ -571,6 +577,17 @@ export async function getLeaveAttendanceInsights(): Promise<ActionResult<LeaveAt
 
   // Attendance rollup — best-effort. Missing RPC (migration 059 not applied)
   // must degrade to an explanatory empty state, never crash the page.
+  // Multi-org: split selected orgs into attendance-enabled vs excludedOrgs,
+  // call the RPC once per enabled org, then merge buckets across orgs.
+  type RollupRow = {
+    month: string;
+    present_days: number;
+    distinct_employees: number;
+    avg_clock_in_minutes_ist: number | null;
+    auto_closed_days: number;
+    total_worked_minutes: number;
+  };
+
   const attendance: AttendanceInsights = {
     enabled: !!user.attendanceEnabled,
     available: false,
@@ -579,44 +596,101 @@ export async function getLeaveAttendanceInsights(): Promise<ActionResult<LeaveAt
     avgDailyHours: [],
     autoClosed: [],
     otHoursByDept: [],
+    excludedOrgs: [],
   };
 
-  if (user.attendanceEnabled) {
-    const [rollup, otResult, employeesResult, departmentsResult] = await Promise.all([
-      supabase.rpc("insights_attendance_monthly", {
-        p_org_id: orgId,
-        p_from: windowStart,
-        p_to: today,
-      }),
+  // Read org settings to determine which orgs have attendance enabled.
+  const { data: orgRows } = await supabase
+    .from("organizations")
+    .select("id, name, settings")
+    .in("id", ids);
+
+  const attnOrgs = (orgRows ?? []).filter(
+    (o: any) => o.settings?.attendance_enabled === true
+  );
+  const excludedOrgs: ExcludedOrg[] = (orgRows ?? [])
+    .filter((o: any) => o.settings?.attendance_enabled !== true)
+    .map((o: any) => ({ orgName: o.name as string, reason: "attendance not enabled" }));
+
+  attendance.excludedOrgs = excludedOrgs;
+  // enabled = true if ANY selected org has attendance on
+  attendance.enabled = attnOrgs.length > 0;
+
+  if (attnOrgs.length > 0) {
+    const [rpcResults, otResult, employeesResult, departmentsResult] = await Promise.all([
+      Promise.all(
+        attnOrgs.map((o: any) =>
+          supabase
+            .rpc("insights_attendance_monthly", {
+              p_org_id: o.id,
+              p_from: windowStart,
+              p_to: today,
+            })
+            .then((res) => ({ orgId: o.id as string, orgName: o.name as string, data: res.data, error: res.error }))
+        )
+      ),
       supabase
         .from("ot_records")
         .select("ot_minutes, employee_id, date, status")
-        .eq("org_id", orgId)
+        .in("org_id", attnOrgs.map((o: any) => o.id))
         .in("status", ["approved", "pushed"])
         .gte("date", windowStart),
-      supabase.from("employees").select("id, department_id").eq("org_id", orgId),
-      supabase.from("departments").select("id, name").eq("org_id", orgId),
+      supabase.from("employees").select("id, department_id").in("org_id", ids),
+      supabase.from("departments").select("id, name").in("org_id", ids),
     ]);
 
-    if (!rollup.error) {
-      attendance.available = true;
-      type RollupRow = {
-        month: string;
+    // Check if any RPC errored with "function does not exist" (migration 059 not applied)
+    const missingRpc = rpcResults.some(
+      (r) => r.error && r.error.message?.includes("function")
+    );
+    if (missingRpc) {
+      // Provision hint: available stays false, no crash
+    } else {
+      // Merge per-month buckets across orgs.
+      // present_days: sum; auto_closed_days: sum; total_worked_minutes: sum.
+      // avg_clock_in_minutes_ist: weighted average by distinct_employees.
+      type MonthAccum = {
         present_days: number;
-        avg_clock_in_minutes_ist: number | null;
         auto_closed_days: number;
         total_worked_minutes: number;
+        weighted_clock_in_sum: number; // sum of (avg_clock_in * distinct_employees)
+        clock_in_weight: number;       // sum of distinct_employees where clock_in is non-null
       };
-      const byMonth = new Map(
-        ((rollup.data ?? []) as RollupRow[]).map((r) => [r.month, r])
-      );
+      const monthMap = new Map<string, MonthAccum>();
+
+      for (const result of rpcResults) {
+        if (result.error) continue; // skip failed individual orgs; others still contribute
+        for (const m of ((result.data ?? []) as RollupRow[])) {
+          const acc = monthMap.get(m.month) ?? {
+            present_days: 0,
+            auto_closed_days: 0,
+            total_worked_minutes: 0,
+            weighted_clock_in_sum: 0,
+            clock_in_weight: 0,
+          };
+          acc.present_days += Number(m.present_days ?? 0);
+          acc.auto_closed_days += Number(m.auto_closed_days ?? 0);
+          acc.total_worked_minutes += Number(m.total_worked_minutes ?? 0);
+          if (m.avg_clock_in_minutes_ist != null) {
+            const w = Number(m.distinct_employees ?? 0);
+            acc.weighted_clock_in_sum += Number(m.avg_clock_in_minutes_ist) * w;
+            acc.clock_in_weight += w;
+          }
+          monthMap.set(m.month, acc);
+        }
+      }
+
+      attendance.available = true;
       for (const m of months) {
-        const r = byMonth.get(m.month);
+        const r = monthMap.get(m.month);
         attendance.presentDays.push({ month: m.month, label: m.label, value: r?.present_days ?? 0 });
         attendance.avgClockInMinutes.push({
           month: m.month,
           label: m.label,
-          value: r?.avg_clock_in_minutes_ist ? Math.round(Number(r.avg_clock_in_minutes_ist)) : 0,
+          value:
+            r && r.clock_in_weight > 0
+              ? Math.round(r.weighted_clock_in_sum / r.clock_in_weight)
+              : 0,
         });
         attendance.avgDailyHours.push({
           month: m.month,
@@ -651,6 +725,12 @@ export async function getLeaveAttendanceInsights(): Promise<ActionResult<LeaveAt
       .sort((a, b) => b.value - a.value);
   }
 
+  const byOrg = groupByOrg(leaves, access.orgs, (r) => r.org_id, (rows) => ({
+    totalRequests: rows.length,
+    approved: rows.length, // already filtered to approved above
+    daysTaken: rows.reduce((s, r) => s + (r.days ?? 0), 0),
+  }));
+
   return {
     success: true,
     data: {
@@ -664,6 +744,7 @@ export async function getLeaveAttendanceInsights(): Promise<ActionResult<LeaveAt
       leaveByTypeMonthly,
       topBalances,
       attendance,
+      byOrg,
     },
   };
 }

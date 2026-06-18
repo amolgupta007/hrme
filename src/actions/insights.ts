@@ -1,4 +1,4 @@
-"use server";
+﻿"use server";
 
 import { getCurrentUser, isAdmin } from "@/lib/current-user";
 import { hasFeature } from "@/config/plans";
@@ -6,6 +6,8 @@ import { createAdminSupabase } from "@/lib/supabase/server";
 import type { ActionResult } from "@/types";
 import { getMyOrgs } from "@/actions/active-org";
 import { resolveScopedOrgIds } from "@/lib/insights/org-scope";
+import { groupByOrg } from "@/lib/insights/by-org";
+import type { ByOrg } from "@/lib/insights/by-org";
 
 // ---- Types ----
 
@@ -68,6 +70,11 @@ export type WorkforceInsights = {
   joinersLeavers: JoinLeavePoint[];
   attritionTrend: MonthPoint[];
   tenureBuckets: NamedCount[];
+  byOrg: ByOrg<{
+    active: number;
+    attritionRatePct: number;
+    avgTenureYears: number;
+  }>;
 };
 
 // ---- Shared helpers ----
@@ -1236,22 +1243,23 @@ export async function getPerformanceTrainingInsights(): Promise<
   };
 }
 
-export async function getWorkforceInsights(): Promise<ActionResult<WorkforceInsights>> {
-  const access = await requireInsightsAccess();
+export async function getWorkforceInsights(
+  orgIds?: string[]
+): Promise<ActionResult<WorkforceInsights>> {
+  const access = await requireInsightsAccess(orgIds);
   if (!access.ok) return { success: false, error: access.error };
-  const { user } = access;
   const supabase = createAdminSupabase();
-  const orgId = user.orgId;
+  const ids = access.orgIds;
 
   const [employeesResult, departmentsResult] = await Promise.all([
     supabase
       .from("employees")
-      .select("id, date_of_joining, status, department_id, employment_type, updated_at")
-      .eq("org_id", orgId),
-    supabase.from("departments").select("id, name").eq("org_id", orgId),
+      .select("id, org_id, date_of_joining, status, department_id, employment_type, updated_at")
+      .in("org_id", ids),
+    supabase.from("departments").select("id, name").in("org_id", ids),
   ]);
 
-  const employees = (employeesResult.data ?? []) as EmployeeRow[];
+  const employees = (employeesResult.data ?? []) as (EmployeeRow & { org_id: string })[];
   const active = employees.filter((e) => e.status !== "terminated");
   const { headcountTrend, joinersLeavers, joiners12m, leavers12m, attritionRatePct, attritionTrend } =
     buildWorkforceSeries(employees);
@@ -1305,6 +1313,24 @@ export async function getWorkforceInsights(): Promise<ActionResult<WorkforceInsi
   }
   const avgTenureYears = tenureN > 0 ? Math.round((tenureSum / tenureN) * 10) / 10 : 0;
 
+  const byOrg = groupByOrg(employees, access.orgs, (e) => e.org_id, (rows) => {
+    const a = rows.filter((e) => e.status !== "terminated");
+    const s = buildWorkforceSeries(rows);
+    const now = Date.now();
+    let sum = 0, n = 0;
+    for (const e of a) {
+      if (!e.date_of_joining) continue;
+      const yrs = (now - new Date(e.date_of_joining).getTime()) / (365.25 * 24 * 3600 * 1000);
+      if (yrs < 0) continue;
+      sum += yrs; n += 1;
+    }
+    return {
+      active: a.length,
+      attritionRatePct: s.attritionRatePct,
+      avgTenureYears: n > 0 ? Math.round((sum / n) * 10) / 10 : 0,
+    };
+  });
+
   return {
     success: true,
     data: {
@@ -1321,6 +1347,7 @@ export async function getWorkforceInsights(): Promise<ActionResult<WorkforceInsi
       joinersLeavers,
       attritionTrend,
       tenureBuckets,
+      byOrg,
     },
   };
 }

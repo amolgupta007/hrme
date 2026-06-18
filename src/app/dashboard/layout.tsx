@@ -3,6 +3,7 @@ import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
 import { getPendingCounts } from "@/actions/notifications";
 import { getCurrentUser } from "@/lib/current-user";
+import { getMyOrgs } from "@/actions/active-org";
 import { ReportFeedbackTriggerRoot } from "@/components/feedback/report-feedback-trigger";
 import { AssistantLauncher } from "@/components/assistant/assistant-launcher";
 import { canUseAssistant } from "@/lib/assistant/permissions";
@@ -18,6 +19,7 @@ export default async function DashboardLayout({
     redirect("/onboarding");
   }
 
+  const orgs = await getMyOrgs();
   const badges = await getPendingCounts();
   const role = userCtx.role;
   const plan = userCtx.plan;
@@ -52,6 +54,8 @@ export default async function DashboardLayout({
             insightsEnabled={hasFeature(plan, "analytics", userCtx.customFeatures ?? null)}
             badges={badges}
             role={role}
+            orgs={orgs}
+            activeOrgId={userCtx.orgId}
           />
           <main className="flex-1 p-6">{children}</main>
         </div>

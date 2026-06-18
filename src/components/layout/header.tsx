@@ -5,6 +5,8 @@ import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import type { PendingCounts } from "@/actions/notifications";
 import type { UserRole } from "@/types";
+import { OrgSwitcher } from "@/components/layout/org-switcher";
+import type { OrgMembership } from "@/actions/active-org";
 
 interface HeaderProps {
   jambaHireEnabled?: boolean;
@@ -12,6 +14,8 @@ interface HeaderProps {
   insightsEnabled?: boolean;
   badges?: PendingCounts;
   role?: UserRole;
+  orgs?: OrgMembership[];
+  activeOrgId?: string;
 }
 
 export function Header({
@@ -20,6 +24,8 @@ export function Header({
   insightsEnabled = false,
   badges,
   role = "employee",
+  orgs = [],
+  activeOrgId = "",
 }: HeaderProps) {
   const [notifOpen, setNotifOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
@@ -64,7 +70,13 @@ export function Header({
   }, []);
 
   return (
-    <header className="sticky top-0 z-40 flex h-16 items-center justify-end border-b border-border bg-background/80 px-6 backdrop-blur-lg">
+    <header className="sticky top-0 z-40 flex h-16 items-center justify-between border-b border-border bg-background/80 px-6 backdrop-blur-lg">
+      {/* Org switcher (top-left) */}
+      <div className="flex items-center">
+        {activeOrgId && orgs.length > 0 && (
+          <OrgSwitcher orgs={orgs} activeOrgId={activeOrgId} />
+        )}
+      </div>
       {/* Actions */}
       <div className="flex items-center gap-2 ml-4">
         {/* Insights switcher — owner/admin only, Business plan (gated upstream) */}

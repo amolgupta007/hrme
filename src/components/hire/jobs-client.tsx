@@ -3,11 +3,12 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Plus, MapPin, Briefcase, Users, MoreHorizontal, Pencil, Trash2, Play, Pause, Eye, Linkedin, Loader2, X } from "lucide-react";
+import { Plus, MapPin, Briefcase, Users, MoreHorizontal, Pencil, Trash2, Play, Pause, Eye, Linkedin, Loader2, X, Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { JobDialog } from "./job-dialog";
 import { updateJobStatus, deleteJob } from "@/actions/hire";
 import type { Job, JobStatus } from "@/actions/hire";
+import { toggleIndeedPosting } from "@/actions/indeed";
 import type { Department } from "@/types";
 import Link from "next/link";
 
@@ -82,6 +83,17 @@ export function JobsClient({ jobs, departments, isAdmin, orgSlug }: Props) {
       toast.error(result.error);
     }
     setOpenMenuId(null);
+  }
+
+  async function handleToggleIndeed(jobId: string, enabled: boolean) {
+    setOpenMenuId(null);
+    const res = await toggleIndeedPosting(jobId, enabled);
+    if (res.success) {
+      toast.success(enabled ? "Posting to Indeed…" : "Removed from Indeed");
+      router.refresh();
+    } else {
+      toast.error(res.error);
+    }
   }
 
   async function handleDelete(id: string) {
@@ -168,6 +180,14 @@ export function JobsClient({ jobs, departments, isAdmin, orgSlug }: Props) {
                     <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[job.status]}`}>
                       {job.status.charAt(0).toUpperCase() + job.status.slice(1)}
                     </span>
+                    {job.indeed_enabled && (
+                      <span
+                        className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium border"
+                        title={job.indeed_sync_error ?? undefined}
+                      >
+                        Indeed: {job.indeed_status ?? "pending"}
+                      </span>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-3 mt-2 flex-wrap text-xs text-muted-foreground">
@@ -226,6 +246,15 @@ export function JobsClient({ jobs, departments, isAdmin, orgSlug }: Props) {
                             >
                               <Linkedin className="h-3.5 w-3.5" /> Share on LinkedIn
                             </a>
+                          )}
+                          {job.status === "active" && (
+                            <button
+                              className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted w-full text-left"
+                              onClick={() => handleToggleIndeed(job.id, !job.indeed_enabled)}
+                            >
+                              <Globe className="h-3.5 w-3.5" />
+                              {job.indeed_enabled ? "Remove from Indeed" : "Post to Indeed"}
+                            </button>
                           )}
                           <button
                             className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted w-full text-left"

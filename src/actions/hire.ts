@@ -2194,20 +2194,6 @@ export async function convertOfferToHire(
 
   await syncReferralFromApplicationStage(applicationId, "hired");
 
-  // Fire Clerk invite (non-fatal — admin can resend from /dashboard/employees)
-  try {
-    const { clerkClient } = await import("@clerk/nextjs/server");
-    const client = await clerkClient();
-    await client.organizations.createOrganizationInvitation({
-      organizationId: o.clerk_org_id,
-      emailAddress: inviteEmail,
-      role: "org:member",
-      redirectUrl: `${process.env.NEXT_PUBLIC_APP_URL ?? "https://jambahr.com"}/dashboard`,
-    });
-  } catch (inviteErr) {
-    console.warn("Clerk invite (convertOfferToHire) failed — non-fatal:", inviteErr);
-  }
-
   // Welcome / handoff email (non-fatal)
   try {
     const { resend, NOREPLY_EMAIL, FROM_EMAIL } = await import("@/lib/resend");

@@ -9,6 +9,7 @@ import type { ActionResult, Employee, Department, UserRole } from "@/types";
 import { employeeSchema } from "@/lib/employees/employee-schema";
 import { normalizePhone } from "@/lib/phone";
 import { provisionPhoneOnlyUser } from "@/lib/clerk/provision-phone-user";
+import { sendInvite } from "./invites";
 
 // ---- Helpers ----
 
@@ -222,17 +223,12 @@ export async function addEmployee(
       console.warn("Phone provisioning failed (non-fatal):", provErr?.message ?? provErr);
     }
   } else if (email) {
-    // Has email: existing behaviour — Clerk org invitation.
+    // Has email: send our own account-setup email (Clerk org invitations dropped).
+    // Best-effort — failure doesn't block the add; admin can resend from the directory.
     try {
-      const client = await clerkClient();
-      await client.organizations.createOrganizationInvitation({
-        organizationId: ids.clerkOrgId,
-        emailAddress: email,
-        role: "org:member",
-        redirectUrl: `${process.env.NEXT_PUBLIC_APP_URL ?? "https://jambahr.com"}/dashboard`,
-      });
+      await sendInvite((data as { id: string }).id);
     } catch (inviteErr: any) {
-      console.warn("Clerk invitation failed (non-fatal):", inviteErr?.message ?? inviteErr);
+      console.warn("Invite email failed (non-fatal):", inviteErr?.message ?? inviteErr);
     }
   }
 
@@ -308,29 +304,7 @@ export async function terminateEmployee(id: string): Promise<ActionResult<void>>
 
   if (error) return { success: false, error: error.message };
 
-  // Revoke pending Clerk invitation if one exists (best-effort)
-  try {
-    const { orgId: clerkOrgId, userId } = auth();
-    const { data: invite } = await supabase
-      .from("employee_invites")
-      .select("clerk_invitation_id")
-      .eq("employee_id", id)
-      .is("accepted_at", null)
-      .single();
-
-    if (invite && (invite as any).clerk_invitation_id && clerkOrgId && userId) {
-      const client = await clerkClient();
-      await client.organizations.revokeOrganizationInvitation({
-        organizationId: clerkOrgId,
-        invitationId: (invite as any).clerk_invitation_id,
-        requestingUserId: userId,
-      });
-    }
-  } catch {
-    // Best-effort — don't fail termination if invite revocation fails
-  }
-
-  // Delete the invite record regardless
+  // Delete the pending invite record (no Clerk invitation to revoke anymore)
   await supabase.from("employee_invites").delete().eq("employee_id", id);
 
   revalidatePath("/dashboard/employees");

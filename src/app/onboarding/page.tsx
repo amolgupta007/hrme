@@ -2,11 +2,11 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useClerk, useOrganizationList } from "@clerk/nextjs";
+import { useClerk } from "@clerk/nextjs";
 import { Building2, Users, ArrowRight, ArrowLeft, Mail, LogOut } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
-import { syncOrgToSupabase } from "@/actions/organizations";
+import { createOrganization } from "@/actions/organizations";
 import { LATEST_POLICY_VERSION } from "@/config/legal";
 
 type Mode = "choose" | "create" | "joining";
@@ -31,7 +31,6 @@ const industries = [
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const { createOrganization, setActive } = useOrganizationList();
   const { signOut } = useClerk();
   const [mode, setMode] = useState<Mode>("choose");
   const [step, setStep] = useState(1);
@@ -55,11 +54,6 @@ export default function OnboardingPage() {
   };
 
   const handleSubmit = async () => {
-    if (!createOrganization || !setActive) {
-      toast.error("Organization features not available. Please refresh.");
-      return;
-    }
-
     if (!accepted) {
       toast.error("Please accept the Privacy Policy and Terms of Service.");
       return;
@@ -67,16 +61,8 @@ export default function OnboardingPage() {
 
     setLoading(true);
     try {
-      // 1. Create org in Clerk
-      const org = await createOrganization({ name: form.companyName });
-
-      // 2. Set as active org so auth().orgId is available in server actions
-      await setActive({ organization: org.id });
-
-      // 3. Sync to Supabase
       const now = new Date().toISOString();
-      const result = await syncOrgToSupabase({
-        clerkOrgId: org.id,
+      const result = await createOrganization({
         name: form.companyName,
         privacyAcceptedAt: now,
         termsAcceptedAt: now,

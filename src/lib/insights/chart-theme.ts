@@ -28,6 +28,9 @@ export const CATEGORY_PALETTE: string[] = [
   "#fb923c",
 ];
 
+/** Ordered palette for per-org series in combined KPIs. */
+export const ORG_SERIES_COLORS = ["#a78bfa", "#34d399", "#f472b6", "#60a5fa", "#fbbf24", "#22d3ee"];
+
 export const CHART_GRID_STROKE = "rgba(148, 163, 184, 0.12)";
 export const CHART_AXIS_COLOR = "#94a3b8";
 

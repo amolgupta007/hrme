@@ -8,22 +8,8 @@ import { getCurrentUser, isAdmin } from "@/lib/current-user";
 import type { ActionResult, Department } from "@/types";
 
 async function getOrgId(): Promise<string | null> {
-  const { orgId, userId } = auth();
-  let clerkOrgId = orgId ?? null;
-  if (!clerkOrgId) {
-    if (!userId) return null;
-    const client = await clerkClient();
-    const memberships = await client.users.getOrganizationMembershipList({ userId });
-    clerkOrgId = memberships.data[0]?.organization.id ?? null;
-  }
-  if (!clerkOrgId) return null;
-  const supabase = createAdminSupabase();
-  const { data } = await supabase
-    .from("organizations")
-    .select("id")
-    .eq("clerk_org_id", clerkOrgId)
-    .single();
-  return (data as { id: string } | null)?.id ?? null;
+  const user = await getCurrentUser();
+  return user?.orgId ?? null;
 }
 
 const departmentSchema = z.object({

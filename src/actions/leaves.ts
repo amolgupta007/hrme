@@ -14,26 +14,10 @@ import type { ActionResult, LeavePolicy, LeaveRequest } from "@/types";
 // ---- Context helper ----
 
 async function getOrgContext(): Promise<{ orgId: string; clerkUserId: string } | null> {
-  const { orgId: sessionOrgId, userId } = auth();
-  if (!userId) return null;
-
-  let clerkOrgId = sessionOrgId ?? null;
-  if (!clerkOrgId) {
-    const client = await clerkClient();
-    const memberships = await client.users.getOrganizationMembershipList({ userId });
-    clerkOrgId = memberships.data[0]?.organization.id ?? null;
-  }
-  if (!clerkOrgId) return null;
-
-  const supabase = createAdminSupabase();
-  const { data } = await supabase
-    .from("organizations")
-    .select("id")
-    .eq("clerk_org_id", clerkOrgId)
-    .single();
-
-  if (!data) return null;
-  return { orgId: (data as { id: string }).id, clerkUserId: userId };
+  const { userId } = auth();
+  const user = await getCurrentUser();
+  if (!userId || !user) return null;
+  return { orgId: user.orgId!, clerkUserId: userId };
 }
 
 // ---- Default policies ----

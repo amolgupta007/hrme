@@ -2,29 +2,14 @@
 
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { createAdminSupabase } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/current-user";
 import { getPendingObjectivesCount } from "@/actions/objectives";
 
 async function getOrgContext() {
-  const { orgId: sessionOrgId, userId } = auth();
-  if (!userId) return null;
-
-  let clerkOrgId = sessionOrgId ?? null;
-  if (!clerkOrgId) {
-    const client = await clerkClient();
-    const memberships = await client.users.getOrganizationMembershipList({ userId });
-    clerkOrgId = memberships.data[0]?.organization.id ?? null;
-  }
-  if (!clerkOrgId) return null;
-
-  const supabase = createAdminSupabase();
-  const { data } = await supabase
-    .from("organizations")
-    .select("id")
-    .eq("clerk_org_id", clerkOrgId)
-    .single();
-
-  if (!data) return null;
-  return { orgId: (data as { id: string }).id, clerkUserId: userId };
+  const { userId } = auth();
+  const user = await getCurrentUser();
+  if (!userId || !user) return null;
+  return { orgId: user.orgId!, clerkUserId: userId };
 }
 
 export type PendingCounts = {

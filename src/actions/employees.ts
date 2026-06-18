@@ -13,31 +13,13 @@ import { sendInvite } from "./invites";
 
 // ---- Helpers ----
 
-/** Returns the internal Supabase org UUID and the Clerk org ID for the current user. */
+/** Returns the internal Supabase org UUID for the current user (active-org path). */
 async function getOrgIds(): Promise<{ internalOrgId: string; clerkOrgId: string } | null> {
-  const { orgId, userId } = auth();
-
-  // Resolve Clerk org ID — prefer session orgId, fall back to membership lookup
-  let clerkOrgId = orgId ?? null;
-
-  if (!clerkOrgId) {
-    if (!userId) return null;
-    const client = await clerkClient();
-    const memberships = await client.users.getOrganizationMembershipList({ userId });
-    clerkOrgId = memberships.data[0]?.organization.id ?? null;
-  }
-
-  if (!clerkOrgId) return null;
-
-  const supabase = createAdminSupabase();
-  const { data } = await supabase
-    .from("organizations")
-    .select("id")
-    .eq("clerk_org_id", clerkOrgId)
-    .single();
-
-  if (!data) return null;
-  return { internalOrgId: (data as { id: string }).id, clerkOrgId };
+  const user = await getCurrentUser();
+  if (!user) return null;
+  // clerkOrgId is vestigial now (Clerk Organizations decoupled); kept only for
+  // the return shape and no longer used to resolve tenancy.
+  return { internalOrgId: user.orgId!, clerkOrgId: "" };
 }
 
 /** Convenience wrapper — returns just the internal Supabase org UUID. */
@@ -152,7 +134,7 @@ export async function addEmployee(
   const { data: org, error: orgError } = await supabase
     .from("organizations")
     .select("id, max_employees")
-    .eq("clerk_org_id", ids.clerkOrgId)
+    .eq("id", ids.internalOrgId)
     .single();
 
   if (orgError || !org) return { success: false, error: "Organization not found" };

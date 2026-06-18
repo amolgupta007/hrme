@@ -24,29 +24,16 @@ type OrgContext = {
 };
 
 async function getOrgContext(): Promise<OrgContext | null> {
-  const { userId, orgId } = auth();
-  if (!userId) return null;
+  const user = await getCurrentUser();
+  if (!user) return null;
 
   const supabase = createAdminSupabase();
   const select = "id, clerk_org_id, plan, stripe_subscription_id, platform_fee_paid, billing_cycle";
 
-  if (orgId) {
-    const { data } = await supabase
-      .from("organizations")
-      .select(select)
-      .eq("clerk_org_id", orgId)
-      .single();
-    return data ? ((data as unknown) as OrgContext) : null;
-  }
-
-  const memberships = await clerkClient().users.getOrganizationMembershipList({ userId });
-  const firstOrg = memberships.data[0]?.organization;
-  if (!firstOrg) return null;
-
   const { data } = await supabase
     .from("organizations")
     .select(select)
-    .eq("clerk_org_id", firstOrg.id)
+    .eq("id", user.orgId!)
     .single();
   return data ? ((data as unknown) as OrgContext) : null;
 }

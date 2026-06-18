@@ -7,12 +7,10 @@ import { hasFeature } from "@/config/plans";
 import type { UserRole } from "@/types";
 
 async function getClerkOrgId(): Promise<string | null> {
-  const { orgId, userId } = auth();
-  if (orgId) return orgId;
-  if (!userId) return null;
-  const client = await clerkClient();
-  const memberships = await client.users.getOrganizationMembershipList({ userId });
-  return memberships.data[0]?.organization.id ?? null;
+  // Returns the INTERNAL org id now (Clerk Organizations decoupled); name kept
+  // to avoid churn at the single call site.
+  const user = await getCurrentUser();
+  return user?.orgId ?? null;
 }
 
 // ---- Types ----
@@ -153,7 +151,7 @@ export async function getDashboardData(): Promise<DashboardData | null> {
   const { data: org } = await supabase
     .from("organizations")
     .select("id")
-    .eq("clerk_org_id", clerkOrgId)
+    .eq("id", clerkOrgId)
     .single();
 
   if (!org) return null;

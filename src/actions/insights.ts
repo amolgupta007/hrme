@@ -54,6 +54,12 @@ export type OverviewInsights = {
     /** Net total of the run before the latest one, if any. */
     payrollPrevNet: number | null;
   };
+  byOrg: ByOrg<{
+    headcount: number;
+    attritionRatePct: number;
+    monthlyPayrollCost: number;
+    leaveUtilizationPct: number;
+  }>;
 };
 
 export type WorkforceInsights = {
@@ -191,12 +197,14 @@ async function requireInsightsAccess(requestedOrgIds?: string[]) {
 
 // ---- Actions ----
 
-export async function getOverviewInsights(): Promise<ActionResult<OverviewInsights>> {
-  const access = await requireInsightsAccess();
+export async function getOverviewInsights(
+  orgIds?: string[]
+): Promise<ActionResult<OverviewInsights>> {
+  const access = await requireInsightsAccess(orgIds);
   if (!access.ok) return { success: false, error: access.error };
   const { user } = access;
   const supabase = createAdminSupabase();
-  const orgId = user.orgId;
+  const ids = access.orgIds;
 
   const months = lastNMonths(12);
   const months24 = lastNMonths(24);
@@ -224,59 +232,59 @@ export async function getOverviewInsights(): Promise<ActionResult<OverviewInsigh
   ] = await Promise.all([
     supabase
       .from("employees")
-      .select("id, date_of_joining, status, department_id, employment_type, updated_at")
-      .eq("org_id", orgId),
-    supabase.from("departments").select("id, name").eq("org_id", orgId),
+      .select("id, org_id, date_of_joining, status, department_id, employment_type, updated_at")
+      .in("org_id", ids),
+    supabase.from("departments").select("id, name").in("org_id", ids),
     supabase
       .from("leave_requests")
       .select("start_date, days")
-      .eq("org_id", orgId)
+      .in("org_id", ids)
       .eq("status", "approved")
       .gte("start_date", windowStart24),
     supabase
       .from("leave_balances")
-      .select("total_days, used_days, carried_forward_days")
-      .eq("org_id", orgId)
+      .select("org_id, total_days, used_days, carried_forward_days")
+      .in("org_id", ids)
       .eq("year", year),
     supabase
       .from("training_enrollments")
       .select("*", { count: "exact", head: true })
-      .eq("org_id", orgId),
+      .in("org_id", ids),
     supabase
       .from("training_enrollments")
       .select("*", { count: "exact", head: true })
-      .eq("org_id", orgId)
+      .in("org_id", ids)
       .eq("status", "completed"),
     supabase
       .from("training_enrollments")
       .select("*", { count: "exact", head: true })
-      .eq("org_id", orgId)
+      .in("org_id", ids)
       .eq("status", "overdue"),
     user.jambaHireEnabled
       ? supabase
           .from("jobs")
           .select("id", { count: "exact", head: true })
-          .eq("org_id", orgId)
+          .in("org_id", ids)
           .eq("status", "active")
       : Promise.resolve(null),
     user.jambaHireEnabled
       ? supabase
           .from("applications")
           .select("id", { count: "exact", head: true })
-          .eq("org_id", orgId)
+          .in("org_id", ids)
       : Promise.resolve(null),
     payrollEnabled
       ? supabase
           .from("payroll_runs")
-          .select("id, month, status")
-          .eq("org_id", orgId)
+          .select("id, org_id, month, status")
+          .in("org_id", ids)
           .in("status", ["processed", "paid"])
           .order("month", { ascending: false })
-          .limit(2)
+          .limit(ids.length * 2)
       : Promise.resolve(null),
   ]);
 
-  const employees = (employeesResult.data ?? []) as EmployeeRow[];
+  const employees = (employeesResult.data ?? []) as (EmployeeRow & { org_id: string })[];
   const active = employees.filter((e) => e.status !== "terminated");
   const { headcountTrend, joinersLeavers, attritionRatePct } = buildWorkforceSeries(employees);
 
@@ -313,9 +321,15 @@ export async function getOverviewInsights(): Promise<ActionResult<OverviewInsigh
   // Leave utilization (this calendar year)
   let totalAllocated = 0;
   let totalUsed = 0;
-  for (const b of (balancesResult.data ?? []) as { total_days: number; used_days: number; carried_forward_days: number }[]) {
-    totalAllocated += (b.total_days ?? 0) + (b.carried_forward_days ?? 0);
-    totalUsed += b.used_days ?? 0;
+  const leaveAllocByOrg = new Map<string, number>();
+  const leaveUsedByOrg = new Map<string, number>();
+  for (const b of (balancesResult.data ?? []) as { org_id: string; total_days: number; used_days: number; carried_forward_days: number }[]) {
+    const alloc = (b.total_days ?? 0) + (b.carried_forward_days ?? 0);
+    const used = b.used_days ?? 0;
+    totalAllocated += alloc;
+    totalUsed += used;
+    leaveAllocByOrg.set(b.org_id, (leaveAllocByOrg.get(b.org_id) ?? 0) + alloc);
+    leaveUsedByOrg.set(b.org_id, (leaveUsedByOrg.get(b.org_id) ?? 0) + used);
   }
   const leaveUtilizationPct =
     totalAllocated > 0 ? Math.round((totalUsed / totalAllocated) * 100) : 0;
@@ -326,22 +340,49 @@ export async function getOverviewInsights(): Promise<ActionResult<OverviewInsigh
       : 0;
 
   // Payroll cost: latest processed/paid run + the one before it for the delta
+  // Also build per-org cost map for byOrg breakdown.
   let monthlyPayrollCost: number | null = null;
   let payrollMonth: string | null = null;
   let payrollPrevNet: number | null = null;
-  const runRows = (payrollRunResult?.data ?? []) as { id: string; month: string }[];
+  const costByOrg = new Map<string, number>();
+  const runRows = (payrollRunResult?.data ?? []) as { id: string; org_id: string; month: string }[];
   if (runRows.length > 0) {
     const { data: entries } = await supabase
       .from("payroll_entries")
       .select("net_pay, payroll_run_id")
       .in("payroll_run_id", runRows.map((r) => r.id));
+    const entryRows = (entries ?? []) as { net_pay: number; payroll_run_id: string }[];
     const sumFor = (runId: string) =>
-      ((entries ?? []) as { net_pay: number; payroll_run_id: string }[])
+      entryRows
         .filter((e) => e.payroll_run_id === runId)
         .reduce((s, e) => s + (e.net_pay ?? 0), 0);
-    monthlyPayrollCost = sumFor(runRows[0].id);
-    payrollMonth = runRows[0].month;
-    if (runRows[1]) payrollPrevNet = sumFor(runRows[1].id);
+    // Combined: use the most-recent run across all orgs
+    const latestMonthByOrg = new Map<string, { id: string; month: string }>();
+    for (const r of runRows) {
+      const existing = latestMonthByOrg.get(r.org_id);
+      if (!existing || r.month > existing.month) latestMonthByOrg.set(r.org_id, r);
+    }
+    // Per-org cost from their latest run
+    let combinedCost = 0;
+    let latestMonth: string | null = null;
+    for (const [orgId, run] of latestMonthByOrg) {
+      const cost = sumFor(run.id);
+      costByOrg.set(orgId, cost);
+      combinedCost += cost;
+      if (!latestMonth || run.month > latestMonth) latestMonth = run.month;
+    }
+    if (latestMonth !== null) {
+      monthlyPayrollCost = combinedCost;
+      payrollMonth = latestMonth;
+    }
+    // Previous-run delta: sum of the second-latest per org
+    const prevRunIds = runRows.filter((r) => {
+      const latest = latestMonthByOrg.get(r.org_id);
+      return latest && r.id !== latest.id;
+    });
+    if (prevRunIds.length > 0) {
+      payrollPrevNet = prevRunIds.reduce((s, r) => s + sumFor(r.id), 0);
+    }
   }
 
   const headcountDelta30d = active.filter(
@@ -364,6 +405,22 @@ export async function getOverviewInsights(): Promise<ActionResult<OverviewInsigh
     Math.max(1, prevMonths.length);
   const attritionPrevPct =
     prevAvgHeadcount > 0 ? Math.round((prevExits / prevAvgHeadcount) * 1000) / 10 : 0;
+
+  // Per-org breakdown
+  const byOrg = access.orgs.map((o) => {
+    const rows = employees.filter((e) => e.org_id === o.id);
+    const s = buildWorkforceSeries(rows);
+    const orgAlloc = leaveAllocByOrg.get(o.id) ?? 0;
+    const orgUsed = leaveUsedByOrg.get(o.id) ?? 0;
+    return {
+      orgId: o.id,
+      orgName: o.name,
+      headcount: rows.filter((e) => e.status !== "terminated").length,
+      attritionRatePct: s.attritionRatePct,
+      monthlyPayrollCost: costByOrg.get(o.id) ?? 0,
+      leaveUtilizationPct: orgAlloc > 0 ? Math.round((orgUsed / orgAlloc) * 100) : 0,
+    };
+  });
 
   return {
     success: true,
@@ -389,6 +446,7 @@ export async function getOverviewInsights(): Promise<ActionResult<OverviewInsigh
         leaveDaysPrev12m,
         payrollPrevNet,
       },
+      byOrg,
     },
   };
 }

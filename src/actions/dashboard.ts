@@ -1,6 +1,5 @@
 "use server";
 
-import { auth, clerkClient } from "@clerk/nextjs/server";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { getCurrentUser, isAdmin, isManagerOrAbove } from "@/lib/current-user";
 import { hasFeature } from "@/config/plans";

@@ -5,6 +5,7 @@ import { z } from "zod";
 import Anthropic from "@anthropic-ai/sdk";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { getCurrentUser, isAdmin, isManagerOrAbove } from "@/lib/current-user";
+import { sendInvite } from "./invites";
 import {
   syncReferralFromApplicationStage,
   markReferralRejectedByApplication,
@@ -2114,11 +2115,11 @@ export async function convertOfferToHire(
 
   const [{ data: candidate }, { data: org }] = await Promise.all([
     supabase.from("candidates").select("name, email").eq("id", a.candidate_id).single(),
-    supabase.from("organizations").select("id, name, clerk_org_id, max_employees").eq("id", a.org_id).single(),
+    supabase.from("organizations").select("id, name, max_employees").eq("id", a.org_id).single(),
   ]);
   if (!candidate || !org) return { success: false, error: "Missing related data" };
   const c = candidate as { name: string; email: string };
-  const o = org as { id: string; name: string; clerk_org_id: string; max_employees: number };
+  const o = org as { id: string; name: string; max_employees: number };
 
   // Headroom check (matches addEmployee behavior)
   const { count: activeCount } = await supabase
@@ -2193,6 +2194,14 @@ export async function convertOfferToHire(
   });
 
   await syncReferralFromApplicationStage(applicationId, "hired");
+
+  // Send the account-setup email so the new hire can sign in and auto-link on
+  // first sign-in (Clerk org invitations are gone). Best-effort, non-fatal.
+  try {
+    await sendInvite(employeeId);
+  } catch (inviteErr) {
+    console.warn("Account-setup email (convertOfferToHire) failed — non-fatal:", inviteErr);
+  }
 
   // Welcome / handoff email (non-fatal)
   try {

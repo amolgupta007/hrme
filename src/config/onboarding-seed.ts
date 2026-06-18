@@ -4,8 +4,8 @@
  * These constants used to live inside the Clerk `organization.created` webhook
  * (`src/app/api/webhooks/clerk/route.ts`). With Clerk Organizations decoupled,
  * org creation happens in the `createOrganization` server action, which seeds
- * the same policies + holidays. Kept here as a single shared source so the
- * action and (until the webhook case is removed) the webhook stay in sync.
+ * the same policies + holidays. Kept here as a shared module imported by that
+ * action.
  */
 
 export const DEFAULT_LEAVE_POLICIES = [

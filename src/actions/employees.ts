@@ -1,6 +1,6 @@
 "use server";
 
-import { auth, clerkClient } from "@clerk/nextjs/server";
+import { clerkClient } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createAdminSupabase } from "@/lib/supabase/server";
@@ -14,12 +14,10 @@ import { sendInvite } from "./invites";
 // ---- Helpers ----
 
 /** Returns the internal Supabase org UUID for the current user (active-org path). */
-async function getOrgIds(): Promise<{ internalOrgId: string; clerkOrgId: string } | null> {
+async function getOrgIds(): Promise<{ internalOrgId: string } | null> {
   const user = await getCurrentUser();
   if (!user) return null;
-  // clerkOrgId is vestigial now (Clerk Organizations decoupled); kept only for
-  // the return shape and no longer used to resolve tenancy.
-  return { internalOrgId: user.orgId!, clerkOrgId: "" };
+  return { internalOrgId: user.orgId! };
 }
 
 /** Convenience wrapper — returns just the internal Supabase org UUID. */
@@ -381,7 +379,6 @@ export async function bulkImportEmployees(
   const ids = await getOrgIds();
   if (!ids) return { success: false, error: "Organization not found" };
   const orgId = ids.internalOrgId;
-  const clerkOrgId = ids.clerkOrgId;
 
   const supabase = createAdminSupabase();
 

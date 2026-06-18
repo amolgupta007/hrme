@@ -1,6 +1,6 @@
 "use server";
 
-import { auth, clerkClient } from "@clerk/nextjs/server";
+import { auth } from "@clerk/nextjs/server";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/current-user";
 import { getPendingObjectivesCount } from "@/actions/objectives";

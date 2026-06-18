@@ -9,8 +9,6 @@ import { WelcomeEmail } from "@/components/emails/welcome";
 import { DEFAULT_ONBOARDING_STEPS } from "@/config/onboarding";
 import { DEFAULT_LEAVE_POLICIES, DEFAULT_HOLIDAYS_2026 } from "@/config/onboarding-seed";
 import { normalizePhone } from "@/lib/phone";
-import { clerkClient } from "@clerk/nextjs/server";
-import { ORG_MEMBERSHIP_CAP } from "@/lib/clerk/provision-phone-user";
 
 const FOUNDER_EMAIL = "amol@jambahr.com";
 
@@ -103,18 +101,6 @@ export async function POST(req: Request) {
           await supabase.from("holidays").insert(
             holidays.map((h) => ({ ...h, org_id: orgId }))
           );
-        }
-
-        // Raise the Clerk org's member cap above Clerk's small default (best-effort)
-        // so memberships (phone provisioning + invite acceptance) aren't blocked as
-        // the org grows. Keyed on the Clerk org id.
-        try {
-          const client = await clerkClient();
-          await client.organizations.updateOrganization(id, {
-            maxAllowedMemberships: ORG_MEMBERSHIP_CAP,
-          });
-        } catch (capErr) {
-          console.warn("Failed to raise org membership cap (non-fatal):", capErr);
         }
 
         // 4. Look up owner email from Clerk user data

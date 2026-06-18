@@ -209,7 +209,6 @@ export async function addEmployee(
       const client = await clerkClient();
       const { clerkUserId } = await provisionPhoneOnlyUser(client, {
         phoneE164: phone!,
-        clerkOrgId: ids.clerkOrgId,
         role: validated.data.role,
       });
       await supabase
@@ -383,7 +382,6 @@ export async function reprovisionPhoneEmployee(
     const client = await clerkClient();
     const { clerkUserId } = await provisionPhoneOnlyUser(client, {
       phoneE164: phone,
-      clerkOrgId: ids.clerkOrgId,
       role: e.role as UserRole,
     });
     await supabase.from("employees").update({ clerk_user_id: clerkUserId }).eq("id", e.id);
@@ -610,7 +608,6 @@ export async function bulkImportEmployees(
         try {
           const { clerkUserId } = await provisionPhoneOnlyUser(client, {
             phoneE164,
-            clerkOrgId,
             role,
           });
           await supabase

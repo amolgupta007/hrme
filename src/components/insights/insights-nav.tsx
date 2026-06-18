@@ -14,6 +14,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PrintReportButton } from "./print-report-button";
+import { OrgScopeSelect } from "./org-scope-select";
+import type { EligibleOrg } from "@/lib/insights/org-scope";
 
 const NAV_ITEMS = [
   { label: "Overview", href: "/insights", icon: LayoutDashboard, exact: true },
@@ -24,7 +26,13 @@ const NAV_ITEMS = [
   { label: "Performance", href: "/insights/performance", icon: Star },
 ];
 
-export function InsightsNav() {
+export function InsightsNav({
+  eligibleOrgs = [],
+  activeOrgId = "",
+}: {
+  eligibleOrgs?: EligibleOrg[];
+  activeOrgId?: string;
+}) {
   const pathname = usePathname();
 
   return (
@@ -75,6 +83,9 @@ export function InsightsNav() {
         </div>
 
         <div className="flex items-center gap-1">
+          {eligibleOrgs.length >= 2 && (
+            <OrgScopeSelect eligibleOrgs={eligibleOrgs} activeOrgId={activeOrgId} />
+          )}
           <PrintReportButton />
           <Link
             href="/dashboard"

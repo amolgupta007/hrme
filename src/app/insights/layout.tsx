@@ -3,6 +3,7 @@ import Image from "next/image";
 import { getCurrentUser, isAdmin } from "@/lib/current-user";
 import { hasFeature } from "@/config/plans";
 import { InsightsNav } from "@/components/insights/insights-nav";
+import { getMyOrgs } from "@/actions/active-org";
 
 export default async function InsightsLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
@@ -11,6 +12,11 @@ export default async function InsightsLayout({ children }: { children: React.Rea
   if (!hasFeature(user.plan ?? "starter", "analytics", user.customFeatures ?? null)) {
     redirect("/dashboard/settings#billing");
   }
+
+  const memberships = await getMyOrgs();
+  const eligibleOrgs = memberships
+    .filter((m) => m.role === "owner" || m.role === "admin")
+    .map((m) => ({ id: m.orgId, name: m.name }));
 
   return (
     // The Insights module deliberately owns its visual language: a dark
@@ -21,7 +27,7 @@ export default async function InsightsLayout({ children }: { children: React.Rea
         aria-hidden="true"
         className="print-hide pointer-events-none fixed inset-x-0 top-0 z-0 h-[480px] bg-[radial-gradient(ellipse_at_top,rgba(139,92,246,0.18),transparent_60%)]"
       />
-      <InsightsNav />
+      <InsightsNav eligibleOrgs={eligibleOrgs} activeOrgId={user.orgId} />
       <main className="relative z-10 mx-auto max-w-7xl px-6 py-8">
         {/* Print-only report masthead — the on-screen nav is hidden in print,
             so exported PDFs carry the brand through this block instead. */}

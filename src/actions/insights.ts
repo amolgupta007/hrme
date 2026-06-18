@@ -773,30 +773,49 @@ export type PayrollInsights = {
   costByDept: NamedCount[];
   salaryBands: NamedCount[];
   otSpendMonthly: MonthPoint[];
+  byOrg: ByOrg<{
+    latestMonthlyNet: number;
+    headcountPaid: number;
+  }>;
+  excludedOrgs: ExcludedOrg[];
 };
 
-/** Returns data:null when the org's plan doesn't include payroll. */
-export async function getPayrollInsights(): Promise<ActionResult<PayrollInsights | null>> {
-  const access = await requireInsightsAccess();
+/** Returns data:null when no selected org has payroll enabled. */
+export async function getPayrollInsights(orgIds?: string[]): Promise<ActionResult<PayrollInsights | null>> {
+  const access = await requireInsightsAccess(orgIds);
   if (!access.ok) return { success: false, error: access.error };
-  const { user } = access;
 
-  if (!hasFeature(user.plan ?? "starter", "payroll", user.customFeatures ?? null)) {
+  const supabase = createAdminSupabase();
+
+  // Determine which orgs have the payroll feature
+  const { data: orgRows } = await supabase
+    .from("organizations")
+    .select("id, name, plan, custom_features")
+    .in("id", access.orgIds);
+
+  const payrollOrgs = (orgRows ?? []).filter((o: any) =>
+    hasFeature(o.plan ?? "starter", "payroll", o.custom_features ?? null)
+  );
+  const excludedOrgs: ExcludedOrg[] = (orgRows ?? [])
+    .filter((o: any) => !payrollOrgs.some((p: any) => p.id === o.id))
+    .map((o: any) => ({ orgName: o.name as string, reason: "payroll not enabled" }));
+
+  if (payrollOrgs.length === 0) {
     return { success: true, data: null };
   }
 
-  const supabase = createAdminSupabase();
-  const orgId = user.orgId;
+  const ids = payrollOrgs.map((o: any) => o.id as string);
+  const orgsForBreakdown = payrollOrgs.map((o: any) => ({ id: o.id as string, name: o.name as string }));
 
   const { data: runRows } = await supabase
     .from("payroll_runs")
-    .select("id, month, status")
-    .eq("org_id", orgId)
+    .select("id, month, status, org_id")
+    .in("org_id", ids)
     .in("status", ["processed", "paid"])
     .order("month", { ascending: false })
-    .limit(12);
+    .limit(12 * ids.length);
 
-  const runs = ((runRows ?? []) as { id: string; month: string }[]).reverse();
+  const runs = ((runRows ?? []) as { id: string; month: string; org_id: string }[]).reverse();
 
   const emptyKpis = {
     latestNet: 0,
@@ -811,7 +830,15 @@ export async function getPayrollInsights(): Promise<ActionResult<PayrollInsights
   if (runs.length === 0) {
     return {
       success: true,
-      data: { kpis: emptyKpis, monthly: [], costByDept: [], salaryBands: [], otSpendMonthly: [] },
+      data: {
+        kpis: emptyKpis,
+        monthly: [],
+        costByDept: [],
+        salaryBands: [],
+        otSpendMonthly: [],
+        byOrg: groupByOrg([], orgsForBreakdown, (r: any) => r.org_id, () => ({ latestMonthlyNet: 0, headcountPaid: 0 })),
+        excludedOrgs,
+      },
     };
   }
 
@@ -820,16 +847,16 @@ export async function getPayrollInsights(): Promise<ActionResult<PayrollInsights
     await Promise.all([
       supabase
         .from("payroll_entries")
-        .select("id, payroll_run_id, employee_id, gross_salary, net_pay, tds, employee_pf")
-        .eq("org_id", orgId)
+        .select("id, payroll_run_id, employee_id, gross_salary, net_pay, tds, employee_pf, org_id")
+        .in("org_id", ids)
         .in("payroll_run_id", runIds),
-      supabase.from("employees").select("id, department_id").eq("org_id", orgId),
-      supabase.from("departments").select("id, name").eq("org_id", orgId),
-      supabase.from("salary_structures").select("ctc").eq("org_id", orgId),
+      supabase.from("employees").select("id, department_id").in("org_id", ids),
+      supabase.from("departments").select("id, name").in("org_id", ids),
+      supabase.from("salary_structures").select("ctc").in("org_id", ids),
       supabase
         .from("payroll_line_items")
         .select("amount, payroll_entry_id")
-        .eq("org_id", orgId)
+        .in("org_id", ids)
         .eq("category", "overtime"),
     ]);
 
@@ -841,6 +868,7 @@ export async function getPayrollInsights(): Promise<ActionResult<PayrollInsights
     net_pay: number;
     tds: number;
     employee_pf: number;
+    org_id: string;
   };
   const entries = (entriesResult.data ?? []) as EntryRow[];
   const monthOfRun = new Map(runs.map((r) => [r.id, r.month]));
@@ -936,9 +964,26 @@ export async function getPayrollInsights(): Promise<ActionResult<PayrollInsights
     value: Math.round(otByMonth.get(m.month) ?? 0),
   }));
 
+  // Per-org breakdown: use latest run per org for latestMonthlyNet + headcountPaid
+  const latestRunByOrg = new Map<string, string>(); // orgId → runId (latest month)
+  for (const r of runs) {
+    const existing = latestRunByOrg.get(r.org_id);
+    if (!existing || r.month > (monthOfRun.get(existing) ?? "")) {
+      latestRunByOrg.set(r.org_id, r.id);
+    }
+  }
+  const latestRunEntries = entries.filter((e) => {
+    const latestId = latestRunByOrg.get(e.org_id);
+    return latestId === e.payroll_run_id;
+  });
+  const byOrg = groupByOrg(latestRunEntries, orgsForBreakdown, (r) => r.org_id, (rows) => ({
+    latestMonthlyNet: Math.round(rows.reduce((s, r) => s + (r.net_pay ?? 0), 0)),
+    headcountPaid: new Set(rows.map((r) => r.employee_id)).size,
+  }));
+
   return {
     success: true,
-    data: { kpis, monthly, costByDept, salaryBands, otSpendMonthly },
+    data: { kpis, monthly, costByDept, salaryBands, otSpendMonthly, byOrg, excludedOrgs },
   };
 }
 

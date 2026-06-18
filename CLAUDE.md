@@ -345,7 +345,7 @@ All actions in `src/actions/hire.ts`.
 
 Jobs board connector allowing JambaHR to post open roles to Indeed and receive applicants inbound. Ships inert behind `INDEED_LIVE=true` — **Indeed must approve JambaHR as an ATS partner before the live client is activated**.
 
-**Schema**: migration `068_indeed_job_sync.sql` adds five columns to `jobs`: `indeed_job_id`, `indeed_posting_status` (`not_posted`/`pending`/`live`/`expired`/`error`), `indeed_last_synced_at`, `indeed_error`, `indeed_posting_enabled`. Migration is NOT yet applied to live DB — awaiting user confirmation.
+**Schema**: migration `068_indeed_job_sync.sql` adds five columns to `jobs`: `indeed_enabled`, `indeed_job_id`, `indeed_status` (CHECK `pending`/`posted`/`expired`/`error`, nullable), `indeed_synced_at`, `indeed_sync_error`. Migration is NOT yet applied to live DB — awaiting user confirmation.
 
 **Boundary module** (`src/lib/indeed/`): `types.ts` (Zod schemas + TypeScript types), `signature.ts` (HMAC-SHA1 verify), `job-mapper.ts` (job row → Indeed posting payload), `application-mapper.ts` (Indeed webhook payload → `MappedApplication`), `oauth.ts` (client credentials token fetch), `client.ts` (real HTTP client), `sandbox.ts` (no-network stub), `index.ts` (factory), `sync.ts` (push/expire), `ingest.ts` (webhook → DB).
 
@@ -353,7 +353,7 @@ Jobs board connector allowing JambaHR to post open roles to Indeed and receive a
 
 **Env vars**: `INDEED_LIVE`, `INDEED_CLIENT_ID`, `INDEED_CLIENT_SECRET`, `INDEED_APPLY_SHARED_SECRET`.
 
-**Outbound**: per-job "Post to Indeed" toggle (`toggleIndeedPosting`) writes `indeed_posting_enabled`; `pushJobToIndeed` runs via `waitUntil` on job create/update/status-change. Disabling the toggle or closing/pausing a posted job calls `expireIndeedListing` → `indeed_posting_status='expired'`. Reconcile cron `/api/cron/indeed-sync-reconcile` (`45 4 * * *` UTC) re-pushes stale/errored postings.
+**Outbound**: per-job "Post to Indeed" toggle (`toggleIndeedPosting`) writes `indeed_enabled`; `pushJobToIndeed` (`src/lib/indeed/sync.ts`) runs via `waitUntil` on job create/update/status-change. An active+enabled job is upserted (`indeed_status='posted'`); disabling the toggle or pausing/closing a previously-posted job expires it via `client.expireJob` → `indeed_status='expired'`. Reconcile cron `/api/cron/indeed-sync-reconcile` (`45 4 * * *` UTC) re-pushes `indeed_enabled` jobs that are `error`/`pending`/never-synced.
 
 **Inbound**: `/api/webhooks/indeed` verifies `X-Indeed-Signature` (HMAC-SHA1, `INDEED_APPLY_SHARED_SECRET`) → `webhook_events` dedup → `ingestIndeedApplication`. Applicants land as `candidates.source='indeed'` + `applications.stage='applied'`, entering the normal pipeline. Résumés are stored in the `documents` Supabase bucket.
 

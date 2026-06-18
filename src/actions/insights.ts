@@ -1034,41 +1034,63 @@ export type HiringInsights = {
   offerStatusDist: NamedCount[];
   loiDist: NamedCount[];
   rejectionByStage: NamedCount[];
+  byOrg: ByOrg<{
+    inPipeline: number;
+    hired: number;
+  }>;
+  excludedOrgs: ExcludedOrg[];
 };
 
-/** Returns data:null when JambaHire isn't enabled for the org. */
-export async function getHiringInsights(): Promise<ActionResult<HiringInsights | null>> {
-  const access = await requireInsightsAccess();
+/** Returns data:null when no selected org has JambaHire enabled. */
+export async function getHiringInsights(orgIds?: string[]): Promise<ActionResult<HiringInsights | null>> {
+  const access = await requireInsightsAccess(orgIds);
   if (!access.ok) return { success: false, error: access.error };
-  const { user } = access;
-  if (!user.jambaHireEnabled) return { success: true, data: null };
 
   const supabase = createAdminSupabase();
-  const orgId = user.orgId;
+
+  // Determine which orgs have JambaHire enabled via settings JSONB flag
+  const { data: orgRows } = await supabase
+    .from("organizations")
+    .select("id, name, settings")
+    .in("id", access.orgIds);
+
+  const hireOrgs = (orgRows ?? []).filter((o: any) => o.settings?.jambahire_enabled === true);
+  const excludedOrgs: ExcludedOrg[] = (orgRows ?? [])
+    .filter((o: any) => !hireOrgs.some((h: any) => h.id === o.id))
+    .map((o: any) => ({ orgName: o.name as string, reason: "JambaHire not enabled" }));
+
+  if (hireOrgs.length === 0) {
+    return { success: true, data: null };
+  }
+
+  const ids = hireOrgs.map((o: any) => o.id as string);
+  const orgsForBreakdown = hireOrgs.map((o: any) => ({ id: o.id as string, name: o.name as string }));
+
   const twelveMonthsAgo = new Date(Date.now() - 365 * 24 * 3600 * 1000).toISOString();
 
   const [applicationsResult, transitionsResult, candidatesResult, offersResult, { count: openJobs }] =
     await Promise.all([
       supabase
         .from("applications")
-        .select("id, stage, applied_at, candidate_id, loi_status")
-        .eq("org_id", orgId),
+        .select("id, org_id, stage, applied_at, candidate_id, loi_status")
+        .in("org_id", ids),
       supabase
         .from("candidate_stage_transitions")
         .select("application_id, from_stage, to_stage, direction, created_at")
-        .eq("org_id", orgId)
+        .in("org_id", ids)
         .order("created_at", { ascending: true }),
-      supabase.from("candidates").select("id, source").eq("org_id", orgId),
-      supabase.from("offers").select("status").eq("org_id", orgId),
+      supabase.from("candidates").select("id, source").in("org_id", ids),
+      supabase.from("offers").select("status").in("org_id", ids),
       supabase
         .from("jobs")
         .select("id", { count: "exact", head: true })
-        .eq("org_id", orgId)
+        .in("org_id", ids)
         .eq("status", "active"),
     ]);
 
   type AppRow = {
     id: string;
+    org_id: string;
     stage: string;
     applied_at: string;
     candidate_id: string;
@@ -1211,6 +1233,11 @@ export async function getHiringInsights(): Promise<ActionResult<HiringInsights |
     (t) => t.to_stage === "hired" && t.created_at >= twelveMonthsAgo
   ).length;
 
+  const byOrg = groupByOrg(applications, orgsForBreakdown, (r) => r.org_id, (rows) => ({
+    inPipeline: rows.filter((r) => !["hired", "rejected"].includes(r.stage)).length,
+    hired: rows.filter((r) => r.stage === "hired").length,
+  }));
+
   return {
     success: true,
     data: {
@@ -1227,6 +1254,8 @@ export async function getHiringInsights(): Promise<ActionResult<HiringInsights |
       offerStatusDist,
       loiDist,
       rejectionByStage,
+      byOrg,
+      excludedOrgs,
     },
   };
 }

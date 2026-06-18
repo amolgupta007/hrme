@@ -1,5 +1,6 @@
 import { getWorkforceInsights } from "@/actions/insights";
 import { KpiCard } from "@/components/insights/kpi-card";
+import { PerOrgSplit } from "@/components/insights/per-org-split";
 import { ChartCard } from "@/components/insights/chart-card";
 import {
   TrendArea,
@@ -10,8 +11,13 @@ import {
 } from "@/components/insights/charts";
 import { INSIGHT_COLORS } from "@/lib/insights/chart-theme";
 
-export default async function WorkforceInsightsPage() {
-  const result = await getWorkforceInsights();
+export default async function WorkforceInsightsPage({
+  searchParams,
+}: {
+  searchParams?: { orgs?: string };
+}) {
+  const orgIds = searchParams?.orgs?.split(",").filter(Boolean);
+  const result = await getWorkforceInsights(orgIds);
 
   if (!result.success) {
     return (
@@ -33,7 +39,12 @@ export default async function WorkforceInsightsPage() {
 
       {/* KPI row */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        <KpiCard label="Active" value={String(d.totals.active)} sub="Current headcount" />
+        <div>
+          <KpiCard label="Active" value={String(d.totals.active)} sub="Current headcount" />
+          <PerOrgSplit
+            items={d.byOrg.map((o) => ({ orgName: o.orgName, value: String(o.active) }))}
+          />
+        </div>
         <KpiCard
           label="Joined"
           value={String(d.totals.joiners12m)}
@@ -54,16 +65,26 @@ export default async function WorkforceInsightsPage() {
               : undefined
           }
         />
-        <KpiCard
-          label="Attrition"
-          value={`${d.totals.attritionRatePct}%`}
-          sub="Exits / avg headcount"
-        />
-        <KpiCard
-          label="Avg Tenure"
-          value={`${d.totals.avgTenureYears}y`}
-          sub="Active employees"
-        />
+        <div>
+          <KpiCard
+            label="Attrition"
+            value={`${d.totals.attritionRatePct}%`}
+            sub="Exits / avg headcount"
+          />
+          <PerOrgSplit
+            items={d.byOrg.map((o) => ({ orgName: o.orgName, value: `${o.attritionRatePct}%` }))}
+          />
+        </div>
+        <div>
+          <KpiCard
+            label="Avg Tenure"
+            value={`${d.totals.avgTenureYears}y`}
+            sub="Active employees"
+          />
+          <PerOrgSplit
+            items={d.byOrg.map((o) => ({ orgName: o.orgName, value: `${o.avgTenureYears}y` }))}
+          />
+        </div>
       </div>
 
       {/* Charts */}

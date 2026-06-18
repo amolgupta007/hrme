@@ -1,11 +1,17 @@
 import { getPerformanceTrainingInsights } from "@/actions/insights";
 import { KpiCard } from "@/components/insights/kpi-card";
+import { PerOrgSplit } from "@/components/insights/per-org-split";
 import { ChartCard } from "@/components/insights/chart-card";
 import { SimpleBars, StackedBars } from "@/components/insights/charts";
 import { INSIGHT_COLORS } from "@/lib/insights/chart-theme";
 
-export default async function PerformanceInsightsPage() {
-  const result = await getPerformanceTrainingInsights();
+export default async function PerformanceInsightsPage({
+  searchParams,
+}: {
+  searchParams?: { orgs?: string };
+}) {
+  const orgIds = searchParams?.orgs?.split(",").filter(Boolean);
+  const result = await getPerformanceTrainingInsights(orgIds);
 
   if (!result.success) {
     return (
@@ -53,11 +59,16 @@ export default async function PerformanceInsightsPage() {
           value={`${d.kpis.objectivesAchievementPct}%`}
           sub="Across approved objectives"
         />
-        <KpiCard
-          label="Training"
-          value={`${d.kpis.trainingCompliancePct}%`}
-          sub="Org-wide completion"
-        />
+        <div>
+          <KpiCard
+            label="Training"
+            value={`${d.kpis.trainingCompliancePct}%`}
+            sub="Org-wide completion"
+          />
+          <PerOrgSplit
+            items={d.byOrg.map((o) => ({ orgName: o.orgName, value: `${o.compliancePct}%` }))}
+          />
+        </div>
         <KpiCard
           label="Overdue"
           value={String(d.kpis.overdueEnrollments)}

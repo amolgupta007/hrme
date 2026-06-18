@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getHiringInsights } from "@/actions/insights";
 import { KpiCard } from "@/components/insights/kpi-card";
+import { PerOrgSplit } from "@/components/insights/per-org-split";
 import { ChartCard } from "@/components/insights/chart-card";
 import { SimpleBars, StackedBars, Donut } from "@/components/insights/charts";
 import { INSIGHT_COLORS } from "@/lib/insights/chart-theme";
@@ -42,8 +43,13 @@ function Funnel({ stages }: { stages: FunnelStage[] }) {
   );
 }
 
-export default async function HiringInsightsPage() {
-  const result = await getHiringInsights();
+export default async function HiringInsightsPage({
+  searchParams,
+}: {
+  searchParams?: { orgs?: string };
+}) {
+  const orgIds = searchParams?.orgs?.split(",").filter(Boolean);
+  const result = await getHiringInsights(orgIds);
 
   if (!result.success) {
     return (
@@ -91,6 +97,12 @@ export default async function HiringInsightsPage() {
         </p>
       </div>
 
+      {d.excludedOrgs && d.excludedOrgs.length > 0 && (
+        <p className="text-xs text-slate-500">
+          Not included: {d.excludedOrgs.map((o) => `${o.orgName} (${o.reason})`).join(", ")}
+        </p>
+      )}
+
       {/* KPI row */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <KpiCard label="Open Positions" value={String(d.kpis.openJobs)} sub="Active job posts" />
@@ -99,14 +111,19 @@ export default async function HiringInsightsPage() {
           value={String(d.kpis.applications12m)}
           sub="Last 12 months"
         />
-        <KpiCard
-          label="Hires"
-          value={String(d.kpis.hires12m)}
-          sub="Last 12 months"
-          delta={
-            d.kpis.hires12m > 0 ? { value: `+${d.kpis.hires12m}`, direction: "up" } : undefined
-          }
-        />
+        <div>
+          <KpiCard
+            label="Hires"
+            value={String(d.kpis.hires12m)}
+            sub="Last 12 months"
+            delta={
+              d.kpis.hires12m > 0 ? { value: `+${d.kpis.hires12m}`, direction: "up" } : undefined
+            }
+          />
+          <PerOrgSplit
+            items={d.byOrg.map((o) => ({ orgName: o.orgName, value: String(o.hired) }))}
+          />
+        </div>
         <KpiCard
           label="Time to Hire"
           value={d.kpis.avgTimeToHireDays > 0 ? `${d.kpis.avgTimeToHireDays}d` : "—"}

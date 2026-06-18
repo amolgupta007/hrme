@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getLeaveAttendanceInsights } from "@/actions/insights";
 import { KpiCard } from "@/components/insights/kpi-card";
+import { PerOrgSplit } from "@/components/insights/per-org-split";
 import { ChartCard } from "@/components/insights/chart-card";
 import { StackedBars, TrendArea, TrendLine, SimpleBars } from "@/components/insights/charts";
 import { INSIGHT_COLORS, CATEGORY_PALETTE } from "@/lib/insights/chart-theme";
@@ -16,8 +17,13 @@ const LEAVE_TYPE_LABELS: Record<string, string> = {
   custom: "Custom",
 };
 
-export default async function LeaveInsightsPage() {
-  const result = await getLeaveAttendanceInsights();
+export default async function LeaveInsightsPage({
+  searchParams,
+}: {
+  searchParams?: { orgs?: string };
+}) {
+  const orgIds = searchParams?.orgs?.split(",").filter(Boolean);
+  const result = await getLeaveAttendanceInsights(orgIds);
 
   if (!result.success) {
     return (
@@ -46,7 +52,12 @@ export default async function LeaveInsightsPage() {
 
       {/* KPI row */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard label="Leave Taken" value={`${d.kpis.daysTaken12m}d`} sub="Approved days, 12 months" />
+        <div>
+          <KpiCard label="Leave Taken" value={`${d.kpis.daysTaken12m}d`} sub="Approved days, 12 months" />
+          <PerOrgSplit
+            items={d.byOrg.map((o) => ({ orgName: o.orgName, value: `${o.daysTaken}d` }))}
+          />
+        </div>
         <KpiCard
           label="Utilisation"
           value={`${d.kpis.utilizationPct}%`}
@@ -117,6 +128,11 @@ export default async function LeaveInsightsPage() {
       {/* Attendance section */}
       <div>
         <h2 className="text-lg font-semibold tracking-tight text-slate-100">Attendance</h2>
+        {att.excludedOrgs && att.excludedOrgs.length > 0 && (
+          <p className="mt-1 text-xs text-slate-500">
+            Not included: {att.excludedOrgs.map((o) => `${o.orgName} (${o.reason})`).join(", ")}
+          </p>
+        )}
         {!att.enabled ? (
           <div className="mt-3 rounded-2xl bg-white/[0.04] p-8 text-center ring-1 ring-white/10">
             <p className="text-sm font-medium text-slate-300">Attendance module is not enabled</p>

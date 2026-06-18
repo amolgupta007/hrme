@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getPayrollInsights } from "@/actions/insights";
 import { KpiCard } from "@/components/insights/kpi-card";
+import { PerOrgSplit } from "@/components/insights/per-org-split";
 import { ChartCard } from "@/components/insights/chart-card";
 import { StackedBars, SimpleBars, TrendArea } from "@/components/insights/charts";
 import { INSIGHT_COLORS, formatINRCompact } from "@/lib/insights/chart-theme";
@@ -11,8 +12,13 @@ function monthLabel(ym: string): string {
   return new Date(y, m - 1, 1).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
 }
 
-export default async function PayrollInsightsPage() {
-  const result = await getPayrollInsights();
+export default async function PayrollInsightsPage({
+  searchParams,
+}: {
+  searchParams?: { orgs?: string };
+}) {
+  const orgIds = searchParams?.orgs?.split(",").filter(Boolean);
+  const result = await getPayrollInsights(orgIds);
 
   if (!result.success) {
     return (
@@ -64,6 +70,12 @@ export default async function PayrollInsightsPage() {
         </p>
       </div>
 
+      {d.excludedOrgs && d.excludedOrgs.length > 0 && (
+        <p className="text-xs text-slate-500">
+          Not included: {d.excludedOrgs.map((o) => `${o.orgName} (${o.reason})`).join(", ")}
+        </p>
+      )}
+
       {!hasRuns ? (
         <div className="rounded-2xl bg-white/[0.04] p-12 text-center ring-1 ring-white/10">
           <p className="text-sm font-medium text-slate-300">No processed payroll runs yet</p>
@@ -81,11 +93,19 @@ export default async function PayrollInsightsPage() {
         <>
           {/* KPI row */}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-            <KpiCard
-              label="Net Payout"
-              value={formatINRCompact(d.kpis.latestNet)}
-              sub={monthLabel(d.kpis.latestMonth)}
-            />
+            <div>
+              <KpiCard
+                label="Net Payout"
+                value={formatINRCompact(d.kpis.latestNet)}
+                sub={monthLabel(d.kpis.latestMonth)}
+              />
+              <PerOrgSplit
+                items={d.byOrg.map((o) => ({
+                  orgName: o.orgName,
+                  value: formatINRCompact(o.latestMonthlyNet),
+                }))}
+              />
+            </div>
             <KpiCard
               label="Gross"
               value={formatINRCompact(d.kpis.latestGross)}

@@ -1,5 +1,6 @@
 import { getOverviewInsights } from "@/actions/insights";
 import { KpiCard } from "@/components/insights/kpi-card";
+import { PerOrgSplit } from "@/components/insights/per-org-split";
 import { ChartCard } from "@/components/insights/chart-card";
 import { TrendArea, Donut, SimpleBars, JoinLeaveBars } from "@/components/insights/charts";
 import { INSIGHT_COLORS, formatINRCompact } from "@/lib/insights/chart-theme";
@@ -10,8 +11,13 @@ function payrollMonthLabel(ym: string): string {
   return new Date(y, m - 1, 1).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
 }
 
-export default async function InsightsOverviewPage() {
-  const result = await getOverviewInsights();
+export default async function InsightsOverviewPage({
+  searchParams,
+}: {
+  searchParams?: { orgs?: string };
+}) {
+  const orgIds = searchParams?.orgs?.split(",").filter(Boolean);
+  const result = await getOverviewInsights(orgIds);
 
   if (!result.success) {
     return (
@@ -45,66 +51,89 @@ export default async function InsightsOverviewPage() {
 
       {/* KPI hero row */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        <KpiCard
-          label="Headcount"
-          value={String(d.headcount)}
-          sub={d.headcountDelta30d > 0 ? `+${d.headcountDelta30d} in 30 days` : "Active employees"}
-          delta={
-            c.headcountYoYPct !== 0
-              ? {
-                  value: `${c.headcountYoYPct > 0 ? "+" : ""}${c.headcountYoYPct}% YoY`,
-                  direction: c.headcountYoYPct > 0 ? "up" : "down",
-                }
-              : undefined
-          }
-          spark={d.headcountTrend}
-          sparkColor={INSIGHT_COLORS.violet}
-        />
-        <KpiCard
-          label="Attrition"
-          value={`${d.attritionRatePct}%`}
-          sub={`Prior period: ${c.attritionPrevPct}%`}
-          delta={
-            attritionDeltaPts !== 0
-              ? {
-                  value: `${attritionDeltaPts > 0 ? "+" : ""}${attritionDeltaPts}pt`,
-                  direction: attritionDeltaPts > 0 ? "up" : "down",
-                  goodWhenUp: false,
-                }
-              : undefined
-          }
-        />
-        <KpiCard
-          label="Payroll Cost"
-          value={d.monthlyPayrollCost !== null ? formatINRCompact(d.monthlyPayrollCost) : "—"}
-          sub={
-            d.payrollMonth
-              ? `Net · ${payrollMonthLabel(d.payrollMonth)}`
-              : "No processed runs yet"
-          }
-          delta={
-            payrollDeltaPct !== null && payrollDeltaPct !== 0
-              ? {
-                  value: `${payrollDeltaPct > 0 ? "+" : ""}${payrollDeltaPct}% MoM`,
-                  direction: payrollDeltaPct > 0 ? "up" : "down",
-                  goodWhenUp: false,
-                }
-              : undefined
-          }
-        />
-        <KpiCard
-          label="Leave Utilisation"
-          value={`${d.leaveUtilizationPct}%`}
-          sub={`${d.leaveDaysTaken12m} days taken in 12 mo`}
-          delta={
-            leaveDeltaPct !== null && leaveDeltaPct !== 0
-              ? {
-                  value: `${leaveDeltaPct > 0 ? "+" : ""}${leaveDeltaPct}%`,
-                  direction: leaveDeltaPct > 0 ? "up" : "down",
-                }
-              : undefined
-          }
-        />
+        <div>
+          <KpiCard
+            label="Headcount"
+            value={String(d.headcount)}
+            sub={d.headcountDelta30d > 0 ? `+${d.headcountDelta30d} in 30 days` : "Active employees"}
+            delta={
+              c.headcountYoYPct !== 0
+                ? {
+                    value: `${c.headcountYoYPct > 0 ? "+" : ""}${c.headcountYoYPct}% YoY`,
+                    direction: c.headcountYoYPct > 0 ? "up" : "down",
+                  }
+                : undefined
+            }
+            spark={d.headcountTrend}
+            sparkColor={INSIGHT_COLORS.violet}
+          />
+          <PerOrgSplit
+            items={d.byOrg.map((o) => ({ orgName: o.orgName, value: String(o.headcount) }))}
+          />
+        </div>
+        <div>
+          <KpiCard
+            label="Attrition"
+            value={`${d.attritionRatePct}%`}
+            sub={`Prior period: ${c.attritionPrevPct}%`}
+            delta={
+              attritionDeltaPts !== 0
+                ? {
+                    value: `${attritionDeltaPts > 0 ? "+" : ""}${attritionDeltaPts}pt`,
+                    direction: attritionDeltaPts > 0 ? "up" : "down",
+                    goodWhenUp: false,
+                  }
+                : undefined
+            }
+          />
+          <PerOrgSplit
+            items={d.byOrg.map((o) => ({ orgName: o.orgName, value: `${o.attritionRatePct}%` }))}
+          />
+        </div>
+        <div>
+          <KpiCard
+            label="Payroll Cost"
+            value={d.monthlyPayrollCost !== null ? formatINRCompact(d.monthlyPayrollCost) : "—"}
+            sub={
+              d.payrollMonth
+                ? `Net · ${payrollMonthLabel(d.payrollMonth)}`
+                : "No processed runs yet"
+            }
+            delta={
+              payrollDeltaPct !== null && payrollDeltaPct !== 0
+                ? {
+                    value: `${payrollDeltaPct > 0 ? "+" : ""}${payrollDeltaPct}% MoM`,
+                    direction: payrollDeltaPct > 0 ? "up" : "down",
+                    goodWhenUp: false,
+                  }
+                : undefined
+            }
+          />
+          <PerOrgSplit
+            items={d.byOrg.map((o) => ({
+              orgName: o.orgName,
+              value: formatINRCompact(o.monthlyPayrollCost),
+            }))}
+          />
+        </div>
+        <div>
+          <KpiCard
+            label="Leave Utilisation"
+            value={`${d.leaveUtilizationPct}%`}
+            sub={`${d.leaveDaysTaken12m} days taken in 12 mo`}
+            delta={
+              leaveDeltaPct !== null && leaveDeltaPct !== 0
+                ? {
+                    value: `${leaveDeltaPct > 0 ? "+" : ""}${leaveDeltaPct}%`,
+                    direction: leaveDeltaPct > 0 ? "up" : "down",
+                  }
+                : undefined
+            }
+          />
+          <PerOrgSplit
+            items={d.byOrg.map((o) => ({ orgName: o.orgName, value: `${o.leaveUtilizationPct}%` }))}
+          />
+        </div>
         <KpiCard
           label="Training"
           value={`${d.trainingCompliancePct}%`}

@@ -1,4 +1,4 @@
-﻿"use server";
+"use server";
 
 import { getCurrentUser, isAdmin } from "@/lib/current-user";
 import { hasFeature } from "@/config/plans";

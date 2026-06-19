@@ -33,6 +33,7 @@ import { ConfirmTransitionDialog } from "./confirm-transition-dialog";
 import { ApplicationDetailDialog } from "./application-detail-dialog";
 import { ConvertToEmployeeDialog } from "./convert-to-employee-dialog";
 import { OfferStatusChip } from "./offer-status-chip";
+import { ScoreChip } from "@/components/hire/screening/score-chip";
 import type { UserRole } from "@/types";
 import Link from "next/link";
 
@@ -844,6 +845,7 @@ export function PipelineClient({ applications, jobs, offers, isAdmin, currentEmp
                               <p className="text-xs text-muted-foreground/60 mt-1">
                                 {age === 0 ? "Today" : age === 1 ? "1d ago" : `${age}d ago`}
                               </p>
+                              <ScoreChip score={(app as any).screening_score ?? null} tier={(app as any).screening_tier ?? null} />
                               {app.loi_status && (
                                 <p
                                   className={`mt-1 inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${

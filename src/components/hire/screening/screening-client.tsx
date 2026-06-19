@@ -7,6 +7,7 @@ import { CvUploadDialog } from "./cv-upload-dialog";
 import { CriteriaConfigDialog } from "./criteria-config-dialog";
 import { ScoreChip } from "./score-chip";
 import { CoverageView } from "./coverage-view";
+import { ScreeningAuditView } from "./screening-audit-view";
 import { runScreening } from "@/actions/screening";
 import { updateApplicationStage, rejectApplication } from "@/actions/hire";
 
@@ -20,6 +21,7 @@ export function ScreeningClient({
   results: any[];
 }) {
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [showAudit, setShowAudit] = useState(false);
   const [pending, start] = useTransition();
 
   function run() {
@@ -61,9 +63,14 @@ export function ScreeningClient({
           <h1 className="text-2xl font-semibold tracking-tight">Screening — {jobTitle}</h1>
           <p className="text-sm text-muted-foreground">Upload CVs, set criteria, then rank the shortlist.</p>
         </div>
-        <Button onClick={run} disabled={pending}>
-          {pending ? "Screening…" : "Run screening"}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setShowAudit((v) => !v)}>
+            {showAudit ? "Hide audit" : "Audit log"}
+          </Button>
+          <Button onClick={run} disabled={pending}>
+            {pending ? "Screening…" : "Run screening"}
+          </Button>
+        </div>
       </div>
 
       <CvUploadDialog jobId={jobId} />
@@ -108,6 +115,8 @@ export function ScreeningClient({
           ))
         )}
       </div>
+
+      {showAudit ? <ScreeningAuditView jobId={jobId} /> : null}
     </div>
   );
 }

@@ -418,19 +418,39 @@ export async function listAllApplications(): Promise<ActionResult<Application[]>
   const candMap = new Map((candidates ?? []).map((c: any) => [c.id, c]));
   const jobMap = new Map((jobs ?? []).map((j: any) => [j.id, { title: j.title as string, hiring_manager_id: j.hiring_manager_id as string | null }]));
 
+  const applications = (apps ?? []).map((a: any) => {
+    const cand = candMap.get(a.candidate_id) as any;
+    const jobMeta = jobMap.get(a.job_id);
+    return {
+      ...a,
+      job_title: jobMeta?.title ?? "Unknown",
+      candidate_name: cand?.name ?? "Unknown",
+      candidate_email: cand?.email ?? "",
+      job_hiring_manager_id: jobMeta?.hiring_manager_id ?? null,
+    };
+  });
+
+  // Attach screening results (additive — missing rows get null fields)
+  const appIds = applications.map((a: any) => a.id);
+  let screeningRows: any[] = [];
+  if (appIds.length) {
+    const { data: sData } = await (supabase as any)
+      .from("screening_results")
+      .select("application_id, score, tier")
+      .in("application_id", appIds)
+      .eq("org_id", user.orgId);
+    screeningRows = sData ?? [];
+  }
+  const byApp = new Map(screeningRows.map((s: any) => [s.application_id, s]));
+  const withScores = applications.map((a: any) => ({
+    ...a,
+    screening_score: byApp.get(a.id)?.score ?? null,
+    screening_tier: byApp.get(a.id)?.tier ?? null,
+  }));
+
   return {
     success: true,
-    data: (apps ?? []).map((a: any) => {
-      const cand = candMap.get(a.candidate_id) as any;
-      const jobMeta = jobMap.get(a.job_id);
-      return {
-        ...a,
-        job_title: jobMeta?.title ?? "Unknown",
-        candidate_name: cand?.name ?? "Unknown",
-        candidate_email: cand?.email ?? "",
-        job_hiring_manager_id: jobMeta?.hiring_manager_id ?? null,
-      };
-    }),
+    data: withScores,
   };
 }
 

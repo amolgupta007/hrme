@@ -3,11 +3,15 @@
 import { randomBytes } from "crypto";
 import { render } from "@react-email/render";
 import { revalidatePath } from "next/cache";
+import { auth, clerkClient } from "@clerk/nextjs/server";
 import { getCurrentUser } from "@/lib/current-user";
 import { isOwner } from "@/types/index";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { resend, FROM_EMAIL, NOREPLY_EMAIL_FROM } from "@/lib/resend";
 import { OwnershipTransferEmail } from "@/components/emails/ownership-transfer";
+import { canAccept, identityMatches } from "@/lib/ownership/transitions";
+import { LATEST_POLICY_VERSION } from "@/config/legal";
+import { OwnershipTransferredEmail } from "@/components/emails/ownership-transferred";
 import type { ActionResult } from "@/types";
 
 const TRANSFER_EXPIRY_MS = 14 * 24 * 60 * 60 * 1000;
@@ -217,5 +221,144 @@ export async function resendOwnershipTransfer(): Promise<ActionResult<void>> {
   } catch (err) {
     return { success: false, error: "Failed to resend email" };
   }
+  return { success: true, data: undefined };
+}
+
+async function callerIdentity(): Promise<{ userId: string; email: string | null; phone: string | null } | null> {
+  const { userId } = auth();
+  if (!userId) return null;
+  try {
+    const client = await clerkClient();
+    const u = await client.users.getUser(userId);
+    return {
+      userId,
+      email: u.primaryEmailAddress?.emailAddress ?? u.emailAddresses?.[0]?.emailAddress ?? null,
+      phone: u.primaryPhoneNumber?.phoneNumber ?? u.phoneNumbers?.[0]?.phoneNumber ?? null,
+    };
+  } catch {
+    return { userId, email: null, phone: null };
+  }
+}
+
+export async function getOwnershipTransferByToken(
+  token: string
+): Promise<ActionResult<{ orgName: string; inviterName: string } | null>> {
+  const caller = await callerIdentity();
+  if (!caller) return { success: false, error: "Not authenticated" };
+
+  const supabase = createAdminSupabase();
+  const { data: t } = await supabase
+    .from("ownership_transfers")
+    .select("org_id, from_employee_id, status, expires_at, to_email, to_phone")
+    .eq("token", token)
+    .maybeSingle();
+  if (!t) return { success: true, data: null };
+  if (!canAccept(t as any, Date.now())) return { success: true, data: null };
+  if (!identityMatches(caller, t as any)) return { success: false, error: "This invitation is for a different account" };
+
+  const [{ data: org }, { data: inviter }] = await Promise.all([
+    supabase.from("organizations").select("name").eq("id", (t as any).org_id).single(),
+    supabase.from("employees").select("first_name").eq("id", (t as any).from_employee_id).single(),
+  ]);
+  return {
+    success: true,
+    data: { orgName: (org as any)?.name ?? "the organization", inviterName: (inviter as any)?.first_name || "An admin" },
+  };
+}
+
+export async function acceptOwnershipTransfer(token: string): Promise<ActionResult<void>> {
+  const caller = await callerIdentity();
+  if (!caller) return { success: false, error: "Not authenticated" };
+
+  const supabase = createAdminSupabase();
+  const { data: t } = await supabase
+    .from("ownership_transfers")
+    .select("id, org_id, to_employee_id, status, expires_at, to_email, to_phone")
+    .eq("token", token)
+    .maybeSingle();
+  if (!t) return { success: false, error: "Invitation not found" };
+  if (!canAccept(t as any, Date.now())) return { success: false, error: "This invitation is no longer valid" };
+  if (!identityMatches(caller, t as any)) return { success: false, error: "This invitation is for a different account" };
+
+  const orgId = (t as any).org_id;
+  const inviteeEmployeeId = (t as any).to_employee_id;
+  const now = new Date().toISOString();
+
+  // demote the org's CURRENT owner(s) to admin, then promote the invitee
+  const { data: currentOwners } = await supabase
+    .from("employees")
+    .select("id, email, first_name")
+    .eq("org_id", orgId)
+    .eq("role", "owner");
+  for (const o of (currentOwners ?? []) as any[]) {
+    if (o.id !== inviteeEmployeeId) {
+      await supabase.from("employees").update({ role: "admin" }).eq("id", o.id);
+    }
+  }
+  await supabase.from("employees").update({ role: "owner" }).eq("id", inviteeEmployeeId);
+
+  // re-stamp org legal acceptance for the new owner
+  await supabase
+    .from("organizations")
+    .update({ terms_accepted_at: now, privacy_policy_accepted_at: now, policy_version_accepted: LATEST_POLICY_VERSION })
+    .eq("id", orgId);
+
+  await supabase
+    .from("ownership_transfers")
+    .update({ status: "accepted", responded_at: now })
+    .eq("id", (t as any).id);
+
+  // notify outgoing owner(s) — best-effort
+  try {
+    const { data: org } = await supabase.from("organizations").select("name").eq("id", orgId).single();
+    const { data: invitee } = await supabase.from("employees").select("first_name").eq("id", inviteeEmployeeId).single();
+    for (const o of (currentOwners ?? []) as any[]) {
+      if (o.id !== inviteeEmployeeId && o.email) {
+        const html = await render(
+          OwnershipTransferredEmail({
+            orgName: (org as any)?.name ?? "your organization",
+            newOwnerName: (invitee as any)?.first_name || "The new owner",
+          })
+        );
+        await resend.emails.send({ from: NOREPLY_EMAIL_FROM, to: o.email, replyTo: FROM_EMAIL, subject: "Ownership transferred", html });
+      }
+    }
+  } catch (err) {
+    console.error("[ownership] transferred email failed", err);
+  }
+
+  revalidatePath("/dashboard/settings");
+  return { success: true, data: undefined };
+}
+
+export async function declineOwnershipTransfer(token: string): Promise<ActionResult<void>> {
+  const caller = await callerIdentity();
+  if (!caller) return { success: false, error: "Not authenticated" };
+
+  const supabase = createAdminSupabase();
+  const { data: t } = await supabase
+    .from("ownership_transfers")
+    .select("id, status, expires_at, to_email, to_phone, to_employee_id")
+    .eq("token", token)
+    .maybeSingle();
+  if (!t) return { success: false, error: "Invitation not found" };
+  if ((t as any).status !== "pending") return { success: false, error: "This invitation is no longer pending" };
+  if (!identityMatches(caller, t as any)) return { success: false, error: "This invitation is for a different account" };
+
+  await supabase
+    .from("ownership_transfers")
+    .update({ status: "cancelled", responded_at: new Date().toISOString() })
+    .eq("id", (t as any).id);
+
+  // placeholder cleanup only if unlinked admin
+  const { data: inv } = await supabase
+    .from("employees")
+    .select("id, clerk_user_id, role")
+    .eq("id", (t as any).to_employee_id)
+    .single();
+  if (inv && !(inv as any).clerk_user_id && (inv as any).role === "admin") {
+    await supabase.from("employees").delete().eq("id", (inv as any).id);
+  }
+
   return { success: true, data: undefined };
 }

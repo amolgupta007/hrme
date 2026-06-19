@@ -12,7 +12,6 @@ import { scoreCv } from "@/lib/screening/score";
 import { assertScreeningBudget } from "@/lib/screening/budget";
 import { screeningCostPaise } from "@/lib/screening/cost";
 import { scoreToTier } from "@/lib/screening/tier";
-import { ScreeningCriteriaSchema as _CriteriaSchema } from "@/lib/screening/types";
 import type { ActionResult } from "@/types";
 
 const ALLOWED = new Set([
@@ -220,7 +219,7 @@ export async function runScreening(jobId: string): Promise<ActionResult<{ scored
     .eq("job_id", jobId)
     .eq("org_id", user.orgId)
     .maybeSingle();
-  const criteria = _CriteriaSchema.safeParse({
+  const criteria = ScreeningCriteriaSchema.safeParse({
     must_haves: (criteriaRow as any)?.must_haves ?? [],
     nice_to_haves: (criteriaRow as any)?.nice_to_haves ?? [],
     top_k: (criteriaRow as any)?.top_k ?? 20,
@@ -338,11 +337,18 @@ export async function getScreeningAudit(jobId: string): Promise<ActionResult<any
   if ("error" in gate) return { success: false, error: gate.error };
   const { user } = gate;
   const supabase = createAdminSupabase();
+  const { data: apps } = await (supabase as any)
+    .from("applications")
+    .select("id")
+    .eq("org_id", user.orgId)
+    .eq("job_id", jobId);
+  const appIds = (apps ?? []).map((a: any) => a.id);
+  if (appIds.length === 0) return { success: true, data: [] };
   const { data, error } = await (supabase as any)
     .from("screening_audit_log")
-    .select("*, applications!inner(job_id)")
+    .select("*")
     .eq("org_id", user.orgId)
-    .eq("applications.job_id", jobId)
+    .in("application_id", appIds)
     .order("created_at", { ascending: false })
     .limit(200);
   if (error) return { success: false, error: error.message };

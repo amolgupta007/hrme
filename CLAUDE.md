@@ -189,6 +189,16 @@ Public: `/`, `/sign-in(.*)`, `/sign-up(.*)`, `/api/webhooks(.*)`, `/api/cron(.*)
 | createAnnouncement, updateAnnouncement, deleteAnnouncement, pinAnnouncement | admin |
 | updateGrievanceStatus, getGrievanceStats, listGrievances (all) | admin |
 
+### Transfer ownership (shipped 2026-06-19)
+- **`ownership_transfers` table** added by migration `069_ownership_transfers.sql`. Columns: `org_id`, `from_employee_id`, `to_email`, `to_phone`, `to_employee_id`, `token` (UNIQUE), `status` (`pending`/`accepted`/`cancelled`/`expired`), `expires_at` (14 days). Partial UNIQUE index on `(org_id) WHERE status = 'pending'` enforces one pending transfer per org. Migration is **NOT yet applied to live DB** — controller holds it for user confirmation.
+- **Owner-only initiate** (`isOwner` guard in `src/types/index.ts`): Settings → "Transfer ownership" section calls `initiateOwnershipTransfer({ email?, phone?, name? })` (`src/actions/ownership.ts`). Blocks self-transfer and double-pending. Finds or creates a placeholder `employees` row for the invitee (role `'admin'`, status `'active'`) if no matching member exists; sends `OwnershipTransferEmail` via `NOREPLY_EMAIL_FROM`. `cancelOwnershipTransfer` and `resendOwnershipTransfer` are also owner-only; cancel cleans up unlinked placeholder, resend refreshes the token.
+- **Claim page** at `/transfer/[token]` — **auth-protected** (NOT public; absent from middleware public matcher). Clerk auto-link makes the invitee an org member first (existing `getCurrentUser` email/phone backfill). Invitee calls `getOwnershipTransferByToken(token)` to render the T&C acceptance UI, then `acceptOwnershipTransfer(token)` or `declineOwnershipTransfer(token)`.
+- **Claim actions are Clerk-identity scoped, not active-org scoped**: `auth()` email/phone + token are the sole identity check (`identityMatches` in `src/lib/ownership/transitions.ts`) — a tampered active-org cookie cannot widen access.
+- **`acceptOwnershipTransfer`** atomically: flips invitee `employees.role` to `'owner'`; flips current-owner `employees.role` to `'admin'`; sets transfer `status = 'accepted'`; re-stamps org legal (`terms_accepted_at`, `privacy_accepted_at`, `policy_version = LATEST_POLICY_VERSION`); sends `OwnershipTransferredEmail` to both parties.
+- **Placeholder cleanup**: on cancel, decline, or expiry — if the invitee's `employees` row was a placeholder (no `clerk_user_id` linked yet), it is deleted to avoid orphan rows.
+- **Expiry cron** `/api/cron/ownership-transfer-expiry` (`30 4 * * *` UTC = 10:00 IST): flips `pending` transfers past `expires_at` to `expired` and cleans up unlinked placeholder employees.
+- Pure guards (`canAccept`, `canCancel`, `identityMatches`, `isExpired`) in `src/lib/ownership/transitions.ts`. All mutations in `src/actions/ownership.ts`.
+
 ---
 
 ## Plan-Based Feature Gating

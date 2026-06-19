@@ -37,18 +37,31 @@ export async function uploadCvs(
   let skipped = 0;
 
   for (const file of files) {
-    if (!ALLOWED.has(file.type) || file.size > 5 * 1024 * 1024) {
+    const ext = file.name.split(".").pop()?.toLowerCase() ?? "bin";
+    // Browsers frequently report a PDF's MIME as "" or "application/octet-stream"
+    // (esp. on Windows), so accept by extension as well as by reported MIME.
+    const typeOk = ALLOWED.has(file.type) || ext === "pdf" || ext === "docx";
+    if (!typeOk || file.size > 5 * 1024 * 1024) {
+      console.error("[uploadCvs] skip: bad type/size", { name: file.name, type: file.type, size: file.size });
       skipped++;
       continue;
     }
-    const ext = file.name.split(".").pop()?.toLowerCase() ?? "bin";
+    const contentType =
+      file.type && file.type !== "application/octet-stream"
+        ? file.type
+        : ext === "pdf"
+          ? "application/pdf"
+          : ext === "docx"
+            ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            : "application/octet-stream";
     const path = `cv/${user.orgId}/${crypto.randomUUID()}.${ext}`;
     const bytes = Buffer.from(await file.arrayBuffer());
 
     const { error: upErr } = await supabase.storage.from("documents").upload(path, bytes, {
-      contentType: file.type,
+      contentType,
     });
     if (upErr) {
+      console.error("[uploadCvs] skip: storage upload failed", { name: file.name, error: upErr.message });
       skipped++;
       continue;
     }
@@ -67,6 +80,7 @@ export async function uploadCvs(
       .select("id")
       .single();
     if (candErr || !cand) {
+      console.error("[uploadCvs] skip: candidate insert failed", { error: (candErr as any)?.message });
       skipped++;
       continue;
     }
@@ -79,6 +93,7 @@ export async function uploadCvs(
       stage: "applied",
     });
     if (appErr) {
+      console.error("[uploadCvs] skip: application insert failed", { error: (appErr as any)?.message });
       skipped++;
       continue;
     }

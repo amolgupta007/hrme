@@ -5,12 +5,16 @@ import { getScreeningAudit } from "@/actions/screening";
 
 export function ScreeningAuditView({ jobId }: { jobId: string }) {
   const [rows, setRows] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   useEffect(() => {
-    getScreeningAudit(jobId).then((res) => {
-      if (res.success) setRows(res.data);
-    });
+    getScreeningAudit(jobId)
+      .then((res) => {
+        if (res.success) setRows(res.data);
+      })
+      .finally(() => setLoading(false));
   }, [jobId]);
 
+  if (loading) return <p className="p-4 text-sm text-muted-foreground">Loading…</p>;
   if (!rows.length) return <p className="p-4 text-sm text-muted-foreground">No screening activity yet.</p>;
   return (
     <table className="w-full text-sm">
@@ -30,7 +34,7 @@ export function ScreeningAuditView({ jobId }: { jobId: string }) {
             <td>{r.action}</td>
             <td>{r.payload?.score ?? "—"}</td>
             <td>{r.payload?.model ?? "—"}</td>
-            <td>{(r.cost_inr_paise / 100).toFixed(2)}</td>
+            <td>{((r.cost_inr_paise ?? 0) / 100).toFixed(2)}</td>
           </tr>
         ))}
       </tbody>

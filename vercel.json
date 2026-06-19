@@ -50,6 +50,10 @@
       "schedule": "15 4 * * *"
     },
     {
+      "path": "/api/cron/ownership-transfer-expiry",
+      "schedule": "30 4 * * *"
+    },
+    {
       "path": "/api/cron/assistant-doc-reindex",
       "schedule": "0 6 * * *"
     },

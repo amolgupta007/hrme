@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { getCurrentUser } from "@/lib/current-user";
 import { isOwner } from "@/types/index";
+import { normalizePhone } from "@/lib/phone";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { resend, FROM_EMAIL, NOREPLY_EMAIL_FROM } from "@/lib/resend";
 import { OwnershipTransferEmail } from "@/components/emails/ownership-transfer";
@@ -31,7 +32,7 @@ export async function initiateOwnershipTransfer(input: {
   if (!isOwner(user.role)) return { success: false, error: "Only the owner can transfer ownership" };
 
   const email = input.email?.trim().toLowerCase() || null;
-  const phone = input.phone?.trim() || null;
+  const phone = input.phone?.trim() ? normalizePhone(input.phone.trim()) : null;
   if (!email && !phone) return { success: false, error: "An email or phone is required" };
 
   const supabase = createAdminSupabase();
@@ -43,7 +44,7 @@ export async function initiateOwnershipTransfer(input: {
     .eq("id", user.employeeId)
     .single();
   const myEmail = (me as any)?.email?.toLowerCase() ?? null;
-  const myPhone = (me as any)?.phone ?? null;
+  const myPhone = normalizePhone((me as any)?.phone ?? null);
   if ((email && email === myEmail) || (phone && phone === myPhone)) {
     return { success: false, error: "You can't transfer ownership to yourself" };
   }
@@ -100,6 +101,7 @@ export async function initiateOwnershipTransfer(input: {
       token,
       status: "pending",
       expires_at: new Date(Date.now() + TRANSFER_EXPIRY_MS).toISOString(),
+      created_placeholder: placeholderCreated,
     })
     .select("id")
     .single();
@@ -162,7 +164,7 @@ export async function cancelOwnershipTransfer(): Promise<ActionResult<void>> {
   const supabase = createAdminSupabase();
   const { data: t } = await supabase
     .from("ownership_transfers")
-    .select("id, to_employee_id, status")
+    .select("id, to_employee_id, status, created_placeholder")
     .eq("org_id", user.orgId)
     .eq("status", "pending")
     .maybeSingle();
@@ -173,14 +175,16 @@ export async function cancelOwnershipTransfer(): Promise<ActionResult<void>> {
     .update({ status: "cancelled", responded_at: new Date().toISOString() })
     .eq("id", (t as any).id);
 
-  // remove the placeholder if it was created for this transfer and never linked/used
-  const { data: inv } = await supabase
-    .from("employees")
-    .select("id, clerk_user_id, role")
-    .eq("id", (t as any).to_employee_id)
-    .single();
-  if (inv && !(inv as any).clerk_user_id && (inv as any).role === "admin") {
-    await supabase.from("employees").delete().eq("id", (inv as any).id);
+  // remove the placeholder only if this transfer created it and the invitee has never signed in
+  if ((t as any).created_placeholder) {
+    const { data: inv } = await supabase
+      .from("employees")
+      .select("id, clerk_user_id")
+      .eq("id", (t as any).to_employee_id)
+      .single();
+    if (inv && !(inv as any).clerk_user_id) {
+      await supabase.from("employees").delete().eq("id", (inv as any).id);
+    }
   }
 
   revalidatePath("/dashboard/settings");
@@ -338,7 +342,7 @@ export async function declineOwnershipTransfer(token: string): Promise<ActionRes
   const supabase = createAdminSupabase();
   const { data: t } = await supabase
     .from("ownership_transfers")
-    .select("id, status, expires_at, to_email, to_phone, to_employee_id")
+    .select("id, status, expires_at, to_email, to_phone, to_employee_id, created_placeholder")
     .eq("token", token)
     .maybeSingle();
   if (!t) return { success: false, error: "Invitation not found" };
@@ -350,14 +354,16 @@ export async function declineOwnershipTransfer(token: string): Promise<ActionRes
     .update({ status: "cancelled", responded_at: new Date().toISOString() })
     .eq("id", (t as any).id);
 
-  // placeholder cleanup only if unlinked admin
-  const { data: inv } = await supabase
-    .from("employees")
-    .select("id, clerk_user_id, role")
-    .eq("id", (t as any).to_employee_id)
-    .single();
-  if (inv && !(inv as any).clerk_user_id && (inv as any).role === "admin") {
-    await supabase.from("employees").delete().eq("id", (inv as any).id);
+  // placeholder cleanup only if this transfer created the row and the invitee has never signed in
+  if ((t as any).created_placeholder) {
+    const { data: inv } = await supabase
+      .from("employees")
+      .select("id, clerk_user_id")
+      .eq("id", (t as any).to_employee_id)
+      .single();
+    if (inv && !(inv as any).clerk_user_id) {
+      await supabase.from("employees").delete().eq("id", (inv as any).id);
+    }
   }
 
   return { success: true, data: undefined };

@@ -11,8 +11,11 @@ CREATE TABLE IF NOT EXISTS ownership_transfers (
   expires_at timestamptz NOT NULL DEFAULT (now() + interval '14 days'),
   created_at timestamptz NOT NULL DEFAULT now(),
   responded_at timestamptz,
+  created_placeholder boolean NOT NULL DEFAULT false,
   CONSTRAINT ownership_transfers_target_present CHECK (to_email IS NOT NULL OR to_phone IS NOT NULL)
 );
+
+ALTER TABLE ownership_transfers ADD COLUMN IF NOT EXISTS created_placeholder boolean NOT NULL DEFAULT false;
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_ownership_transfers_one_pending
   ON ownership_transfers (org_id) WHERE status = 'pending';

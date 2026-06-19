@@ -6,6 +6,8 @@ import { createAdminSupabase } from "@/lib/supabase/server";
 import { assertJambaHireAccess } from "@/lib/jambahire-access";
 import { ingestCv } from "@/lib/screening/ingest";
 import { embed } from "@/lib/assistant/embeddings";
+import { ScreeningCriteriaSchema } from "@/lib/screening/types";
+import { suggestCriteria } from "@/lib/screening/criteria";
 import type { ActionResult } from "@/types";
 
 const ALLOWED = new Set([
@@ -136,4 +138,67 @@ export async function runStage1Ranking(
   if (error) return { success: false, error: error.message };
 
   return { success: true, data: { ranked: (ranked ?? []) as any } };
+}
+
+export async function getScreeningConfig(jobId: string): Promise<ActionResult<any>> {
+  const gate = await assertJambaHireAccess();
+  if ("error" in gate) return { success: false, error: gate.error };
+  const { user } = gate;
+  const supabase = createAdminSupabase();
+  const { data } = await (supabase as any)
+    .from("job_screening_criteria")
+    .select("*")
+    .eq("job_id", jobId)
+    .eq("org_id", user.orgId)
+    .maybeSingle();
+  return { success: true, data: data ?? null };
+}
+
+export async function upsertScreeningCriteria(
+  jobId: string,
+  criteria: unknown,
+): Promise<ActionResult<void>> {
+  const gate = await assertJambaHireAccess();
+  if ("error" in gate) return { success: false, error: gate.error };
+  const { user } = gate;
+  const parsed = ScreeningCriteriaSchema.safeParse(criteria);
+  if (!parsed.success) return { success: false, error: "Invalid criteria" };
+  const supabase = createAdminSupabase();
+  const { error } = await (supabase as any).from("job_screening_criteria").upsert(
+    {
+      org_id: user.orgId,
+      job_id: jobId,
+      must_haves: parsed.data.must_haves,
+      nice_to_haves: parsed.data.nice_to_haves,
+      top_k: parsed.data.top_k,
+      enabled: true,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "job_id" },
+  );
+  if (error) return { success: false, error: error.message };
+  revalidatePath(`/hire/jobs/${jobId}/screening`);
+  return { success: true, data: undefined };
+}
+
+export async function suggestCriteriaFromJd(
+  jobId: string,
+): Promise<ActionResult<{ must_haves: any[]; nice_to_haves: any[] }>> {
+  const gate = await assertJambaHireAccess();
+  if ("error" in gate) return { success: false, error: gate.error };
+  const { user } = gate;
+  const supabase = createAdminSupabase();
+  const { data: job } = await supabase
+    .from("jobs")
+    .select("title, description")
+    .eq("id", jobId)
+    .eq("org_id", user.orgId)
+    .single();
+  if (!job) return { success: false, error: "Job not found" };
+  try {
+    const out = await suggestCriteria((job as any).title, (job as any).description ?? "");
+    return { success: true, data: out };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : "Suggestion failed" };
+  }
 }

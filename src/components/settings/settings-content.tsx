@@ -12,6 +12,7 @@ import {
   Clock as ClockIcon,
   Wallet as WalletIcon,
   MapPin,
+  ShieldCheck,
 } from "lucide-react";
 import { CollapsibleSection } from "@/components/settings/collapsible-section";
 import { LeavePoliciesSection } from "@/components/settings/leave-policies-section";
@@ -24,6 +25,7 @@ import { AssistantSettingsSection } from "@/components/settings/assistant-settin
 import { AttendanceSection } from "@/components/settings/attendance-section";
 import { PayrollSection } from "@/components/settings/payroll-section";
 import { JambaGeoSection } from "@/components/settings/jambageo-section";
+import { TransferOwnershipSection } from "@/components/settings/transfer-ownership-section";
 import type { LeavePolicy, Department, Employee } from "@/types";
 import type { SalaryStructureConfig } from "@/actions/payroll";
 import type { RatioConfig } from "@/lib/ctc";
@@ -158,6 +160,8 @@ export function SettingsContent({
     userCtx.role !== "employee" &&
     userCtx.role !== "manager";
 
+  const isOwnerRole = userCtx !== null && userCtx.role === "owner";
+
   return (
     <div className="space-y-4">
       <CollapsibleSection
@@ -196,6 +200,18 @@ export function SettingsContent({
           grievancesEnabled={grievancesEnabled}
         />
       </CollapsibleSection>
+
+      {isOwnerRole && (
+        <CollapsibleSection
+          title="Transfer Ownership"
+          icon={<ShieldCheck className="h-5 w-5 text-muted-foreground" />}
+          summary="Hand over this organization to a new owner"
+          isOpen={openSection === "transfer-ownership"}
+          onToggle={() => toggle("transfer-ownership")}
+        >
+          <TransferOwnershipSection />
+        </CollapsibleSection>
+      )}
 
       {attendanceEnabled && isAdmin && (
         <CollapsibleSection

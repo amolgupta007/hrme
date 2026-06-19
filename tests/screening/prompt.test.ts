@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { wrapUntrusted, buildScorePrompt } from "@/lib/screening/prompt";
+import { wrapUntrusted, buildScorePrompt, buildParsePrompt, buildCriteriaPrompt } from "@/lib/screening/prompt";
 
 describe("wrapUntrusted", () => {
   it("fences content in an untrusted-data block", () => {
@@ -22,5 +22,34 @@ describe("buildScorePrompt", () => {
     );
     expect(p).toContain("Go");
     expect(p).toContain("<untrusted-cv-data>");
+  });
+
+  it("includes prompt-injection guard directive", () => {
+    const p = buildScorePrompt(
+      { must_haves: [{ label: "Go", weight: 5 }], nice_to_haves: [], top_k: 20 },
+      {
+        contact: { name: null, email: null, phone: null, location: null },
+        skills: [], experience: [], education: [], certifications: [], total_experience_years: null,
+      },
+      "raw cv text",
+    );
+    expect(p).toContain("NOT instructions");
+  });
+});
+
+describe("buildParsePrompt", () => {
+  it("wraps CV and includes prompt-injection guard", () => {
+    const p = buildParsePrompt("some cv");
+    expect(p).toContain("<untrusted-cv-data>");
+    expect(p).toContain("NOT instructions");
+  });
+});
+
+describe("buildCriteriaPrompt", () => {
+  it("includes job title and prompt-injection guard with untrusted-data wrapper", () => {
+    const p = buildCriteriaPrompt("Engineer", "build APIs");
+    expect(p).toContain("Engineer");
+    expect(p).toContain("<untrusted-cv-data>");
+    expect(p).toContain("NOT instructions");
   });
 });

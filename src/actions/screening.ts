@@ -8,6 +8,11 @@ import { ingestCv } from "@/lib/screening/ingest";
 import { embed } from "@/lib/assistant/embeddings";
 import { ScreeningCriteriaSchema } from "@/lib/screening/types";
 import { suggestCriteria } from "@/lib/screening/criteria";
+import { scoreCv } from "@/lib/screening/score";
+import { assertScreeningBudget } from "@/lib/screening/budget";
+import { screeningCostPaise } from "@/lib/screening/cost";
+import { scoreToTier } from "@/lib/screening/tier";
+import { ScreeningCriteriaSchema as _CriteriaSchema } from "@/lib/screening/types";
 import type { ActionResult } from "@/types";
 
 const ALLOWED = new Set([
@@ -201,4 +206,145 @@ export async function suggestCriteriaFromJd(
   } catch (e) {
     return { success: false, error: e instanceof Error ? e.message : "Suggestion failed" };
   }
+}
+
+export async function runScreening(jobId: string): Promise<ActionResult<{ scored: number; skipped: number }>> {
+  const gate = await assertJambaHireAccess();
+  if ("error" in gate) return { success: false, error: gate.error };
+  const { user } = gate;
+  const supabase = createAdminSupabase();
+
+  const { data: criteriaRow } = await (supabase as any)
+    .from("job_screening_criteria")
+    .select("must_haves, nice_to_haves, top_k")
+    .eq("job_id", jobId)
+    .eq("org_id", user.orgId)
+    .maybeSingle();
+  const criteria = _CriteriaSchema.safeParse({
+    must_haves: (criteriaRow as any)?.must_haves ?? [],
+    nice_to_haves: (criteriaRow as any)?.nice_to_haves ?? [],
+    top_k: (criteriaRow as any)?.top_k ?? 20,
+  });
+  if (!criteria.success || criteria.data.must_haves.length === 0)
+    return { success: false, error: "Configure screening criteria first" };
+
+  const stage1 = await runStage1Ranking(jobId);
+  if (!stage1.success) return { success: false, error: stage1.error };
+
+  let scored = 0;
+  let skipped = 0;
+  for (const cand of stage1.data.ranked) {
+    const budget = await assertScreeningBudget(user.orgId, user.plan);
+    if (!budget.ok) break; // stop scoring; keep what we have
+
+    const { data: profile } = await (supabase as any)
+      .from("cv_screening_profiles")
+      .select("parsed, raw_text, parse_status")
+      .eq("candidate_id", cand.candidate_id)
+      .single();
+    if (!profile || (profile as any).parse_status === "unsupported" || !(profile as any).raw_text) {
+      skipped++;
+      continue;
+    }
+
+    try {
+      const { result, usage, model } = await scoreCv({
+        criteria: criteria.data,
+        parsed: (profile as any).parsed,
+        cvText: (profile as any).raw_text,
+      });
+      const cost = screeningCostPaise({ model, ...usage });
+
+      await (supabase as any).from("screening_results").upsert(
+        {
+          org_id: user.orgId,
+          application_id: cand.application_id,
+          candidate_id: cand.candidate_id,
+          job_id: jobId,
+          stage1_similarity: cand.similarity,
+          score: result.score,
+          tier: scoreToTier(result.score),
+          coverage: result.coverage,
+          rationale: result.rationale,
+          model_version: model,
+          criteria_snapshot: criteria.data,
+          screened_at: new Date().toISOString(),
+          screened_by: user.employeeId,
+        },
+        { onConflict: "application_id" },
+      );
+
+      await (supabase as any).from("screening_audit_log").insert({
+        org_id: user.orgId,
+        application_id: cand.application_id,
+        action: "score",
+        payload: { score: result.score, model, top_k: criteria.data.top_k, usage },
+        cost_inr_paise: cost,
+        actor_id: user.employeeId,
+        actor_type: "admin",
+      });
+      scored++;
+    } catch (e) {
+      console.error(`[screening] score failed for application ${cand.application_id}:`, e);
+      skipped++;
+    }
+  }
+
+  revalidatePath(`/hire/jobs/${jobId}/screening`);
+  return { success: true, data: { scored, skipped } };
+}
+
+export async function getScreeningResults(jobId: string): Promise<ActionResult<any[]>> {
+  const gate = await assertJambaHireAccess();
+  if ("error" in gate) return { success: false, error: gate.error };
+  const { user } = gate;
+  const supabase = createAdminSupabase();
+  const { data, error } = await (supabase as any)
+    .from("screening_results")
+    .select("*, candidates(name, email, resume_url), applications(stage)")
+    .eq("job_id", jobId)
+    .eq("org_id", user.orgId)
+    .order("score", { ascending: false, nullsFirst: false });
+  if (error) return { success: false, error: error.message };
+  return { success: true, data: data ?? [] };
+}
+
+export async function rescoreApplication(applicationId: string): Promise<ActionResult<void>> {
+  const gate = await assertJambaHireAccess();
+  if ("error" in gate) return { success: false, error: gate.error };
+  const { user } = gate;
+  const supabase = createAdminSupabase();
+  const { data: app } = await (supabase as any)
+    .from("applications")
+    .select("job_id")
+    .eq("id", applicationId)
+    .eq("org_id", user.orgId)
+    .single();
+  if (!app) return { success: false, error: "Application not found" };
+  // Simplest correct path: re-run the job's screening (idempotent upsert).
+  const res = await runScreening((app as any).job_id);
+  return res.success ? { success: true, data: undefined } : { success: false, error: res.error };
+}
+
+export async function reparseCv(candidateId: string): Promise<ActionResult<void>> {
+  const gate = await assertJambaHireAccess();
+  if ("error" in gate) return { success: false, error: gate.error };
+  waitUntil(ingestCv(candidateId));
+  return { success: true, data: undefined };
+}
+
+export async function getScreeningAudit(jobId: string): Promise<ActionResult<any[]>> {
+  const gate = await assertJambaHireAccess();
+  if ("error" in gate) return { success: false, error: gate.error };
+  const { user } = gate;
+  const supabase = createAdminSupabase();
+  const { data, error } = await (supabase as any)
+    .from("screening_audit_log")
+    .select("*, applications!inner(job_id)")
+    .eq("org_id", user.orgId)
+    .eq("applications.job_id", jobId)
+    .order("created_at", { ascending: false })
+    .limit(200);
+  if (error) return { success: false, error: error.message };
+  return { success: true, data: data ?? [] };
 }

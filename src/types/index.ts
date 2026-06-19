@@ -37,6 +37,10 @@ export function hasPermission(
   return ROLE_HIERARCHY[userRole] >= ROLE_HIERARCHY[requiredRole];
 }
 
+export function isOwner(role: UserRole): boolean {
+  return role === "owner";
+}
+
 // ---- Billing ----
 export type BillingCycle = "monthly" | "annual";
 

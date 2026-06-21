@@ -69,11 +69,17 @@ export async function uploadCvs(
 
     // One candidate per upload (no reliable email yet — parser fills contact later).
     // candidates is not in database.types.ts — cast to any (established repo pattern)
+    // candidates.email is NOT NULL with a UNIQUE(org_id, email) constraint, but the
+    // real email isn't known until the CV is parsed (background). Use a unique
+    // placeholder so the insert succeeds; ingestCv stores the parsed contact in
+    // cv_screening_profiles.parsed.
+    const placeholderEmail = `cv-import+${crypto.randomUUID()}@placeholder.invalid`;
     const { data: cand, error: candErr } = await (supabase as any)
       .from("candidates")
       .insert({
         org_id: user.orgId,
         name: file.name.replace(/\.[^.]+$/, ""),
+        email: placeholderEmail,
         source: "cv_upload",
         resume_url: urlData.publicUrl,
       })

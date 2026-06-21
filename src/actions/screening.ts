@@ -329,6 +329,56 @@ export async function getScreeningResults(jobId: string): Promise<ActionResult<a
   return { success: true, data: data ?? [] };
 }
 
+/**
+ * Roster of every uploaded CV for a job with its background parse status, so the
+ * UI can show per-row "parsing / ready / needs review / unsupported" pills
+ * instead of a blind gap after upload. (P1: async parse visibility.)
+ */
+export async function getScreeningRoster(
+  jobId: string,
+): Promise<ActionResult<Array<{ application_id: string; candidate_id: string; name: string; parse_status: string | null; scored: boolean }>>> {
+  const gate = await assertJambaHireAccess();
+  if ("error" in gate) return { success: false, error: gate.error };
+  const { user } = gate;
+  const supabase = createAdminSupabase();
+
+  const { data: apps, error } = await (supabase as any)
+    .from("applications")
+    .select("id, candidate_id, candidates(name)")
+    .eq("job_id", jobId)
+    .eq("org_id", user.orgId)
+    .order("applied_at", { ascending: false });
+  if (error) return { success: false, error: error.message };
+
+  const candidateIds = (apps ?? []).map((a: any) => a.candidate_id);
+  if (candidateIds.length === 0) return { success: true, data: [] };
+
+  const [{ data: profiles }, { data: scored }] = await Promise.all([
+    (supabase as any)
+      .from("cv_screening_profiles")
+      .select("candidate_id, parse_status")
+      .eq("org_id", user.orgId)
+      .in("candidate_id", candidateIds),
+    (supabase as any)
+      .from("screening_results")
+      .select("application_id")
+      .eq("org_id", user.orgId)
+      .eq("job_id", jobId),
+  ]);
+
+  const statusBy = new Map((profiles ?? []).map((p: any) => [p.candidate_id, p.parse_status]));
+  const scoredSet = new Set((scored ?? []).map((s: any) => s.application_id));
+
+  const roster = (apps ?? []).map((a: any) => ({
+    application_id: a.id,
+    candidate_id: a.candidate_id,
+    name: a.candidates?.name ?? "Candidate",
+    parse_status: (statusBy.get(a.candidate_id) as string | undefined) ?? null,
+    scored: scoredSet.has(a.id),
+  }));
+  return { success: true, data: roster };
+}
+
 export async function rescoreApplication(applicationId: string): Promise<ActionResult<void>> {
   const gate = await assertJambaHireAccess();
   if ("error" in gate) return { success: false, error: gate.error };

@@ -1,6 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "@/components/ui/table";
 import { getScreeningAudit } from "@/actions/screening";
 
 export function ScreeningAuditView({ jobId }: { jobId: string }) {
@@ -14,30 +22,35 @@ export function ScreeningAuditView({ jobId }: { jobId: string }) {
       .finally(() => setLoading(false));
   }, [jobId]);
 
-  if (loading) return <p className="p-4 text-sm text-muted-foreground">Loading…</p>;
-  if (!rows.length) return <p className="p-4 text-sm text-muted-foreground">No screening activity yet.</p>;
+  if (loading) return <p className="py-4 text-sm text-muted-foreground">Loading…</p>;
+  if (!rows.length) return <p className="py-4 text-sm text-muted-foreground">No screening activity yet.</p>;
+
   return (
-    <table className="w-full text-sm">
-      <thead>
-        <tr className="text-left text-muted-foreground">
-          <th className="py-1">When</th>
-          <th>Action</th>
-          <th>Score</th>
-          <th>Model</th>
-          <th>Cost (₹)</th>
-        </tr>
-      </thead>
-      <tbody>
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>When</TableHead>
+          <TableHead>Action</TableHead>
+          <TableHead className="text-center">Score</TableHead>
+          <TableHead>Model</TableHead>
+          <TableHead className="text-right">Cost (₹)</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
         {rows.map((r) => (
-          <tr key={r.id} className="border-t">
-            <td className="py-1">{new Date(r.created_at).toLocaleString()}</td>
-            <td>{r.action}</td>
-            <td>{r.payload?.score ?? "—"}</td>
-            <td>{r.payload?.model ?? "—"}</td>
-            <td>{((r.cost_inr_paise ?? 0) / 100).toFixed(2)}</td>
-          </tr>
+          <TableRow key={r.id}>
+            <TableCell className="whitespace-nowrap text-muted-foreground">
+              {new Date(r.created_at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}
+            </TableCell>
+            <TableCell className="capitalize">{r.action}</TableCell>
+            <TableCell className="text-center tabular-nums">{r.payload?.score ?? "—"}</TableCell>
+            <TableCell className="text-muted-foreground">{r.payload?.model ?? "—"}</TableCell>
+            <TableCell className="text-right tabular-nums">
+              {((r.cost_inr_paise ?? 0) / 100).toFixed(2)}
+            </TableCell>
+          </TableRow>
         ))}
-      </tbody>
-    </table>
+      </TableBody>
+    </Table>
   );
 }

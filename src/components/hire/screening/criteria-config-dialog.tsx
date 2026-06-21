@@ -109,7 +109,7 @@ export function CriteriaConfigDialog({ jobId }: { jobId: string }) {
         />
         <span>candidates</span>
       </div>
-      <Button onClick={save} disabled={pending}>
+      <Button onClick={save} disabled={pending} className="bg-indigo-600 hover:bg-indigo-700 text-white">
         {pending ? "Saving…" : "Save criteria"}
       </Button>
     </div>

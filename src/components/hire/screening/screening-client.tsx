@@ -67,7 +67,7 @@ export function ScreeningClient({
           <Button variant="outline" onClick={() => setShowAudit((v) => !v)}>
             {showAudit ? "Hide audit" : "Audit log"}
           </Button>
-          <Button onClick={run} disabled={pending}>
+          <Button onClick={run} disabled={pending} className="bg-indigo-600 hover:bg-indigo-700 text-white">
             {pending ? "Screening…" : "Run screening"}
           </Button>
         </div>
@@ -98,7 +98,7 @@ export function ScreeningClient({
                   >
                     {expanded === r.application_id ? "Hide" : "Details"}
                   </Button>
-                  <Button size="sm" onClick={() => advance(r.application_id)} disabled={pending}>
+                  <Button size="sm" onClick={() => advance(r.application_id)} disabled={pending} className="bg-indigo-600 hover:bg-indigo-700 text-white">
                     Advance
                   </Button>
                   <Button variant="outline" size="sm" onClick={() => reject(r.application_id)} disabled={pending}>

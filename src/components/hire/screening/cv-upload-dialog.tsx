@@ -33,7 +33,7 @@ export function CvUploadDialog({ jobId }: { jobId: string }) {
         onChange={(e) => setFiles(e.target.files)}
         className="text-sm"
       />
-      <Button onClick={submit} disabled={pending}>
+      <Button onClick={submit} disabled={pending} className="bg-indigo-600 hover:bg-indigo-700 text-white">
         {pending ? "Uploading…" : "Upload CVs"}
       </Button>
     </div>

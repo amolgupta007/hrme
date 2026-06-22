@@ -135,7 +135,7 @@ export function ConvertToEmployeeDialog({
               />
             </Field>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Field label="Designation">
                 <input
                   type="text"
@@ -160,7 +160,7 @@ export function ConvertToEmployeeDialog({
               </Field>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Field label="Department">
                 <select
                   value={departmentId}

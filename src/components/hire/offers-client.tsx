@@ -309,7 +309,7 @@ export function OffersClient({ offers, applications, departments, employees, isA
               <input className={inputCls} placeholder="e.g. Senior Software Engineer" value={form.role_title} onChange={(e) => setField("role_title", e.target.value)} />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
                 <label className="text-sm font-medium">CTC (₹/year) *</label>
                 <input type="number" className={inputCls} placeholder="e.g. 1200000" value={form.ctc} onChange={(e) => setField("ctc", e.target.value)} />

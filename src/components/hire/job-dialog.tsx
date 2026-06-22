@@ -140,7 +140,7 @@ export function JobDialog({ open, onClose, departments, existing }: Props) {
 
         <div className="space-y-4 mt-2">
           {/* Title + Status */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div className="col-span-2">
               <label className={labelCls}>Job Title *</label>
               <input className={inputCls} placeholder="e.g. Senior Backend Engineer" value={title} onChange={(e) => setTitle(e.target.value)} />
@@ -157,7 +157,7 @@ export function JobDialog({ open, onClose, departments, existing }: Props) {
           </div>
 
           {/* Department + Employment Type */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className={labelCls}>Department</label>
               <select className={inputCls} value={departmentId} onChange={(e) => setDepartmentId(e.target.value)}>
@@ -191,7 +191,7 @@ export function JobDialog({ open, onClose, departments, existing }: Props) {
           </div>
 
           {/* Location */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className={labelCls}>Location Type</label>
               <select className={inputCls} value={locationType} onChange={(e) => setLocationType(e.target.value)}>
@@ -207,7 +207,7 @@ export function JobDialog({ open, onClose, departments, existing }: Props) {
           </div>
 
           {/* Salary */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div>
               <label className={labelCls}>Min CTC (₹/year)</label>
               <input type="number" className={inputCls} placeholder="e.g. 800000" value={salaryMin} onChange={(e) => setSalaryMin(e.target.value)} />

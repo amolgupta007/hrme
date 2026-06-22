@@ -135,7 +135,7 @@ export function ScheduleInterviewDialog({ open, onClose, applications, employees
           </div>
 
           {/* Date + Duration */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className="text-sm font-medium">Date & Time *</label>
               <input type="datetime-local" className={inputCls} value={scheduledAt} onChange={(e) => setScheduledAt(e.target.value)} />

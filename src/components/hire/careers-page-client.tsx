@@ -245,7 +245,7 @@ function ApplyModal({ job, onClose }: { job: Job; onClose: () => void }) {
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
                 <label className="text-sm font-medium">Full Name *</label>
                 <input className={inputCls} placeholder="Priya Sharma" value={name} onChange={(e) => setName(e.target.value)} required />
@@ -256,7 +256,7 @@ function ApplyModal({ job, onClose }: { job: Job; onClose: () => void }) {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
                 <label className="text-sm font-medium">Phone</label>
                 <input className={inputCls} placeholder="+91 9876543210" value={phone} onChange={(e) => setPhone(e.target.value)} />

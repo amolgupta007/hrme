@@ -239,7 +239,7 @@ export function InterviewsClient({ interviews, applications, employees, isAdmin 
                 {rescheduling?.id === interview.id && (
                   <div className="border-t border-border pt-3 space-y-3">
                     <p className="text-xs font-semibold">Reschedule Interview</p>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       <div>
                         <label className="text-xs font-medium">New Date &amp; Time *</label>
                         <input

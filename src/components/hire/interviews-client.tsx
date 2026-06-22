@@ -103,12 +103,12 @@ export function InterviewsClient({ interviews, applications, employees, isAdmin 
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-indigo-100 dark:border-indigo-900/40">
+      <div className="flex gap-1 overflow-x-auto border-b border-indigo-100 dark:border-indigo-900/40">
         {(["upcoming", "past"] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 capitalize transition-colors ${
+            className={`shrink-0 whitespace-nowrap px-4 py-2 text-sm font-medium border-b-2 capitalize transition-colors ${
               tab === t
                 ? "border-indigo-600 text-indigo-700 dark:text-indigo-300"
                 : "border-transparent text-muted-foreground hover:text-foreground"

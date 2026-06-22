@@ -132,14 +132,14 @@ export function JobsClient({ jobs, departments, isAdmin, orgSlug }: Props) {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-indigo-100 dark:border-indigo-900/40">
+      <div className="flex gap-1 overflow-x-auto border-b border-indigo-100 dark:border-indigo-900/40">
         {STATUS_TABS.map((tab) => {
           const count = tab.value === "all" ? jobs.length : jobs.filter((j) => j.status === tab.value).length;
           return (
             <button
               key={tab.value}
               onClick={() => setActiveTab(tab.value)}
-              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              className={`shrink-0 whitespace-nowrap px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
                 activeTab === tab.value
                   ? "border-indigo-600 text-indigo-700 dark:text-indigo-300"
                   : "border-transparent text-muted-foreground hover:text-foreground"

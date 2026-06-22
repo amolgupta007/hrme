@@ -91,7 +91,8 @@ export function CandidatesClient({ candidates }: Props) {
         </div>
       ) : (
         <div className="rounded-xl border border-indigo-100 bg-white overflow-hidden dark:border-indigo-900/40 dark:bg-[#150e2b]">
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[560px] text-sm">
             <thead>
               <tr className="border-b border-indigo-100 dark:border-indigo-900/40 bg-indigo-50/50 dark:bg-indigo-950/20">
                 <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Candidate</th>
@@ -145,6 +146,7 @@ export function CandidatesClient({ candidates }: Props) {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
       <AddCandidateDialog open={addOpen} onClose={() => setAddOpen(false)} />

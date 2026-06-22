@@ -26,7 +26,7 @@ export function ScreeningAuditView({ jobId }: { jobId: string }) {
   if (!rows.length) return <p className="py-4 text-sm text-muted-foreground">No screening activity yet.</p>;
 
   return (
-    <Table>
+    <Table className="min-w-[480px]">
       <TableHeader>
         <TableRow>
           <TableHead>When</TableHead>

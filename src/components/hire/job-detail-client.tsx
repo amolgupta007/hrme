@@ -82,7 +82,7 @@ export function JobDetailClient({ job, applications, departments, isAdmin }: Pro
         <Link href="/hire/jobs" className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-3">
           <ArrowLeft className="h-3.5 w-3.5" /> Back to Jobs
         </Link>
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-xl font-bold">{job.title}</h1>
@@ -134,7 +134,7 @@ export function JobDetailClient({ job, applications, departments, isAdmin }: Pro
               const s = stageObj(app.stage);
               return (
                 <div key={app.id} className="rounded-xl border border-indigo-100 bg-white p-4 dark:border-indigo-900/40 dark:bg-[#150e2b]">
-                  <div className="flex items-center justify-between gap-4">
+                  <div className="flex flex-wrap items-center justify-between gap-4">
                     <div>
                       <p className="font-medium text-sm">{app.candidate_name}</p>
                       <p className="text-xs text-muted-foreground">{app.candidate_email}</p>

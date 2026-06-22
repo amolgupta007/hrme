@@ -113,7 +113,7 @@ export function JobsClient({ jobs, departments, isAdmin, orgSlug }: Props) {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-foreground">Jobs</h1>
           <p className="text-sm text-muted-foreground mt-0.5">

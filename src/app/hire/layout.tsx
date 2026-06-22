@@ -15,7 +15,7 @@ export default async function HireLayout({ children }: { children: React.ReactNo
   return (
     <div className="min-h-screen bg-[#f5f4ff] dark:bg-[#0e0c1a]">
       <HireNav referralsEnabled={isReferralsEnabled()} />
-      <main className="mx-auto max-w-7xl px-6 py-8">{children}</main>
+      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6">{children}</main>
     </div>
   );
 }

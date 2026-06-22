@@ -177,9 +177,9 @@ export function ScreeningClient({
 
       {/* Results */}
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0">
+        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0">
           <CardTitle className="text-base">Ranked candidates</CardTitle>
-          <div className="flex items-center gap-1">
+          <div className="flex flex-wrap items-center gap-1">
             {(["all", "strong", "possible", "weak"] as TierFilter[]).map((t) => (
               <Button
                 key={t}
@@ -217,7 +217,7 @@ export function ScreeningClient({
               <ul className="divide-y">
                 {filtered.map((r) => (
                   <li key={r.application_id} className="p-4">
-                    <div className="flex items-center justify-between gap-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
                       <div className="flex min-w-0 items-center gap-3">
                         <input
                           type="checkbox"
@@ -282,7 +282,7 @@ export function ScreeningClient({
 
       {/* Sticky bulk-action bar */}
       {selected.size > 0 ? (
-        <div className="sticky bottom-4 z-10 mx-auto flex w-fit items-center gap-3 rounded-full border bg-background px-4 py-2 shadow-lg">
+        <div className="sticky bottom-4 z-10 mx-auto flex w-fit max-w-[calc(100vw-2rem)] flex-wrap items-center justify-center gap-3 rounded-2xl border bg-background px-4 py-2 shadow-lg">
           <span className="text-sm font-medium">{selected.size} selected</span>
           <Button
             size="sm"

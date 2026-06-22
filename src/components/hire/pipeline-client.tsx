@@ -685,7 +685,7 @@ export function PipelineClient({ applications, jobs, offers, isAdmin, currentEmp
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
             <input
-              className="rounded-lg border border-input bg-background pl-8 pr-3 py-1.5 text-sm w-44 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+              className="w-full rounded-lg border border-input bg-background pl-8 pr-3 py-1.5 text-sm sm:w-44 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400"
               placeholder="Search name…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -734,9 +734,9 @@ export function PipelineClient({ applications, jobs, offers, isAdmin, currentEmp
 
         {/* Bulk Action Bar */}
         {isAdmin && selected.size > 0 && (
-          <div className="flex items-center gap-3 rounded-xl bg-indigo-600 px-4 py-2.5 text-white">
+          <div className="flex flex-wrap items-center gap-3 rounded-xl bg-indigo-600 px-4 py-2.5 text-white">
             <span className="text-sm font-medium">{selected.size} selected</span>
-            <div className="flex items-center gap-2 ml-auto flex-wrap">
+            <div className="flex items-center gap-2 sm:ml-auto flex-wrap">
               <span className="text-xs opacity-80">Move to:</span>
               <select
                 className="rounded-lg bg-indigo-700 border border-indigo-500 px-2 py-1 text-xs text-white"
@@ -761,7 +761,8 @@ export function PipelineClient({ applications, jobs, offers, isAdmin, currentEmp
         )}
 
         {/* Kanban board */}
-        <div className="overflow-x-auto pb-4">
+        <p className="mb-2 text-xs text-muted-foreground md:hidden">Swipe sideways to see all stages →</p>
+        <div className="overflow-x-auto overscroll-x-contain pb-4">
           <div className="flex gap-3 min-w-max">
             {STAGES.map((stage) => {
               const cards = byStage(stage.value);

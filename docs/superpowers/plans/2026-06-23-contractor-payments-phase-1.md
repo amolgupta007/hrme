@@ -106,14 +106,9 @@ CREATE TRIGGER contractor_engagements_set_updated_at BEFORE UPDATE ON public.con
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 ```
 
-- [ ] **Step 2: Apply via Supabase MCP**
+- [ ] **Step 2: Controller applies via Supabase MCP**
 
-Use `apply_migration` with name `079_contractor_engagements` and the SQL above. (`update_updated_at_column()` already exists — gotcha #7.)
-
-- [ ] **Step 3: Verify the table exists**
-
-Run `list_tables` (or `execute_sql`: `SELECT column_name, data_type FROM information_schema.columns WHERE table_name='contractor_engagements' ORDER BY ordinal_position;`).
-Expected: 14 columns matching the DDL.
+The controller (not this subagent) applies migration `079_contractor_engagements` to the live DB. This task only writes + commits the SQL file. Do NOT call `apply_migration`. (`update_updated_at_column()` already exists — gotcha #7.)
 
 - [ ] **Step 4: Commit**
 
@@ -344,21 +339,19 @@ CREATE UNIQUE INDEX IF NOT EXISTS disbursement_items_batch_contractor_uq
 ALTER TABLE public.disbursement_batches
   ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'payroll'
     CHECK (kind IN ('payroll','contractor'));
+
+-- Contractor batches are not tied to a payroll run. (Live schema confirmed:
+-- disbursement_batches.payroll_run_id is currently NOT NULL — relax it so an
+-- ad-hoc contractor batch can be created without a payroll_runs row.)
+ALTER TABLE public.disbursement_batches
+  ALTER COLUMN payroll_run_id DROP NOT NULL;
 ```
 
-- [ ] **Step 2: Confirm the real old constraint name first**
+> The UNIQUE constraint name `disbursement_items_batch_id_payroll_entry_id_key` is **confirmed against the live DB** (controller verified via `pg_constraint`). Apply as written.
 
-Run `execute_sql`: `SELECT conname FROM pg_constraint WHERE conrelid = 'public.disbursement_items'::regclass AND contype IN ('u','c');`
-If the UNIQUE constraint is not named `disbursement_items_batch_id_payroll_entry_id_key`, substitute the real name into the `DROP CONSTRAINT` line before applying. (Postgres auto-names it `<table>_<cols>_key` by default, but verify.)
+- [ ] **Step 2: Controller applies via Supabase MCP**
 
-- [ ] **Step 3: Apply via Supabase MCP**
-
-Use `apply_migration` with name `080_disbursement_contractor_support`.
-
-- [ ] **Step 4: Verify**
-
-Run `execute_sql`: `SELECT column_name, is_nullable FROM information_schema.columns WHERE table_name='disbursement_items' AND column_name IN ('payroll_entry_id','contractor_engagement_id');`
-Expected: `payroll_entry_id | YES`, `contractor_engagement_id | YES`.
+The controller (not this subagent) applies migration `080_disbursement_contractor_support` to the live DB. This task only writes + commits the SQL file. Do NOT call `apply_migration`.
 
 - [ ] **Step 5: Commit**
 
@@ -644,6 +637,7 @@ git commit -m "feat(contractors): engagement CRUD + exclude contractors from sal
 
 ```typescript
 // append to src/actions/contractors.ts
+import { randomUUID } from "crypto";
 import { computeContractorTDS } from "@/lib/contractor/tds";
 
 const PayInputSchema = z.object({
@@ -651,7 +645,6 @@ const PayInputSchema = z.object({
     engagement_id: z.string().uuid(),
     gross_amount: z.number().positive(),
   })).min(1),
-  note: z.string().optional(),
 });
 
 export async function payContractors(
@@ -707,8 +700,12 @@ export async function payContractors(
     });
   }
 
-  // Create the batch (kind='contractor', awaiting_approval). Mirror the column set
-  // initiateDisbursement uses for payroll batches (org_id, status, idempotency key, maker).
+  // Create the batch (kind='contractor', awaiting_approval). These are the REAL
+  // disbursement_batches columns (verified against the live DB): there is NO
+  // created_by or note column — the maker is maker_id, and idempotency_key /
+  // total_amount / total_fees_paise / override_wallet_shortfall are NOT NULL.
+  // payroll_run_id is nullable after migration 080.
+  const totalAmount = itemRows.reduce((s, r) => s + r.amount, 0); // paise
   const { data: batch, error: batchErr } = await supabase
     .from("disbursement_batches")
     .insert({
@@ -716,8 +713,12 @@ export async function payContractors(
       kind: "contractor",
       status: "awaiting_approval",
       payroll_run_id: null,
-      created_by: user.employeeId,
-      note: parsed.data.note ?? null,
+      maker_id: user.employeeId,
+      idempotency_key: randomUUID(),
+      initiated_at: new Date().toISOString(),
+      total_amount: totalAmount,
+      total_fees_paise: 0,
+      override_wallet_shortfall: false,
     })
     .select("id")
     .single();
@@ -733,7 +734,9 @@ export async function payContractors(
 }
 ```
 
-> Reconcile the exact `disbursement_batches` insert columns against `initiateDisbursement` (line 231) — `payroll_run_id` must be nullable for contractor batches; if it is currently `NOT NULL`, add `ALTER COLUMN payroll_run_id DROP NOT NULL` to migration 080 (Task 3 Step 1) and re-apply before this step. Verify with `execute_sql` against `information_schema.columns`.
+> **Read `initiateDisbursement` (disbursement.ts:231) first** and mirror its exact `disbursement_batches` insert column set + any helper it uses to build `idempotency_key`/`total_amount` — match the established pattern rather than the literal above if it differs.
+>
+> **Integration risk to handle (do not skip):** the existing `approveDisbursement` (disbursement.ts:399) and `reconcileBatchAndRunStatus` (`src/lib/payroll/disbursement-reconcile.ts`) were written assuming a non-null `payroll_run_id` (they update `payroll_runs.status`). A `kind='contractor'` batch has `payroll_run_id = null`. Before relying on approval reuse, **read both** and confirm they no-op the payroll-run update when `payroll_run_id`/`kind='contractor'`. If they would throw or update a null run, make the minimal guard (e.g. `if (batch.payroll_run_id) { …update run… }`) and note it in your report. This is the one place Phase 1 may need to touch shared disbursement code.
 
 - [ ] **Step 2: Build + lint**
 

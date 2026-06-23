@@ -1,4 +1,4 @@
-import type { NavItem } from "@/types";
+﻿import type { NavItem } from "@/types";
 
 export const sidebarNav: NavItem[] = [
   {
@@ -21,6 +21,7 @@ export const sidebarNav: NavItem[] = [
     title: "Leaves",
     href: "/dashboard/leaves",
     icon: "CalendarDays",
+    hideForContractor: true,
   },
   {
     title: "Documents",
@@ -34,18 +35,21 @@ export const sidebarNav: NavItem[] = [
     icon: "Star",
     requiredRole: "manager",
     requiredPlan: "growth",
+    hideForContractor: true,
   },
   {
     title: "Objectives",
     href: "/dashboard/objectives",
     icon: "Target",
     requiredPlan: "growth",
+    hideForContractor: true,
   },
   {
     title: "Training",
     href: "/dashboard/training",
     icon: "GraduationCap",
     requiredPlan: "growth",
+    hideForContractor: true,
   },
   {
     title: "Attendance",
@@ -64,6 +68,7 @@ export const sidebarNav: NavItem[] = [
     href: "/dashboard/refer",
     icon: "UserPlus",
     featureFlag: "referrals",
+    hideForContractor: true,
   },
   {
     title: "Grievances",

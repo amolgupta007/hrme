@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation";
+﻿import { redirect } from "next/navigation";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
 import { getPendingCounts } from "@/actions/notifications";
@@ -46,7 +46,7 @@ export default async function DashboardLayout({
   return (
     <ReportFeedbackTriggerRoot>
       <div className="flex min-h-screen">
-        <Sidebar badges={badges} role={role} plan={plan} features={features} />
+        <Sidebar badges={badges} role={role} plan={plan} features={features} employmentType={userCtx.employmentType} />
         <div className="flex flex-1 flex-col">
           <Header
             jambaHireEnabled={jambaHireEnabled}
@@ -64,3 +64,4 @@ export default async function DashboardLayout({
     </ReportFeedbackTriggerRoot>
   );
 }
+

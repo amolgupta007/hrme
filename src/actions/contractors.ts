@@ -166,7 +166,7 @@ export async function payContractors(
   if (engErr) return { success: false, error: engErr.message };
   const engById = new Map<string, any>((engs ?? []).map((e: any) => [e.id, e]));
 
-  // Build per-item rows: compute TDS, verify synced fund account, convert net to paise.
+  // Build per-item rows: compute TDS, verify synced fund account, store net amount in rupees.
   const itemRows: Array<{
     org_id: string;
     batch_id: string; // filled after batch insert
@@ -174,7 +174,7 @@ export async function payContractors(
     payroll_entry_id: null;
     employee_id: string;
     fund_account_id: string;
-    amount: number; // paise
+    amount: number; // rupees — engine multiplies by 100 at dispatch (matches initiateDisbursement)
     status: "pending";
   }> = [];
 
@@ -216,12 +216,12 @@ export async function payContractors(
       payroll_entry_id: null,
       employee_id: (eng as any).employee_id,
       fund_account_id: (bank as any).razorpayx_fund_account_id,
-      amount: Math.round(net * 100), // paise
+      amount: Math.round(net), // rupees — engine multiplies by 100 at dispatch (matches initiateDisbursement)
       status: "pending",
     });
   }
 
-  // Total in paise across all items.
+  // Total in rupees across all items.
   const totalAmount = itemRows.reduce((s, r) => s + r.amount, 0);
 
   // Insert the batch (kind='contractor', payroll_run_id=null).

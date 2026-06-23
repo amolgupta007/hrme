@@ -13,7 +13,7 @@ export type UserContext = {
   role: UserRole;
   employeeId: string | null;
   firstName: string | null;
-  employmentType: string | null;
+  employmentType: "full_time" | "part_time" | "contract" | "intern" | null;
   plan: OrgPlan;
   customFeatures: string[] | null;
   jambaHireEnabled: boolean;
@@ -149,7 +149,7 @@ export async function getCurrentUser(): Promise<UserContext | null> {
   const role: UserRole = active.role as UserRole;
   const employeeId: string | null = active.id;
   const firstName: string | null = active.first_name;
-  const employmentType: string | null = active.employment_type ?? null;
+  const employmentType = (active.employment_type ?? null) as "full_time" | "part_time" | "contract" | "intern" | null;
 
   return {
     orgId,

@@ -63,9 +63,10 @@ export async function updateContractorEngagement(
   if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
 
   const supabase = createAdminSupabase();
+  const { employee_id: _ignored, ...updateData } = parsed.data;
   const { error } = await supabase
     .from("contractor_engagements")
-    .update(parsed.data)
+    .update(updateData)
     .eq("id", id)
     .eq("org_id", user.orgId);
   if (error) return { success: false, error: error.message };
@@ -104,6 +105,7 @@ export async function listContractorEngagements(): Promise<ActionResult<any[]>> 
       .in("employee_id", employeeIds);
     for (const b of banks ?? []) {
       const row = b as any;
+      if (bankStatusMap.get(row.employee_id) === "synced") continue; // synced wins
       bankStatusMap.set(row.employee_id, row.beneficiary_sync_status);
     }
   }

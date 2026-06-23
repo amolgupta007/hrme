@@ -57,6 +57,8 @@ export async function reconcileBatchAndRunStatus(
     .maybeSingle();
   if (!batchRow) return;
   const runId = (batchRow as any).payroll_run_id;
+  // Contractor batches have no parent payroll run — skip run-status update entirely.
+  if (!runId) return;
 
   // Fetch all batches for the run + their items
   const { data: runBatches } = await sb

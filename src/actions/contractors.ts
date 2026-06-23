@@ -1,8 +1,10 @@
 "use server";
+import { randomUUID } from "crypto";
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { getCurrentUser, isAdmin } from "@/lib/current-user";
 import { createAdminSupabase } from "@/lib/supabase/server";
+import { computeContractorTDS } from "@/lib/contractor/tds";
 import type { ActionResult } from "@/types";
 
 const EngagementSchema = z.object({
@@ -127,4 +129,131 @@ export async function listContractorEngagements(): Promise<ActionResult<any[]>> 
     bank_verified: bankStatusMap.get(r.employee_id) === "synced",
   }));
   return { success: true, data: rows };
+}
+
+// ---- payContractors ----
+
+const PayContractorsSchema = z.object({
+  items: z
+    .array(
+      z.object({
+        engagement_id: z.string().uuid(),
+        gross_amount: z.number().positive(),
+      }),
+    )
+    .min(1),
+});
+
+export async function payContractors(
+  input: z.infer<typeof PayContractorsSchema>,
+): Promise<ActionResult<{ batchId: string }>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Unauthorized" };
+
+  const parsed = PayContractorsSchema.safeParse(input);
+  if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
+
+  const supabase = createAdminSupabase();
+
+  // Load engagements — verify they belong to this org.
+  const engIds = parsed.data.items.map((i) => i.engagement_id);
+  const { data: engs, error: engErr } = await supabase
+    .from("contractor_engagements")
+    .select("id, employee_id, tds_section, payee_type, has_pan, status")
+    .eq("org_id", user.orgId)
+    .in("id", engIds);
+  if (engErr) return { success: false, error: engErr.message };
+  const engById = new Map<string, any>((engs ?? []).map((e: any) => [e.id, e]));
+
+  // Build per-item rows: compute TDS, verify synced fund account, convert net to paise.
+  const itemRows: Array<{
+    org_id: string;
+    batch_id: string; // filled after batch insert
+    contractor_engagement_id: string;
+    payroll_entry_id: null;
+    employee_id: string;
+    fund_account_id: string;
+    amount: number; // paise
+    status: "pending";
+  }> = [];
+
+  for (const it of parsed.data.items) {
+    const eng = engById.get(it.engagement_id);
+    if (!eng) return { success: false, error: `Engagement ${it.engagement_id} not found in this org` };
+    if ((eng as any).status !== "active")
+      return { success: false, error: `Engagement ${it.engagement_id} is not active` };
+
+    // Verify bank account is synced (beneficiary must exist in RazorpayX).
+    const { data: bank } = await supabase
+      .from("employee_bank_accounts")
+      .select("razorpayx_fund_account_id, beneficiary_sync_status")
+      .eq("org_id", user.orgId)
+      .eq("employee_id", (eng as any).employee_id)
+      .maybeSingle();
+    if (
+      !(bank as any)?.razorpayx_fund_account_id ||
+      (bank as any)?.beneficiary_sync_status !== "synced"
+    ) {
+      return {
+        success: false,
+        error: `Contractor bank account not verified/synced for engagement ${it.engagement_id}`,
+      };
+    }
+
+    const { tds } = computeContractorTDS({
+      amount: it.gross_amount,
+      section: (eng as any).tds_section,
+      payeeType: (eng as any).payee_type,
+      hasPan: (eng as any).has_pan,
+    });
+    const net = Math.max(0, it.gross_amount - tds);
+
+    itemRows.push({
+      org_id: user.orgId,
+      batch_id: "", // placeholder — filled after batch insert
+      contractor_engagement_id: (eng as any).id,
+      payroll_entry_id: null,
+      employee_id: (eng as any).employee_id,
+      fund_account_id: (bank as any).razorpayx_fund_account_id,
+      amount: Math.round(net * 100), // paise
+      status: "pending",
+    });
+  }
+
+  // Total in paise across all items.
+  const totalAmount = itemRows.reduce((s, r) => s + r.amount, 0);
+
+  // Insert the batch (kind='contractor', payroll_run_id=null).
+  // Column set mirrors initiateDisbursement — uses `as any` cast for unknown-table TS workaround.
+  const { data: batch, error: batchErr } = await supabase
+    .from("disbursement_batches")
+    .insert({
+      org_id: user.orgId,
+      kind: "contractor",
+      status: "awaiting_approval",
+      payroll_run_id: null,
+      maker_id: user.employeeId ?? null,
+      idempotency_key: randomUUID(),
+      total_amount: totalAmount,
+      total_fees_paise: 0,
+      override_wallet_shortfall: false,
+    } as any)
+    .select("id")
+    .single();
+  if (batchErr || !batch) return { success: false, error: batchErr?.message ?? "Failed to create batch" };
+  const batchId = (batch as any).id as string;
+
+  // Insert items with the real batch_id.
+  const { error: itemsErr } = await supabase
+    .from("disbursement_items")
+    .insert(itemRows.map((r) => ({ ...r, batch_id: batchId })) as any);
+  if (itemsErr) {
+    // Clean up the orphan batch on item-insert failure.
+    await supabase.from("disbursement_batches").delete().eq("id", batchId);
+    return { success: false, error: itemsErr.message };
+  }
+
+  revalidatePath("/dashboard/contractors");
+  return { success: true, data: { batchId } };
 }

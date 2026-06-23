@@ -89,6 +89,13 @@ export const sidebarNav: NavItem[] = [
     requiredPlan: "business",
   },
   {
+    title: "Contractors",
+    href: "/dashboard/contractors",
+    icon: "Briefcase",
+    requiredRole: "admin",
+    requiredPlan: "business",
+  },
+  {
     title: "Settings",
     href: "/dashboard/settings",
     icon: "Settings",

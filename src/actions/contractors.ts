@@ -257,3 +257,51 @@ export async function payContractors(
   revalidatePath("/dashboard/contractors");
   return { success: true, data: { batchId } };
 }
+
+// ---- listAssignableContractors ----
+// Returns employees with employment_type='contract' that do NOT already have an
+// active engagement — used by the Add Engagement dialog picker.
+
+export async function listAssignableContractors(): Promise<
+  ActionResult<Array<{ id: string; name: string; email: string | null }>>
+> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Unauthorized" };
+
+  const supabase = createAdminSupabase();
+
+  // All contract employees in this org.
+  const { data: contractEmps, error: empErr } = await supabase
+    .from("employees")
+    .select("id, first_name, last_name, email")
+    .eq("org_id", user.orgId)
+    .eq("employment_type", "contract")
+    .eq("status", "active");
+  if (empErr) return { success: false, error: empErr.message };
+
+  if (!contractEmps || contractEmps.length === 0) {
+    return { success: true, data: [] };
+  }
+
+  // Employees that already have an active engagement.
+  const allIds = contractEmps.map((e: any) => e.id);
+  const { data: activeEngs } = await supabase
+    .from("contractor_engagements")
+    .select("employee_id")
+    .eq("org_id", user.orgId)
+    .eq("status", "active")
+    .in("employee_id", allIds);
+
+  const engagedIds = new Set((activeEngs ?? []).map((e: any) => e.employee_id));
+
+  const rows = contractEmps
+    .filter((e: any) => !engagedIds.has(e.id))
+    .map((e: any) => ({
+      id: e.id,
+      name: `${e.first_name ?? ""} ${e.last_name ?? ""}`.trim(),
+      email: e.email ?? null,
+    }));
+
+  return { success: true, data: rows };
+}

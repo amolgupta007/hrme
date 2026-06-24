@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { sendContractorAgreement } from "@/actions/contractor-agreements";
-import { buildAgreementBody, defaultAgreementTitle } from "@/lib/contractor/agreement-templates";
+import { buildAgreementBody } from "@/lib/contractor/agreement-templates";
 import {
   AGREEMENT_TYPE_LABELS,
   IP_OWNERSHIP_LABELS,
@@ -101,7 +101,7 @@ export function SendAgreementDialog({
   const router = useRouter();
   const [loading, setLoading] = React.useState(false);
   const [agreementType, setAgreementType] = React.useState<AgreementType>("service");
-  const [ipOwnership, setIpOwnership] = React.useState<IpOwnership>("na");
+  const [ipOwnership, setIpOwnership] = React.useState<IpOwnership>("work_for_hire");
   const [bodyText, setBodyText] = React.useState("");
   const [expiryDays, setExpiryDays] = React.useState("");
   const [bodyEdited, setBodyEdited] = React.useState(false);
@@ -118,7 +118,7 @@ export function SendAgreementDialog({
   React.useEffect(() => {
     if (open) {
       setAgreementType("service");
-      setIpOwnership("na");
+      setIpOwnership("work_for_hire");
       setBodyEdited(false);
       setExpiryDays("");
     }
@@ -145,28 +145,32 @@ export function SendAgreementDialog({
     e.preventDefault();
     setLoading(true);
 
-    const effectiveIp: IpOwnership = agreementType === "nda" ? "na" : ipOwnership;
-    const result = await sendContractorAgreement({
-      engagement_id: engagementId,
-      agreement_type: agreementType,
-      ip_ownership: effectiveIp,
-      body_text: bodyText.trim() || undefined,
-      expires_in_days: expiryDays ? parseInt(expiryDays, 10) : undefined,
-    });
+    try {
+      const effectiveIp: IpOwnership = agreementType === "nda" ? "na" : ipOwnership;
+      const result = await sendContractorAgreement({
+        engagement_id: engagementId,
+        agreement_type: agreementType,
+        ip_ownership: effectiveIp,
+        body_text: bodyText.trim() || undefined,
+        expires_in_days: expiryDays ? parseInt(expiryDays, 10) : undefined,
+      });
 
-    setLoading(false);
-
-    if (result.success) {
-      toast.success(
-        <div className="space-y-1">
-          <p className="font-medium">Agreement sent to {contractorName}</p>
-          <p className="text-xs text-muted-foreground break-all">{result.data.url}</p>
-        </div>
-      );
-      onOpenChange(false);
-      router.refresh();
-    } else {
-      toast.error(result.error);
+      if (result.success) {
+        toast.success(
+          <div className="space-y-1">
+            <p className="font-medium">Agreement sent to {contractorName}</p>
+            <p className="text-xs text-muted-foreground break-all">{result.data.url}</p>
+          </div>
+        );
+        onOpenChange(false);
+        router.refresh();
+      } else {
+        toast.error(result.error);
+      }
+    } catch (e) {
+      toast.error("Something went wrong sending the agreement.");
+    } finally {
+      setLoading(false);
     }
   }
 

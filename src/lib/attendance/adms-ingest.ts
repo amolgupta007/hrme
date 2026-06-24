@@ -151,9 +151,32 @@ export async function ingestAttlog(serial: string, body: string): Promise<Ingest
     await recomputeDay(supabase, orgId, employeeId, istDate);
   }
 
+  // Liveness for the Settings connection-status indicator.
+  const nowIso = new Date().toISOString();
+  await supabase
+    .from("devices")
+    .update({ last_seen_at: nowIso, ...(base.ingested > 0 ? { last_punch_at: nowIso } : {}) })
+    .eq("id", deviceId);
+
   base.unmatchedPins = [...unmatched];
   base.daysRecomputed = affected.size;
   return base;
+}
+
+/**
+ * Mark a known device as alive from a non-punch contact (handshake / command poll).
+ * Throttled to ~1 write/min so the device's ~2s getrequest poll doesn't hammer the DB.
+ * Unknown serials are a no-op (the WHERE matches nothing).
+ */
+export async function touchDeviceSeen(serial: string): Promise<void> {
+  if (!serial) return;
+  const supabase = createAdminSupabase();
+  const cutoff = new Date(Date.now() - 60_000).toISOString();
+  await supabase
+    .from("devices")
+    .update({ last_seen_at: new Date().toISOString() })
+    .eq("device_serial", serial)
+    .or(`last_seen_at.is.null,last_seen_at.lt.${cutoff}`);
 }
 
 /** Derive the daily attendance_records rollup for one (employee, IST day) from its events. */

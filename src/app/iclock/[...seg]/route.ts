@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { ingestAttlog } from "@/lib/attendance/adms-ingest";
+import { ingestAttlog, touchDeviceSeen } from "@/lib/attendance/adms-ingest";
 
 /**
  * ZKTeco / eSSL ADMS ("push SDK") attendance endpoint — multi-location attendance Phase 0.C.
@@ -88,6 +88,10 @@ async function capture(req: Request, seg: string[]): Promise<NextResponse> {
 
   // Everything else (OPERLOG POSTs, getrequest polls, devicecmd acks):
   // acknowledge so the device marks records delivered and keeps talking.
+  // Bump device liveness (throttled) so Settings shows a live "connected" status.
+  if (sn !== "(none)") {
+    touchDeviceSeen(sn).catch(() => {});
+  }
   return ok("OK\n");
 }
 

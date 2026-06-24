@@ -64,7 +64,7 @@ export default async function AgreementPage({ params, searchParams }: Props) {
               Signed by {a.signed_by_name}
             </p>
             <p className="text-sm text-emerald-600 mt-1">
-              on {new Date(a.signed_at).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}
+              {a.signed_at ? `on ${new Date(a.signed_at).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}` : ""}
             </p>
           </div>
         ) : a.status === "declined" ? (

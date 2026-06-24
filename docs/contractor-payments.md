@@ -132,34 +132,110 @@ This is a key trust point for the demo:
 
 ---
 
-## 6. Current limitations (set expectations honestly)
+## 6. Agreements, NDA & IP assignment (Phase 2 — shipped)
+
+JambaHR now captures **who owns the creative output** via contractor agreements
+and e-signatures.
+
+### What it does
+
+When you're about to pay a contractor, you can send them a **signed agreement**
+covering three types:
+
+- **Service agreement** — standard engagement terms (IP ownership: work-for-hire
+  or licensed).
+- **NDA** — confidentiality agreement (IP ownership not applicable).
+- **IP assignment** — explicit intellectual property transfer (IP ownership:
+  work-for-hire or licensed).
+
+The contractor receives a **magic link** (no login required), reads the
+agreement, and **types their full legal name to sign**. JambaHR records the
+**typed signature, IP address, browser, and timestamp** as proof of signing.
+
+**The agency talking point:** capture whether the comedian/designer owns their
+own work (licensed) or whether you own all output as work-for-hire before the
+first payment leaves your wallet.
+
+### Demo steps
+
+#### Step 1 — Send agreement
+
+From **Dashboard → Contractors**, find the engagement and click **Send agreement**.
+
+The dialog opens with:
+- **Agreement type:** pick Service agreement, NDA, or IP assignment
+- **IP ownership** (hidden for NDA): pick **Work-for-hire** (you own all output)
+  or **Licensed** (contractor owns work, grants you a license)
+- **Agreement body:** auto-generated template text. Edit it if needed (e.g.
+  custom terms, payment milestones).
+- **Expiry days** (optional): how long the contractor has to sign before the
+  link expires (default: 30 days).
+
+Click **Send**. The contractor gets an **email with a signing link**.
+
+#### Step 2 — Contractor signs
+
+The contractor opens the link (no login required) and lands on a **public signing
+page** (`/agreements/[token]`). They:
+1. Read the agreement terms
+2. Type their **full legal name** in the signature field
+3. Click **Sign**
+
+JambaHR records the signature, IP address, browser user-agent, and exact
+timestamp.
+
+#### Step 3 — Track agreement status
+
+Back on the **Contractors page**, each engagement now shows **agreement status
+chips**:
+
+```
+Service · Signed          ← latest service agreement is signed
+NDA · Sent               ← NDA is unsigned, awaiting signature
+IP Assignment · Declined ← contractor declined the IP assignment
+```
+
+A subtle amber **"No signed agreement"** hint appears if no agreement is signed
+yet — this is an **advisory signal only** (doesn't block payouts in Phase 2).
+
+### Versioning and superseding
+
+If you **re-send the same agreement type** to a contractor:
+- If the prior version was **unsigned**, it is **superseded** (new version
+  replaces it).
+- If the prior version was **signed**, the new version is added as a separate
+  record (signed history is preserved).
+
+This lets you update terms without losing the audit trail.
+
+---
+
+## 7. Current limitations (set expectations honestly)
 
 - **194C annual aggregate isn't tracked across payments yet.** TDS is computed
   **per payment**. A 194C contractor paid repeated sub-₹30,000 amounts won't have
   TDS auto-deducted even after crossing the ₹1,00,000 yearly threshold — verify
-  aggregate liability manually for recurring 194C contractors. (Phase 2.)
-- **No Form 16A / TDS certificate generation yet.** (Phase 2.)
-- **No contractor invoices or expense submission yet.** (Phase 2.)
-- **No agreement / NDA / IP-assignment signing yet.** (Phase 2 — in progress.)
+  aggregate liability manually for recurring 194C contractors. (Phase 3.)
+- **No Form 16A / TDS certificate generation yet.** (Phase 3.)
+- **No contractor invoices or expense submission yet.** (Phase 3.)
+- **Agreements don't block payouts yet.** (Phase 3 — soft signal only in Phase
+  2.)
 - **Interactive end-to-end run** with live RazorpayX still pending a manual QA
   pass.
 
 ---
 
-## 7. Coming next (Phase 2)
+## 8. Coming next (Phase 3)
 
-- **Contractor agreements + NDA + IP-assignment e-signing** — *in progress*. The
-  big one for creative agencies: capture **who owns the creative output**
-  (work-for-hire vs licensed), collect NDAs, and have contractors **e-sign**
-  before first payout. (This section of the doc will be filled in as it ships.)
 - 194C annual-aggregate TDS tracking + **Form 16A** generation + TDS liability
   summary.
 - Contractor **invoice & expense** submission with approval.
 - **Flexible pay cycles** (per-project / milestone) and contract-renewal reminders.
+- Agreement hard-block for unsigned contracts before payout.
 
 ---
 
-## 8. Demo cheat-sheet (talking points)
+## 9. Demo cheat-sheet (talking points)
 
 - *"Employment type = Contract is the only switch — everything else branches off
   it automatically."*
@@ -168,3 +244,5 @@ This is a key trust point for the demo:
   your salaried payroll, but with none of the statutory salary deductions."*
 - *"Your money, your RazorpayX wallet — JambaHR never holds the funds."*
 - *"One platform for 20 full-timers and 30 freelancers, correctly separated."*
+- *"Capture who owns the comedy — work-for-hire or licensed — and get it signed
+  before the first payout."*

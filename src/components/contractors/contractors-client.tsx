@@ -4,7 +4,7 @@ import * as React from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import * as Label from "@radix-ui/react-label";
 import * as Select from "@radix-ui/react-select";
-import { Briefcase, ChevronDown, Plus, Pencil, CreditCard, X } from "lucide-react";
+import { Briefcase, ChevronDown, Plus, Pencil, CreditCard, X, FileText, AlertTriangle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -16,12 +16,17 @@ import {
 } from "@/actions/contractors";
 import { approveDisbursement } from "@/actions/disbursement";
 import { PayContractorsDialog } from "./pay-contractors-dialog";
+import { SendAgreementDialog } from "./send-agreement-dialog";
 import {
   RATE_TYPE_LABELS,
   TDS_SECTION_LABELS,
 } from "@/lib/contractor/types";
 import type { RateType, TdsSection, PayeeType, EngagementStatus } from "@/lib/contractor/types";
 import type { ContractorBatchRow } from "@/actions/contractors";
+import {
+  AGREEMENT_TYPE_LABELS,
+} from "@/lib/contractor/agreement-types";
+import type { AgreementType, AgreementStatus } from "@/lib/contractor/agreement-types";
 
 // Shape returned by listContractorEngagements
 export interface ContractorEngagement {
@@ -48,10 +53,23 @@ export interface AssignableContractor {
   email: string | null;
 }
 
+// Shape returned by listEngagementAgreements (latest per engagement+type)
+export interface EngagementAgreement {
+  id: string;
+  contractor_engagement_id: string;
+  agreement_type: AgreementType;
+  status: AgreementStatus;
+  signed_at: string | null;
+  sent_at: string | null;
+  expires_at: string | null;
+}
+
 interface ContractorsClientProps {
   engagements: ContractorEngagement[];
   assignableContractors: AssignableContractor[];
   batches: ContractorBatchRow[];
+  agreements: EngagementAgreement[];
+  orgName: string;
 }
 
 const inputCn =
@@ -471,10 +489,27 @@ function ApproveBatchDialog({ open, onOpenChange, batch, onSuccess }: ApproveBat
   );
 }
 
+// Short labels for chips
+const AGREEMENT_TYPE_SHORT: Record<AgreementType, string> = {
+  service: "Service",
+  nda: "NDA",
+  ip_assignment: "IP",
+};
+
+const AGREEMENT_STATUS_CHIP: Record<AgreementStatus, { label: string; className: string }> = {
+  sent: { label: "Sent", className: "bg-blue-100 text-blue-700" },
+  signed: { label: "Signed", className: "bg-emerald-100 text-emerald-700" },
+  declined: { label: "Declined", className: "bg-red-100 text-red-700" },
+  expired: { label: "Expired", className: "bg-muted text-muted-foreground" },
+  superseded: { label: "Superseded", className: "bg-muted text-muted-foreground" },
+};
+
 export function ContractorsClient({
   engagements,
   assignableContractors,
   batches,
+  agreements,
+  orgName,
 }: ContractorsClientProps) {
   const router = useRouter();
   const [formOpen, setFormOpen] = React.useState(false);
@@ -482,6 +517,19 @@ export function ContractorsClient({
     React.useState<ContractorEngagement | null>(null);
   const [payOpen, setPayOpen] = React.useState(false);
   const [approvingBatch, setApprovingBatch] = React.useState<ContractorBatchRow | null>(null);
+  const [sendAgreementFor, setSendAgreementFor] =
+    React.useState<ContractorEngagement | null>(null);
+
+  // Group agreements by engagement id for O(1) lookup in the table
+  const agreementsByEngagement = React.useMemo(() => {
+    const map = new Map<string, EngagementAgreement[]>();
+    for (const a of agreements) {
+      const existing = map.get(a.contractor_engagement_id) ?? [];
+      existing.push(a);
+      map.set(a.contractor_engagement_id, existing);
+    }
+    return map;
+  }, [agreements]);
 
   function handleEdit(eng: ContractorEngagement) {
     setEditingEngagement(eng);
@@ -571,6 +619,9 @@ export function ContractorsClient({
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground">
                   Status
                 </th>
+                <th className="px-4 py-3 text-left font-medium text-muted-foreground">
+                  Agreements
+                </th>
                 <th className="px-4 py-3 text-right font-medium text-muted-foreground">
                   Actions
                 </th>
@@ -631,6 +682,57 @@ export function ContractorsClient({
                     >
                       {eng.status === "active" ? "Active" : "Ended"}
                     </Badge>
+                  </td>
+                  <td className="px-4 py-3">
+                    {(() => {
+                      const engAgreements = agreementsByEngagement.get(eng.id) ?? [];
+                      const hasSignedAgreement = engAgreements.some((a) => a.status === "signed");
+                      return (
+                        <div className="flex flex-col gap-1.5 min-w-[140px]">
+                          {/* Per-agreement chips */}
+                          {engAgreements.length > 0 ? (
+                            <div className="flex flex-wrap gap-1">
+                              {engAgreements.map((a) => {
+                                const chip = AGREEMENT_STATUS_CHIP[a.status] ?? {
+                                  label: a.status,
+                                  className: "bg-muted text-muted-foreground",
+                                };
+                                return (
+                                  <span
+                                    key={a.id}
+                                    className={cn(
+                                      "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
+                                      chip.className
+                                    )}
+                                    title={AGREEMENT_TYPE_LABELS[a.agreement_type]}
+                                  >
+                                    {AGREEMENT_TYPE_SHORT[a.agreement_type]} · {chip.label}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          ) : null}
+
+                          {/* Soft amber signal when no signed agreement exists */}
+                          {!hasSignedAgreement && (
+                            <span className="inline-flex items-center gap-1 text-xs text-amber-700">
+                              <AlertTriangle className="h-3 w-3 shrink-0" />
+                              No signed agreement
+                            </span>
+                          )}
+
+                          {/* Send agreement button */}
+                          <button
+                            type="button"
+                            onClick={() => setSendAgreementFor(eng)}
+                            className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                          >
+                            <FileText className="h-3 w-3" />
+                            Send agreement
+                          </button>
+                        </div>
+                      );
+                    })()}
                   </td>
                   <td className="px-4 py-3 text-right">
                     <Button
@@ -735,6 +837,17 @@ export function ContractorsClient({
         batch={approvingBatch}
         onSuccess={() => { setApprovingBatch(null); router.refresh(); }}
       />
+
+      {/* Send agreement dialog */}
+      {sendAgreementFor && (
+        <SendAgreementDialog
+          open={sendAgreementFor !== null}
+          onOpenChange={(o) => { if (!o) setSendAgreementFor(null); }}
+          engagementId={sendAgreementFor.id}
+          contractorName={sendAgreementFor.employee_name}
+          orgName={orgName}
+        />
+      )}
     </>
   );
 }

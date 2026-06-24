@@ -3,6 +3,7 @@ import { getCurrentUser, isAdmin } from "@/lib/current-user";
 import { hasFeature } from "@/config/plans";
 import { UpgradeGate } from "@/components/layout/upgrade-gate";
 import { listContractorEngagements, listAssignableContractors, listContractorBatches } from "@/actions/contractors";
+import { listEngagementAgreements } from "@/actions/contractor-agreements";
 import { ContractorsClient } from "@/components/contractors/contractors-client";
 
 export default async function ContractorsPage() {
@@ -20,15 +21,17 @@ export default async function ContractorsPage() {
     );
   }
 
-  const [engRes, assignableRes, batchesRes] = await Promise.all([
+  const [engRes, assignableRes, batchesRes, agreementsRes] = await Promise.all([
     listContractorEngagements(),
     listAssignableContractors(),
     listContractorBatches(),
+    listEngagementAgreements(),
   ]);
 
   const engagements = engRes.success ? engRes.data : [];
   const assignableContractors = assignableRes.success ? assignableRes.data : [];
   const batches = batchesRes.success ? batchesRes.data : [];
+  const agreements = agreementsRes.success ? agreementsRes.data : [];
 
   return (
     <div className="space-y-6">
@@ -42,6 +45,8 @@ export default async function ContractorsPage() {
         engagements={engagements}
         assignableContractors={assignableContractors}
         batches={batches}
+        agreements={agreements}
+        orgName={user.orgName ?? ""}
       />
     </div>
   );

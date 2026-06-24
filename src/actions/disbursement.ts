@@ -500,9 +500,9 @@ export async function approveDisbursement(
         amount: it.amount * 100, // paise
         currency: "INR",
         mode: "IMPS",
-        purpose: "salary",
+        purpose: b.kind === "contractor" ? "payout" : "salary",
         reference_id: it.id,
-        narration: "Salary",
+        narration: b.kind === "contractor" ? "Contractor payment" : "Salary",
       })),
     },
     b.idempotency_key,
@@ -542,9 +542,9 @@ export async function approveDisbursement(
           amount: it.amount * 100,
           currency: "INR",
           mode: "IMPS",
-          purpose: "salary",
+          purpose: b.kind === "contractor" ? "payout" : "salary",
           reference_id: it.id,
-          narration: "Salary",
+          narration: b.kind === "contractor" ? "Contractor payment" : "Salary",
         },
         itemIdempotency,
       );
@@ -682,9 +682,9 @@ export async function retryFailedPayouts(
         amount: it.amount * 100, // paise
         currency: "INR",
         mode: "IMPS",
-        purpose: "salary",
+        purpose: b.kind === "contractor" ? "payout" : "salary",
         reference_id: it.id,
-        narration: "Salary (retry)",
+        narration: b.kind === "contractor" ? "Contractor payment (retry)" : "Salary (retry)",
       },
       idempotencyKey,
     );

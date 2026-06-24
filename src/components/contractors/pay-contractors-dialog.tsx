@@ -262,6 +262,12 @@ export function PayContractorsDialog({
                   <span className="font-medium">awaiting_approval</span> status. A
                   second admin must approve before disbursement (maker-checker).
                 </p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  TDS is computed per payment. Section 194C&apos;s ₹1,00,000
+                  annual-aggregate threshold is not tracked across payments in
+                  this version — verify aggregate liability manually for
+                  recurring 194C contractors.
+                </p>
               </div>
             )}
 

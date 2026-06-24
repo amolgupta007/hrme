@@ -126,6 +126,10 @@ Make contractor a real worker type and pay them correctly, reusing existing rail
 *Demo: onboard a creative → verify bank → pay a flat fee with correct 194J TDS →
 they see their payout statement.*
 
+#### Phase 1 known limitations
+
+- **Section 194C annual-aggregate threshold not tracked across payments.** `computeContractorTDS` correctly models the ₹30,000 single-payment and ₹1,00,000 FY-aggregate exemption thresholds, but `payContractors` always passes `ytdPaid = 0`, so recurring sub-₹30k 194C contractors will not have TDS deducted even after crossing ₹1,00,000 in the financial year. TDS is computed per payment only. Admins must verify cumulative liability manually for recurring 194C contractors; full YTD-aggregate tracking is a Phase 2 item.
+
 ### Phase 2 — Depth (≈3–4 wks)
 6. Contractor agreement + NDA + IP-assignment signing (fork LOI/offer token flow;
    clause templates + `contractor_agreements` table with versioning).

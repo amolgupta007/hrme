@@ -224,6 +224,31 @@ export async function payContractors(
   // Total in rupees across all items.
   const totalAmount = itemRows.reduce((s, r) => s + r.amount, 0);
 
+  // Open-batch guard: reject if any selected engagement already has an in-flight
+  // contractor batch (mirrors initiateDisbursement's duplicate-batch guard).
+  // Two-query approach avoids Supabase nested-embed never-inference (gotcha #3).
+  const { data: openBatches } = await supabase
+    .from("disbursement_batches")
+    .select("id")
+    .eq("org_id", user.orgId)
+    .eq("kind", "contractor")
+    .in("status", ["awaiting_approval", "approved", "processing", "partial_failed"]);
+  if (openBatches && openBatches.length > 0) {
+    const openBatchIds = (openBatches as any[]).map((b: any) => b.id);
+    const { data: conflictItems } = await supabase
+      .from("disbursement_items")
+      .select("contractor_engagement_id")
+      .in("batch_id", openBatchIds)
+      .in("contractor_engagement_id", engIds);
+    if (conflictItems && (conflictItems as any[]).length > 0) {
+      return {
+        success: false,
+        error:
+          "An open payout already exists for one or more selected contractors. Approve or cancel it first.",
+      };
+    }
+  }
+
   // Insert the batch (kind='contractor', payroll_run_id=null).
   // Column set mirrors initiateDisbursement — uses `as any` cast for unknown-table TS workaround.
   const { data: batch, error: batchErr } = await supabase
@@ -253,6 +278,21 @@ export async function payContractors(
     await supabase.from("disbursement_batches").delete().eq("id", batchId);
     return { success: false, error: itemsErr.message };
   }
+
+  // DPDP audit parity: write an 'initiate' row matching disbursement_audit_log
+  // (mirrors logAudit() in disbursement.ts — best-effort, never blocks the payout).
+  await supabase
+    .from("disbursement_audit_log")
+    .insert({
+      org_id: user.orgId,
+      batch_id: batchId,
+      actor_id: user.employeeId ?? null,
+      actor_role: user.role,
+      action: "initiate",
+      payload: { item_count: itemRows.length, kind: "contractor" },
+    } as any)
+    .then(() => {})
+    .catch(() => {});
 
   revalidatePath("/dashboard/contractors");
   return { success: true, data: { batchId } };

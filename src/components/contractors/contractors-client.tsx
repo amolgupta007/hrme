@@ -14,12 +14,14 @@ import {
   createContractorEngagement,
   updateContractorEngagement,
 } from "@/actions/contractors";
+import { approveDisbursement } from "@/actions/disbursement";
 import { PayContractorsDialog } from "./pay-contractors-dialog";
 import {
   RATE_TYPE_LABELS,
   TDS_SECTION_LABELS,
 } from "@/lib/contractor/types";
 import type { RateType, TdsSection, PayeeType, EngagementStatus } from "@/lib/contractor/types";
+import type { ContractorBatchRow } from "@/actions/contractors";
 
 // Shape returned by listContractorEngagements
 export interface ContractorEngagement {
@@ -49,6 +51,7 @@ export interface AssignableContractor {
 interface ContractorsClientProps {
   engagements: ContractorEngagement[];
   assignableContractors: AssignableContractor[];
+  batches: ContractorBatchRow[];
 }
 
 const inputCn =
@@ -383,15 +386,102 @@ function EngagementDialog({
 
 // ---- Main client component ----
 
+function formatINR(n: number) {
+  return `₹${n.toLocaleString("en-IN")}`;
+}
+
+const BATCH_STATUS_LABELS: Record<string, { label: string; className: string }> = {
+  awaiting_approval: { label: "Awaiting Approval", className: "bg-amber-100 text-amber-700" },
+  approved: { label: "Approved", className: "bg-blue-100 text-blue-700" },
+  processing: { label: "Processing", className: "bg-blue-100 text-blue-700" },
+  completed: { label: "Completed", className: "bg-emerald-100 text-emerald-700" },
+  partial_failed: { label: "Partial Failed", className: "bg-orange-100 text-orange-700" },
+  cancelled: { label: "Cancelled", className: "bg-muted text-muted-foreground" },
+  preflight: { label: "Preflight", className: "bg-muted text-muted-foreground" },
+};
+
+interface ApproveBatchDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  batch: ContractorBatchRow | null;
+  onSuccess: () => void;
+}
+
+function ApproveBatchDialog({ open, onOpenChange, batch, onSuccess }: ApproveBatchDialogProps) {
+  const [loading, setLoading] = React.useState(false);
+
+  async function handleApprove() {
+    if (!batch) return;
+    setLoading(true);
+    const result = await approveDisbursement(batch.id);
+    setLoading(false);
+    if (result.success) {
+      const { pushed, failed } = result.data;
+      toast.success(
+        failed > 0
+          ? `Approved — ${pushed} paid, ${failed} failed`
+          : `Approved — ${pushed} payout${pushed !== 1 ? "s" : ""} queued`
+      );
+      onOpenChange(false);
+      onSuccess();
+    } else {
+      toast.error(result.error);
+      onOpenChange(false);
+    }
+  }
+
+  return (
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/50 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-xl border bg-background p-6 shadow-xl data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95">
+          <div className="mb-4 flex items-center justify-between">
+            <Dialog.Title className="text-lg font-semibold">Approve & Pay</Dialog.Title>
+            <Dialog.Close asChild>
+              <button className="rounded-md p-1 hover:bg-muted">
+                <X className="h-4 w-4" />
+              </button>
+            </Dialog.Close>
+          </div>
+          {batch && (
+            <p className="text-sm text-muted-foreground mb-5">
+              Approve disbursement of{" "}
+              <span className="font-semibold text-foreground">{formatINR(batch.total_amount)}</span>{" "}
+              to {batch.item_count} contractor{batch.item_count !== 1 ? "s" : ""}? This will
+              initiate RazorpayX payouts immediately.
+            </p>
+          )}
+          <div className="flex justify-end gap-3">
+            <Dialog.Close asChild>
+              <Button type="button" variant="outline" disabled={loading}>
+                Cancel
+              </Button>
+            </Dialog.Close>
+            <Button
+              onClick={handleApprove}
+              disabled={loading}
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
+            >
+              {loading ? "Approving..." : "Approve & Pay"}
+            </Button>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
+
 export function ContractorsClient({
   engagements,
   assignableContractors,
+  batches,
 }: ContractorsClientProps) {
   const router = useRouter();
   const [formOpen, setFormOpen] = React.useState(false);
   const [editingEngagement, setEditingEngagement] =
     React.useState<ContractorEngagement | null>(null);
   const [payOpen, setPayOpen] = React.useState(false);
+  const [approvingBatch, setApprovingBatch] = React.useState<ContractorBatchRow | null>(null);
 
   function handleEdit(eng: ContractorEngagement) {
     setEditingEngagement(eng);
@@ -560,6 +650,65 @@ export function ContractorsClient({
         </div>
       )}
 
+      {/* Contractor payouts section */}
+      {batches.length > 0 && (
+        <div className="space-y-3">
+          <h2 className="text-base font-semibold">Contractor payouts</h2>
+          <div className="overflow-x-auto rounded-xl border">
+            <table className="w-full min-w-[600px] text-sm">
+              <thead>
+                <tr className="border-b bg-muted/40">
+                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">Date</th>
+                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">Amount</th>
+                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">Contractors</th>
+                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">Status</th>
+                  <th className="px-4 py-3 text-right font-medium text-muted-foreground">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {batches.map((batch) => {
+                  const statusInfo = BATCH_STATUS_LABELS[batch.status] ?? {
+                    label: batch.status,
+                    className: "bg-muted text-muted-foreground",
+                  };
+                  return (
+                    <tr key={batch.id} className="hover:bg-muted/20">
+                      <td className="px-4 py-3 text-muted-foreground">
+                        {new Date(batch.created_at).toLocaleDateString("en-IN", {
+                          day: "2-digit",
+                          month: "short",
+                          year: "numeric",
+                        })}
+                      </td>
+                      <td className="px-4 py-3 font-medium">{formatINR(batch.total_amount)}</td>
+                      <td className="px-4 py-3">
+                        {batch.item_count} contractor{batch.item_count !== 1 ? "s" : ""}
+                      </td>
+                      <td className="px-4 py-3">
+                        <Badge className={cn("hover:opacity-100", statusInfo.className)}>
+                          {statusInfo.label}
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {batch.status === "awaiting_approval" && (
+                          <Button
+                            size="sm"
+                            onClick={() => setApprovingBatch(batch)}
+                            className="bg-primary text-primary-foreground hover:bg-primary/90"
+                          >
+                            Approve &amp; pay
+                          </Button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* Add / Edit dialog */}
       <EngagementDialog
         open={formOpen}
@@ -577,6 +726,14 @@ export function ContractorsClient({
         open={payOpen}
         onOpenChange={setPayOpen}
         engagements={activeEngagements}
+      />
+
+      {/* Approve batch dialog */}
+      <ApproveBatchDialog
+        open={approvingBatch !== null}
+        onOpenChange={(o) => { if (!o) setApprovingBatch(null); }}
+        batch={approvingBatch}
+        onSuccess={() => { setApprovingBatch(null); router.refresh(); }}
       />
     </>
   );

@@ -115,8 +115,9 @@ export function PayContractorsDialog({
     if (result.success) {
       toast.success("Payment batch created — awaiting approval");
       onOpenChange(false);
-      // Route to disbursement batch detail for maker-checker approval.
-      router.push(`/dashboard/payroll?tab=disbursements&batch=${result.data.batchId}`);
+      // Route back to the contractors page where the awaiting_approval batch can be approved.
+      router.push("/dashboard/contractors");
+      router.refresh();
     } else {
       toast.error(result.error);
     }

@@ -2,8 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser, isAdmin } from "@/lib/current-user";
 import { hasFeature } from "@/config/plans";
 import { UpgradeGate } from "@/components/layout/upgrade-gate";
-import { listContractorEngagements } from "@/actions/contractors";
-import { listAssignableContractors } from "@/actions/contractors";
+import { listContractorEngagements, listAssignableContractors, listContractorBatches } from "@/actions/contractors";
 import { ContractorsClient } from "@/components/contractors/contractors-client";
 
 export default async function ContractorsPage() {
@@ -21,13 +20,15 @@ export default async function ContractorsPage() {
     );
   }
 
-  const [engRes, assignableRes] = await Promise.all([
+  const [engRes, assignableRes, batchesRes] = await Promise.all([
     listContractorEngagements(),
     listAssignableContractors(),
+    listContractorBatches(),
   ]);
 
   const engagements = engRes.success ? engRes.data : [];
   const assignableContractors = assignableRes.success ? assignableRes.data : [];
+  const batches = batchesRes.success ? batchesRes.data : [];
 
   return (
     <div className="space-y-6">
@@ -40,6 +41,7 @@ export default async function ContractorsPage() {
       <ContractorsClient
         engagements={engagements}
         assignableContractors={assignableContractors}
+        batches={batches}
       />
     </div>
   );

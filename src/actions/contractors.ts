@@ -258,6 +258,52 @@ export async function payContractors(
   return { success: true, data: { batchId } };
 }
 
+// ---- listContractorBatches ----
+
+export type ContractorBatchRow = {
+  id: string;
+  status: string;
+  total_amount: number; // rupees
+  item_count: number;
+  created_at: string;
+};
+
+export async function listContractorBatches(): Promise<ActionResult<ContractorBatchRow[]>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Unauthorized" };
+
+  const supabase = createAdminSupabase();
+  const { data, error } = await supabase
+    .from("disbursement_batches")
+    .select("id, status, total_amount, created_at")
+    .eq("org_id", user.orgId)
+    .eq("kind", "contractor")
+    .order("created_at", { ascending: false })
+    .limit(50);
+  if (error) return { success: false, error: error.message };
+
+  const batchIds = (data ?? []).map((b: any) => b.id);
+  const countByBatch = new Map<string, number>();
+  if (batchIds.length) {
+    const { data: items } = await supabase
+      .from("disbursement_items")
+      .select("batch_id")
+      .in("batch_id", batchIds);
+    for (const it of (items ?? []) as any[])
+      countByBatch.set(it.batch_id, (countByBatch.get(it.batch_id) ?? 0) + 1);
+  }
+
+  const rows = (data ?? []).map((b: any) => ({
+    id: b.id,
+    status: b.status,
+    total_amount: b.total_amount, // rupees
+    item_count: countByBatch.get(b.id) ?? 0,
+    created_at: b.created_at,
+  }));
+  return { success: true, data: rows };
+}
+
 // ---- listAssignableContractors ----
 // Returns employees with employment_type='contract' that do NOT already have an
 // active engagement — used by the Add Engagement dialog picker.

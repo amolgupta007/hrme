@@ -1,8 +1,19 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { toast } from "sonner";
-import { Plus, Trash2, Pencil, MapPin, Cpu, Fingerprint } from "lucide-react";
+import {
+  Plus,
+  Trash2,
+  Pencil,
+  MapPin,
+  Cpu,
+  Fingerprint,
+  ChevronDown,
+  ChevronRight,
+  HelpCircle,
+  ListChecks,
+} from "lucide-react";
 import { CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -50,6 +61,10 @@ export function BiometricDevicesSection({
   const [locations, setLocations] = useState(initialLocations);
   const [devices, setDevices] = useState(initialDevices);
   const [employees, setEmployees] = useState(initialEmployees);
+
+  // Setup help: guide expanded by default until they have a device; per-device troubleshoot.
+  const [showGuide, setShowGuide] = useState(initialDevices.length === 0);
+  const [troubleshootId, setTroubleshootId] = useState<string | null>(null);
 
   // Device dialog
   const [deviceDialog, setDeviceDialog] = useState<{ open: boolean; editing?: DeviceRow }>(
@@ -139,6 +154,8 @@ export function BiometricDevicesSection({
           straight into Attendance.
         </p>
 
+        <SetupGuide open={showGuide} onToggle={() => setShowGuide((v) => !v)} />
+
         {/* ---- Devices ---- */}
         <div>
           <div className="mb-2 flex items-center justify-between">
@@ -156,37 +173,51 @@ export function BiometricDevicesSection({
               {devices.map((d) => {
                 const st = statusOf(d.last_seen_at);
                 return (
-                  <li key={d.id} className="flex items-center justify-between gap-3 p-3">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className={`h-2 w-2 shrink-0 rounded-full ${toneCls[st.tone]}`} />
-                        <span className="truncate text-sm font-medium">
-                          {d.label || d.device_serial}
-                        </span>
-                        {!d.is_active && (
-                          <span className="text-[10px] text-muted-foreground">Inactive</span>
-                        )}
+                  <li key={d.id} className="p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className={`h-2 w-2 shrink-0 rounded-full ${toneCls[st.tone]}`} />
+                          <span className="truncate text-sm font-medium">
+                            {d.label || d.device_serial}
+                          </span>
+                          {!d.is_active && (
+                            <span className="text-[10px] text-muted-foreground">Inactive</span>
+                          )}
+                        </div>
+                        <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                          {d.device_serial}
+                          {d.location_name ? ` · ${d.location_name}` : ""} · {st.text}
+                          {d.last_punch_at
+                            ? ` · last punch ${new Date(d.last_punch_at).toLocaleString()}`
+                            : ""}
+                        </p>
                       </div>
-                      <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                        {d.device_serial}
-                        {d.location_name ? ` · ${d.location_name}` : ""} · {st.text}
-                        {d.last_punch_at
-                          ? ` · last punch ${new Date(d.last_punch_at).toLocaleString()}`
-                          : ""}
-                      </p>
+                      <div className="flex items-center gap-1">
+                        {st.tone === "amber" && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                              setTroubleshootId(troubleshootId === d.id ? null : d.id)
+                            }
+                          >
+                            <HelpCircle className="mr-1 h-3.5 w-3.5" /> Not connecting?
+                          </Button>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setDeviceDialog({ open: true, editing: d })}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => setDeletingDevice(d)}>
+                          <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                        </Button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setDeviceDialog({ open: true, editing: d })}
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={() => setDeletingDevice(d)}>
-                        <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                      </Button>
-                    </div>
+                    {troubleshootId === d.id && <TroubleshootBox serial={d.device_serial} />}
                   </li>
                 );
               })}
@@ -318,5 +349,109 @@ export function BiometricDevicesSection({
         onConfirm={() => deletingLoc && removeLocation(deletingLoc)}
       />
     </>
+  );
+}
+
+// Device-side ADMS settings (production endpoint). Kept in sync with register-device-dialog.tsx.
+const ADMS_FIELDS: ReadonlyArray<readonly [string, string]> = [
+  ["Server Mode", "ADMS"],
+  ["Server Address", "jambahr.com"],
+  ["Server Port", "443"],
+  ["HTTPS / Encrypt", "ON"],
+  ["Enable Domain Name", "ON"],
+];
+
+function Step({
+  n,
+  title,
+  children,
+}: {
+  n: number;
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <li className="flex gap-2.5">
+      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-semibold text-primary">
+        {n}
+      </span>
+      <div className="min-w-0">
+        <p className="font-medium text-foreground">{title}</p>
+        <div className="mt-0.5 text-muted-foreground">{children}</div>
+      </div>
+    </li>
+  );
+}
+
+function SetupGuide({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+  return (
+    <div className="rounded-lg border border-border bg-muted/30">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex w-full items-center justify-between p-3 text-left"
+      >
+        <span className="flex items-center gap-2 text-sm font-medium">
+          <ListChecks className="h-4 w-4" /> How to connect a device
+        </span>
+        {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+      </button>
+      {open && (
+        <div className="border-t border-border p-3 text-xs">
+          <ol className="space-y-2.5">
+            <Step n={1} title="Enroll the employee on the device">
+              On the device: Menu → User Mgmt → New User. Note the <b>User ID</b> — that number is
+              the PIN you map under “Employee PINs” below.
+            </Step>
+            <Step n={2} title="Point the device at JambaHR">
+              Menu → Comm → Cloud Server (ADMS):
+              <ul className="mt-1 space-y-0.5">
+                {ADMS_FIELDS.map(([k, v]) => (
+                  <li key={k} className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">{k}</span>
+                    <span className="font-mono">{v}</span>
+                  </li>
+                ))}
+              </ul>
+            </Step>
+            <Step n={3} title="Reboot the device">
+              It connects within ~30s of boot. Make sure the device has internet access (it reaches
+              out to jambahr.com:443).
+            </Step>
+            <Step n={4} title="Register it here">
+              Click “Register device”, enter the serial + location, then set the employee’s PIN under
+              “Employee PINs”.
+            </Step>
+            <Step n={5} title="Watch the status">
+              The device’s dot turns green “Connected”. Fingerprint punches now flow straight into
+              Attendance.
+            </Step>
+          </ol>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TroubleshootBox({ serial }: { serial: string }) {
+  const checks = [
+    "Did you reboot the device after saving the Cloud Server settings?",
+    "Can the device reach the internet? It connects out to jambahr.com:443.",
+    "Is HTTPS / Encrypt set to ON on the device?",
+    "Is Server Port set to 443 and Server Address jambahr.com?",
+    `Does the serial on the device match “${serial}” exactly?`,
+  ];
+  return (
+    <div className="mt-2 rounded-md border border-amber-300/60 bg-amber-50 p-2.5 text-xs dark:border-amber-500/30 dark:bg-amber-500/10">
+      <p className="mb-1 font-medium">Not connecting? Check:</p>
+      <ul className="space-y-1">
+        {checks.map((c, i) => (
+          <li key={i} className="flex gap-1.5">
+            <span className="text-amber-600">•</span>
+            <span className="text-muted-foreground">{c}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }

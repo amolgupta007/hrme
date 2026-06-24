@@ -842,6 +842,82 @@ git commit -m "feat(contractors): admin contractors page + pay-contractors dialo
 
 ---
 
+### Task 8: Contractor-payout approval surface (discovered gap)
+
+**Why this exists:** The existing disbursement approval UI is **run-scoped** — `getDisbursementBatchByRun(runId)` filters `.eq("payroll_run_id", runId)`, and the payroll page doesn't read query params. A `kind='contractor'` batch has `payroll_run_id = null`, so it never appears there and can't be approved. `approveDisbursement(batchId)` itself is batch-id-scoped and works for a null-run batch (reconcile was guarded in Task 6), so we only need a UI entry point + a list action. **Also: amounts in `disbursement_items.amount` are stored in RUPEES** (the engine multiplies ×100 at dispatch — see disbursement.ts:500/542/682); `payContractors` was corrected to store rupees.
+
+**Files:**
+- Modify: `src/actions/contractors.ts` (add `listContractorBatches`)
+- Modify: `src/app/dashboard/contractors/page.tsx` (fetch batches, pass down)
+- Modify: `src/components/contractors/contractors-client.tsx` (render a "Contractor payouts" section + Approve action calling the existing `approveDisbursement`)
+- Modify: `src/components/contractors/pay-contractors-dialog.tsx` (redirect to `/dashboard/contractors` after submit, not the run-scoped payroll URL)
+
+**Interfaces:**
+- Produces: `listContractorBatches()` → `ActionResult<ContractorBatchRow[]>` where
+  `ContractorBatchRow = { id, status, total_amount /* rupees */, item_count, created_at }`.
+- Reuses: `approveDisbursement(batchId)` (already exported from `src/actions/disbursement.ts`; admin-guarded, maker-checker enforced, works for null-run batches).
+
+- [ ] **Step 1: Add `listContractorBatches`**
+
+```typescript
+export async function listContractorBatches(): Promise<ActionResult<any[]>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Unauthorized" };
+
+  const supabase = createAdminSupabase();
+  const { data, error } = await supabase
+    .from("disbursement_batches")
+    .select("id, status, total_amount, created_at")
+    .eq("org_id", user.orgId)
+    .eq("kind", "contractor")
+    .order("created_at", { ascending: false })
+    .limit(50);
+  if (error) return { success: false, error: error.message };
+
+  const batchIds = (data ?? []).map((b: any) => b.id);
+  const countByBatch = new Map<string, number>();
+  if (batchIds.length) {
+    const { data: items } = await supabase
+      .from("disbursement_items")
+      .select("batch_id")
+      .in("batch_id", batchIds);
+    for (const it of (items ?? []) as any[])
+      countByBatch.set(it.batch_id, (countByBatch.get(it.batch_id) ?? 0) + 1);
+  }
+
+  const rows = (data ?? []).map((b: any) => ({
+    id: b.id,
+    status: b.status,
+    total_amount: b.total_amount, // rupees
+    item_count: countByBatch.get(b.id) ?? 0,
+    created_at: b.created_at,
+  }));
+  return { success: true, data: rows };
+}
+```
+
+- [ ] **Step 2: Surface batches + approval on the contractors page**
+
+In `page.tsx` add `listContractorBatches()` to the `Promise.all`, pass `batches` to `ContractorsClient`. In `contractors-client.tsx` render a "Contractor payouts" section (a simple table: created date · ₹total_amount · N contractors · status chip). For rows with `status === 'awaiting_approval'`, show an "Approve & pay" button that opens a small confirm dialog → calls `approveDisbursement(row.id)` → on `success` toast the `{ pushed, failed }` summary + `router.refresh()`; on error toast `error` (e.g. "RazorpayX not connected", "A different admin must approve" — both are expected/handled). Use `formatINR` from `@/lib/ctc` (or the repo's currency formatter) for `total_amount`. Teal `bg-primary` CTA.
+
+- [ ] **Step 3: Redirect the pay dialog to the contractors page**
+
+In `pay-contractors-dialog.tsx`, change the post-submit `router.push(...)` to `/dashboard/contractors` (the run-scoped `/dashboard/payroll?tab=disbursements&batch=...` URL is a dead-link — the payroll page is run-scoped and ignores query params), then `router.refresh()` so the new `awaiting_approval` batch appears in the payouts section.
+
+- [ ] **Step 4: Verify**
+
+`npm run build` succeeds; `npm run lint` on changed files clean. No automated interactive test — the controller runs the end-to-end smoke test.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/actions/contractors.ts src/app/dashboard/contractors/page.tsx src/components/contractors/contractors-client.tsx src/components/contractors/pay-contractors-dialog.tsx
+git commit -m "feat(contractors): contractor-payout approval surface on contractors page"
+```
+
+---
+
 ## Self-Review notes (for the implementer)
 
 - **Type consistency:** `RateType`/`TdsSection`/`PayeeType`/`EngagementStatus` are defined once in `src/lib/contractor/types.ts` (Task 2) and reused by the migration CHECK constraints (Task 1), Zod enums (Task 5), and UI (Task 7) — keep the string literals identical (`'194J'`, `'194C'`, `'individual_huf'`, `'other'`, `'hourly'|'daily'|'monthly'|'milestone'`, `'active'|'ended'`).

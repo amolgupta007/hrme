@@ -15,6 +15,7 @@
 
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { computeDailyAttendance, type PunchEvent } from "./daily-attendance";
+import { resolveEmployeeZoneLocationIds } from "./resolve-zone";
 
 const IST_OFFSET = "+05:30";
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -198,9 +199,18 @@ async function recomputeDay(
     .lt("punched_at", end.toISOString())
     .order("punched_at", { ascending: true });
 
+  // Phase 1: pool only punches from the employee's zone for that day.
+  // null = unassigned → pool all of the employee's punches (no-zone fallback).
+  const zoneLocationIds = await resolveEmployeeZoneLocationIds(
+    supabase,
+    orgId,
+    employeeId,
+    istDate,
+  );
+
   const result = computeDailyAttendance({
     events: (events ?? []) as PunchEvent[],
-    zoneLocationIds: null, // Phase 0: no zones yet — pool all of the employee's punches
+    zoneLocationIds,
   });
 
   if (result.status === "absent") return;

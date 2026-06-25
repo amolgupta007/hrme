@@ -20,6 +20,7 @@ import { DepartmentsSection } from "@/components/settings/departments-section";
 import { ProductsSection } from "@/components/settings/products-section";
 import { OnboardingStepsSection } from "@/components/settings/onboarding-steps-section";
 import { BiometricDevicesSection } from "@/components/settings/biometric-devices-section";
+import { AttendanceZonesCard } from "@/components/settings/attendance-zones-card";
 import { PerformanceSection } from "@/components/settings/performance-section";
 import { AssistantSettingsSection } from "@/components/settings/assistant-settings-section";
 import { AttendanceSection } from "@/components/settings/attendance-section";
@@ -33,6 +34,7 @@ import type { MaskedRazorpayXCredentials } from "@/actions/razorpayx-credentials
 import type { OnboardingStepConfig } from "@/config/onboarding";
 import type { FingerprintConfig, EmployeeWithDeviceCode } from "@/actions/fingerprint";
 import type { LocationRow, DeviceRow } from "@/actions/attendance-devices";
+import type { ZoneRow, ZoneAssignmentRow } from "@/actions/attendance-zones";
 import type { PerformanceSettings } from "@/lib/performance-settings";
 import type { AttendanceSettings } from "@/actions/attendance";
 import type { Shift, ShiftAssignment } from "@/actions/shifts";
@@ -62,6 +64,8 @@ type SettingsContentProps = {
   fingerprintEmployees: EmployeeWithDeviceCode[];
   biometricLocations: LocationRow[];
   biometricDevices: DeviceRow[];
+  attendanceZones: ZoneRow[];
+  zoneAssignments: ZoneAssignmentRow[];
   userCtx: UserCtx;
   performanceSettings: PerformanceSettings;
   attendanceSettings: AttendanceSettings | null;
@@ -103,6 +107,8 @@ export function SettingsContent({
   fingerprintEmployees,
   biometricLocations,
   biometricDevices,
+  attendanceZones,
+  zoneAssignments,
   userCtx,
   performanceSettings,
   attendanceSettings,
@@ -270,6 +276,12 @@ export function SettingsContent({
             initialLocations={biometricLocations}
             initialDevices={biometricDevices}
             initialEmployees={fingerprintEmployees}
+          />
+          <AttendanceZonesCard
+            initialZones={attendanceZones}
+            initialAssignments={zoneAssignments}
+            locations={biometricLocations}
+            employees={fingerprintEmployees}
           />
         </CollapsibleSection>
       )}

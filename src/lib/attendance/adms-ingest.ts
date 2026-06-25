@@ -149,7 +149,7 @@ export async function ingestAttlog(serial: string, body: string): Promise<Ingest
 
   for (const key of affected) {
     const [employeeId, istDate] = key.split("|");
-    await recomputeDay(supabase, orgId, employeeId, istDate);
+    await recomputeAttendanceDay(supabase, orgId, employeeId, istDate);
   }
 
   // Liveness for the Settings connection-status indicator.
@@ -180,8 +180,11 @@ export async function touchDeviceSeen(serial: string): Promise<void> {
     .or(`last_seen_at.is.null,last_seen_at.lt.${cutoff}`);
 }
 
-/** Derive the daily attendance_records rollup for one (employee, IST day) from its events. */
-async function recomputeDay(
+/**
+ * Derive the daily attendance_records rollup for one (employee, IST day) from its events.
+ * Exported so a manual "recalculate day" admin action can reuse the exact same logic.
+ */
+export async function recomputeAttendanceDay(
   supabase: ReturnType<typeof createAdminSupabase>,
   orgId: string,
   employeeId: string,
@@ -224,6 +227,12 @@ async function recomputeDay(
       clock_out_at: result.lastOutAt,
       total_minutes: result.totalMinutes,
       source: "device", // attendance_records.source CHECK only allows web/device/auto_close
+      // Phase 2 multi-location rollup fields (derived from the event stream).
+      first_in_location_id: result.firstInLocationId,
+      last_out_location_id: result.lastOutLocationId,
+      punch_count: result.punchCount,
+      out_of_zone_count: result.outOfZoneCount,
+      derived_status: result.status,
     },
     { onConflict: "org_id,employee_id,date" },
   );

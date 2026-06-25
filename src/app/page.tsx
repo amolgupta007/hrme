@@ -120,6 +120,7 @@ export default function HomePage() {
           </Link>
           <div className="hidden md:flex items-center gap-6">
             <Link href="#features" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">Features</Link>
+            <Link href="/contractors" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">For Contractors</Link>
             <Link href="/pricing" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">Pricing</Link>
             <Link href="/blog" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">Blog</Link>
           </div>
@@ -574,6 +575,7 @@ export default function HomePage() {
                 <p className="font-semibold text-foreground">Product</p>
                 <div className="space-y-1.5 text-muted-foreground">
                   <Link href="#features" className="block hover:text-foreground transition-colors">Features</Link>
+                  <Link href="/contractors" className="block hover:text-foreground transition-colors">For Contractors</Link>
                   <Link href="/pricing" className="block hover:text-foreground transition-colors">Pricing</Link>
                   <Link href="/sign-up" className="block hover:text-foreground transition-colors">Get Started</Link>
                 </div>

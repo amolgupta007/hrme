@@ -524,6 +524,22 @@ Optional, per-org rule: employees who clock in late more than N days in an IST c
 
 **v1 limitations**: overnight shifts not evaluated; calendar-month period only; bonus-block consequence only (no penalty deductions); single org-wide rule (targeting selects who it covers); Omni WhatsApp adapter pending.
 
+## Multi-Location Attendance (Biometric Zones) — shipped 2026-06-25
+
+Biometric devices across multiple sites push fingerprint punches to JambaHR; punches pool into one daily attendance record scoped to the employee's **zone**. Operator/dev doc: `docs/multi-location-attendance.md`. Spec: `docs/prds/multi-location-attendance.md`.
+
+**Data flow:** device → **ADMS push** `POST /iclock/cdata?SN=<serial>&table=ATTLOG` (`src/app/iclock/[...seg]/route.ts`, public, no Clerk) → `ingestAttlog` (`src/lib/attendance/adms-ingest.ts`) parses tab-separated ATTLOG, resolves **org by serial** + **employee by PIN** (`employees.device_code`), writes `attendance_punch_events` (source `'adms'`, IST→UTC) → `recomputeAttendanceDay` runs `resolveEmployeeZoneLocationIds` (`src/lib/attendance/resolve-zone.ts`) + the pure `computeDailyAttendance` (`src/lib/attendance/daily-attendance.ts`) → upserts the daily `attendance_records` rollup. Direction (in/out) is **derived** (min=first-in, max=last-out), never trusted from the device.
+
+**Zones:** `attendance_zones` + `attendance_zone_locations` + effective-dated `employee_zone_assignments`. An employee's punches count only from devices in their zone; out-of-zone punches are excluded (counted in `out_of_zone_count`). **Unassigned employee → null zone → pool ALL locations** (no-zone fallback, no regression). Actions in `src/actions/attendance-zones.ts`.
+
+**Admin UI:** Settings → Attendance → **Biometric Devices** (`biometric-devices-section.tsx`): locations CRUD, device registration (`register-device-dialog.tsx`) with copy-paste ADMS setup + live Connected/Waiting status + "Not connecting?" troubleshooter, employee PIN mapping, **Attendance Zones** (`attendance-zones-card.tsx`), **Device security** (`ingest-security-card.tsx`). Attendance page → **"Locations" tab** (`daily-attendance-tab.tsx`, admin): per-day first-in/last-out **with location**, hours, punch count, out-of-zone flag, status badge, recalculate, review-queue filter. Actions: `attendance-devices.ts`, `attendance-daily.ts`.
+
+**Security:** only registered **+ `is_active`** serials accepted. Optional per-org **ingest token** in the path `/iclock/<token>/<verb>` (`parseIclockPath` in `src/lib/attendance/iclock-path.ts`, `resolveOrgByIngestToken`); token/serial org-mismatch rejected; per-org `device_ingest_require_token` (in `organizations.settings`) rejects plain serial pushes (default off). Token + require-toggle in the Device security card.
+
+**Migrations:** `076` locations, `077` devices, `078` attendance_punch_events (+`uq_punch_events_dedupe`), `082` devices.last_seen/last_punch, `083` zones, `084` attendance_records multi-loc fields. (Mine were renumbered 079–081 → 082–084 to dodge the contractor 079/080 already on main.)
+
+**Device config (ADMS):** Menu → Comm → Cloud Server (ADMS): Server `jambahr.com`, Port `443`, HTTPS **ON** (prod), Enable Domain Name ON. The device PIN/User ID = `employees.device_code`.
+
 ## Payroll Module (`/dashboard/payroll`) — Business+
 
 - `src/lib/ctc.ts` — CTC breakdown: PF caps, PT per state (10 states), TDS slabs FY 2025-26, Rebate u/s 87A
@@ -910,6 +926,11 @@ npm run db:push       # Push migrations (needs CLI)
 86. **Lateness skips overnight shifts in v1**: `computeLateness` returns `evaluated:false` for `is_overnight` shifts (and when there's no shift AND no `fallback_cutoff_time`). Those punches are never marked late. Boundary-wrap handling is deferred.
 87. **Bonus block reads `late_policy_flags`; override is a separate action**: `addPayrollLineItem` blocks `category='bonus'` for a `status='flagged'` employee in the run's `month` unless `override:true`. The normal admin path is the Payroll badge → `overrideLateFlag` (flips to `overridden`); the `override` arg on the line item is the secondary escape hatch. Only `bonus` is blocked.
 88. **Late-policy counting is IST calendar-month**: the clock-in path counts `is_late` rows with `date` in `[YYYY-MM-01, recordDate]`; the reconcile cron bounds `[YYYY-MM-01, YYYY-MM-31]`. One policy per org (DB-unique on `org_id`); flags unique on `(org_id, employee_id, month)`.
+89. **ADMS ATTLOG timestamps are device-local IST, not UTC**: `adms-ingest` parses `YYYY-MM-DD HH:MM:SS` as `Asia/Kolkata` → UTC. The node-zklib *pull* path (port 4370) returns UTC instead — different — but pull is NOT the production path (it needs an on-prem agent; Vercel can't reach a LAN device). Push/ADMS is canonical. See `docs/multi-location-attendance.md`.
+90. **Device HTTPS must match the server**: ON for production (`jambahr.com` has a cert), OFF for a local plain-HTTP dev server. A device with HTTPS on pointed at HTTP sends **zero bytes** (TLS handshake fails) — looks like a dead integration. Also: ADMS devices **resend all stored logs on reboot** → idempotency via `uq_punch_events_dedupe`; recompute is safe to re-run.
+91. **`attendance_records.source` CHECK only allows `web`/`device`/`auto_close`**: the multi-loc rollup writes `'device'`; the punch-event log (`attendance_punch_events`) uses `'adms'`. Don't write `'adms'` to `attendance_records` — it violates the constraint.
+92. **`next build` exit 127 with no error = `.next` contention**, not your code. Multiple `next dev` servers on the same project share one `.next` dir and corrupt the production build. Stop ALL dev servers + `rm -rf .next`, then build. (Cost a long debugging detour on 2026-06-25.)
+93. **Multi-loc attendance is org-by-serial by default** (serials aren't secret). For stronger auth use the per-org ingest token path `/iclock/<token>/<verb>` + the `device_ingest_require_token` org setting. Unregistered or `is_active=false` serials are always dropped.
 
 ---
 

@@ -70,7 +70,23 @@ export function istDateOf(local: string): string | null {
   return m ? m[1] : null;
 }
 
-export async function ingestAttlog(serial: string, body: string): Promise<IngestResult> {
+/** Resolve an org by its per-org device ingest token (security hardening). */
+export async function resolveOrgByIngestToken(token: string): Promise<string | null> {
+  if (!token) return null;
+  const supabase = createAdminSupabase();
+  const { data } = await supabase
+    .from("organizations")
+    .select("id")
+    .eq("settings->>device_ingest_token" as any, token)
+    .maybeSingle();
+  return (data as any)?.id ?? null;
+}
+
+export async function ingestAttlog(
+  serial: string,
+  body: string,
+  opts: { tokenProvided?: boolean; orgIdFromToken?: string | null } = {},
+): Promise<IngestResult> {
   const base: IngestResult = {
     ok: true,
     ingested: 0,
@@ -95,9 +111,30 @@ export async function ingestAttlog(serial: string, body: string): Promise<Ingest
     console.warn(`[adms] unknown device serial ${serial} — ${punches.length} punch(es) dropped`);
     return { ...base, ok: false, reason: "unknown_device" };
   }
+  // Security: a deactivated device stops being trusted immediately.
+  if (!(device as any).is_active) {
+    console.warn(`[adms] device ${serial} is inactive — ${punches.length} punch(es) dropped`);
+    return { ...base, ok: false, reason: "inactive_device" };
+  }
   const orgId = (device as any).org_id as string;
   const deviceId = (device as any).id as string;
   const locationId = (device as any).location_id as string | null;
+
+  // Security: a token in the URL must belong to the same org as the serial.
+  if (opts.orgIdFromToken && opts.orgIdFromToken !== orgId) {
+    console.warn(`[adms] token/serial org mismatch for ${serial} — dropped`);
+    return { ...base, ok: false, reason: "token_org_mismatch" };
+  }
+  // Security: orgs may require the token (reject plain serial-only pushes).
+  const { data: org } = await supabase
+    .from("organizations")
+    .select("settings")
+    .eq("id", orgId)
+    .maybeSingle();
+  if ((org as any)?.settings?.device_ingest_require_token === true && !opts.tokenProvided) {
+    console.warn(`[adms] org ${orgId} requires an ingest token; serial-only push dropped`);
+    return { ...base, ok: false, reason: "token_required" };
+  }
 
   // Map PINs → employees (device_code) within the org, one round trip.
   const pins = [...new Set(punches.map((p) => p.pin))];
@@ -177,6 +214,7 @@ export async function touchDeviceSeen(serial: string): Promise<void> {
     .from("devices")
     .update({ last_seen_at: new Date().toISOString() })
     .eq("device_serial", serial)
+    .eq("is_active", true)
     .or(`last_seen_at.is.null,last_seen_at.lt.${cutoff}`);
 }
 

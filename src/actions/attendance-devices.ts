@@ -1,6 +1,7 @@
 "use server";
 
 import { z } from "zod";
+import { randomBytes } from "crypto";
 import { revalidatePath } from "next/cache";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { getCurrentUser, isAdmin } from "@/lib/current-user";
@@ -221,6 +222,69 @@ export async function deleteDevice(id: string): Promise<ActionResult<void>> {
     .eq("id", id)
     .eq("org_id", ctx.user.orgId);
 
+  if (error) return { success: false, error: error.message };
+  revalidatePath("/dashboard/settings");
+  return { success: true, data: undefined };
+}
+
+// ---------------- Ingest security (per-org token) ----------------
+
+export type IngestSecurity = {
+  token: string | null;
+  requireToken: boolean;
+};
+
+async function readSettings(orgId: string) {
+  const supabase = createAdminSupabase();
+  const { data } = await supabase
+    .from("organizations")
+    .select("settings")
+    .eq("id", orgId)
+    .single();
+  return { supabase, settings: ((data as any)?.settings ?? {}) as Record<string, any> };
+}
+
+export async function getIngestSecurity(): Promise<ActionResult<IngestSecurity>> {
+  const ctx = await requireAdmin();
+  if ("error" in ctx) return { success: false, error: ctx.error };
+  const { settings } = await readSettings(ctx.user.orgId);
+  return {
+    success: true,
+    data: {
+      token: settings.device_ingest_token ?? null,
+      requireToken: settings.device_ingest_require_token === true,
+    },
+  };
+}
+
+export async function regenerateIngestToken(): Promise<ActionResult<string>> {
+  const ctx = await requireAdmin();
+  if ("error" in ctx) return { success: false, error: ctx.error };
+  const { supabase, settings } = await readSettings(ctx.user.orgId);
+  const token = `dit_${randomBytes(18).toString("hex")}`;
+  const { error } = await supabase
+    .from("organizations")
+    .update({ settings: { ...settings, device_ingest_token: token } })
+    .eq("id", ctx.user.orgId);
+  if (error) return { success: false, error: error.message };
+  revalidatePath("/dashboard/settings");
+  return { success: true, data: token };
+}
+
+export async function setRequireIngestToken(
+  required: boolean,
+): Promise<ActionResult<void>> {
+  const ctx = await requireAdmin();
+  if ("error" in ctx) return { success: false, error: ctx.error };
+  const { supabase, settings } = await readSettings(ctx.user.orgId);
+  // Guard: can't require a token that doesn't exist yet.
+  if (required && !settings.device_ingest_token) {
+    return { success: false, error: "Generate a token first, then require it." };
+  }
+  const { error } = await supabase
+    .from("organizations")
+    .update({ settings: { ...settings, device_ingest_require_token: required } })
+    .eq("id", ctx.user.orgId);
   if (error) return { success: false, error: error.message };
   revalidatePath("/dashboard/settings");
   return { success: true, data: undefined };

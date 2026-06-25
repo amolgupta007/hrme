@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DestructiveDialog } from "@/components/ui/destructive-dialog";
 import { RegisterDeviceDialog } from "./register-device-dialog";
+import { IngestSecurityCard } from "./ingest-security-card";
 import {
   createLocation,
   deleteLocation,
@@ -307,6 +308,7 @@ export function BiometricDevicesSection({
             })}
           </ul>
         </div>
+        <IngestSecurityCard />
       </CardContent>
 
       {deviceDialog.open && (

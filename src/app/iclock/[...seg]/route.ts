@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
-import { ingestAttlog, touchDeviceSeen } from "@/lib/attendance/adms-ingest";
+import {
+  ingestAttlog,
+  touchDeviceSeen,
+  resolveOrgByIngestToken,
+} from "@/lib/attendance/adms-ingest";
+import { parseIclockPath } from "@/lib/attendance/iclock-path";
 
 /**
  * ZKTeco / eSSL ADMS ("push SDK") attendance endpoint — multi-location attendance Phase 0.C.
@@ -35,6 +40,8 @@ async function capture(req: Request, seg: string[]): Promise<NextResponse> {
   const query = Object.fromEntries(url.searchParams.entries());
   const headers = Object.fromEntries(req.headers.entries());
   const sn = query.SN ?? query.sn ?? "(none)";
+  // Optional per-org ingest token in the path: /iclock/<token>/<verb>.
+  const { token, endpoint } = parseIclockPath(seg);
 
   let body = "";
   try {
@@ -56,7 +63,7 @@ async function capture(req: Request, seg: string[]): Promise<NextResponse> {
 
   // GET /iclock/cdata = registration handshake. Send a config block that asks the
   // device to push all attendance logs in realtime, unencrypted.
-  if (req.method === "GET" && seg[0] === "cdata") {
+  if (req.method === "GET" && endpoint === "cdata") {
     const handshake = [
       `GET OPTION FROM: ${sn}`,
       "ATTLOGStamp=None", // None = resend all stored logs (so we see data even if old)
@@ -75,9 +82,13 @@ async function capture(req: Request, seg: string[]): Promise<NextResponse> {
   }
 
   // POST /iclock/cdata?table=ATTLOG = attendance punches. Ingest, then ack.
-  if (req.method === "POST" && seg[0] === "cdata" && query.table === "ATTLOG") {
+  if (req.method === "POST" && endpoint === "cdata" && query.table === "ATTLOG") {
     try {
-      const result = await ingestAttlog(sn, body);
+      const orgIdFromToken = token ? await resolveOrgByIngestToken(token) : null;
+      const result = await ingestAttlog(sn, body, {
+        tokenProvided: !!token,
+        orgIdFromToken,
+      });
       console.log("[adms] ingest:", JSON.stringify(result));
     } catch (e) {
       // Never fail the device's POST on our error — it would just resend (deduped).

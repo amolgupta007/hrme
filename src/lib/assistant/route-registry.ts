@@ -303,6 +303,25 @@ export const ROUTE_REGISTRY = {
     description:
       "Initiate, approve, and reconcile RazorpayX salary disbursement batches.",
   },
+
+  // Contractors (Business tier)
+  contractors_list: {
+    path: "/dashboard/contractors",
+    required_role: "admin",
+    required_plan: "business",
+    label: "Contractor Engagements",
+    description:
+      "View and manage contractor engagements — rate, TDS section, bank verification, and contract dates.",
+  },
+  contractors_pay: {
+    path: "/dashboard/contractors",
+    required_role: "admin",
+    required_plan: "business",
+    label: "Pay Contractors",
+    description:
+      "Process TDS-compliant contractor payments. Enter gross amounts, preview TDS deductions, and submit a disbursement batch for approval.",
+  },
+
   profile_bank_account: {
     path: "/dashboard/profile",
     params: { section: "bank-account" },

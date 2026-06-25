@@ -629,15 +629,23 @@ export async function processPayrollRun(runId: string): Promise<ActionResult<voi
   }
 
   // P-002: fetch each employee's date_of_joining for mid-FY income projection.
+  // Also fetch employment_type to exclude contractors from salaried payroll.
   const employeeIds = (salaries as any[]).map((s) => s.employee_id);
   const { data: emps } = await supabase
     .from("employees")
-    .select("id, date_of_joining")
+    .select("id, date_of_joining, employment_type")
     .eq("org_id", user.orgId)
     .in("id", employeeIds);
   const joiningMap = new Map<string, string | null>(
     (emps ?? []).map((e: any) => [e.id, (e.date_of_joining as string | null) ?? null])
   );
+
+  // Exclude contractors from salaried payroll runs. A contractor should not have
+  // a salary_structures row, but this guards against accidental misconfig.
+  const contractorIds = new Set(
+    (emps ?? []).filter((e: any) => e.employment_type === "contract").map((e: any) => e.id)
+  );
+  const salariedStructures = (salaries as any[]).filter((s) => !contractorIds.has(s.employee_id));
 
   // PRD 02 Phase 1: line items are not pre-fetched here because they only exist
   // AFTER a run is processed (admin adds them in the entry-edit dialog). The
@@ -647,7 +655,7 @@ export async function processPayrollRun(runId: string): Promise<ActionResult<voi
 
   // Build entries — TDS is projected over months_in_fy so mid-FY joiners aren't
   // over-deducted. Stored on each entry for later read-back in updatePayrollEntry.
-  const entries = (salaries as any[]).map((s) => {
+  const entries = salariedStructures.map((s) => {
     const lopDays = lopMap[s.employee_id] ?? 0;
     const lopDeduction = lopDays > 0
       ? Math.round((s.gross_monthly / runData.working_days) * lopDays)

@@ -13,6 +13,7 @@ export type UserContext = {
   role: UserRole;
   employeeId: string | null;
   firstName: string | null;
+  employmentType: "full_time" | "part_time" | "contract" | "intern" | null;
   plan: OrgPlan;
   customFeatures: string[] | null;
   jambaHireEnabled: boolean;
@@ -39,7 +40,7 @@ export async function getCurrentUser(): Promise<UserContext | null> {
     const { data } = await supabase
       .from("employees")
       .select(
-        "id, role, first_name, org_id, organizations!inner(id, name, plan, settings, custom_features)"
+        "id, role, first_name, employment_type, org_id, organizations!inner(id, name, plan, settings, custom_features)"
       )
       .eq("clerk_user_id", userId as string)
       .neq("status", "terminated")
@@ -148,6 +149,7 @@ export async function getCurrentUser(): Promise<UserContext | null> {
   const role: UserRole = active.role as UserRole;
   const employeeId: string | null = active.id;
   const firstName: string | null = active.first_name;
+  const employmentType = (active.employment_type ?? null) as "full_time" | "part_time" | "contract" | "intern" | null;
 
   return {
     orgId,
@@ -156,6 +158,7 @@ export async function getCurrentUser(): Promise<UserContext | null> {
     role,
     employeeId,
     firstName,
+    employmentType,
     plan,
     customFeatures,
     jambaHireEnabled,

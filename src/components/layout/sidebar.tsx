@@ -25,6 +25,7 @@ import {
   Lock,
   MessageCircle,
   Bug,
+  Briefcase,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -53,6 +54,7 @@ const iconMap: Record<string, LucideIcon> = {
   MessageSquareWarning,
   UserPlus,
   MapPin,
+  Briefcase,
 };
 
 // Map nav href to badge key
@@ -62,13 +64,16 @@ const BADGE_MAP: Record<string, keyof PendingCounts> = {
   "/dashboard/objectives": "objectives",
 };
 
-export function Sidebar({ badges, role, plan, features }: { badges: PendingCounts; role: UserRole; plan: OrgPlan; features?: Record<string, boolean> }) {
+export function Sidebar({ badges, role, plan, features, employmentType }: { badges: PendingCounts; role: UserRole; plan: OrgPlan; features?: Record<string, boolean>; employmentType?: string | null }) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
+
+  const isContractor = employmentType === "contract";
 
   const visibleNav = sidebarNav.filter((item) => {
     if (item.requiredRole && !hasPermission(role, item.requiredRole)) return false;
     if (item.featureFlag && !features?.[item.featureFlag]) return false;
+    if (item.hideForContractor && isContractor) return false;
     return true;
   });
 

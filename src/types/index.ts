@@ -60,6 +60,7 @@ export interface NavItem {
   requiredPlan?: "growth" | "business";
   featureFlag?: string;
   badge?: string;
+  hideForContractor?: boolean;
 }
 
 // ---- API Response ----

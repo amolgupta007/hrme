@@ -19,7 +19,8 @@ import { LeavePoliciesSection } from "@/components/settings/leave-policies-secti
 import { DepartmentsSection } from "@/components/settings/departments-section";
 import { ProductsSection } from "@/components/settings/products-section";
 import { OnboardingStepsSection } from "@/components/settings/onboarding-steps-section";
-import { FingerprintSection } from "@/components/settings/fingerprint-section";
+import { BiometricDevicesSection } from "@/components/settings/biometric-devices-section";
+import { AttendanceZonesCard } from "@/components/settings/attendance-zones-card";
 import { PerformanceSection } from "@/components/settings/performance-section";
 import { AssistantSettingsSection } from "@/components/settings/assistant-settings-section";
 import { AttendanceSection } from "@/components/settings/attendance-section";
@@ -32,6 +33,8 @@ import type { RatioConfig } from "@/lib/ctc";
 import type { MaskedRazorpayXCredentials } from "@/actions/razorpayx-credentials";
 import type { OnboardingStepConfig } from "@/config/onboarding";
 import type { FingerprintConfig, EmployeeWithDeviceCode } from "@/actions/fingerprint";
+import type { LocationRow, DeviceRow } from "@/actions/attendance-devices";
+import type { ZoneRow, ZoneAssignmentRow } from "@/actions/attendance-zones";
 import type { PerformanceSettings } from "@/lib/performance-settings";
 import type { AttendanceSettings } from "@/actions/attendance";
 import type { Shift, ShiftAssignment } from "@/actions/shifts";
@@ -59,6 +62,10 @@ type SettingsContentProps = {
   onboardingSteps: OnboardingStepConfig[];
   fingerprintConfig: FingerprintConfig;
   fingerprintEmployees: EmployeeWithDeviceCode[];
+  biometricLocations: LocationRow[];
+  biometricDevices: DeviceRow[];
+  attendanceZones: ZoneRow[];
+  zoneAssignments: ZoneAssignmentRow[];
   userCtx: UserCtx;
   performanceSettings: PerformanceSettings;
   attendanceSettings: AttendanceSettings | null;
@@ -98,6 +105,10 @@ export function SettingsContent({
   onboardingSteps,
   fingerprintConfig,
   fingerprintEmployees,
+  biometricLocations,
+  biometricDevices,
+  attendanceZones,
+  zoneAssignments,
   userCtx,
   performanceSettings,
   attendanceSettings,
@@ -154,6 +165,10 @@ export function SettingsContent({
       : `${stepsEnabled} ${pluralise(stepsEnabled, "step", "steps")} enabled`;
 
   const fingerprintSummary = fingerprintConfig.enabled ? "Enabled" : "Not configured";
+  const biometricSummary =
+    biometricDevices.length > 0
+      ? `${biometricDevices.length} device${biometricDevices.length > 1 ? "s" : ""}`
+      : "Not set up";
 
   const isAdmin =
     userCtx !== null &&
@@ -251,15 +266,22 @@ export function SettingsContent({
 
       {attendanceEnabled && isAdmin && (
         <CollapsibleSection
-          title="Fingerprint Integration"
+          title="Biometric Devices"
           icon={<Fingerprint className="h-5 w-5 text-muted-foreground" />}
-          summary={fingerprintSummary}
+          summary={biometricSummary}
           isOpen={openSection === "fingerprint"}
           onToggle={() => toggle("fingerprint")}
         >
-          <FingerprintSection
-            initialConfig={fingerprintConfig}
+          <BiometricDevicesSection
+            initialLocations={biometricLocations}
+            initialDevices={biometricDevices}
             initialEmployees={fingerprintEmployees}
+          />
+          <AttendanceZonesCard
+            initialZones={attendanceZones}
+            initialAssignments={zoneAssignments}
+            locations={biometricLocations}
+            employees={fingerprintEmployees}
           />
         </CollapsibleSection>
       )}

@@ -11,6 +11,7 @@ import { RosterGrid } from "./roster-grid";
 import type { RosterGrid as RosterGridData } from "@/actions/shifts";
 import type { WeekOffPolicy } from "@/lib/attendance/week-off";
 import { OvertimeTab } from "./overtime-tab";
+import { DailyAttendanceTab } from "./daily-attendance-tab";
 import type { OvertimeRecord } from "@/actions/overtime";
 import type { OvertimeSettings } from "@/lib/attendance/overtime-types";
 
@@ -50,7 +51,7 @@ export function AttendanceClient({ today, history, team, employees, isManager, i
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [liveTime, setLiveTime] = useState("");
-  const [activeTab, setActiveTab] = useState<"my" | "team" | "roster" | "overtime">(isManager ? "team" : "my");
+  const [activeTab, setActiveTab] = useState<"my" | "team" | "roster" | "overtime" | "daily">(isManager ? "team" : "my");
   const [filterEmployee, setFilterEmployee] = useState("");
   const [filteredHistory, setFilteredHistory] = useState<AttendanceRecord[]>(history);
 
@@ -223,11 +224,12 @@ export function AttendanceClient({ today, history, team, employees, isManager, i
             { label: "Team Today", value: "team" },
             { label: "Roster", value: "roster" },
             ...(isAdmin && overtimeSettings.enabled ? [{ label: "Overtime", value: "overtime" }] : []),
+            ...(isAdmin ? [{ label: "Locations", value: "daily" }] : []),
             { label: "My History", value: "my" },
           ].map((tab) => (
             <button
               key={tab.value}
-              onClick={() => setActiveTab(tab.value as "my" | "team" | "roster" | "overtime")}
+              onClick={() => setActiveTab(tab.value as "my" | "team" | "roster" | "overtime" | "daily")}
               className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
                 activeTab === tab.value
                   ? "border-primary text-primary"
@@ -287,6 +289,8 @@ export function AttendanceClient({ today, history, team, employees, isManager, i
       {activeTab === "overtime" && isAdmin && overtimeSettings.enabled && (
         <OvertimeTab records={overtimeRecords} settings={overtimeSettings} isAdmin={isAdmin} />
       )}
+
+      {activeTab === "daily" && isAdmin && <DailyAttendanceTab />}
 
       {/* My history tab */}
       {(activeTab === "my" || !isManager) && (

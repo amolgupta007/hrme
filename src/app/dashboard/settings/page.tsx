@@ -10,6 +10,8 @@ import {
   getFingerprintConfig,
   listEmployeesWithDeviceCodes,
 } from "@/actions/fingerprint";
+import { listLocations, listDevices } from "@/actions/attendance-devices";
+import { listZones, listZoneAssignments } from "@/actions/attendance-zones";
 import { getPerformanceSettings } from "@/lib/performance-settings";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { getAttendanceSettings } from "@/actions/attendance";
@@ -51,6 +53,10 @@ export default async function SettingsPage() {
     razorpayxCredentialsResult,
     latePolicyResult,
     whatsappCredsResult,
+    locationsResult,
+    devicesResult,
+    zonesResult,
+    zoneAssignmentsResult,
   ] = await Promise.all([
     listDepartments(),
     getOrgProfile(),
@@ -70,7 +76,16 @@ export default async function SettingsPage() {
     getRazorpayXCredentials(),
     getLatePolicy(),
     getWhatsAppCredentials(),
+    listLocations(),
+    listDevices(),
+    listZones(),
+    listZoneAssignments(),
   ]);
+
+  const biometricLocations = locationsResult.success ? locationsResult.data : [];
+  const biometricDevices = devicesResult.success ? devicesResult.data : [];
+  const attendanceZones = zonesResult.success ? zonesResult.data : [];
+  const zoneAssignments = zoneAssignmentsResult.success ? zoneAssignmentsResult.data : [];
 
   const departments = departmentsResult.success ? departmentsResult.data : [];
   const policies = policiesResult.success ? policiesResult.data : [];
@@ -155,6 +170,10 @@ export default async function SettingsPage() {
         onboardingSteps={onboardingSteps}
         fingerprintConfig={fingerprintConfig}
         fingerprintEmployees={fingerprintEmployees}
+        biometricLocations={biometricLocations}
+        biometricDevices={biometricDevices}
+        attendanceZones={attendanceZones}
+        zoneAssignments={zoneAssignments}
         userCtx={userCtx}
         performanceSettings={performanceSettings}
         attendanceSettings={attendanceSettings}

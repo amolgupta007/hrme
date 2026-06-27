@@ -1,10 +1,10 @@
 import {
   streamText,
   convertToModelMessages,
-  gateway,
   stepCountIs,
   type UIMessage,
 } from "ai";
+import { anthropic } from "@ai-sdk/anthropic";
 import { getCurrentUser } from "@/lib/current-user";
 import { canUseAssistant } from "@/lib/assistant/permissions";
 import { checkRateLimit } from "@/lib/assistant/rate-limit";
@@ -191,7 +191,9 @@ export async function POST(req: Request) {
   };
 
   const result = streamText({
-    model: gateway("anthropic/claude-sonnet-4-6"),
+    // Direct Anthropic provider (uses ANTHROPIC_API_KEY) -- bypasses the Vercel AI
+    // Gateway, which now paywalls BYOK behind paid gateway credits (was 403-ing every call).
+    model: anthropic("claude-sonnet-4-6"),
     system: systemPrompt,
     messages: modelMessages,
     tools,

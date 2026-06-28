@@ -153,6 +153,24 @@ export default async function SuperadminDashboard() {
           </Link>
         </section>
 
+        {/* Operations Runbooks */}
+        <section>
+          <h2 className="mb-1 text-base font-semibold text-gray-900">Runbooks</h2>
+          <p className="mb-4 text-sm text-gray-500">
+            Internal setup &amp; troubleshooting guides (biometric relay, etc.). Founder-only.
+          </p>
+          <Link
+            href="/superadmin/runbooks"
+            className="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-5 py-4 shadow-sm transition hover:border-gray-300 hover:shadow"
+          >
+            <div>
+              <p className="text-sm font-medium text-gray-900">Operations Runbooks</p>
+              <p className="mt-1 text-sm text-gray-500">Step-by-step ops guides</p>
+            </div>
+            <span className="text-sm text-teal-700">Open →</span>
+          </Link>
+        </section>
+
         {/* Custom plan requests */}
         <section>
           <h2 className="mb-1 text-base font-semibold text-gray-900">

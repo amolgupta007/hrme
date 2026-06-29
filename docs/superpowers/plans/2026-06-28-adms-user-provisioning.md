@@ -1,5 +1,7 @@
 # ADMS User Provisioning Implementation Plan
 
+> ✅ **SHIPPED & hardware-verified 2026-06-29.** All 11 tasks done; merged to `main` (`4a4f62d`) + deployed to prod; migration `085` live; upsert_user + delete_user both confirmed end-to-end on the real MB140 (`UFS2260202795`). AI-assistant help article `settings_biometric_devices` added + indexed. See `docs/multi-location-attendance.md` §4.5 and CLAUDE.md gotchas #94–96.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Let JambaHR push employee user records (PIN + Name) onto ZKTeco/eSSL biometric devices automatically via the ADMS command channel, with org-wide scope, a durable command queue, and a CSV/`device_code` bulk-entry path.

@@ -129,16 +129,19 @@ async function sendViaMsg91(e164Phone: string, otp: string): Promise<void> {
   });
 
   const text = await res.text();
-  if (!res.ok) {
-    throw new Error(`MSG91 HTTP ${res.status}: ${text}`);
-  }
-  // MSG91 returns 200 with { type: "success" | "error", ... } — surface errors.
+  // Always log MSG91's verdict — this is the only window into delivery.
+  console.warn(`[clerk-sms] MSG91 response ${res.status} for ${mobiles}: ${text}`);
+
+  let parsed: any = null;
   try {
-    const json = JSON.parse(text);
-    if (json?.type && json.type !== "success") {
-      throw new Error(`MSG91 error: ${text}`);
-    }
+    parsed = JSON.parse(text);
   } catch {
-    // non-JSON 200 — treat as delivered, MSG91 occasionally returns a bare id
+    // non-JSON body — fall through to the HTTP-status check below
+  }
+
+  // MSG91 Flow returns HTTP 200 with { type: "success" | "error", message }.
+  // Treat a non-2xx OR an explicit type:"error" as a failure.
+  if (!res.ok || (parsed && parsed.type && parsed.type !== "success")) {
+    throw new Error(`MSG91 send failed (HTTP ${res.status}): ${text}`);
   }
 }

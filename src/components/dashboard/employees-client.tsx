@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import * as Select from "@radix-ui/react-select";
-import { Search, UserPlus, ChevronDown, Upload, Mail } from "lucide-react";
+import { Search, UserPlus, ChevronDown, Upload, Mail, Smartphone } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -12,6 +12,7 @@ import { EmployeeForm } from "./employee-form";
 import type { Employee, Department, UserRole } from "@/types";
 import { hasPermission } from "@/types";
 import { sendBulkInvites } from "@/actions/invites";
+import { backfillAuthIdentifiers } from "@/actions/employees";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { OnboardingTracking } from "./onboarding-tracking";
 import type { EmployeeOnboardingSummary } from "@/config/onboarding";
@@ -41,6 +42,7 @@ export function EmployeesClient({ employees, departments, role, onboardingData }
   const [statusFilter, setStatusFilter] = React.useState("all");
   // Invite state
   const [sendingInvites, setSendingInvites] = React.useState(false);
+  const [syncingLogins, setSyncingLogins] = React.useState(false);
 
   // Sort state
   const [sortField, setSortField] = React.useState<SortField>("name");
@@ -134,6 +136,28 @@ export function EmployeesClient({ employees, departments, role, onboardingData }
     }
   }
 
+  async function handleSyncLogins() {
+    setSyncingLogins(true);
+    try {
+      const result = await backfillAuthIdentifiers();
+      if (result.success) {
+        const { scanned, addedPhone, failed } = result.data;
+        if (scanned === 0) {
+          toast.info("No employees with a phone number to sync");
+        } else {
+          toast.success(
+            `Synced ${scanned} phone number${scanned !== 1 ? "s" : ""} — ${addedPhone} new phone login${addedPhone !== 1 ? "s" : ""} enabled`
+          );
+        }
+        if (failed > 0) toast.error(`${failed} failed — check server logs`);
+      } else {
+        toast.error(result.error);
+      }
+    } finally {
+      setSyncingLogins(false);
+    }
+  }
+
   function openAdd() {
     setEditingEmployee(null);
     setFormOpen(true);
@@ -212,6 +236,12 @@ export function EmployeesClient({ employees, departments, role, onboardingData }
             {sorted.length} {sorted.length === 1 ? "employee" : "employees"}
             {(search || hasActiveFilters) && employees.length !== sorted.length && ` of ${employees.length}`}
           </span>
+          {canManage && (
+            <Button variant="outline" onClick={handleSyncLogins} disabled={syncingLogins}>
+              <Smartphone className="mr-2 h-4 w-4" />
+              {syncingLogins ? "Syncing…" : "Sync phone logins"}
+            </Button>
+          )}
           {canManage && (
             <Button onClick={openAdd}>
               <UserPlus className="mr-2 h-4 w-4" />

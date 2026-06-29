@@ -9,7 +9,7 @@ import { enqueueDeleteForEmployee } from "@/lib/attendance/device-provisioning";
 import type { ActionResult, Employee, Department, UserRole } from "@/types";
 import { employeeSchema } from "@/lib/employees/employee-schema";
 import { normalizePhone } from "@/lib/phone";
-import { provisionPhoneOnlyUser } from "@/lib/clerk/provision-phone-user";
+import { provisionPhoneOnlyUser, syncEmployeeAuthIdentifiers } from "@/lib/clerk/provision-phone-user";
 import { sendInvite } from "./invites";
 
 // ---- Helpers ----
@@ -126,7 +126,6 @@ export async function addEmployee(
       ? validated.data.email.trim()
       : null;
   const phone = normalizePhone(validated.data.phone);
-  const isPhoneOnly = !email && !!phone;
 
   const supabase = createAdminSupabase();
 
@@ -185,29 +184,36 @@ export async function addEmployee(
     return { success: false, error: error.message };
   }
 
-  if (isPhoneOnly) {
-    // Phone-only: provision the Clerk user + org membership directly and link synchronously.
+  const newId = (data as { id: string }).id;
+
+  if (phone) {
+    // Phone present (with or without an email): mirror BOTH identifiers onto a
+    // single Clerk user so this person can sign in by phone OR email. Without
+    // this, a phone in the employees table is never a Clerk sign-in identifier.
+    // Best-effort — the employee row is the source of truth; linking can retry.
     try {
       const client = await clerkClient();
-      const { clerkUserId } = await provisionPhoneOnlyUser(client, {
-        phoneE164: phone!,
+      const { clerkUserId } = await syncEmployeeAuthIdentifiers(client, {
+        email,
+        phoneE164: phone,
         role: validated.data.role,
       });
-      await supabase
-        .from("employees")
-        .update({ clerk_user_id: clerkUserId })
-        .eq("id", (data as { id: string }).id);
+      if (clerkUserId) {
+        await supabase
+          .from("employees")
+          .update({ clerk_user_id: clerkUserId })
+          .eq("id", newId);
+      }
     } catch (provErr: any) {
-      // Non-fatal: the employee row exists but Clerk linking failed (clerk_user_id stays null).
-      // provisionPhoneOnlyUser is idempotent; recovery today is to delete and re-add the employee.
-      // (A directory "retry provisioning" action is a known Phase-1 follow-up.)
-      console.warn("Phone provisioning failed (non-fatal):", provErr?.message ?? provErr);
+      console.warn("Clerk identifier sync failed (non-fatal):", provErr?.message ?? provErr);
     }
-  } else if (email) {
+  }
+
+  if (email) {
     // Has email: send our own account-setup email (Clerk org invitations dropped).
     // Best-effort — failure doesn't block the add; admin can resend from the directory.
     try {
-      await sendInvite((data as { id: string }).id);
+      await sendInvite(newId);
     } catch (inviteErr: any) {
       console.warn("Invite email failed (non-fatal):", inviteErr?.message ?? inviteErr);
     }
@@ -232,17 +238,20 @@ export async function updateEmployee(
     return { success: false, error: validated.error.errors[0]?.message ?? "Validation failed" };
   }
 
+  const email =
+    validated.data.email && validated.data.email.trim() !== ""
+      ? validated.data.email.trim()
+      : null;
+  const phone = normalizePhone(validated.data.phone ?? null);
+
   const supabase = createAdminSupabase();
   const { error } = await supabase
     .from("employees")
     .update({
       first_name: validated.data.firstName,
       last_name: validated.data.lastName,
-      email:
-        validated.data.email && validated.data.email.trim() !== ""
-          ? validated.data.email.trim()
-          : null,
-      phone: normalizePhone(validated.data.phone ?? null),
+      email,
+      phone,
       department_id: validated.data.departmentId || null,
       designation: validated.data.designation || null,
       date_of_joining: validated.data.dateOfJoining,
@@ -263,6 +272,37 @@ export async function updateEmployee(
       };
     }
     return { success: false, error: error.message };
+  }
+
+  // Keep Clerk sign-in identifiers in step with the row. When a phone is set,
+  // mirror email + phone onto the employee's Clerk user so either can be used
+  // to sign in (e.g. a phone added to an existing email-login employee). This is
+  // the path that fixes "phone is in employee data but login can't find it".
+  // Best-effort — never block the update on a Clerk sync hiccup.
+  if (phone) {
+    try {
+      const { data: emp } = await supabase
+        .from("employees")
+        .select("clerk_user_id")
+        .eq("id", id)
+        .eq("org_id", orgId)
+        .single();
+      const client = await clerkClient();
+      const { clerkUserId } = await syncEmployeeAuthIdentifiers(client, {
+        email,
+        phoneE164: phone,
+        role: validated.data.role,
+        existingClerkUserId: (emp as { clerk_user_id: string | null } | null)?.clerk_user_id ?? null,
+      });
+      if (clerkUserId && (emp as { clerk_user_id: string | null } | null)?.clerk_user_id !== clerkUserId) {
+        await supabase
+          .from("employees")
+          .update({ clerk_user_id: clerkUserId })
+          .eq("id", id);
+      }
+    } catch (syncErr: any) {
+      console.warn("Clerk identifier sync failed (non-fatal):", syncErr?.message ?? syncErr);
+    }
   }
 
   revalidatePath("/dashboard/employees");
@@ -355,6 +395,70 @@ export async function reprovisionPhoneEmployee(
     const msg = err?.errors?.[0]?.message ?? err?.message ?? "Clerk provisioning failed";
     return { success: false, error: msg };
   }
+}
+
+/**
+ * One-shot backfill: for every active employee that has a phone, mirror their
+ * email + phone onto their Clerk user so the number becomes a sign-in
+ * identifier. Use this to fix employees who were added/edited before the
+ * add/update Clerk-sync existed (phone in our DB but not on Clerk → phone login
+ * "couldn't find account"). Idempotent and safe to re-run.
+ */
+export async function backfillAuthIdentifiers(): Promise<
+  ActionResult<{ scanned: number; updated: number; addedPhone: number; addedEmail: number; failed: number }>
+> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can sync sign-in identifiers" };
+  const orgId = await getOrgId();
+  if (!orgId) return { success: false, error: "Not authenticated" };
+
+  const supabase = createAdminSupabase();
+  const { data: emps, error } = await supabase
+    .from("employees")
+    .select("id, email, phone, role, clerk_user_id")
+    .eq("org_id", orgId)
+    .neq("status", "terminated");
+  if (error) return { success: false, error: error.message };
+
+  const rows = (emps ?? []) as {
+    id: string;
+    email: string | null;
+    phone: string | null;
+    role: string;
+    clerk_user_id: string | null;
+  }[];
+  const withPhone = rows.filter((e) => !!normalizePhone(e.phone));
+
+  let updated = 0;
+  let addedPhone = 0;
+  let addedEmail = 0;
+  let failed = 0;
+  const client = await clerkClient();
+
+  // Sequential — SMB scale (≤500) and keeps us well under Clerk's rate limits.
+  for (const e of withPhone) {
+    try {
+      const res = await syncEmployeeAuthIdentifiers(client, {
+        email: e.email,
+        phoneE164: e.phone,
+        role: e.role as UserRole,
+        existingClerkUserId: e.clerk_user_id,
+      });
+      if (res.addedPhone) addedPhone++;
+      if (res.addedEmail) addedEmail++;
+      if (res.clerkUserId && res.clerkUserId !== e.clerk_user_id) {
+        await supabase.from("employees").update({ clerk_user_id: res.clerkUserId }).eq("id", e.id);
+        updated++;
+      }
+    } catch (err: any) {
+      failed++;
+      console.warn(`backfillAuthIdentifiers: failed for employee ${e.id}:`, err?.message ?? err);
+    }
+  }
+
+  revalidatePath("/dashboard/employees");
+  return { success: true, data: { scanned: withPhone.length, updated, addedPhone, addedEmail, failed } };
 }
 
 export type ImportRow = {

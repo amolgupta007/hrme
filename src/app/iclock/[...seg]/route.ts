@@ -5,6 +5,12 @@ import {
   resolveOrgByIngestToken,
 } from "@/lib/attendance/adms-ingest";
 import { parseIclockPath } from "@/lib/attendance/iclock-path";
+import { createAdminSupabase } from "@/lib/supabase/server";
+import {
+  buildUserCommand,
+  buildDeleteCommand,
+  parseDeviceCmdAck,
+} from "@/lib/attendance/adms-commands";
 
 /**
  * ZKTeco / eSSL ADMS ("push SDK") attendance endpoint — multi-location attendance Phase 0.C.
@@ -32,6 +38,62 @@ function ok(text: string) {
     status: 200,
     headers: { "Content-Type": "text/plain" },
   });
+}
+
+const COMMAND_BATCH = 20;
+
+/**
+ * Drain up to COMMAND_BATCH pending user-provisioning commands for this serial.
+ * Builds + persists each command line, flips the row to `sent`, and returns the
+ * joined lines (or null when there's nothing pending / device not eligible).
+ */
+async function dispatchCommands(sn: string): Promise<string | null> {
+  const supabase = createAdminSupabase();
+
+  // Only dispatch to a registered, active device.
+  const { data: device } = await supabase
+    .from("devices")
+    .select("id, is_active")
+    .eq("device_serial", sn)
+    .maybeSingle();
+  if (!device || (device as any).is_active !== true) return null;
+
+  const { data: pending } = await supabase
+    .from("device_commands")
+    .select("id, cmd_seq, cmd_type, pin, name")
+    .eq("device_serial", sn)
+    .eq("status", "pending")
+    .order("created_at", { ascending: true })
+    .limit(COMMAND_BATCH);
+  if (!pending || pending.length === 0) return null;
+
+  const lines: string[] = [];
+  for (const c of pending as any[]) {
+    const line =
+      c.cmd_type === "delete_user"
+        ? buildDeleteCommand(c.cmd_seq, c.pin)
+        : buildUserCommand({ cmdSeq: c.cmd_seq, pin: c.pin, name: c.name ?? "" });
+    lines.push(line);
+    await (supabase.from("device_commands") as any)
+      .update({ status: "sent", sent_at: new Date().toISOString(), command_text: line })
+      .eq("id", c.id);
+  }
+  return lines.join("\n") + "\n";
+}
+
+/** Record a device's command ack (ID=<cmd_seq>&Return=<code>). */
+async function recordAck(body: string): Promise<void> {
+  const { id, ret } = parseDeviceCmdAck(body);
+  if (id === null) return;
+  const supabase = createAdminSupabase();
+  const success = ret !== null && ret >= 0;
+  await (supabase.from("device_commands") as any)
+    .update(
+      success
+        ? { status: "confirmed", confirmed_at: new Date().toISOString() }
+        : { status: "failed", last_error: `Return=${ret}` }
+    )
+    .eq("cmd_seq", id);
 }
 
 async function capture(req: Request, seg: string[]): Promise<NextResponse> {
@@ -97,7 +159,32 @@ async function capture(req: Request, seg: string[]): Promise<NextResponse> {
     return ok("OK\n");
   }
 
-  // Everything else (OPERLOG POSTs, getrequest polls, devicecmd acks):
+  // GET /iclock/getrequest = device polling for server commands. Hand it any
+  // pending user-provisioning commands; otherwise fall through to OK. Best-effort:
+  // any failure must not stall the device.
+  if (req.method === "GET" && endpoint === "getrequest" && sn !== "(none)") {
+    touchDeviceSeen(sn).catch(() => {});
+    try {
+      const commands = await dispatchCommands(sn);
+      if (commands) return ok(commands);
+    } catch (e) {
+      console.error("[adms] dispatchCommands threw:", (e as Error)?.message);
+    }
+    return ok("OK\n");
+  }
+
+  // POST /iclock/devicecmd = device ack of a command we sent. Record the result.
+  if (req.method === "POST" && endpoint === "devicecmd") {
+    if (sn !== "(none)") touchDeviceSeen(sn).catch(() => {});
+    try {
+      await recordAck(body);
+    } catch (e) {
+      console.error("[adms] recordAck threw:", (e as Error)?.message);
+    }
+    return ok("OK\n");
+  }
+
+  // Everything else (OPERLOG POSTs, other polls/acks):
   // acknowledge so the device marks records delivered and keeps talking.
   // Bump device liveness (throttled) so Settings shows a live "connected" status.
   if (sn !== "(none)") {

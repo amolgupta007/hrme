@@ -369,6 +369,7 @@ export type ImportRow = {
   designation?: string;
   date_of_birth?: string;
   reporting_manager_email?: string;
+  device_code?: string;
 };
 
 export type ImportResult = {
@@ -409,10 +410,10 @@ export async function bulkImportEmployees(
 
   const remainingSlots = maxEmployees - activeCount;
 
-  // Fetch existing emails and phones in org (for duplicate detection)
+  // Fetch existing emails, phones and device codes in org (for duplicate detection)
   const { data: existingEmps } = await supabase
     .from("employees")
-    .select("email, status, phone")
+    .select("email, status, phone, device_code")
     .eq("org_id", orgId);
   const existingEmailMap = new Map(
     (existingEmps ?? [])
@@ -424,6 +425,14 @@ export async function bulkImportEmployees(
       .map((e: any) => e.phone)
       .filter((p: any): p is string => !!p)
   );
+  // device_code (biometric PIN) must be unique per org — backed by the
+  // uq_employees_org_device_code partial index (migration 085).
+  const existingDeviceCodeSet = new Set<string>(
+    (existingEmps ?? [])
+      .map((e: any) => e.device_code)
+      .filter((c: any): c is string => !!c)
+  );
+  const deviceCodesSeen = new Set<string>();
 
   // Fetch departments (for name→id lookup)
   const { data: depts } = await supabase
@@ -515,6 +524,18 @@ export async function bulkImportEmployees(
       continue;
     }
 
+    const deviceCode = row.device_code?.trim() || null;
+    if (deviceCode) {
+      if (!/^\d+$/.test(deviceCode)) {
+        errors.push({ row: rowNum, reason: "device_code must be digits only", data: row });
+        continue;
+      }
+      if (existingDeviceCodeSet.has(deviceCode) || deviceCodesSeen.has(deviceCode)) {
+        errors.push({ row: rowNum, reason: `Duplicate device_code (PIN) "${deviceCode}" — must be unique per org`, data: row });
+        continue;
+      }
+    }
+
     if (!emailOk && rowPhone) {
       if (existingPhoneSet.has(rowPhone) || phoneOnlyPhonesSeen.has(rowPhone)) {
         errors.push({ row: rowNum, reason: "Duplicate phone (already exists)", data: row });
@@ -537,8 +558,10 @@ export async function bulkImportEmployees(
       designation: row.designation?.trim() || null,
       date_of_birth: row.date_of_birth || null,
       reporting_manager_id: reportingManagerId,
+      device_code: deviceCode,
       status: "active",
     });
+    if (deviceCode) deviceCodesSeen.add(deviceCode); // prevent within-batch duplicate
     if (!emailOk && rowPhone) {
       phoneOnlyIndices.push({ insertIndex, phoneE164: rowPhone, role: row.role });
       phoneOnlyPhonesSeen.add(rowPhone); // prevent within-batch duplicate
@@ -554,6 +577,9 @@ export async function bulkImportEmployees(
       .insert(toInsert)
       .select("id, phone");
     if (insertError) {
+      if (insertError.message?.includes("uq_employees_org_device_code")) {
+        return { success: false, error: "A device_code (PIN) is already used by another employee in this organization." };
+      }
       return { success: false, error: insertError.message };
     }
 

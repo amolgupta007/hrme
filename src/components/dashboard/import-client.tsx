@@ -32,6 +32,7 @@ const COLUMN_REFERENCE = [
   { col: "designation", accepts: "Optional — free text job title" },
   { col: "date_of_birth", accepts: "Optional — YYYY-MM-DD" },
   { col: "reporting_manager_email", accepts: "Optional — must match existing employee email" },
+  { col: "device_code", accepts: "Optional — biometric PIN, digits only, unique per org" },
 ];
 
 function validateRow(row: any, rowNum: number): ParsedRow {
@@ -47,6 +48,8 @@ function validateRow(row: any, rowNum: number): ParsedRow {
     return { ...base, _valid: false, _error: `Invalid employment_type "${row.employment_type}"` };
   if (!row.date_of_joining || !/^\d{4}-\d{2}-\d{2}$/.test(row.date_of_joining))
     return { ...base, _valid: false, _error: "Invalid date_of_joining (use YYYY-MM-DD)" };
+  if (row.device_code?.trim() && !/^\d+$/.test(row.device_code.trim()))
+    return { ...base, _valid: false, _error: "device_code must be digits only" };
 
   return { ...base, _valid: true };
 }

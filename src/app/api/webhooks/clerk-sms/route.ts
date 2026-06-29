@@ -62,14 +62,11 @@ export async function POST(req: Request) {
 
   const data = event.data ?? {};
 
-  // First-run aid: log the raw payload once so you can confirm Clerk's exact
-  // field names against this code, then trim this log.
-  console.warn("[clerk-sms] sms.created payload:", JSON.stringify(data));
-
-  // Clerk's SMS message object. Field names confirmed defensively:
+  // Clerk's SMS message object. Field names confirmed against live payloads:
   //  - to_phone_number: E.164 destination, e.g. "+919812345678"
-  //  - otp_code: the verification code (present for verification templates)
+  //  - data.otp_code: the verification code (nested under `data`)
   //  - message: the fully rendered SMS body (fallback to pull digits from)
+  // NB: never log otpCode or the raw payload — these are live OTP secrets.
   const toPhone: string | undefined =
     data.to_phone_number || data.phone_number || data.to;
   const otpCode: string | undefined =
@@ -77,9 +74,9 @@ export async function POST(req: Request) {
 
   if (!toPhone || !otpCode) {
     console.error(
-      `[clerk-sms] could not extract phone/code (phone=${toPhone}, code=${
+      `[clerk-sms] could not extract phone/code (phone=${maskPhone(toPhone)}, code=${
         otpCode ? "present" : "missing"
-      }) — check payload log above`
+      })`
     );
     // 200 so Clerk doesn't retry a payload we can't parse; investigate via logs.
     return NextResponse.json({ received: true, delivered: false });
@@ -100,6 +97,12 @@ export async function POST(req: Request) {
 function extractCode(message?: string): string | undefined {
   if (!message) return undefined;
   return message.match(/\b(\d{4,8})\b/)?.[1];
+}
+
+/** Mask a phone for logs — keep only the last 4 digits. */
+function maskPhone(phone?: string): string {
+  if (!phone) return "unknown";
+  return `***${phone.replace(/\D/g, "").slice(-4)}`;
 }
 
 async function sendViaMsg91(e164Phone: string, otp: string): Promise<void> {
@@ -129,8 +132,9 @@ async function sendViaMsg91(e164Phone: string, otp: string): Promise<void> {
   });
 
   const text = await res.text();
-  // Always log MSG91's verdict — this is the only window into delivery.
-  console.warn(`[clerk-sms] MSG91 response ${res.status} for ${mobiles}: ${text}`);
+  // Log MSG91's verdict for delivery visibility. Response body carries only a
+  // request id + status (no OTP); the phone is masked to last-4.
+  console.warn(`[clerk-sms] MSG91 response ${res.status} for ${maskPhone(mobiles)}: ${text}`);
 
   let parsed: any = null;
   try {

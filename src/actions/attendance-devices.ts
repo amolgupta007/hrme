@@ -5,7 +5,10 @@ import { randomBytes } from "crypto";
 import { revalidatePath } from "next/cache";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { getCurrentUser, isAdmin } from "@/lib/current-user";
-import { enqueueUpsertForDevice } from "@/lib/attendance/device-provisioning";
+import {
+  enqueueUpsertForDevice,
+  enqueueSyncAll,
+} from "@/lib/attendance/device-provisioning";
 import type { ActionResult } from "@/types";
 
 export type LocationRow = {
@@ -229,6 +232,48 @@ export async function deleteDevice(id: string): Promise<ActionResult<void>> {
   if (error) return { success: false, error: error.message };
   revalidatePath("/dashboard/settings");
   return { success: true, data: undefined };
+}
+
+// ---------------- User provisioning (push to devices) ----------------
+
+export async function syncAllUsersToDevices(): Promise<ActionResult<{ enqueued: number }>> {
+  const ctx = await requireAdmin();
+  if ("error" in ctx) return { success: false, error: ctx.error };
+  const enqueued = await enqueueSyncAll(ctx.user.orgId);
+  revalidatePath("/dashboard/settings");
+  return { success: true, data: { enqueued } };
+}
+
+export async function retryFailedCommands(): Promise<ActionResult<{ retried: number }>> {
+  const ctx = await requireAdmin();
+  if ("error" in ctx) return { success: false, error: ctx.error };
+  const supabase = createAdminSupabase();
+  const { data, error } = await (supabase.from("device_commands") as any)
+    .update({ status: "pending", last_error: null })
+    .eq("org_id", ctx.user.orgId)
+    .eq("status", "failed")
+    .select("id");
+  if (error) return { success: false, error: error.message };
+  revalidatePath("/dashboard/settings");
+  return { success: true, data: { retried: data?.length ?? 0 } };
+}
+
+export async function getProvisioningStatus(): Promise<
+  ActionResult<{ pending: number; sent: number; confirmed: number; failed: number }>
+> {
+  const ctx = await requireAdmin();
+  if ("error" in ctx) return { success: false, error: ctx.error };
+  const supabase = createAdminSupabase();
+  const counts = { pending: 0, sent: 0, confirmed: 0, failed: 0 };
+  for (const status of Object.keys(counts) as (keyof typeof counts)[]) {
+    const { count } = await supabase
+      .from("device_commands")
+      .select("id", { count: "exact", head: true })
+      .eq("org_id", ctx.user.orgId)
+      .eq("status", status);
+    counts[status] = count ?? 0;
+  }
+  return { success: true, data: counts };
 }
 
 // ---------------- Ingest security (per-org token) ----------------

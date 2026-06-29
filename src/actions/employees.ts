@@ -561,9 +561,15 @@ export async function bulkImportEmployees(
 
   const errors: ImportResult["errors"] = [];
   const toInsert: any[] = [];
-  // Tracks phone-only rows so we can provision Clerk accounts after batch insert
-  const phoneOnlyIndices: { insertIndex: number; phoneE164: string; role: "admin" | "manager" | "employee" }[] = [];
-  const phoneOnlyPhonesSeen = new Set<string>();
+  // Tracks every row with a phone so we can sync Clerk sign-in identifiers
+  // (email + phone) after the batch insert — not just phone-only rows.
+  const phoneRowIndices: {
+    insertIndex: number;
+    phoneE164: string;
+    email: string | null;
+    role: "admin" | "manager" | "employee";
+  }[] = [];
+  const phonesSeen = new Set<string>();
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
@@ -640,8 +646,11 @@ export async function bulkImportEmployees(
       }
     }
 
-    if (!emailOk && rowPhone) {
-      if (existingPhoneSet.has(rowPhone) || phoneOnlyPhonesSeen.has(rowPhone)) {
+    if (rowPhone) {
+      // Phone must be unique per org for ANY row (email+phone or phone-only) —
+      // the employees_org_phone_unique partial index would otherwise fail the
+      // whole batch insert.
+      if (existingPhoneSet.has(rowPhone) || phonesSeen.has(rowPhone)) {
         errors.push({ row: rowNum, reason: "Duplicate phone (already exists)", data: row });
         continue;
       }
@@ -666,9 +675,14 @@ export async function bulkImportEmployees(
       status: "active",
     });
     if (deviceCode) deviceCodesSeen.add(deviceCode); // prevent within-batch duplicate
-    if (!emailOk && rowPhone) {
-      phoneOnlyIndices.push({ insertIndex, phoneE164: rowPhone, role: row.role });
-      phoneOnlyPhonesSeen.add(rowPhone); // prevent within-batch duplicate
+    if (rowPhone) {
+      phoneRowIndices.push({
+        insertIndex,
+        phoneE164: rowPhone,
+        email: emailOk ? rowEmail.toLowerCase() : null,
+        role: row.role,
+      });
+      phonesSeen.add(rowPhone); // prevent within-batch duplicate
     }
     if (emailOk) {
       existingEmailMap.set(rowEmail.toLowerCase(), "active"); // prevent within-batch duplicate
@@ -687,27 +701,32 @@ export async function bulkImportEmployees(
       return { success: false, error: insertError.message };
     }
 
-    // Provision Clerk accounts for phone-only rows (best-effort, non-fatal)
-    if (phoneOnlyIndices.length > 0 && inserted) {
+    // Sync Clerk sign-in identifiers for every imported row with a phone, so
+    // email+phone rows can sign in by either (not just phone-only rows).
+    // Best-effort, non-fatal.
+    if (phoneRowIndices.length > 0 && inserted) {
       const insertedRows = inserted as { id: string; phone: string | null }[];
       const client = await clerkClient();
-      for (const { insertIndex, phoneE164, role } of phoneOnlyIndices) {
+      for (const { insertIndex, phoneE164, email, role } of phoneRowIndices) {
         const insertedRow = insertedRows[insertIndex];
         if (!insertedRow || insertedRow.phone !== phoneE164) {
-          console.warn(`Import phone provisioning: positional mismatch at index ${insertIndex}; skipping back-fill`);
+          console.warn(`Import identifier sync: positional mismatch at index ${insertIndex}; skipping`);
           continue;
         }
         try {
-          const { clerkUserId } = await provisionPhoneOnlyUser(client, {
+          const { clerkUserId } = await syncEmployeeAuthIdentifiers(client, {
+            email,
             phoneE164,
             role,
           });
-          await supabase
-            .from("employees")
-            .update({ clerk_user_id: clerkUserId })
-            .eq("id", insertedRow.id);
+          if (clerkUserId) {
+            await supabase
+              .from("employees")
+              .update({ clerk_user_id: clerkUserId })
+              .eq("id", insertedRow.id);
+          }
         } catch (e: any) {
-          console.warn("Import phone provisioning failed (non-fatal):", e?.message ?? e);
+          console.warn("Import identifier sync failed (non-fatal):", e?.message ?? e);
         }
       }
     }

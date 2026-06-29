@@ -4,8 +4,8 @@ import { listHelpArticles, getHelpArticle, clearHelpCache } from "@/lib/assistan
 describe("help loader", () => {
   beforeEach(() => clearHelpCache());
 
-  it("loads all 55 help articles", () => {
-    expect(listHelpArticles().length).toBe(55);
+  it("loads all 56 help articles", () => {
+    expect(listHelpArticles().length).toBe(56);
   });
 
   it("returns null for unknown id", () => {

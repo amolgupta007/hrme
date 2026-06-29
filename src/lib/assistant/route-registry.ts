@@ -232,6 +232,18 @@ export const ROUTE_REGISTRY = {
     required_org_feature: "attendanceEnabled",
   },
 
+  // Biometric devices + user provisioning (multi-location attendance)
+  settings_biometric_devices: {
+    path: "/dashboard/settings",
+    params: { section: "attendance" },
+    label: "Set up biometric devices & sync users",
+    description:
+      "Register fingerprint devices, map employee PINs, manage zones, and push employees onto devices.",
+    required_role: "admin",
+    required_plan: "starter",
+    required_org_feature: "attendanceEnabled",
+  },
+
   // Attendance Phase 2 — roster, overtime, week-off override
   attendance_roster: {
     path: "/dashboard/attendance",

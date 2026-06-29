@@ -93,14 +93,26 @@ Settings → Attendance → Biometric Devices → **Device security**:
 - **Generate an ingest token** to get a secret server path `https://jambahr.com/iclock/<token>` — set that as the device's server path so punches carry a secret.
 - **Require token** rejects plain serial-only pushes (only for devices that can set a custom server path).
 
+### 4.5 User provisioning (push employees → devices)
+Settings → Attendance → Biometric Devices → **Sync users to devices**:
+- **"Sync all users to devices"** queues an `upsert_user` command (PIN + Name) for every active employee with a PIN, onto every active device. The status line shows `pending · sent · confirmed · failed`; **Retry failed** re-queues failed commands.
+- Provisioning is **automatic** on two events: registering a new device **backfills** all existing employees with PINs; terminating an employee **deletes** their user record from all devices.
+- PINs come from `employees.device_code` — set per-employee under "Employee PINs", or in bulk via the CSV importer's **`device_code`** column (digits only, unique per org).
+- **Fingerprints are NOT pushed** — only the user record (PIN + Name). The employee still enrolls their fingerprint physically at the device. Provisioning just means the device already knows who PIN *N* is, so the first punch resolves correctly.
+
+**How it works:** commands sit in the `device_commands` queue (`pending`). On each `GET /iclock/getrequest` poll, the route drains a batch, builds ADMS command lines (`C:<seq>:DATA UPDATE USERINFO …`), and flips them to `sent`. The device executes them and `POST`s an ack to `/iclock/devicecmd` (`ID=<seq>&Return=0`), which flips the row to `confirmed` (or `failed` on a negative return). All command-string building/parsing is pure and unit-tested (`adms-commands.ts`); enqueue is best-effort and never blocks punch ingestion.
+
 ---
 
 ## 5. Key files
 
 | File | Role |
 |---|---|
-| `src/app/iclock/[...seg]/route.ts` | Public ADMS endpoint — handshake, ATTLOG ingest, command-poll acks |
+| `src/app/iclock/[...seg]/route.ts` | Public ADMS endpoint — handshake, ATTLOG ingest, `getrequest` command dispatch + `devicecmd` acks |
 | `src/lib/attendance/adms-ingest.ts` | Parse ATTLOG, IST→UTC, dedupe, write punch events, `recomputeAttendanceDay`, token/`is_active` checks |
+| `src/lib/attendance/adms-commands.ts` | Pure ADMS command builders + ack parser (`buildUserCommand`/`buildDeleteCommand`/`parseDeviceCmdAck`) — 11 tests |
+| `src/lib/attendance/device-command-diff.ts` | Pure command dedup (`missingCommands`/`commandKey`) — tests |
+| `src/lib/attendance/device-provisioning.ts` | Enqueue helpers (upsert-for-device, delete-for-employee, sync-all) — best-effort DB I/O |
 | `src/lib/attendance/daily-attendance.ts` | Pure `computeDailyAttendance()` / `dedupePunches()` (9 tests) |
 | `src/lib/attendance/resolve-zone.ts` | Employee + day → in-zone location ids |
 | `src/lib/attendance/iclock-path.ts` | `parseIclockPath()` — token vs ADMS verb (5 tests) |
@@ -137,6 +149,9 @@ Tests: `tests/attendance/{daily-attendance,adms-ingest,iclock-path}.test.ts`.
 6. **Windows Firewall** blocks inbound to a dev port from the device even when same-host curl works — add an inbound allow rule when testing locally.
 7. **`next build` exit 127 with no error** = multiple `next dev` servers sharing the project `.next` dir corrupting the build. Stop **all** dev servers + `rm -rf .next`, then build.
 8. **Org-by-serial is the default trust boundary** — serials aren't secret. Use the per-org ingest token for stronger security where the device firmware supports a custom server path.
+9. **`getrequest` now returns provisioning commands**, not just `OK`. Commands live in the `device_commands` queue (migration `085`); the device drains them via its poll and acks via `devicecmd`. Dispatch is best-effort — any failure falls through to `OK\n` so a device never stalls and punch ingestion is unaffected.
+10. **`employees.device_code` (PIN) is unique per org** — backed by partial index `uq_employees_org_device_code` (migration `085`). The CSV importer and per-employee PIN edit both surface a friendly duplicate error.
+11. **Fingerprint templates are never pushed** — provisioning sends only the user record (PIN + Name, 24-char limit, tab/newline-stripped). Biometric enrollment stays physical at the device.
 
 ---
 

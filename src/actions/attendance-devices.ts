@@ -5,6 +5,7 @@ import { randomBytes } from "crypto";
 import { revalidatePath } from "next/cache";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { getCurrentUser, isAdmin } from "@/lib/current-user";
+import { enqueueUpsertForDevice } from "@/lib/attendance/device-provisioning";
 import type { ActionResult } from "@/types";
 
 export type LocationRow = {
@@ -168,6 +169,9 @@ export async function registerDevice(input: {
     }
     return { success: false, error: error.message };
   }
+
+  // Backfill existing active employees (with PINs) onto the new device. Best-effort.
+  await enqueueUpsertForDevice(ctx.user.orgId, (data as any).id, (data as any).device_serial);
 
   revalidatePath("/dashboard/settings");
   return {

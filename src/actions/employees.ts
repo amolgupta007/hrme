@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { getCurrentUser, isAdmin } from "@/lib/current-user";
+import { enqueueDeleteForEmployee } from "@/lib/attendance/device-provisioning";
 import type { ActionResult, Employee, Department, UserRole } from "@/types";
 import { employeeSchema } from "@/lib/employees/employee-schema";
 import { normalizePhone } from "@/lib/phone";
@@ -276,13 +277,21 @@ export async function terminateEmployee(id: string): Promise<ActionResult<void>>
   if (!orgId) return { success: false, error: "Not authenticated" };
 
   const supabase = createAdminSupabase();
-  const { error } = await supabase
+  const { data: terminated, error } = await supabase
     .from("employees")
     .update({ status: "terminated" })
     .eq("id", id)
-    .eq("org_id", orgId);
+    .eq("org_id", orgId)
+    .select("device_code")
+    .single();
 
   if (error) return { success: false, error: error.message };
+
+  // Remove the ex-employee's user record from all devices. Best-effort.
+  const terminatedPin = (terminated as any)?.device_code as string | null;
+  if (terminatedPin) {
+    await enqueueDeleteForEmployee(orgId, id, terminatedPin);
+  }
 
   // Delete the pending invite record (no Clerk invitation to revoke anymore)
   await supabase.from("employee_invites").delete().eq("employee_id", id);

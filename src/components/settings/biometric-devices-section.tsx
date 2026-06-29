@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import {
   Plus,
@@ -13,6 +13,7 @@ import {
   ChevronRight,
   HelpCircle,
   ListChecks,
+  RefreshCw,
 } from "lucide-react";
 import { CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -24,6 +25,9 @@ import {
   createLocation,
   deleteLocation,
   deleteDevice,
+  syncAllUsersToDevices,
+  retryFailedCommands,
+  getProvisioningStatus,
   type LocationRow,
   type DeviceRow,
 } from "@/actions/attendance-devices";
@@ -82,6 +86,46 @@ export function BiometricDevicesSection({
   // PIN editing
   const [pinEdits, setPinEdits] = useState<Record<string, string>>({});
   const [savingPin, setSavingPin] = useState<string | null>(null);
+
+  // Device user sync (push employees → devices via ADMS command queue)
+  const [syncStatus, setSyncStatus] = useState<{
+    pending: number;
+    sent: number;
+    confirmed: number;
+    failed: number;
+  } | null>(null);
+  const [syncing, setSyncing] = useState(false);
+
+  const refreshSyncStatus = useCallback(async () => {
+    const res = await getProvisioningStatus();
+    if (res.success) setSyncStatus(res.data);
+  }, []);
+
+  useEffect(() => {
+    refreshSyncStatus();
+  }, [refreshSyncStatus]);
+
+  async function handleSyncAll() {
+    setSyncing(true);
+    const res = await syncAllUsersToDevices();
+    setSyncing(false);
+    if (res.success) {
+      toast.success(`Queued ${res.data.enqueued} user update(s) to devices`);
+      refreshSyncStatus();
+    } else {
+      toast.error(res.error);
+    }
+  }
+
+  async function handleRetryFailed() {
+    const res = await retryFailedCommands();
+    if (res.success) {
+      toast.success(`Re-queued ${res.data.retried} failed command(s)`);
+      refreshSyncStatus();
+    } else {
+      toast.error(res.error);
+    }
+  }
 
   const mappedCount = useMemo(
     () => employees.filter((e) => e.device_code).length,
@@ -308,6 +352,43 @@ export function BiometricDevicesSection({
             })}
           </ul>
         </div>
+
+        {/* ---- Sync users to devices (ADMS provisioning) ---- */}
+        <div className="rounded-lg border border-border p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <p className="flex items-center gap-1.5 text-sm font-semibold">
+                <RefreshCw className="h-3.5 w-3.5" /> Sync users to devices
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Pushes every active employee with a PIN onto all active devices.
+                Fingerprints are still enrolled at the device itself.
+              </p>
+            </div>
+            <Button onClick={handleSyncAll} disabled={syncing} className="shrink-0">
+              {syncing ? "Queuing…" : "Sync all users to devices"}
+            </Button>
+          </div>
+          {syncStatus && (
+            <p className="mt-3 text-xs text-muted-foreground">
+              {syncStatus.pending} pending · {syncStatus.sent} sent ·{" "}
+              {syncStatus.confirmed} confirmed ·{" "}
+              <span className={syncStatus.failed ? "text-destructive" : ""}>
+                {syncStatus.failed} failed
+              </span>
+              {syncStatus.failed > 0 && (
+                <button
+                  type="button"
+                  onClick={handleRetryFailed}
+                  className="ml-2 underline"
+                >
+                  Retry failed
+                </button>
+              )}
+            </p>
+          )}
+        </div>
+
         <IngestSecurityCard />
       </CardContent>
 

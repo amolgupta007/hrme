@@ -9,6 +9,9 @@ import { getCurrentUser, isAdmin } from "@/lib/current-user";
 import { computeCTCBreakdown, getProfessionalTax, computeTaxByRegime, computeAdditionalTaxOnBonus, computeMonthsInFY, DEFAULT_RATIO_CONFIG, type RatioConfig } from "@/lib/ctc";
 import type { LineItem, LineItemCategory } from "@/lib/payroll/line-items";
 import { recomputeEntryFromLineItems } from "@/lib/payroll/recompute-entry";
+import { computeLatePenaltyDeduction } from "@/lib/payroll/late-penalty";
+import type { PenaltyBand } from "@/lib/attendance/late-penalty-bands";
+import { resolveCoveredEmployeeIds } from "@/lib/attendance/late-policy-targets";
 import { resend, FROM_EMAIL } from "@/lib/resend";
 import { PayslipEmail } from "@/components/emails/payslip";
 import type { ActionResult } from "@/types";
@@ -80,6 +83,8 @@ export type PayrollEntry = {
   tds: number;
   lop_days: number;
   lop_deduction: number;
+  late_penalty_days: number;
+  late_penalty_deduction: number;
   bonus: number;
   total_deductions: number;
   net_pay: number;
@@ -633,7 +638,7 @@ export async function processPayrollRun(runId: string): Promise<ActionResult<voi
   const employeeIds = (salaries as any[]).map((s) => s.employee_id);
   const { data: emps } = await supabase
     .from("employees")
-    .select("id, date_of_joining, employment_type")
+    .select("id, date_of_joining, employment_type, department_id")
     .eq("org_id", user.orgId)
     .in("id", employeeIds);
   const joiningMap = new Map<string, string | null>(
@@ -646,6 +651,77 @@ export async function processPayrollRun(runId: string): Promise<ActionResult<voi
     (emps ?? []).filter((e: any) => e.employment_type === "contract").map((e: any) => e.id)
   );
   const salariedStructures = (salaries as any[]).filter((s) => !contractorIds.has(s.employee_id));
+
+  // Late-penalty consequence: if the org's late policy deducts salary, resolve
+  // the covered employees, their monthly late-day counts, penalty bands, and any
+  // waived (overridden) flags. Penalty reduces net pay only (not taxable income).
+  let penaltyEnabled = false;
+  let penaltyBands: PenaltyBand[] = [];
+  const lateCountMap: Record<string, number> = {};
+  const waivedSet = new Set<string>();
+  let coveredEmployees = new Set<string>();
+  {
+    const { data: policy } = await supabase
+      .from("late_policies")
+      .select("id, enabled, consequence")
+      .eq("org_id", user.orgId)
+      .maybeSingle();
+    const p = policy as { id: string; enabled: boolean; consequence: string } | null;
+    if (p && p.enabled && (p.consequence === "salary_deduction" || p.consequence === "both")) {
+      const { data: bandRows } = await supabase
+        .from("late_penalty_bands")
+        .select("min_late_days, max_late_days, deduction_days")
+        .eq("org_id", user.orgId)
+        .eq("policy_id", p.id)
+        .order("sort", { ascending: true });
+      penaltyBands = ((bandRows ?? []) as any[]).map((b) => ({
+        min_late_days: b.min_late_days,
+        max_late_days: b.max_late_days,
+        deduction_days: Number(b.deduction_days),
+      }));
+
+      if (penaltyBands.length > 0) {
+        penaltyEnabled = true;
+        const { data: targetRows } = await supabase
+          .from("late_policy_targets")
+          .select("target_type, target_id")
+          .eq("org_id", user.orgId)
+          .eq("policy_id", p.id);
+        coveredEmployees = resolveCoveredEmployeeIds({
+          targets: ((targetRows ?? []) as any[]).map((t) => ({
+            target_type: t.target_type,
+            target_id: t.target_id,
+          })),
+          employees: ((emps ?? []) as any[]).map((e) => ({
+            id: e.id,
+            department_id: e.department_id,
+          })),
+        });
+
+        // Monthly late-day counts from the is_late attendance rows.
+        const { data: lateRows } = await supabase
+          .from("attendance_records")
+          .select("employee_id")
+          .eq("org_id", user.orgId)
+          .eq("is_late", true)
+          .gte("date", monthStart)
+          .lte("date", monthEnd);
+        for (const r of (lateRows ?? []) as any[]) {
+          lateCountMap[r.employee_id] = (lateCountMap[r.employee_id] ?? 0) + 1;
+        }
+
+        // Waived (overridden) flags for this month.
+        const { data: flags } = await supabase
+          .from("late_policy_flags")
+          .select("employee_id, status")
+          .eq("org_id", user.orgId)
+          .eq("month", runData.month);
+        for (const f of (flags ?? []) as any[]) {
+          if (f.status === "overridden") waivedSet.add(f.employee_id);
+        }
+      }
+    }
+  }
 
   // PRD 02 Phase 1: line items are not pre-fetched here because they only exist
   // AFTER a run is processed (admin adds them in the entry-edit dialog). The
@@ -683,8 +759,27 @@ export async function processPayrollRun(runId: string): Promise<ActionResult<voi
     const bonusTax = computeAdditionalTaxOnBonus(annualTaxableIncome, taxableLineSum, regime);
     const adjustedTds = monthlyTds + bonusTax;
 
+    // Late-penalty deduction (net-only; does not affect TDS). Skipped for
+    // employees not covered by the policy or whose flag was waived this month.
+    let latePenaltyDays = 0;
+    let latePenaltyDeduction = 0;
+    if (penaltyEnabled && coveredEmployees.has(s.employee_id) && !waivedSet.has(s.employee_id)) {
+      const pen = computeLatePenaltyDeduction({
+        lateDays: lateCountMap[s.employee_id] ?? 0,
+        bands: penaltyBands,
+        grossMonthly: s.gross_monthly,
+        workingDays: runData.working_days,
+      });
+      latePenaltyDays = pen.penaltyDays;
+      latePenaltyDeduction = pen.deduction;
+    }
+
     const totalDeductions =
-      s.employee_pf_monthly + s.professional_tax_monthly + adjustedTds + lopDeduction;
+      s.employee_pf_monthly +
+      s.professional_tax_monthly +
+      adjustedTds +
+      lopDeduction +
+      latePenaltyDeduction;
     const netPay = Math.max(0, s.gross_monthly + totalLineItems - totalDeductions);
 
     return {
@@ -700,6 +795,8 @@ export async function processPayrollRun(runId: string): Promise<ActionResult<voi
       tds: adjustedTds,
       lop_days: lopDays,
       lop_deduction: lopDeduction,
+      late_penalty_days: latePenaltyDays,
+      late_penalty_deduction: latePenaltyDeduction,
       bonus: 0, // legacy column kept for back-compat; line items are the new path
       total_line_items: totalLineItems,
       total_deductions: totalDeductions,
@@ -902,7 +999,7 @@ export async function getPayrollEntries(runId: string): Promise<ActionResult<Pay
   const [{ data: entries, error }, { data: employees }, { data: departments }] = await Promise.all([
     supabase
       .from("payroll_entries")
-      .select("id, employee_id, basic_monthly, hra_monthly, special_allowance_monthly, gross_salary, employee_pf, professional_tax, tds, lop_days, lop_deduction, bonus, total_deductions, net_pay")
+      .select("id, employee_id, basic_monthly, hra_monthly, special_allowance_monthly, gross_salary, employee_pf, professional_tax, tds, lop_days, lop_deduction, late_penalty_days, late_penalty_deduction, bonus, total_deductions, net_pay")
       .eq("payroll_run_id", runId)
       .eq("org_id", user.orgId)
       .order("created_at"),
@@ -937,6 +1034,8 @@ export async function getPayrollEntries(runId: string): Promise<ActionResult<Pay
       tds: r.tds,
       lop_days: r.lop_days,
       lop_deduction: r.lop_deduction,
+      late_penalty_days: Number(r.late_penalty_days ?? 0),
+      late_penalty_deduction: r.late_penalty_deduction ?? 0,
       bonus: r.bonus,
       total_deductions: r.total_deductions,
       net_pay: r.net_pay,
@@ -948,7 +1047,7 @@ export async function getPayrollEntries(runId: string): Promise<ActionResult<Pay
 
 export async function updatePayrollEntry(
   entryId: string,
-  updates: { bonus: number; lop_days: number }
+  updates: { bonus: number; lop_days: number; late_penalty_days?: number }
 ): Promise<ActionResult<void>> {
   const user = await getCurrentUser();
   if (!user) return { success: false, error: "Not authenticated" };
@@ -959,7 +1058,7 @@ export async function updatePayrollEntry(
   // Fetch current entry (net_pay captured for previous_net_pay audit column)
   const { data: entry, error: fetchErr } = await supabase
     .from("payroll_entries")
-    .select("gross_salary, employee_pf, professional_tax, tds, net_pay, payroll_run_id, employee_id, annual_taxable_income, months_in_fy")
+    .select("gross_salary, employee_pf, professional_tax, tds, net_pay, payroll_run_id, employee_id, annual_taxable_income, months_in_fy, late_penalty_days, late_penalty_deduction")
     .eq("id", entryId)
     .eq("org_id", user.orgId)
     .single();
@@ -981,6 +1080,13 @@ export async function updatePayrollEntry(
   const workingDays = (run as any)?.working_days ?? 26;
   const lopDeduction = updates.lop_days > 0
     ? Math.round((e.gross_salary / workingDays) * updates.lop_days)
+    : 0;
+
+  // Late-penalty: admin may override the penalty days per entry; otherwise keep
+  // the value computed at process time. Same per-day rate as LOP; net-only.
+  const latePenaltyDays = updates.late_penalty_days ?? Number(e.late_penalty_days ?? 0);
+  const latePenaltyDeduction = latePenaltyDays > 0
+    ? Math.round((e.gross_salary / workingDays) * latePenaltyDays)
     : 0;
 
   // P-005 + P-003: re-derive base TDS regime-aware, then add marginal tax on bonus.
@@ -1008,7 +1114,8 @@ export async function updatePayrollEntry(
   const bonusTax = computeAdditionalTaxOnBonus(annualTaxable, updates.bonus, regime);
   const adjustedTds = baseTdsMonthly + bonusTax;
 
-  const totalDeductions = e.employee_pf + e.professional_tax + adjustedTds + lopDeduction;
+  const totalDeductions =
+    e.employee_pf + e.professional_tax + adjustedTds + lopDeduction + latePenaltyDeduction;
   const netPay = Math.max(0, e.gross_salary + updates.bonus - totalDeductions);
 
   const { error } = await supabase
@@ -1017,6 +1124,8 @@ export async function updatePayrollEntry(
       bonus: updates.bonus,
       lop_days: updates.lop_days,
       lop_deduction: lopDeduction,
+      late_penalty_days: latePenaltyDays,
+      late_penalty_deduction: latePenaltyDeduction,
       tds: adjustedTds,
       total_deductions: totalDeductions,
       net_pay: netPay,

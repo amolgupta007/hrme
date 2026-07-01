@@ -92,3 +92,41 @@ describe("dedupePunches", () => {
     expect(deduped).toHaveLength(2);
   });
 });
+
+describe("computeDailyAttendance worked/break minutes", () => {
+  it("subtracts lunch from workedMinutes but totalMinutes stays gross span", () => {
+    const r = computeDailyAttendance({
+      events: [
+        punch("09:00", null, "a"),
+        punch("13:00", null, "b"),
+        punch("14:00", null, "c"),
+        punch("18:00", null, "d"),
+      ],
+      zoneLocationIds: null,
+    });
+    expect(r.totalMinutes).toBe(540); // gross span (back-compat)
+    expect(r.workedMinutes).toBe(480); // minus lunch
+    expect(r.breakMinutes).toBe(60);
+    expect(r.needsReview).toBe(false);
+    expect(r.status).toBe("present");
+  });
+
+  it("odd punch count flags needsReview", () => {
+    const r = computeDailyAttendance({
+      events: [punch("09:00", null, "a"), punch("13:00", null, "b"), punch("14:00", null, "c")],
+      zoneLocationIds: null,
+    });
+    expect(r.workedMinutes).toBe(240);
+    expect(r.needsReview).toBe(true);
+  });
+
+  it("single punch → incomplete, null worked, needsReview", () => {
+    const r = computeDailyAttendance({
+      events: [punch("09:00", null, "a")],
+      zoneLocationIds: null,
+    });
+    expect(r.status).toBe("incomplete");
+    expect(r.workedMinutes).toBeNull();
+    expect(r.needsReview).toBe(true);
+  });
+});

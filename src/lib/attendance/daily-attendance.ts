@@ -7,7 +7,12 @@
  *
  * Direction (IN/OUT) is never trusted from the device; it is derived as
  * min(punched_at) = first-in, max(punched_at) = last-out.
+ *
+ * `totalMinutes` remains the gross span (last−first, break included) for
+ * back-compat. `workedMinutes`/`breakMinutes` come from chronological interval
+ * pairing (see pair-punches.ts) — worked time with breaks excluded.
  */
+import { pairPunches } from "./pair-punches";
 
 export type PunchEvent = {
   id: string;
@@ -19,8 +24,14 @@ export type DailyAttendanceStatus = "present" | "incomplete" | "absent";
 
 export type DailyAttendanceResult = {
   status: DailyAttendanceStatus;
-  /** last_out − first_in in whole minutes; null when not present. */
+  /** last_out − first_in in whole minutes (gross span, break included); null when not present. */
   totalMinutes: number | null;
+  /** Σ(out−in) over paired intervals — worked time with breaks excluded; null when not present. */
+  workedMinutes: number | null;
+  /** Σ gaps between paired intervals; null when not present. */
+  breakMinutes: number | null;
+  /** True on odd-count (missed-punch) days or when no pair could be formed. */
+  needsReview: boolean;
   firstInAt: string | null;
   lastOutAt: string | null;
   firstInLocationId: string | null;
@@ -69,6 +80,9 @@ export function computeDailyAttendance(params: {
   const empty: DailyAttendanceResult = {
     status: "absent",
     totalMinutes: null,
+    workedMinutes: null,
+    breakMinutes: null,
+    needsReview: false,
     firstInAt: null,
     lastOutAt: null,
     firstInLocationId: null,
@@ -106,6 +120,9 @@ export function computeDailyAttendance(params: {
     return {
       status: "incomplete",
       totalMinutes: null,
+      workedMinutes: null,
+      breakMinutes: null,
+      needsReview: true,
       firstInAt: firstIn.punched_at,
       lastOutAt: null,
       firstInLocationId: firstIn.location_id,
@@ -121,9 +138,15 @@ export function computeDailyAttendance(params: {
     (new Date(lastOut.punched_at).getTime() - new Date(firstIn.punched_at).getTime()) / 60_000,
   );
 
+  // Net worked time (breaks excluded) via chronological interval pairing.
+  const paired = pairPunches(sorted.map((e) => ({ id: e.id, punched_at: e.punched_at })));
+
   return {
     status: "present",
     totalMinutes,
+    workedMinutes: paired.workedMinutes,
+    breakMinutes: paired.breakMinutes,
+    needsReview: paired.needsReview,
     firstInAt: firstIn.punched_at,
     lastOutAt: lastOut.punched_at,
     firstInLocationId: firstIn.location_id,

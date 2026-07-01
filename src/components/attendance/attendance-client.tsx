@@ -12,6 +12,7 @@ import type { RosterGrid as RosterGridData } from "@/actions/shifts";
 import type { WeekOffPolicy } from "@/lib/attendance/week-off";
 import { OvertimeTab } from "./overtime-tab";
 import { DailyAttendanceTab } from "./daily-attendance-tab";
+import { PunchTimelineDialog } from "./punch-timeline-dialog";
 import type { OvertimeRecord } from "@/actions/overtime";
 import type { OvertimeSettings } from "@/lib/attendance/overtime-types";
 
@@ -53,6 +54,7 @@ export function AttendanceClient({ today, history, team, employees, isManager, i
   const [liveTime, setLiveTime] = useState("");
   const [activeTab, setActiveTab] = useState<"my" | "team" | "roster" | "overtime" | "daily">(isManager ? "team" : "my");
   const [filterEmployee, setFilterEmployee] = useState("");
+  const [punchTimeline, setPunchTimeline] = useState<AttendanceRecord | null>(null);
   const [filteredHistory, setFilteredHistory] = useState<AttendanceRecord[]>(history);
 
   const isClockedIn = today?.isClockedIn ?? false;
@@ -340,22 +342,49 @@ export function AttendanceClient({ today, history, team, employees, isManager, i
                       )}
                     </p>
                   </div>
-                  <div className="text-right">
-                    {rec.total_minutes ? (
-                      <span className={`text-sm font-semibold ${rec.total_minutes >= 480 ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}`}>
-                        {formatDuration(rec.total_minutes)}
-                      </span>
-                    ) : rec.clock_in_at && !rec.clock_out_at ? (
-                      <span className="text-xs text-primary font-medium">In progress</span>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    )}
+                  <div className="flex items-center gap-3">
+                    <div className="text-right">
+                      {rec.total_minutes ? (
+                        <span className={`text-sm font-semibold ${rec.total_minutes >= 480 ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}`}>
+                          {formatDuration(rec.total_minutes)}
+                        </span>
+                      ) : rec.clock_in_at && !rec.clock_out_at ? (
+                        <span className="text-xs text-primary font-medium">In progress</span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => setPunchTimeline(rec)}
+                      className="rounded-md border px-2 py-1 text-xs text-muted-foreground hover:bg-muted"
+                      title="View punch timeline"
+                    >
+                      View punches
+                    </button>
                   </div>
                 </div>
               ))}
             </div>
           )}
         </div>
+      )}
+
+      {punchTimeline && (
+        <PunchTimelineDialog
+          open={!!punchTimeline}
+          onOpenChange={(v) => {
+            if (!v) {
+              setPunchTimeline(null);
+              router.refresh();
+            }
+          }}
+          employeeId={punchTimeline.employee_id}
+          date={punchTimeline.date}
+          employeeName={punchTimeline.employee_name}
+          canApprove={isAdmin || isManager}
+          canVoid={isAdmin}
+          readOnly={!(isAdmin || isManager)}
+        />
       )}
 
       {attendancePayrollEnabled && (

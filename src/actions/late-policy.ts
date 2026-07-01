@@ -4,7 +4,10 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { getCurrentUser, isAdmin } from "@/lib/current-user";
 import { createAdminSupabase } from "@/lib/supabase/server";
+import { validateBands, type PenaltyBand } from "@/lib/attendance/late-penalty-bands";
 import type { ActionResult } from "@/types";
+
+export type LateConsequence = "block_bonus" | "salary_deduction" | "both" | "none";
 
 export type LatePolicy = {
   id: string;
@@ -18,9 +21,16 @@ export type LatePolicy = {
   warn_at: number | null;
   channel_whatsapp: boolean;
   channel_email: boolean;
+  consequence: LateConsequence;
 };
 
 export type LatePolicyTargetRow = { target_type: "department" | "employee"; target_id: string };
+
+const BandSchema = z.object({
+  min_late_days: z.number().int().min(1).max(31),
+  max_late_days: z.number().int().min(1).max(31).nullable(),
+  deduction_days: z.number().min(0).max(31),
+});
 
 const PolicySchema = z.object({
   enabled: z.boolean(),
@@ -32,23 +42,35 @@ const PolicySchema = z.object({
   warn_at: z.number().int().min(1).max(31).nullable(),
   channel_whatsapp: z.boolean(),
   channel_email: z.boolean(),
+  consequence: z.enum(["block_bonus", "salary_deduction", "both", "none"]),
   targets: z.array(z.object({ target_type: z.enum(["department", "employee"]), target_id: z.string().uuid() })),
+  bands: z.array(BandSchema),
 });
 
 export async function getLatePolicy(): Promise<
-  ActionResult<{ policy: LatePolicy | null; targets: LatePolicyTargetRow[] }>
+  ActionResult<{ policy: LatePolicy | null; targets: LatePolicyTargetRow[]; bands: PenaltyBand[] }>
 > {
   const user = await getCurrentUser();
   if (!user) return { success: false, error: "Not authenticated" };
   if (!isAdmin(user.role)) return { success: false, error: "Unauthorized" };
   const sb = createAdminSupabase();
   const { data: policy } = await sb.from("late_policies").select("*").eq("org_id", user.orgId).maybeSingle();
-  if (!policy) return { success: true, data: { policy: null, targets: [] } };
+  if (!policy) return { success: true, data: { policy: null, targets: [], bands: [] } };
   const { data: targets } = await sb
     .from("late_policy_targets")
     .select("target_type, target_id")
     .eq("policy_id", (policy as any).id);
-  return { success: true, data: { policy: policy as any, targets: (targets ?? []) as any } };
+  const { data: bandRows } = await sb
+    .from("late_penalty_bands")
+    .select("min_late_days, max_late_days, deduction_days")
+    .eq("policy_id", (policy as any).id)
+    .order("sort", { ascending: true });
+  const bands: PenaltyBand[] = ((bandRows ?? []) as any[]).map((b) => ({
+    min_late_days: b.min_late_days,
+    max_late_days: b.max_late_days,
+    deduction_days: Number(b.deduction_days),
+  }));
+  return { success: true, data: { policy: policy as any, targets: (targets ?? []) as any, bands } };
 }
 
 export async function upsertLatePolicy(input: z.infer<typeof PolicySchema>): Promise<ActionResult<{ id: string }>> {
@@ -60,9 +82,16 @@ export async function upsertLatePolicy(input: z.infer<typeof PolicySchema>): Pro
   if (parsed.data.warn_at != null && parsed.data.warn_at >= parsed.data.threshold_days) {
     return { success: false, error: "Warn-at must be below the threshold" };
   }
-  const sb = createAdminSupabase();
-  const { targets, ...policyFields } = parsed.data;
+  const { targets, bands, ...policyFields } = parsed.data;
 
+  // Validate bands only when the consequence actually deducts salary.
+  const deducts = policyFields.consequence === "salary_deduction" || policyFields.consequence === "both";
+  if (deducts) {
+    const v = validateBands(bands as PenaltyBand[]);
+    if (!v.ok) return { success: false, error: v.error };
+  }
+
+  const sb = createAdminSupabase();
   const { data: existing } = await sb.from("late_policies").select("id").eq("org_id", user.orgId).maybeSingle();
   let policyId: string;
   if (existing) {
@@ -92,6 +121,21 @@ export async function upsertLatePolicy(input: z.infer<typeof PolicySchema>): Pro
     }));
     const { error: tErr } = await sb.from("late_policy_targets").insert(rows as any);
     if (tErr) return { success: false, error: tErr.message };
+  }
+
+  // Bands are append-and-replace per policy. Only persisted when the consequence deducts.
+  await sb.from("late_penalty_bands").delete().eq("policy_id", policyId);
+  if (deducts && bands.length > 0) {
+    const bandRows = bands.map((b, i) => ({
+      org_id: user.orgId,
+      policy_id: policyId,
+      min_late_days: b.min_late_days,
+      max_late_days: b.max_late_days,
+      deduction_days: b.deduction_days,
+      sort: i,
+    }));
+    const { error: bErr } = await sb.from("late_penalty_bands").insert(bandRows as any);
+    if (bErr) return { success: false, error: bErr.message };
   }
 
   revalidatePath("/dashboard/settings");

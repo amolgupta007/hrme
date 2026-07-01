@@ -18,6 +18,7 @@ import { CTCBreakdownCard } from "./ctc-breakdown-card";
 import { PayNowButton } from "./pay-now-button";
 import { DisbursementTab } from "./disbursement-tab";
 import { BonusIneligibleBadge } from "./bonus-ineligible-badge";
+import { LatePenaltyChip } from "./late-penalty-chip";
 import {
   processPayrollRun,
   markPayrollPaid,
@@ -462,6 +463,17 @@ export function PayrollClient({
                                       lateDays={lateFlag.late_days_count}
                                       status={lateFlag.status}
                                       onOverridden={() => router.refresh()}
+                                    />
+                                  </div>
+                                )}
+                                {entry.late_penalty_deduction > 0 && (
+                                  <div className="mt-1">
+                                    <LatePenaltyChip
+                                      employeeId={entry.employee_id}
+                                      month={run.month}
+                                      penaltyDays={entry.late_penalty_days}
+                                      amount={entry.late_penalty_deduction}
+                                      onWaived={() => router.refresh()}
                                     />
                                   </div>
                                 )}

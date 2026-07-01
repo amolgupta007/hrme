@@ -203,7 +203,7 @@ export async function computeAndRecordOvertime(
     // Per-day OT: for each attendance_records row with shift_id in range, compute worked - shift.
     const { data: records } = await sb
       .from("attendance_records")
-      .select("id, employee_id, date, total_minutes, shift_id, shifts(total_hours)")
+      .select("id, employee_id, date, total_minutes, worked_minutes, shift_id, shifts(total_hours)")
       .eq("org_id", user.orgId)
       .not("shift_id", "is", null)
       .not("total_minutes", "is", null)
@@ -214,7 +214,9 @@ export async function computeAndRecordOvertime(
     let skipped = 0;
     for (const rec of ((records ?? []) as any[])) {
       const shiftMinutes = rec.shifts?.total_hours ? Number(rec.shifts.total_hours) * 60 : null;
-      const ot = computeDailyOvertimeMinutes(rec.total_minutes, shiftMinutes);
+      // Net worked time (breaks excluded) drives OT; fall back to gross span for legacy rows.
+      const workedMinutes = rec.worked_minutes ?? rec.total_minutes;
+      const ot = computeDailyOvertimeMinutes(workedMinutes, shiftMinutes);
       if (ot <= 0) {
         skipped++;
         continue;
@@ -247,7 +249,7 @@ export async function computeAndRecordOvertime(
     // Caller is expected to pass a 7-day Mon-Sun window per cycle.
     const { data: records } = await sb
       .from("attendance_records")
-      .select("employee_id, date, total_minutes, shift_id, shifts(total_hours)")
+      .select("employee_id, date, total_minutes, worked_minutes, shift_id, shifts(total_hours)")
       .eq("org_id", user.orgId)
       .not("shift_id", "is", null)
       .not("total_minutes", "is", null)
@@ -261,7 +263,8 @@ export async function computeAndRecordOvertime(
         lastDate: r.date,
         shiftId: r.shift_id,
       };
-      cur.total += r.total_minutes ?? 0;
+      // Net worked time (breaks excluded); fall back to gross span for legacy rows.
+      cur.total += r.worked_minutes ?? r.total_minutes ?? 0;
       if (r.date > cur.lastDate) cur.lastDate = r.date;
       byEmp.set(r.employee_id, cur);
     }

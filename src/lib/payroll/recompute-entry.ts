@@ -23,7 +23,7 @@ export async function recomputeEntryFromLineItems(
   const { data: entry } = await sb
     .from("payroll_entries")
     .select(
-      "id, gross_salary, employee_pf, professional_tax, lop_deduction, payroll_run_id, employee_id, annual_taxable_income, months_in_fy, net_pay, org_id",
+      "id, gross_salary, employee_pf, professional_tax, lop_deduction, late_penalty_deduction, payroll_run_id, employee_id, annual_taxable_income, months_in_fy, net_pay, org_id",
     )
     .eq("id", entryId)
     .single();
@@ -58,7 +58,14 @@ export async function recomputeEntryFromLineItems(
   const bonusTax = computeAdditionalTaxOnBonus(annualTaxable, taxableSum, regime);
   const adjustedTds = baseTds + bonusTax;
 
-  const totalDeductions = e.employee_pf + e.professional_tax + adjustedTds + (e.lop_deduction ?? 0);
+  // Late-penalty deduction is stored on the entry (set at process time or via a
+  // manual edit); it reduces net pay only and is preserved across line-item recomputes.
+  const totalDeductions =
+    e.employee_pf +
+    e.professional_tax +
+    adjustedTds +
+    (e.lop_deduction ?? 0) +
+    (e.late_penalty_deduction ?? 0);
   const netPay = Math.max(0, e.gross_salary + totalLineItems - totalDeductions);
 
   await sb

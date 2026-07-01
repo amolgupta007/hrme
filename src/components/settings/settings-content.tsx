@@ -42,6 +42,7 @@ import type { WeekOffPolicy } from "@/lib/attendance/week-off";
 import type { EmployeeWeekOffOverrideRow } from "@/actions/week-off";
 import type { OvertimeSettings } from "@/lib/attendance/overtime-types";
 import type { LatePolicy } from "@/actions/late-policy";
+import type { PenaltyBand } from "@/lib/attendance/late-penalty-bands";
 import type { WhatsAppCredsView } from "@/actions/whatsapp-credentials";
 import type { TargetRow } from "@/components/settings/late-policy-targets-select";
 
@@ -77,6 +78,7 @@ type SettingsContentProps = {
   overtimeSettings: OvertimeSettings;
   latePolicy: LatePolicy | null;
   latePolicyTargets: TargetRow[];
+  latePolicyBands: PenaltyBand[];
   whatsappCreds: WhatsAppCredsView | null;
   lateDepartments: Array<{ id: string; name: string }>;
   lateEmployees: Array<{ id: string; name: string; department_id: string | null }>;
@@ -120,6 +122,7 @@ export function SettingsContent({
   overtimeSettings,
   latePolicy,
   latePolicyTargets,
+  latePolicyBands,
   whatsappCreds,
   lateDepartments,
   lateEmployees,
@@ -247,6 +250,7 @@ export function SettingsContent({
             overtimeSettings={overtimeSettings}
             latePolicy={latePolicy}
             latePolicyTargets={latePolicyTargets}
+            latePolicyBands={latePolicyBands}
             whatsappCreds={whatsappCreds}
             lateDepartments={lateDepartments}
             lateEmployees={lateEmployees}

@@ -119,6 +119,7 @@ export default async function SettingsPage() {
     : null;
   const latePolicy = latePolicyResult.success ? latePolicyResult.data.policy : null;
   const latePolicyTargets = latePolicyResult.success ? latePolicyResult.data.targets : [];
+  const latePolicyBands = latePolicyResult.success ? latePolicyResult.data.bands : [];
   const whatsappCreds = whatsappCredsResult.success ? whatsappCredsResult.data : null;
   const lateDepartments = departments.map((d) => ({ id: d.id, name: d.name }));
   const lateEmployees = employees.map((e) => ({
@@ -184,6 +185,7 @@ export default async function SettingsPage() {
         employees={employees}
         latePolicy={latePolicy}
         latePolicyTargets={latePolicyTargets}
+        latePolicyBands={latePolicyBands}
         whatsappCreds={whatsappCreds}
         lateDepartments={lateDepartments}
         lateEmployees={lateEmployees}

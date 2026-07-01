@@ -2,17 +2,26 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { upsertLatePolicy, type LatePolicy } from "@/actions/late-policy";
+import { upsertLatePolicy, type LatePolicy, type LateConsequence } from "@/actions/late-policy";
 import { LatePolicyTargetsSelect, type TargetRow } from "./late-policy-targets-select";
+import { LatePenaltyBandsEditor } from "./late-penalty-bands-editor";
+import type { PenaltyBand } from "@/lib/attendance/late-penalty-bands";
+
+const DEFAULT_BANDS: PenaltyBand[] = [
+  { min_late_days: 3, max_late_days: 4, deduction_days: 0.5 },
+  { min_late_days: 5, max_late_days: 7, deduction_days: 2 },
+];
 
 export function LatePolicyCard({
   initialPolicy,
   initialTargets,
+  initialBands,
   departments,
   employees,
 }: {
   initialPolicy: LatePolicy | null;
   initialTargets: TargetRow[];
+  initialBands: PenaltyBand[];
   departments: Array<{ id: string; name: string }>;
   employees: Array<{ id: string; name: string; department_id: string | null }>;
 }) {
@@ -25,8 +34,16 @@ export function LatePolicyCard({
   const [notifyThreshold, setNotifyThreshold] = useState(initialPolicy?.notify_on_threshold ?? true);
   const [chEmail, setChEmail] = useState(initialPolicy?.channel_email ?? true);
   const [chWhatsapp, setChWhatsapp] = useState(initialPolicy?.channel_whatsapp ?? false);
+  const [consequence, setConsequence] = useState<LateConsequence>(
+    initialPolicy?.consequence ?? "block_bonus",
+  );
+  const [bands, setBands] = useState<PenaltyBand[]>(
+    initialBands.length > 0 ? initialBands : DEFAULT_BANDS,
+  );
   const [targets, setTargets] = useState<TargetRow[]>(initialTargets);
   const [saving, setSaving] = useState(false);
+
+  const deducts = consequence === "salary_deduction" || consequence === "both";
 
   async function save() {
     setSaving(true);
@@ -36,7 +53,9 @@ export function LatePolicyCard({
       notify_on_late: notifyLate, notify_on_threshold: notifyThreshold,
       warn_at: warnAt === "" ? null : Number(warnAt),
       channel_whatsapp: chWhatsapp, channel_email: chEmail,
+      consequence,
       targets,
+      bands: deducts ? bands : [],
     });
     setSaving(false);
     if (res.success) toast.success("Late policy saved");
@@ -75,6 +94,30 @@ export function LatePolicyCard({
         <label className="flex items-center gap-2"><input type="checkbox" checked={notifyThreshold} onChange={(e) => setNotifyThreshold(e.target.checked)} /> Notify on threshold</label>
         <label className="flex items-center gap-2"><input type="checkbox" checked={chEmail} onChange={(e) => setChEmail(e.target.checked)} /> Email</label>
         <label className="flex items-center gap-2"><input type="checkbox" checked={chWhatsapp} onChange={(e) => setChWhatsapp(e.target.checked)} /> WhatsApp</label>
+      </div>
+
+      <div className="space-y-2 rounded-md border border-dashed p-3">
+        <label className="text-sm font-medium">Consequence
+          <select
+            className="mt-1 block w-full rounded-md border px-3 py-2 text-sm"
+            value={consequence}
+            onChange={(e) => setConsequence(e.target.value as LateConsequence)}
+          >
+            <option value="block_bonus">Block bonus</option>
+            <option value="salary_deduction">Deduct salary (bands)</option>
+            <option value="both">Both — block bonus &amp; deduct salary</option>
+            <option value="none">None (notify only)</option>
+          </select>
+        </label>
+        {deducts && (
+          <div className="pt-1">
+            <p className="mb-2 text-xs text-muted-foreground">
+              Deduct N days of salary based on how many days the employee was late this month
+              (per-day rate = gross ÷ working days, same as LOP). Deduction reduces net pay only.
+            </p>
+            <LatePenaltyBandsEditor value={bands} onChange={setBands} />
+          </div>
+        )}
       </div>
 
       <div>

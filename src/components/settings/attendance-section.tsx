@@ -15,6 +15,7 @@ import type { WeekOffPolicy } from "@/lib/attendance/week-off";
 import type { OvertimeSettings } from "@/lib/attendance/overtime-types";
 import type { EmployeeWeekOffOverrideRow } from "@/actions/week-off";
 import type { LatePolicy } from "@/actions/late-policy";
+import type { PenaltyBand } from "@/lib/attendance/late-penalty-bands";
 import type { WhatsAppCredsView } from "@/actions/whatsapp-credentials";
 import type { Employee, Department } from "@/types";
 
@@ -29,12 +30,13 @@ interface Props {
   overtimeSettings: OvertimeSettings;
   latePolicy: LatePolicy | null;
   latePolicyTargets: TargetRow[];
+  latePolicyBands: PenaltyBand[];
   whatsappCreds: WhatsAppCredsView | null;
   lateDepartments: Array<{ id: string; name: string }>;
   lateEmployees: Array<{ id: string; name: string; department_id: string | null }>;
 }
 
-export function AttendanceSection({ attendanceSettings, shifts, assignments, weekOffPolicy, weekOffOverrides, employees, departments, overtimeSettings, latePolicy, latePolicyTargets, whatsappCreds, lateDepartments, lateEmployees }: Props) {
+export function AttendanceSection({ attendanceSettings, shifts, assignments, weekOffPolicy, weekOffOverrides, employees, departments, overtimeSettings, latePolicy, latePolicyTargets, latePolicyBands, whatsappCreds, lateDepartments, lateEmployees }: Props) {
   return (
     <div className="space-y-4 p-6">
       <h2 className="text-lg font-semibold">Attendance</h2>
@@ -48,7 +50,7 @@ export function AttendanceSection({ attendanceSettings, shifts, assignments, wee
       <WeekOffCard initial={weekOffPolicy} />
       <WeekOffOverrideList overrides={weekOffOverrides} employees={employees} />
       <OvertimeCard settings={overtimeSettings} />
-      <LatePolicyCard initialPolicy={latePolicy} initialTargets={latePolicyTargets} departments={lateDepartments} employees={lateEmployees} />
+      <LatePolicyCard initialPolicy={latePolicy} initialTargets={latePolicyTargets} initialBands={latePolicyBands} departments={lateDepartments} employees={lateEmployees} />
       <WhatsAppProviderCard initial={whatsappCreds} />
     </div>
   );

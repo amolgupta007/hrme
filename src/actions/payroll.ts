@@ -83,6 +83,8 @@ export type PayrollEntry = {
   tds: number;
   lop_days: number;
   lop_deduction: number;
+  late_penalty_days: number;
+  late_penalty_deduction: number;
   bonus: number;
   total_deductions: number;
   net_pay: number;
@@ -997,7 +999,7 @@ export async function getPayrollEntries(runId: string): Promise<ActionResult<Pay
   const [{ data: entries, error }, { data: employees }, { data: departments }] = await Promise.all([
     supabase
       .from("payroll_entries")
-      .select("id, employee_id, basic_monthly, hra_monthly, special_allowance_monthly, gross_salary, employee_pf, professional_tax, tds, lop_days, lop_deduction, bonus, total_deductions, net_pay")
+      .select("id, employee_id, basic_monthly, hra_monthly, special_allowance_monthly, gross_salary, employee_pf, professional_tax, tds, lop_days, lop_deduction, late_penalty_days, late_penalty_deduction, bonus, total_deductions, net_pay")
       .eq("payroll_run_id", runId)
       .eq("org_id", user.orgId)
       .order("created_at"),
@@ -1032,6 +1034,8 @@ export async function getPayrollEntries(runId: string): Promise<ActionResult<Pay
       tds: r.tds,
       lop_days: r.lop_days,
       lop_deduction: r.lop_deduction,
+      late_penalty_days: Number(r.late_penalty_days ?? 0),
+      late_penalty_deduction: r.late_penalty_deduction ?? 0,
       bonus: r.bonus,
       total_deductions: r.total_deductions,
       net_pay: r.net_pay,

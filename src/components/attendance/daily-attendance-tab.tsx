@@ -9,6 +9,7 @@ import {
   recalculateDay,
   type DailyAttendanceRow,
 } from "@/actions/attendance-daily";
+import { PunchTimelineDialog } from "./punch-timeline-dialog";
 
 function fmtHours(min: number | null) {
   if (min == null) return "—";
@@ -37,6 +38,7 @@ export function DailyAttendanceTab() {
   const [rows, setRows] = useState<DailyAttendanceRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [recalcId, setRecalcId] = useState<string | null>(null);
+  const [timeline, setTimeline] = useState<DailyAttendanceRow | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -155,7 +157,13 @@ export function DailyAttendanceTab() {
                   </td>
                   <td className="px-3 py-2">{fmtHours(r.total_minutes)}</td>
                   <td className="px-3 py-2">
-                    {r.punch_count ?? "—"}
+                    <button
+                      onClick={() => setTimeline(r)}
+                      className="rounded px-1 font-medium text-primary underline-offset-2 hover:underline"
+                      title="View punch timeline"
+                    >
+                      {r.punch_count ?? 0} punch{(r.punch_count ?? 0) === 1 ? "" : "es"}
+                    </button>
                     {(r.out_of_zone_count ?? 0) > 0 && (
                       <span className="ml-1 inline-flex items-center gap-0.5 rounded bg-amber-100 px-1 text-[10px] font-medium text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">
                         <AlertTriangle className="h-2.5 w-2.5" />
@@ -190,6 +198,23 @@ export function DailyAttendanceTab() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {timeline && (
+        <PunchTimelineDialog
+          open={!!timeline}
+          onOpenChange={(v) => {
+            if (!v) {
+              setTimeline(null);
+              load();
+            }
+          }}
+          employeeId={timeline.employee_id}
+          date={timeline.date}
+          employeeName={timeline.employee_name}
+          canApprove
+          canVoid
+        />
       )}
     </div>
   );

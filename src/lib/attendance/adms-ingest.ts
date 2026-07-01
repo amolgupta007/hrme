@@ -231,14 +231,19 @@ export async function recomputeAttendanceDay(
   const start = new Date(`${istDate}T00:00:00${IST_OFFSET}`);
   const end = new Date(start.getTime() + DAY_MS);
 
-  const { data: events } = await supabase
+  const { data: allEvents } = await supabase
     .from("attendance_punch_events")
-    .select("id, punched_at, location_id")
+    .select("id, punched_at, location_id, status")
     .eq("org_id", orgId)
     .eq("employee_id", employeeId)
     .gte("punched_at", start.toISOString())
     .lt("punched_at", end.toISOString())
     .order("punched_at", { ascending: true });
+
+  const rows = (allEvents ?? []) as (PunchEvent & { status?: string | null })[];
+  // Only approved punches count toward the rollup; pending/rejected/voided/duplicate are excluded.
+  const approved = rows.filter((r) => (r.status ?? "approved") === "approved");
+  const hasPending = rows.some((r) => r.status === "pending");
 
   // Phase 1: pool only punches from the employee's zone for that day.
   // null = unassigned → pool all of the employee's punches (no-zone fallback).
@@ -250,11 +255,12 @@ export async function recomputeAttendanceDay(
   );
 
   const result = computeDailyAttendance({
-    events: (events ?? []) as PunchEvent[],
+    events: approved as PunchEvent[],
     zoneLocationIds,
   });
 
-  if (result.status === "absent") return;
+  // An absent day with no pending punches has nothing to record.
+  if (result.status === "absent" && !hasPending) return;
 
   const { error } = await supabase.from("attendance_records").upsert(
     {
@@ -264,6 +270,10 @@ export async function recomputeAttendanceDay(
       clock_in_at: result.firstInAt,
       clock_out_at: result.lastOutAt,
       total_minutes: result.totalMinutes,
+      worked_minutes: result.workedMinutes,
+      break_minutes: result.breakMinutes,
+      needs_review: result.needsReview || hasPending,
+      has_pending_punches: hasPending,
       source: "device", // attendance_records.source CHECK only allows web/device/auto_close
       // Phase 2 multi-location rollup fields (derived from the event stream).
       first_in_location_id: result.firstInLocationId,

@@ -16,6 +16,8 @@
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { computeDailyAttendance, type PunchEvent } from "./daily-attendance";
 import { resolveEmployeeZoneLocationIds } from "./resolve-zone";
+import { decideAttribution, type GroupMatch } from "./cross-org-resolution";
+import { getSiblingOrgIds, assertSameGroup } from "./company-group";
 
 const IST_OFFSET = "+05:30";
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -147,46 +149,156 @@ export async function ingestAttlog(
     (emps ?? []).map((e: any) => [String(e.device_code), e.id as string]),
   );
 
-  const affected = new Set<string>(); // `${employeeId}|${istDate}`
+  // Cross-org (company group) resolution: for PINs with no employee in the
+  // device's own org, search sibling group orgs by device_code. Only runs when
+  // there are host-misses AND the org is grouped — ungrouped orgs are unchanged.
+  const missPins = pins.filter((p) => !pinToEmp.has(p));
+  const groupMatchesByPin = new Map<string, GroupMatch[]>();
+  let siblingOrgIds: string[] = [];
+  if (missPins.length > 0) {
+    siblingOrgIds = await getSiblingOrgIds(supabase, orgId);
+    if (siblingOrgIds.length > 0) {
+      const { data: gemps } = await supabase
+        .from("employees")
+        .select("id, device_code, org_id")
+        .in("org_id", siblingOrgIds)
+        .in("device_code", missPins)
+        .neq("status", "terminated");
+      for (const e of (gemps ?? []) as any[]) {
+        const pin = String(e.device_code);
+        const arr = groupMatchesByPin.get(pin) ?? [];
+        arr.push({ employeeId: e.id as string, orgId: e.org_id as string });
+        groupMatchesByPin.set(pin, arr);
+      }
+    }
+  }
+  const isGrouped = siblingOrgIds.length > 0;
+
+  const affected = new Set<string>(); // `${orgId}|${employeeId}|${istDate}` (org = payroll org)
   const unmatched = new Set<string>();
 
   for (const p of punches) {
-    const employeeId = pinToEmp.get(p.pin);
-    if (!employeeId) {
-      unmatched.add(p.pin);
-      continue;
-    }
     const punchedAt = istLocalToUtcIso(p.localDateTime);
     const istDate = istDateOf(p.localDateTime);
     if (!punchedAt || !istDate) continue;
 
-    const { error } = await supabase.from("attendance_punch_events").insert({
-      org_id: orgId,
-      employee_id: employeeId,
-      device_id: deviceId,
-      location_id: locationId,
-      punched_at: punchedAt,
-      source: "adms",
-      raw_payload: { line: p.raw, serial, status: p.status, verify: p.verify },
-    });
-
-    if (error) {
-      // 23505 = duplicate (device resends all logs on reboot) → expected no-op.
-      if ((error as any).code === "23505" || /duplicate/i.test(error.message)) {
-        base.duplicates++;
+    // Host-org match first (also makes dual-employment safe).
+    const hostEmp = pinToEmp.get(p.pin);
+    if (hostEmp) {
+      const { error } = await supabase.from("attendance_punch_events").insert({
+        org_id: orgId,
+        employee_id: hostEmp,
+        device_id: deviceId,
+        location_id: locationId,
+        punched_at: punchedAt,
+        source: "adms",
+        raw_payload: { line: p.raw, serial, status: p.status, verify: p.verify },
+      });
+      if (error) {
+        if ((error as any).code === "23505" || /duplicate/i.test(error.message)) base.duplicates++;
+        else {
+          console.error("[adms] punch insert failed:", error.message);
+          continue;
+        }
       } else {
-        console.error("[adms] punch insert failed:", error.message);
+        base.ingested++;
+      }
+      affected.add(`${orgId}|${hostEmp}|${istDate}`);
+      continue;
+    }
+
+    // Host miss → resolve across the company group.
+    const decision = decideAttribution(null, groupMatchesByPin.get(p.pin) ?? []);
+
+    if (decision.status === "attributed") {
+      const payrollOrgId = decision.payrollOrgId;
+      const guestEmp = decision.employeeId;
+      // Defensive gate: only stamp a cross-org punch when both orgs share a group.
+      if (!(await assertSameGroup(supabase, payrollOrgId, orgId))) {
+        console.warn(`[adms] cross-org gate failed ${orgId}→${payrollOrgId}; punch dropped`);
         continue;
       }
-    } else {
+      const { data: ins, error } = await supabase
+        .from("attendance_punch_events")
+        .insert({
+          org_id: payrollOrgId, // attribute to the payroll org
+          employee_id: guestEmp,
+          device_id: deviceId, // host device
+          location_id: locationId, // host location
+          punched_at: punchedAt,
+          source: "adms",
+          raw_payload: {
+            line: p.raw,
+            serial,
+            status: p.status,
+            verify: p.verify,
+            cross_org_host: orgId,
+          },
+        })
+        .select("id")
+        .single();
+      if (error) {
+        if ((error as any).code === "23505" || /duplicate/i.test(error.message)) {
+          base.duplicates++;
+          affected.add(`${payrollOrgId}|${guestEmp}|${istDate}`);
+        } else {
+          console.error("[adms] cross-org punch insert failed:", error.message);
+        }
+        continue;
+      }
       base.ingested++;
+      affected.add(`${payrollOrgId}|${guestEmp}|${istDate}`);
+      // Host-org visibility log (best-effort; unique on punch_event_id → resend-safe).
+      const { error: gErr } = await supabase.from("guest_punch_logs").insert({
+        host_org_id: orgId,
+        guest_org_id: payrollOrgId,
+        guest_employee_id: guestEmp,
+        device_id: deviceId,
+        location_id: locationId,
+        punched_at: punchedAt,
+        punch_event_id: (ins as { id: string }).id,
+        pin: p.pin,
+      });
+      if (gErr && !/duplicate/i.test(gErr.message))
+        console.warn("[adms] guest log insert failed:", gErr.message);
+      continue;
     }
-    affected.add(`${employeeId}|${istDate}`);
+
+    if (decision.status === "ambiguous") {
+      // Same PIN in >1 group org — never guess. Queue for review (resend-safe).
+      const { error: uErr } = await supabase.from("unresolved_punches").insert({
+        host_org_id: orgId,
+        device_id: deviceId,
+        pin: p.pin,
+        punched_at: punchedAt,
+        reason: "ambiguous_group_pin",
+        candidate_org_ids: decision.candidateOrgIds,
+      });
+      if (uErr && !/duplicate/i.test(uErr.message))
+        console.warn("[adms] unresolved insert failed:", uErr.message);
+      continue;
+    }
+
+    // Unmatched: unchanged for ungrouped orgs. For grouped orgs, log a review row
+    // so a guest arriving with an unknown PIN is visible (resend-safe).
+    unmatched.add(p.pin);
+    if (isGrouped) {
+      const { error: uErr } = await supabase.from("unresolved_punches").insert({
+        host_org_id: orgId,
+        device_id: deviceId,
+        pin: p.pin,
+        punched_at: punchedAt,
+        reason: "no_group_match",
+        candidate_org_ids: null,
+      });
+      if (uErr && !/duplicate/i.test(uErr.message))
+        console.warn("[adms] unresolved insert failed:", uErr.message);
+    }
   }
 
   for (const key of affected) {
-    const [employeeId, istDate] = key.split("|");
-    await recomputeAttendanceDay(supabase, orgId, employeeId, istDate);
+    const [recomputeOrgId, employeeId, istDate] = key.split("|");
+    await recomputeAttendanceDay(supabase, recomputeOrgId, employeeId, istDate);
   }
 
   // Liveness for the Settings connection-status indicator.

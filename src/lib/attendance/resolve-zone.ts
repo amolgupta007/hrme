@@ -15,6 +15,7 @@
  */
 
 import type { createAdminSupabase } from "@/lib/supabase/server";
+import { getGroupLocationIds } from "./company-group";
 
 type AdminClient = ReturnType<typeof createAdminSupabase>;
 
@@ -48,8 +49,18 @@ export async function resolveEmployeeZoneLocationIds(
     .select("location_id")
     .eq("zone_id", assignment.zone_id);
 
+  const zoneLocationIds = (zoneLocs ?? []).map((r: any) => r.location_id as string);
+
+  // Company-group union: a grouped employee's punches at ANY group-member location
+  // must count (they legitimately work across sister companies). Without this, a
+  // cross-org guest punch at a sibling location would be dropped as out-of-zone.
+  // Ungrouped orgs get [] back → no change. This is the one place we deliberately
+  // widen zone scope beyond the employee's own org, and only for group members.
+  const groupLocationIds = await getGroupLocationIds(supabase, orgId);
+  if (groupLocationIds.length === 0) return zoneLocationIds;
+
   // Assigned to a zone but the zone has no locations → empty set (nothing counts),
   // which is distinct from null (pool-all). Surfaces a misconfigured zone instead
   // of silently pooling everything.
-  return (zoneLocs ?? []).map((r: any) => r.location_id as string);
+  return [...new Set([...zoneLocationIds, ...groupLocationIds])];
 }

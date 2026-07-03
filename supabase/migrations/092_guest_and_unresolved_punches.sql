@@ -17,6 +17,9 @@ CREATE TABLE IF NOT EXISTS public.guest_punch_logs (
 );
 CREATE INDEX IF NOT EXISTS idx_guest_punch_logs_host
   ON public.guest_punch_logs (host_org_id, punched_at);
+-- Dedup: one guest log per underlying punch event (devices resend logs on reboot).
+CREATE UNIQUE INDEX IF NOT EXISTS uq_guest_punch_logs_event
+  ON public.guest_punch_logs (punch_event_id) WHERE punch_event_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS public.unresolved_punches (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -31,6 +34,9 @@ CREATE TABLE IF NOT EXISTS public.unresolved_punches (
 );
 CREATE INDEX IF NOT EXISTS idx_unresolved_punches_host
   ON public.unresolved_punches (host_org_id, resolved, punched_at);
+-- Dedup: one review row per (host, pin, instant, reason) so device resends are no-ops.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_unresolved_punches_dedupe
+  ON public.unresolved_punches (host_org_id, pin, punched_at, reason);
 
 -- guest_punch_logs: host-org admins may read their own guests (audit).
 ALTER TABLE public.guest_punch_logs ENABLE ROW LEVEL SECURITY;

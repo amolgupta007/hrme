@@ -169,6 +169,16 @@ export default async function SuperadminDashboard() {
             </div>
             <span className="text-sm text-teal-700">Open →</span>
           </Link>
+          <Link
+            href="/superadmin/groups"
+            className="mt-3 flex items-center justify-between rounded-lg border border-gray-200 bg-white px-5 py-4 shadow-sm transition hover:border-gray-300 hover:shadow"
+          >
+            <div>
+              <p className="text-sm font-medium text-gray-900">Company Groups</p>
+              <p className="mt-1 text-sm text-gray-500">Link orgs for cross-org attendance (e.g. TMP)</p>
+            </div>
+            <span className="text-sm text-teal-700">Open →</span>
+          </Link>
         </section>
 
         {/* Custom plan requests */}

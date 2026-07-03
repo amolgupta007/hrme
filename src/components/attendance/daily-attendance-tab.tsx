@@ -10,6 +10,7 @@ import {
   type DailyAttendanceRow,
 } from "@/actions/attendance-daily";
 import { PunchTimelineDialog } from "./punch-timeline-dialog";
+import { GuestPunchesCard } from "./guest-punches-card";
 
 function fmtHours(min: number | null) {
   if (min == null) return "—";
@@ -199,6 +200,8 @@ export function DailyAttendanceTab() {
           </table>
         </div>
       )}
+
+      <GuestPunchesCard />
 
       {timeline && (
         <PunchTimelineDialog

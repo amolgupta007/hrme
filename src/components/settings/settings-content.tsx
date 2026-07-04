@@ -39,7 +39,7 @@ import type { PerformanceSettings } from "@/lib/performance-settings";
 import type { AttendanceSettings } from "@/actions/attendance";
 import type { Shift, ShiftAssignment } from "@/actions/shifts";
 import type { WeekOffPolicy } from "@/lib/attendance/week-off";
-import type { EmployeeWeekOffOverrideRow } from "@/actions/week-off";
+import type { EmployeeWeekOffOverrideRow, DepartmentWeekOffOverrideRow } from "@/actions/week-off";
 import type { OvertimeSettings } from "@/lib/attendance/overtime-types";
 import type { LatePolicy } from "@/actions/late-policy";
 import type { PenaltyBand } from "@/lib/attendance/late-penalty-bands";
@@ -74,6 +74,7 @@ type SettingsContentProps = {
   shiftAssignments: ShiftAssignment[];
   weekOffPolicy: WeekOffPolicy | null;
   weekOffOverrides: EmployeeWeekOffOverrideRow[];
+  departmentWeekOffOverrides: DepartmentWeekOffOverrideRow[];
   employees: Employee[];
   overtimeSettings: OvertimeSettings;
   latePolicy: LatePolicy | null;
@@ -118,6 +119,7 @@ export function SettingsContent({
   shiftAssignments,
   weekOffPolicy,
   weekOffOverrides,
+  departmentWeekOffOverrides,
   employees,
   overtimeSettings,
   latePolicy,
@@ -245,6 +247,7 @@ export function SettingsContent({
             assignments={shiftAssignments}
             weekOffPolicy={weekOffPolicy}
             weekOffOverrides={weekOffOverrides}
+            departmentWeekOffOverrides={departmentWeekOffOverrides}
             employees={employees}
             departments={departments}
             overtimeSettings={overtimeSettings}

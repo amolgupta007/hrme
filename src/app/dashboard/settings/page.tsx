@@ -16,7 +16,7 @@ import { getPerformanceSettings } from "@/lib/performance-settings";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { getAttendanceSettings } from "@/actions/attendance";
 import { listShifts, listShiftAssignments } from "@/actions/shifts";
-import { getWeekOffPolicy, listAllWeekOffOverrides } from "@/actions/week-off";
+import { getWeekOffPolicy, listAllWeekOffOverrides, listAllDepartmentWeekOffOverrides } from "@/actions/week-off";
 import { listEmployees } from "@/actions/employees";
 import { getSalaryStructureConfig } from "@/actions/payroll";
 import { getOvertimeSettings } from "@/actions/overtime";
@@ -47,6 +47,7 @@ export default async function SettingsPage() {
     shiftAssignmentsResult,
     weekOffPolicyResult,
     weekOffOverridesResult,
+    departmentWeekOffOverridesResult,
     employeesResult,
     payrollConfigResult,
     overtimeSettingsResult,
@@ -70,6 +71,7 @@ export default async function SettingsPage() {
     listShiftAssignments(),
     getWeekOffPolicy(),
     listAllWeekOffOverrides(),
+    listAllDepartmentWeekOffOverrides(),
     listEmployees(),
     getSalaryStructureConfig(),
     getOvertimeSettings(),
@@ -107,6 +109,7 @@ export default async function SettingsPage() {
   const shiftAssignments = shiftAssignmentsResult.success ? shiftAssignmentsResult.data : [];
   const weekOffPolicy = weekOffPolicyResult.success ? weekOffPolicyResult.data : null;
   const weekOffOverrides = weekOffOverridesResult.success ? weekOffOverridesResult.data : [];
+  const departmentWeekOffOverrides = departmentWeekOffOverridesResult.success ? departmentWeekOffOverridesResult.data : [];
   const employees = employeesResult.success ? employeesResult.data : [];
   const payrollEnabled = hasFeature(plan, "payroll", userCtx?.customFeatures ?? null);
   const payrollActiveConfig = payrollConfigResult.success ? payrollConfigResult.data.active : null;
@@ -182,6 +185,7 @@ export default async function SettingsPage() {
         shiftAssignments={shiftAssignments}
         weekOffPolicy={weekOffPolicy}
         weekOffOverrides={weekOffOverrides}
+        departmentWeekOffOverrides={departmentWeekOffOverrides}
         employees={employees}
         latePolicy={latePolicy}
         latePolicyTargets={latePolicyTargets}

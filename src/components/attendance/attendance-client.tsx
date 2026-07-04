@@ -27,6 +27,7 @@ interface Props {
   activeShift: { id: string; name: string; start_time: string; end_time: string; is_overnight: boolean } | null;
   roster: RosterGridData | null;
   weekOff: WeekOffPolicy | null;
+  weekOffByEmployee: Record<string, WeekOffPolicy>;
   rosterRange: { from: string; to: string };
   overtimeRecords: OvertimeRecord[];
   overtimeSettings: OvertimeSettings;
@@ -48,7 +49,7 @@ function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
 }
 
-export function AttendanceClient({ today, history, team, employees, isManager, isAdmin, attendancePayrollEnabled, activeShift, roster, weekOff, rosterRange, overtimeRecords, overtimeSettings }: Props) {
+export function AttendanceClient({ today, history, team, employees, isManager, isAdmin, attendancePayrollEnabled, activeShift, roster, weekOff, weekOffByEmployee, rosterRange, overtimeRecords, overtimeSettings }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [liveTime, setLiveTime] = useState("");
@@ -284,7 +285,7 @@ export function AttendanceClient({ today, history, team, employees, isManager, i
 
       {/* Roster tab */}
       {activeTab === "roster" && isManager && roster && (
-        <RosterGrid initial={roster} weekOff={weekOff} from={rosterRange.from} to={rosterRange.to} />
+        <RosterGrid initial={roster} weekOff={weekOff} weekOffByEmployee={weekOffByEmployee} from={rosterRange.from} to={rosterRange.to} />
       )}
 
       {/* Overtime tab */}

@@ -40,3 +40,16 @@ export function isWeekOff(dateStr: string, policy: WeekOffPolicy, override?: Wee
   if (effective.alt_saturday_rule && isAltSaturdayOff(dateStr, effective.alt_saturday_rule)) return true;
   return false;
 }
+
+/**
+ * Resolve the effective week-off policy for one employee, applying precedence:
+ * employee override > department override > org policy. Each override FULLY
+ * replaces the level below it (not a merge). Returns the winning policy.
+ */
+export function resolveEffectiveWeekOff(
+  policy: WeekOffPolicy,
+  departmentOverride?: WeekOffOverride | null,
+  employeeOverride?: WeekOffOverride | null
+): WeekOffPolicy {
+  return employeeOverride ?? departmentOverride ?? policy;
+}

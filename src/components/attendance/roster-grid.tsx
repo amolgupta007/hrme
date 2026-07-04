@@ -13,11 +13,13 @@ import { RosterWeekNav } from "./roster-week-nav";
 interface Props {
   initial: Grid;
   weekOff: WeekOffPolicy | null;
+  /** Per-employee effective week-off (employee/department override already resolved). Falls back to org policy. */
+  weekOffByEmployee?: Record<string, WeekOffPolicy>;
   from: string;
   to: string;
 }
 
-export function RosterGrid({ initial, weekOff, from, to }: Props) {
+export function RosterGrid({ initial, weekOff, weekOffByEmployee, from, to }: Props) {
   const router = useRouter();
   const [busy, setBusy] = React.useState(false);
   const sensors = useSensors(
@@ -49,7 +51,7 @@ export function RosterGrid({ initial, weekOff, from, to }: Props) {
             }]
           : []
       ) ?? [];
-    const effectiveWeekOff = weekOff ?? { week_type: 6 as const, off_days: [] };
+    const effectiveWeekOff = weekOffByEmployee?.[employee_id] ?? weekOff ?? { week_type: 6 as const, off_days: [] };
     const conflicts = detectAssignmentConflicts({ employee_id, date, shift }, existing, effectiveWeekOff);
     conflicts.forEach((c) => toast.warning(c.message));
 

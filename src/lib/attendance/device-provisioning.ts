@@ -1,5 +1,6 @@
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { isValidPin, sanitizeName } from "@/lib/attendance/adms-commands";
+import { getSiblingOrgIds } from "@/lib/attendance/company-group";
 import {
   commandKey,
   missingCommands,
@@ -84,6 +85,19 @@ async function activeEmployeesWithPin(orgId: string) {
     .from("employees")
     .select("id, first_name, last_name, device_code")
     .eq("org_id", orgId)
+    .neq("status", "terminated")
+    .not("device_code", "is", null);
+  return ((data ?? []) as any[]).filter((e) => isValidPin(e.device_code));
+}
+
+/** Active, PIN'd employees across a set of orgs (for cross-org group provisioning). */
+async function activeEmployeesWithPinForOrgs(orgIds: string[]) {
+  if (orgIds.length === 0) return [];
+  const supabase = createAdminSupabase();
+  const { data } = await supabase
+    .from("employees")
+    .select("id, first_name, last_name, device_code")
+    .in("org_id", orgIds)
     .neq("status", "terminated")
     .not("device_code", "is", null);
   return ((data ?? []) as any[]).filter((e) => isValidPin(e.device_code));
@@ -174,6 +188,67 @@ export async function enqueueSyncAll(orgId: string): Promise<number> {
     return await insertMissing(orgId, desired, meta);
   } catch (e: any) {
     console.warn("[device-provisioning] enqueueSyncAll:", e?.message);
+    return 0;
+  }
+}
+
+/**
+ * Company-group provisioning: push GROUP-SIBLING employees' user records
+ * (PIN + Name, no fingerprint) onto THIS org's devices, so a cross-site employee
+ * shows up as a named PIN slot at the host site and an operator only has to scan
+ * their finger. Dispatch is keyed by device_serial (not org), and PINs are unique
+ * across the group, so sibling PINs never collide with the host's own. Ungrouped
+ * orgs → getSiblingOrgIds returns [] → no-op. Commands are stamped with the host
+ * org_id so they appear in the host device's provisioning status.
+ */
+export async function enqueueGroupUpsertForDevice(
+  hostOrgId: string,
+  deviceId: string,
+  deviceSerial: string
+): Promise<number> {
+  try {
+    const siblingOrgIds = await getSiblingOrgIds(createAdminSupabase(), hostOrgId);
+    if (siblingOrgIds.length === 0) return 0;
+    const employees = await activeEmployeesWithPinForOrgs(siblingOrgIds);
+    const desired: DesiredCommand[] = [];
+    const meta = new Map<string, Meta>();
+    for (const e of employees) {
+      const c: DesiredCommand = { device_id: deviceId, pin: e.device_code, cmd_type: "upsert_user" };
+      desired.push(c);
+      meta.set(commandKey(c), { device_serial: deviceSerial, employee_id: e.id, name: fullName(e) });
+    }
+    return await insertMissing(hostOrgId, desired, meta);
+  } catch (e: any) {
+    console.warn("[device-provisioning] enqueueGroupUpsertForDevice:", e?.message);
+    return 0;
+  }
+}
+
+/** Push all group-sibling employees onto ALL of this org's active devices. */
+export async function enqueueGroupSyncAll(orgId: string): Promise<number> {
+  try {
+    const siblingOrgIds = await getSiblingOrgIds(createAdminSupabase(), orgId);
+    if (siblingOrgIds.length === 0) return 0;
+    const [devices, employees] = await Promise.all([
+      activeDevices(orgId),
+      activeEmployeesWithPinForOrgs(siblingOrgIds),
+    ]);
+    const desired: DesiredCommand[] = [];
+    const meta = new Map<string, Meta>();
+    for (const d of devices) {
+      for (const e of employees) {
+        const c: DesiredCommand = { device_id: d.id, pin: e.device_code, cmd_type: "upsert_user" };
+        desired.push(c);
+        meta.set(commandKey(c), {
+          device_serial: d.device_serial,
+          employee_id: e.id,
+          name: fullName(e),
+        });
+      }
+    }
+    return await insertMissing(orgId, desired, meta);
+  } catch (e: any) {
+    console.warn("[device-provisioning] enqueueGroupSyncAll:", e?.message);
     return 0;
   }
 }

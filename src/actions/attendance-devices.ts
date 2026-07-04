@@ -8,6 +8,8 @@ import { getCurrentUser, isAdmin } from "@/lib/current-user";
 import {
   enqueueUpsertForDevice,
   enqueueSyncAll,
+  enqueueGroupUpsertForDevice,
+  enqueueGroupSyncAll,
 } from "@/lib/attendance/device-provisioning";
 import type { ActionResult } from "@/types";
 
@@ -174,7 +176,9 @@ export async function registerDevice(input: {
   }
 
   // Backfill existing active employees (with PINs) onto the new device. Best-effort.
+  // Include group-sibling employees so a shared device is ready for cross-site staff.
   await enqueueUpsertForDevice(ctx.user.orgId, (data as any).id, (data as any).device_serial);
+  await enqueueGroupUpsertForDevice(ctx.user.orgId, (data as any).id, (data as any).device_serial);
 
   revalidatePath("/dashboard/settings");
   return {
@@ -239,9 +243,12 @@ export async function deleteDevice(id: string): Promise<ActionResult<void>> {
 export async function syncAllUsersToDevices(): Promise<ActionResult<{ enqueued: number }>> {
   const ctx = await requireAdmin();
   if ("error" in ctx) return { success: false, error: ctx.error };
-  const enqueued = await enqueueSyncAll(ctx.user.orgId);
+  // Own employees onto own devices, PLUS group-sibling employees onto own devices
+  // (so cross-site staff get a named PIN slot at this org's sites). No-op if ungrouped.
+  const own = await enqueueSyncAll(ctx.user.orgId);
+  const group = await enqueueGroupSyncAll(ctx.user.orgId);
   revalidatePath("/dashboard/settings");
-  return { success: true, data: { enqueued } };
+  return { success: true, data: { enqueued: own + group } };
 }
 
 export async function retryFailedCommands(): Promise<ActionResult<{ retried: number }>> {

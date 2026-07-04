@@ -26,6 +26,7 @@ import {
   MessageCircle,
   Bug,
   Briefcase,
+  FileSignature,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -55,6 +56,7 @@ const iconMap: Record<string, LucideIcon> = {
   UserPlus,
   MapPin,
   Briefcase,
+  FileSignature,
 };
 
 // Map nav href to badge key

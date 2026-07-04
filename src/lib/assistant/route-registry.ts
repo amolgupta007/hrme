@@ -437,6 +437,43 @@ export const ROUTE_REGISTRY = {
     required_plan: "business",
   },
 
+  // Offer Letters & Document Templating (Business tier, admin)
+  document_templates: {
+    path: "/dashboard/documents/templates",
+    label: "Build an offer letter template",
+    description: "Create clause-based offer letter / NDA / policy templates with {{variables}}, drag to reorder, pull from the clause library, or generate a first draft with AI.",
+    required_role: "admin",
+    required_plan: "business",
+  },
+  new_document_template: {
+    path: "/dashboard/documents/templates/new",
+    label: "Create a new document template",
+    description: "Start a blank clause-based template or generate one with AI.",
+    required_role: "admin",
+    required_plan: "business",
+  },
+  edit_document_template: {
+    path: "/dashboard/documents/templates/[id]",
+    label: "Edit a document template",
+    description: "Edit clauses, reorder, and activate a template so it can be issued.",
+    required_role: "admin",
+    required_plan: "business",
+  },
+  issue_document: {
+    path: "/dashboard/documents/issue",
+    label: "Issue a document to employees",
+    description: "Pick an active template and issuing entity, select employees, review auto-filled variables, and send for e-acknowledgement.",
+    required_role: "admin",
+    required_plan: "business",
+  },
+  signed_records: {
+    path: "/dashboard/documents/signed",
+    label: "View signed records",
+    description: "Track issued documents and download the append-only signed-record audit trail (owner/admin only).",
+    required_role: "admin",
+    required_plan: "business",
+  },
+
   // Settings + billing
   upgrade_plan: {
     path: "/dashboard/settings",

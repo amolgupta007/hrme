@@ -16,6 +16,7 @@ export type PlanFeature =
   | "ats"
   | "interview_scheduling"
   | "offer_letters"
+  | "document_templating"
   | "onboarding_workflows"
   | "jambageo";
 
@@ -45,6 +46,7 @@ export const PLAN_FEATURES: Record<OrgPlan, PlanFeature[]> = {
     "ats",
     "interview_scheduling",
     "offer_letters",
+    "document_templating",
     "onboarding_workflows",
     "jambageo",
   ],
@@ -96,6 +98,7 @@ export const PLAN_UNLOCK_HIGHLIGHTS: Record<"growth" | "business", string[]> = {
     "AI attrition risk scoring",
     "Semantic document search",
     "Full hiring suite (ATS, interviews, offers)",
+    "Offer letter & document templating with e-acknowledgement",
     "Onboarding workflows",
   ],
 };

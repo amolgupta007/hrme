@@ -361,8 +361,9 @@ export function BiometricDevicesSection({
                 <RefreshCw className="h-3.5 w-3.5" /> Sync users to devices
               </p>
               <p className="mt-1 text-xs text-muted-foreground">
-                Pushes every active employee with a PIN onto all active devices.
-                Fingerprints are still enrolled at the device itself.
+                Pushes every active employee with a PIN onto all active devices — including
+                employees from companies in your group, so cross-site staff appear as a named
+                PIN slot here. Fingerprints are still enrolled at the device itself.
               </p>
             </div>
             <Button onClick={handleSyncAll} disabled={syncing} className="shrink-0">

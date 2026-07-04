@@ -3,7 +3,8 @@ import { redirect } from "next/navigation";
 import { getTodayStatus, listAttendance, getTeamTodayAttendance } from "@/actions/attendance";
 import { listEmployees } from "@/actions/employees";
 import { getActiveShiftForEmployee, getRosterGrid } from "@/actions/shifts";
-import { getWeekOffPolicy } from "@/actions/week-off";
+import { getWeekOffPolicy, listAllWeekOffOverrides, listAllDepartmentWeekOffOverrides } from "@/actions/week-off";
+import { resolveEffectiveWeekOff, type WeekOffPolicy } from "@/lib/attendance/week-off";
 import { getOvertimeRecords, getOvertimeSettings } from "@/actions/overtime";
 import { DEFAULT_OT_SETTINGS } from "@/lib/attendance/overtime-types";
 import { AttendanceClient } from "@/components/attendance/attendance-client";
@@ -45,12 +46,28 @@ export default async function AttendancePage() {
   const employees = employeesResult?.success ? employeesResult.data : [];
 
   const { from: rosterFrom, to: rosterTo } = defaultWeekRange();
-  const [rosterResult, weekOffResult] = await Promise.all([
+  const [rosterResult, weekOffResult, empOverridesResult, deptOverridesResult] = await Promise.all([
     isManager ? getRosterGrid({ from: rosterFrom, to: rosterTo }) : Promise.resolve(null),
     getWeekOffPolicy(),
+    isManager ? listAllWeekOffOverrides() : Promise.resolve(null),
+    isManager ? listAllDepartmentWeekOffOverrides() : Promise.resolve(null),
   ]);
   const roster = rosterResult?.success ? rosterResult.data : null;
   const weekOff = weekOffResult?.success ? weekOffResult.data : null;
+
+  // Resolve each employee's effective week-off (employee override > department
+  // override > org policy) so the roster conflict check honours overrides.
+  const empOverrides = empOverridesResult?.success ? empOverridesResult.data : [];
+  const deptOverrides = deptOverridesResult?.success ? deptOverridesResult.data : [];
+  const empOvMap = new Map(empOverrides.map((o) => [o.employee_id, { week_type: o.week_type, off_days: o.off_days, alt_saturday_rule: o.alt_saturday_rule }]));
+  const deptOvMap = new Map(deptOverrides.map((o) => [o.department_id, { week_type: o.week_type, off_days: o.off_days, alt_saturday_rule: o.alt_saturday_rule }]));
+  const basePolicy: WeekOffPolicy = weekOff ?? { week_type: 6, off_days: [] };
+  const weekOffByEmployee: Record<string, WeekOffPolicy> = {};
+  for (const e of employees ?? []) {
+    const eo = empOvMap.get(e.id);
+    const dOv = e.department_id ? deptOvMap.get(e.department_id) : undefined;
+    if (eo || dOv) weekOffByEmployee[e.id] = resolveEffectiveWeekOff(basePolicy, dOv, eo);
+  }
 
   const [otRecordsResult, otSettingsResult] = await Promise.all([
     isAdminUser ? getOvertimeRecords() : Promise.resolve(null),
@@ -71,6 +88,7 @@ export default async function AttendancePage() {
       activeShift={activeShift}
       roster={roster}
       weekOff={weekOff}
+      weekOffByEmployee={weekOffByEmployee}
       rosterRange={{ from: rosterFrom, to: rosterTo }}
       overtimeRecords={overtimeRecords}
       overtimeSettings={overtimeSettings}

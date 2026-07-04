@@ -222,3 +222,149 @@ export async function listAllWeekOffOverrides(): Promise<ActionResult<EmployeeWe
     })),
   };
 }
+
+// ---------------------------------------------------------------------------
+// Per-department week-off overrides
+// Precedence at resolve time: employee override > department override > org policy.
+// ---------------------------------------------------------------------------
+
+export type DepartmentWeekOffOverrideRow = WeekOffOverride & {
+  id: string;
+  department_id: string;
+  department_name: string;
+  effective_from: string;
+};
+
+const DeptOverrideSchema = z.object({
+  department_id: z.string().uuid(),
+  week_type: z.union([z.literal(5), z.literal(6)]),
+  off_days: z.array(z.number().int().min(0).max(6)).min(1).max(2),
+  alt_saturday_rule: z.enum(["none", "odd_off", "even_off"]).default("none"),
+  effective_from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+});
+
+/** Read the week-off override for one department. Admin-only. */
+export async function getDepartmentWeekOffOverride(
+  departmentId: string
+): Promise<ActionResult<WeekOffOverride | null>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Unauthorized" };
+  const sb = createAdminSupabase();
+  const { data, error } = await sb
+    .from("department_week_off_override")
+    .select("week_type, off_days, alt_saturday_rule")
+    .eq("org_id", user.orgId)
+    .eq("department_id", departmentId)
+    .maybeSingle();
+  if (error) return { success: false, error: error.message };
+  if (!data) return { success: true, data: null };
+  return {
+    success: true,
+    data: {
+      week_type: (data as any).week_type,
+      off_days: (data as any).off_days,
+      alt_saturday_rule:
+        ((data as any).alt_saturday_rule as "none" | "odd_off" | "even_off" | null) ?? "none",
+    },
+  };
+}
+
+/**
+ * Create or update a per-department week-off override. Admin-only.
+ * Cross-tenant guard: verifies the target department belongs to the caller's org.
+ */
+export async function upsertDepartmentWeekOffOverride(
+  input: z.infer<typeof DeptOverrideSchema>
+): Promise<ActionResult<void>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can set week-off overrides" };
+
+  const parsed = DeptOverrideSchema.safeParse(input);
+  if (!parsed.success) return { success: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+
+  if (parsed.data.week_type === 5 && parsed.data.off_days.length !== 2) {
+    return { success: false, error: "5-day week must pick exactly 2 off days" };
+  }
+  if (parsed.data.week_type === 6 && parsed.data.off_days.length !== 1) {
+    return { success: false, error: "6-day week must pick exactly 1 off day" };
+  }
+
+  const sb = createAdminSupabase();
+
+  // Cross-tenant guard: confirm the department belongs to the caller's org.
+  const { data: deptOk } = await sb
+    .from("departments")
+    .select("id")
+    .eq("org_id", user.orgId)
+    .eq("id", parsed.data.department_id)
+    .maybeSingle();
+  if (!deptOk) return { success: false, error: "Department not found in your organisation" };
+
+  const { error } = await sb
+    .from("department_week_off_override")
+    .upsert(
+      {
+        org_id: user.orgId,
+        department_id: parsed.data.department_id,
+        week_type: parsed.data.week_type,
+        off_days: parsed.data.off_days,
+        alt_saturday_rule: parsed.data.alt_saturday_rule,
+        effective_from: parsed.data.effective_from,
+        created_by: user.employeeId ?? null,
+      } as any,
+      { onConflict: "department_id" }
+    );
+
+  if (error) return { success: false, error: error.message };
+  revalidatePath("/dashboard/settings");
+  revalidatePath("/dashboard/attendance");
+  return { success: true, data: undefined };
+}
+
+/** Remove the week-off override for a department, reverting it to the org policy. Admin-only. */
+export async function deleteDepartmentWeekOffOverride(departmentId: string): Promise<ActionResult<void>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can remove week-off overrides" };
+  const sb = createAdminSupabase();
+  const { error } = await sb
+    .from("department_week_off_override")
+    .delete()
+    .eq("org_id", user.orgId)
+    .eq("department_id", departmentId);
+  if (error) return { success: false, error: error.message };
+  revalidatePath("/dashboard/settings");
+  revalidatePath("/dashboard/attendance");
+  return { success: true, data: undefined };
+}
+
+/** List all per-department week-off overrides for the org, joined with department name. Admin-only. */
+export async function listAllDepartmentWeekOffOverrides(): Promise<ActionResult<DepartmentWeekOffOverrideRow[]>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can list week-off overrides" };
+  const sb = createAdminSupabase();
+  const { data, error } = await sb
+    .from("department_week_off_override")
+    .select(
+      "id, department_id, week_type, off_days, alt_saturday_rule, effective_from, departments!department_id(name)"
+    )
+    .eq("org_id", user.orgId)
+    .order("created_at", { ascending: false });
+  if (error) return { success: false, error: error.message };
+  return {
+    success: true,
+    data: (data ?? []).map((r: any) => ({
+      id: r.id,
+      department_id: r.department_id,
+      department_name: r.departments ? r.departments.name : "Unknown",
+      week_type: r.week_type,
+      off_days: r.off_days,
+      alt_saturday_rule:
+        (r.alt_saturday_rule as "none" | "odd_off" | "even_off" | null) ?? "none",
+      effective_from: r.effective_from,
+    })),
+  };
+}

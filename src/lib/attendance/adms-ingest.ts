@@ -139,12 +139,15 @@ export async function ingestAttlog(
   }
 
   // Map PINs → employees (device_code) within the org, one round trip.
+  // Exclude terminated employees so a stale PIN on a left employee doesn't
+  // host-match (and, in a group, doesn't block cross-org resolution).
   const pins = [...new Set(punches.map((p) => p.pin))];
   const { data: emps } = await supabase
     .from("employees")
     .select("id, device_code")
     .eq("org_id", orgId)
-    .in("device_code", pins);
+    .in("device_code", pins)
+    .neq("status", "terminated");
   const pinToEmp = new Map<string, string>(
     (emps ?? []).map((e: any) => [String(e.device_code), e.id as string]),
   );

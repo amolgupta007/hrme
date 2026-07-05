@@ -1,5 +1,5 @@
 {
-  "name": "hr-portal",
+  "name": "web",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -16,7 +16,8 @@
     "stripe:listen": "stripe listen --forward-to localhost:3000/api/webhooks/stripe",
     "convert-legal": "node scripts/convert-legal-docs.js",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.87",

@@ -15,7 +15,7 @@ export function OwnershipTransferEmail({
       <Body style={{ backgroundColor: "#f6f9fc", fontFamily: "sans-serif" }}>
         <Container style={{ padding: "24px", maxWidth: "520px" }}>
           <Section>
-            <Heading as="h2">You've been invited to own {orgName}</Heading>
+            <Heading as="h2">You&apos;ve been invited to own {orgName}</Heading>
             <Text>
               {inviterName} has invited you to take ownership of <strong>{orgName}</strong> on JambaHR.
               Sign in with this email address, then review and accept to become the owner.
@@ -27,7 +27,7 @@ export function OwnershipTransferEmail({
               Review &amp; accept ownership
             </Button>
             <Text style={{ color: "#8898aa", fontSize: "12px", marginTop: "16px" }}>
-              This invitation expires in 14 days. If you weren't expecting this, you can ignore this email.
+              This invitation expires in 14 days. If you weren&apos;t expecting this, you can ignore this email.
             </Text>
           </Section>
         </Container>

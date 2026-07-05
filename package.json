@@ -1,13 +1,19 @@
 {
   "name": "jambahr",
   "private": true,
+  "packageManager": "npm@11.8.0",
   "workspaces": [
     "apps/*",
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build --workspace=hr-portal",
-    "test": "npm run test --workspace=hr-portal",
-    "lint": "npm run lint --workspace=hr-portal"
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "test": "turbo test",
+    "lint": "turbo lint",
+    "typecheck": "turbo typecheck"
+  },
+  "devDependencies": {
+    "turbo": "^2.10.3"
   }
 }

@@ -65,7 +65,7 @@ export function TransferOwnershipSection() {
   return (
     <div className="space-y-3 p-6">
       <p className="text-sm text-muted-foreground">
-        Invite someone to become the owner of this organization. You'll stay on as an admin once they accept.
+        Invite someone to become the owner of this organization. You&apos;ll stay on as an admin once they accept.
       </p>
       <input className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="New owner's name (optional)" value={name} onChange={(e) => setName(e.target.value)} />
       <input className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />

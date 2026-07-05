@@ -8,10 +8,15 @@ import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const SUPABASE_URL = "https://imjwqktxzahhnfmfbtfc.supabase.co";
-const SUPABASE_SERVICE_ROLE_KEY =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imltandxa3R4emFoaG5mbWZidGZjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NDMzMTY3NiwiZXhwIjoyMDg5OTA3Njc2fQ.XNoi59Rd8qy-ZZ8Gzv79b1NUQdzzBmgn1PeLzaHqqXw";
-const PICS_DIR = path.join(__dirname, "../sample-documents/pics");
+// Run with: node --env-file=../.env.local scripts/upload-employee-avatars.mjs (from apps/web)
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+  console.error("Missing NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY in env.");
+  process.exit(1);
+}
+// sample-documents/ lives at the repo root; this script under apps/web/scripts.
+const PICS_DIR = path.join(__dirname, "..", "..", "..", "sample-documents/pics");
 const BUCKET = "avatars";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);

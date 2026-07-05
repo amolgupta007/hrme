@@ -2,6 +2,19 @@
 
 HR management platform for small and medium businesses (10–500 employees) who don't want to hire a dedicated HR professional.
 
+## Monorepo layout (since 2026-07, Mobile PRD-01)
+
+Turborepo + npm workspaces. The Next.js app lives in **`apps/web`** (Vercel Root Directory points there); `docs/` and `supabase/` stay at the repo root.
+
+```
+apps/web            # the Next.js 14 app (everything below in "Project Structure")
+packages/shared     # @jambahr/shared — pure types, schemas, compute (web + mobile)
+packages/supabase   # @jambahr/supabase — generated Database types
+packages/config     # @jambahr/config — tsconfig base
+```
+
+Commands (repo root): `npm run dev` / `build` / `test` / `lint` / `typecheck` (all via turbo), or scope with `npx turbo build --filter=web`, `npx turbo typecheck --filter=@jambahr/shared`. Env files live in **`apps/web/.env.local`**. App-specific scripts (`embed:help`, `db:generate`, …) run from `apps/web`.
+
 ## Tech Stack
 
 | Layer | Tool | Purpose |

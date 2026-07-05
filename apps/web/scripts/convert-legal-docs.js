@@ -4,8 +4,10 @@ const fs = require("fs");
 const path = require("path");
 
 const VERSION = "2026-05-01";
-const OUT_DIR = path.join(process.cwd(), "src/content/legal");
-const SRC_DIR = path.join(process.cwd(), "sample-documents/policy");
+// __dirname-anchored so the script works from any cwd. sample-documents/
+// lives at the repo root (untracked source assets), the app under apps/web.
+const OUT_DIR = path.join(__dirname, "..", "src/content/legal");
+const SRC_DIR = path.join(__dirname, "..", "..", "..", "sample-documents/policy");
 
 const SOURCES = [
   { docx: "JambaHR_Privacy_Policy.docx", slug: "privacy", title: "Privacy Policy" },

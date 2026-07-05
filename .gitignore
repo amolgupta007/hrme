@@ -1,18 +1,21 @@
 # dependencies
-/node_modules
+node_modules/
 /.pnp
 .pnp.js
 .yarn/install-state.gz
 
 # testing
-/coverage
+coverage/
 
 # next.js
-/.next/
-/out/
+.next/
+out/
+
+# turborepo
+.turbo/
 
 # production
-/build
+build/
 
 # misc
 .DS_Store

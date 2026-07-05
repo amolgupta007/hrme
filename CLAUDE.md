@@ -13,6 +13,8 @@ JambaHR is an all-in-one HR management SaaS platform for small and medium busine
 
 Feature specs live in `/docs/prds/`. Always read the relevant PRD before planning a feature, and flag any divergence between the PRD's assumed data model and the actual schema. The PRD describes the target; inspect the real codebase and reconcile.
 
+Mobile PRDs live in `/docs/prds/mobile/` and are future-state specs; always inspect `apps/web` and the real schema for divergence before implementing. Known divergence record: `docs/prds/mobile/01A-MIGRATION-PLAN.md` §1 (notably: there is NO Clerk-JWT→Supabase RLS path — mobile uses the BFF approach per its Decision Record).
+
 ---
 
 ## Tech Stack
@@ -41,8 +43,27 @@ Feature specs live in `/docs/prds/`. Always read the relevant PRD before plannin
 
 ## Project Structure
 
+**Monorepo since 2026-07-05 (Mobile PRD-01 Phase B):** Turborepo + npm workspaces. The Next.js app moved to **`apps/web`** (Vercel Root Directory = `apps/web`). `docs/`, `supabase/` (migrations), and `CLAUDE.md` stay at the repo root. `.env.local` lives in **`apps/web/.env.local`**. `apps/mobile` (Expo) arrives in Phase C.
+
 ```
-hr-portal/src/
+jambahr/  (repo root)
+├── apps/web/             # the entire Next.js app — src/, public/, tests/, scripts/,
+│                         #   eslint-rules/, next.config.js, vercel.json (18 crons), sentry configs
+├── packages/shared/      # @jambahr/shared — pure types/schemas/compute (web + mobile):
+│                         #   attendance compute (week-off, lateness, daily-attendance, pair-punches,
+│                         #   shift-time, attribute-date, ot, overtime-types, late-penalty-bands),
+│                         #   payroll (ctc, line-items, late-penalty), phone, plans, format, types
+├── packages/supabase/    # @jambahr/supabase — generated Database types (db:generate writes here)
+├── packages/config/      # @jambahr/config — tsconfig base
+├── turbo.json / package.json (workspaces) / .github/workflows/ci.yml (lint+test)
+```
+
+**Extraction shims:** every module moved to `packages/*` left a one-line `export * from "@jambahr/…"` shim at its old `apps/web/src/...` path, so `@/lib/...`/`@/types/...`/`@/config/plans` imports still work. New code may import `@jambahr/shared/...` directly. `cn()` stays web-only in `@/lib/utils`.
+
+Layout of `apps/web/src/` (paths below are relative to `apps/web/`):
+
+```
+src/
 ├── app/
 │   ├── layout.tsx / globals.css / global-error.tsx
 │   ├── page.tsx                    # Marketing landing page
@@ -843,11 +864,18 @@ All cron routes require `Authorization: Bearer CRON_SECRET` header. `CRON_SECRET
 ## Development Commands
 
 ```bash
-npm run dev           # http://localhost:3000
-npm run build
-npm run lint
-npm run db:generate   # Regenerate Supabase types (needs CLI)
-npm run db:push       # Push migrations (needs CLI)
+# From the repo root (all via turbo):
+npm run dev                                   # turbo dev (web on :3000)
+npm run build / test / lint / typecheck
+npx turbo build --filter=web                  # scope to one workspace
+npx turbo typecheck --filter=@jambahr/shared  # packages are strictly typechecked
+                                              # (apps/web typecheck is advisory — ~454 known
+                                              #  Supabase never-type errors, gotcha #3)
+
+# From apps/web (app-specific scripts):
+npm run db:generate   # Regenerate Supabase types → packages/supabase/src/database.types.ts
+npm run db:push       # Push migrations (needs CLI; supabase/ stays at repo root)
+npm run embed:help    # tsx --env-file=.env.local (env lives in apps/web/.env.local)
 ```
 
 ---

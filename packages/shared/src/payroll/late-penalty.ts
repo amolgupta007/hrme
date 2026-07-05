@@ -4,7 +4,7 @@
  * penalty reduces net pay only — it does NOT reduce taxable income (mirrors
  * lop_deduction). No DB, no I/O.
  */
-import { resolvePenaltyDays, type PenaltyBand } from "@/lib/attendance/late-penalty-bands";
+import { resolvePenaltyDays, type PenaltyBand } from "../attendance/late-penalty-bands";
 
 export function computeLatePenaltyDeduction(args: {
   lateDays: number;

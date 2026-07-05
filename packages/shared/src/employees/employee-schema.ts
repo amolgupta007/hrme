@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { isValidPhone } from "@/lib/phone";
+import { isValidPhone } from "../phone";
 
 export const employeeSchema = z
   .object({

@@ -1,4 +1,4 @@
-import { parseHHMM } from "@/lib/attendance/shift-time";
+import { parseHHMM } from "./shift-time";
 
 export type LatenessShift = {
   start_time: string;

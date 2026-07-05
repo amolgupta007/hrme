@@ -1,4 +1,5 @@
 import type { Database } from "./database.types";
+import type { UserRole } from "@jambahr/shared/types";
 
 // ---- Row type shortcuts ----
 export type Organization =
@@ -20,53 +21,17 @@ export type TrainingCourse =
 export type TrainingEnrollment =
   Database["public"]["Tables"]["training_enrollments"]["Row"];
 
-// ---- Roles ----
-export type UserRole = "owner" | "admin" | "manager" | "employee";
-
-export const ROLE_HIERARCHY: Record<UserRole, number> = {
-  owner: 4,
-  admin: 3,
-  manager: 2,
-  employee: 1,
-};
-
-export function hasPermission(
-  userRole: UserRole,
-  requiredRole: UserRole
-): boolean {
-  return ROLE_HIERARCHY[userRole] >= ROLE_HIERARCHY[requiredRole];
-}
-
-export function isOwner(role: UserRole): boolean {
-  return role === "owner";
-}
-
-// ---- Billing ----
-export type BillingCycle = "monthly" | "annual";
-
-export type SubscriptionStatus =
-  | "active"
-  | "paused"
-  | "halted"
-  | "pending"
-  | "cancelled";
-
-// ---- Navigation ----
-export interface NavItem {
-  title: string;
-  href: string;
-  icon: string;
-  requiredRole?: UserRole;
-  requiredPlan?: "growth" | "business";
-  featureFlag?: string;
-  badge?: string;
-  hideForContractor?: boolean;
-}
-
-// ---- API Response ----
-export type ActionResult<T = void> =
-  | { success: true; data: T }
-  | { success: false; error: string };
+// ---- Roles / Billing / Navigation / ActionResult ----
+// Moved to @jambahr/shared (PRD-01 Phase B); re-exported so existing
+// `@/types` imports keep working unchanged.
+export type {
+  UserRole,
+  BillingCycle,
+  SubscriptionStatus,
+  NavItem,
+  ActionResult,
+} from "@jambahr/shared/types";
+export { ROLE_HIERARCHY, hasPermission, isOwner } from "@jambahr/shared/types";
 
 // ---- Feedback ----
 export type FeedbackType = "bug" | "feature_request" | "feedback" | "other";

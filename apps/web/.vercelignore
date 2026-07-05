@@ -1,0 +1,7 @@
+# Local-only / IDE / untracked dirs — never needed for the Vercel build
+.vs
+.git
+.superpowers
+.claude
+docs/demo
+sample-documents

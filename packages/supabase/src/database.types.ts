@@ -1,0 +1,874 @@
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[];
+
+export interface Database {
+  public: {
+    Tables: {
+      organizations: {
+        Row: {
+          id: string;
+          clerk_org_id: string;
+          name: string;
+          slug: string;
+          logo_url: string | null;
+          plan: "starter" | "growth" | "business" | "custom";
+          stripe_customer_id: string | null;
+          stripe_subscription_id: string | null;
+          max_employees: number;
+          settings: Json;
+          billing_cycle: "monthly" | "annual" | null;
+          subscription_status: "active" | "paused" | "halted" | "pending" | "cancelled" | null;
+          platform_fee_paid: number;
+          gstin: string | null;
+          custom_features: unknown;
+          custom_per_feature_rate: number | null;
+          custom_platform_fee: number | null;
+          custom_max_employees: number | null;
+          subscription_paused_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          clerk_org_id: string;
+          name: string;
+          slug: string;
+          logo_url?: string | null;
+          plan?: "starter" | "growth" | "business" | "custom";
+          stripe_customer_id?: string | null;
+          stripe_subscription_id?: string | null;
+          max_employees?: number;
+          settings?: Json;
+          billing_cycle?: "monthly" | "annual" | null;
+          subscription_status?: "active" | "paused" | "halted" | "pending" | "cancelled" | null;
+          platform_fee_paid?: number;
+          gstin?: string | null;
+          custom_features?: unknown;
+          custom_per_feature_rate?: number | null;
+          custom_platform_fee?: number | null;
+          custom_max_employees?: number | null;
+          subscription_paused_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          clerk_org_id?: string;
+          name?: string;
+          slug?: string;
+          logo_url?: string | null;
+          plan?: "starter" | "growth" | "business" | "custom";
+          stripe_customer_id?: string | null;
+          stripe_subscription_id?: string | null;
+          max_employees?: number;
+          settings?: Json;
+          billing_cycle?: "monthly" | "annual" | null;
+          subscription_status?: "active" | "paused" | "halted" | "pending" | "cancelled" | null;
+          platform_fee_paid?: number;
+          gstin?: string | null;
+          custom_features?: unknown;
+          custom_per_feature_rate?: number | null;
+          custom_platform_fee?: number | null;
+          custom_max_employees?: number | null;
+          subscription_paused_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      employees: {
+        Row: {
+          id: string;
+          org_id: string;
+          clerk_user_id: string | null;
+          first_name: string;
+          last_name: string;
+          email: string;
+          phone: string | null;
+          avatar_url: string | null;
+          role: "owner" | "admin" | "manager" | "employee";
+          department_id: string | null;
+          designation: string | null;
+          date_of_joining: string;
+          date_of_birth: string | null;
+          employment_type: "full_time" | "part_time" | "contract" | "intern";
+          status: "active" | "inactive" | "on_leave" | "terminated";
+          reporting_manager_id: string | null;
+          personal_email: string | null;
+          gender: string | null;
+          pronouns: string | null;
+          marital_status: string | null;
+          country: string | null;
+          pan_number: string | null;
+          aadhar_number: string | null;
+          emergency_contact_name: string | null;
+          emergency_contact_phone: string | null;
+          emergency_contact_relationship: string | null;
+          communication_address: Json | null;
+          permanent_address: Json | null;
+          metadata: Json;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          clerk_user_id?: string | null;
+          first_name: string;
+          last_name: string;
+          email: string;
+          phone?: string | null;
+          avatar_url?: string | null;
+          role?: "owner" | "admin" | "manager" | "employee";
+          department_id?: string | null;
+          designation?: string | null;
+          date_of_joining: string;
+          date_of_birth?: string | null;
+          employment_type: "full_time" | "part_time" | "contract" | "intern";
+          status?: "active" | "inactive" | "on_leave" | "terminated";
+          reporting_manager_id?: string | null;
+          personal_email?: string | null;
+          gender?: string | null;
+          pronouns?: string | null;
+          marital_status?: string | null;
+          country?: string | null;
+          pan_number?: string | null;
+          aadhar_number?: string | null;
+          emergency_contact_name?: string | null;
+          emergency_contact_phone?: string | null;
+          emergency_contact_relationship?: string | null;
+          communication_address?: Json | null;
+          permanent_address?: Json | null;
+          metadata?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          org_id?: string;
+          clerk_user_id?: string | null;
+          first_name?: string;
+          last_name?: string;
+          email?: string;
+          phone?: string | null;
+          avatar_url?: string | null;
+          role?: "owner" | "admin" | "manager" | "employee";
+          department_id?: string | null;
+          designation?: string | null;
+          date_of_joining?: string;
+          date_of_birth?: string | null;
+          employment_type?: "full_time" | "part_time" | "contract" | "intern";
+          status?: "active" | "inactive" | "on_leave" | "terminated";
+          reporting_manager_id?: string | null;
+          personal_email?: string | null;
+          gender?: string | null;
+          pronouns?: string | null;
+          marital_status?: string | null;
+          country?: string | null;
+          pan_number?: string | null;
+          aadhar_number?: string | null;
+          emergency_contact_name?: string | null;
+          emergency_contact_phone?: string | null;
+          emergency_contact_relationship?: string | null;
+          communication_address?: Json | null;
+          permanent_address?: Json | null;
+          metadata?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      departments: {
+        Row: {
+          id: string;
+          org_id: string;
+          name: string;
+          description: string | null;
+          head_id: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          name: string;
+          description?: string | null;
+          head_id?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          org_id?: string;
+          name?: string;
+          description?: string | null;
+          head_id?: string | null;
+          created_at?: string;
+        };
+      };
+      leave_policies: {
+        Row: {
+          id: string;
+          org_id: string;
+          name: string;
+          type: "paid" | "unpaid" | "sick" | "casual" | "maternity" | "paternity" | "custom";
+          days_per_year: number;
+          carry_forward: boolean;
+          max_carry_forward_days: number;
+          applicable_from_months: number;
+          requires_approval: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          name: string;
+          type: "paid" | "unpaid" | "sick" | "casual" | "maternity" | "paternity" | "custom";
+          days_per_year: number;
+          carry_forward?: boolean;
+          max_carry_forward_days?: number;
+          applicable_from_months?: number;
+          requires_approval?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          org_id?: string;
+          name?: string;
+          type?: "paid" | "unpaid" | "sick" | "casual" | "maternity" | "paternity" | "custom";
+          days_per_year?: number;
+          carry_forward?: boolean;
+          max_carry_forward_days?: number;
+          applicable_from_months?: number;
+          requires_approval?: boolean;
+          created_at?: string;
+        };
+      };
+      leave_requests: {
+        Row: {
+          id: string;
+          org_id: string;
+          employee_id: string;
+          policy_id: string;
+          start_date: string;
+          end_date: string;
+          days: number;
+          reason: string | null;
+          status: "pending" | "approved" | "rejected" | "cancelled";
+          reviewed_by: string | null;
+          reviewed_at: string | null;
+          review_note: string | null;
+          ticket_number: string | null;
+          exceeds_balance: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          employee_id: string;
+          policy_id: string;
+          start_date: string;
+          end_date: string;
+          days: number;
+          reason?: string | null;
+          status?: "pending" | "approved" | "rejected" | "cancelled";
+          reviewed_by?: string | null;
+          reviewed_at?: string | null;
+          review_note?: string | null;
+          ticket_number?: string | null;
+          exceeds_balance?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          org_id?: string;
+          employee_id?: string;
+          policy_id?: string;
+          start_date?: string;
+          end_date?: string;
+          days?: number;
+          reason?: string | null;
+          status?: "pending" | "approved" | "rejected" | "cancelled";
+          reviewed_by?: string | null;
+          reviewed_at?: string | null;
+          review_note?: string | null;
+          ticket_number?: string | null;
+          exceeds_balance?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      leave_balances: {
+        Row: {
+          id: string;
+          org_id: string;
+          employee_id: string;
+          policy_id: string;
+          year: number;
+          total_days: number;
+          used_days: number;
+          carried_forward_days: number;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          employee_id: string;
+          policy_id: string;
+          year: number;
+          total_days: number;
+          used_days?: number;
+          carried_forward_days?: number;
+        };
+        Update: {
+          id?: string;
+          org_id?: string;
+          employee_id?: string;
+          policy_id?: string;
+          year?: number;
+          total_days?: number;
+          used_days?: number;
+          carried_forward_days?: number;
+        };
+      };
+      documents: {
+        Row: {
+          id: string;
+          org_id: string;
+          employee_id: string | null;
+          name: string;
+          category: "policy" | "contract" | "id_proof" | "tax" | "certificate" | "other";
+          file_url: string;
+          file_size: number;
+          mime_type: string;
+          uploaded_by: string;
+          is_company_wide: boolean;
+          requires_acknowledgment: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          employee_id?: string | null;
+          name: string;
+          category: "policy" | "contract" | "id_proof" | "tax" | "certificate" | "other";
+          file_url: string;
+          file_size?: number;
+          mime_type?: string;
+          uploaded_by: string;
+          is_company_wide?: boolean;
+          requires_acknowledgment?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          org_id?: string;
+          employee_id?: string | null;
+          name?: string;
+          category?: "policy" | "contract" | "id_proof" | "tax" | "certificate" | "other";
+          file_url?: string;
+          file_size?: number;
+          mime_type?: string;
+          uploaded_by?: string;
+          is_company_wide?: boolean;
+          requires_acknowledgment?: boolean;
+          created_at?: string;
+        };
+      };
+      review_cycles: {
+        Row: {
+          id: string;
+          org_id: string;
+          name: string;
+          description: string | null;
+          status: "draft" | "active" | "completed";
+          start_date: string;
+          end_date: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          name: string;
+          description?: string | null;
+          status?: "draft" | "active" | "completed";
+          start_date: string;
+          end_date: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          org_id?: string;
+          name?: string;
+          description?: string | null;
+          status?: "draft" | "active" | "completed";
+          start_date?: string;
+          end_date?: string;
+          created_at?: string;
+        };
+      };
+      reviews: {
+        Row: {
+          id: string;
+          org_id: string;
+          cycle_id: string;
+          employee_id: string;
+          reviewer_id: string;
+          self_rating: number | null;
+          manager_rating: number | null;
+          self_comments: string | null;
+          manager_comments: string | null;
+          goals: Json;
+          status: "pending" | "self_review" | "manager_review" | "completed";
+          completed_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          cycle_id: string;
+          employee_id: string;
+          reviewer_id: string;
+          self_rating?: number | null;
+          manager_rating?: number | null;
+          self_comments?: string | null;
+          manager_comments?: string | null;
+          goals?: Json;
+          status?: "pending" | "self_review" | "manager_review" | "completed";
+          completed_at?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          org_id?: string;
+          cycle_id?: string;
+          employee_id?: string;
+          reviewer_id?: string;
+          self_rating?: number | null;
+          manager_rating?: number | null;
+          self_comments?: string | null;
+          manager_comments?: string | null;
+          goals?: Json;
+          status?: "pending" | "self_review" | "manager_review" | "completed";
+          completed_at?: string | null;
+          created_at?: string;
+        };
+      };
+      training_courses: {
+        Row: {
+          id: string;
+          org_id: string;
+          title: string;
+          description: string | null;
+          category: "ethics" | "compliance" | "safety" | "skills" | "onboarding" | "custom";
+          content_url: string | null;
+          duration_minutes: number | null;
+          is_mandatory: boolean;
+          due_date: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          title: string;
+          description?: string | null;
+          category: "ethics" | "compliance" | "safety" | "skills" | "onboarding" | "custom";
+          content_url?: string | null;
+          duration_minutes?: number | null;
+          is_mandatory?: boolean;
+          due_date?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          org_id?: string;
+          title?: string;
+          description?: string | null;
+          category?: "ethics" | "compliance" | "safety" | "skills" | "onboarding" | "custom";
+          content_url?: string | null;
+          duration_minutes?: number | null;
+          is_mandatory?: boolean;
+          due_date?: string | null;
+          created_at?: string;
+        };
+      };
+      training_enrollments: {
+        Row: {
+          id: string;
+          org_id: string;
+          course_id: string;
+          employee_id: string;
+          status: "assigned" | "in_progress" | "completed" | "overdue";
+          progress_percent: number;
+          completed_at: string | null;
+          certificate_url: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          course_id: string;
+          employee_id: string;
+          status?: "assigned" | "in_progress" | "completed" | "overdue";
+          progress_percent?: number;
+          completed_at?: string | null;
+          certificate_url?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          org_id?: string;
+          course_id?: string;
+          employee_id?: string;
+          status?: "assigned" | "in_progress" | "completed" | "overdue";
+          progress_percent?: number;
+          completed_at?: string | null;
+          certificate_url?: string | null;
+          created_at?: string;
+        };
+      };
+      custom_plan_requests: {
+        Row: {
+          id: string;
+          org_id: string;
+          requested_by_employee_id: string | null;
+          requested_features: unknown;
+          requested_employees: number;
+          requested_billing_cycle: "monthly" | "annual";
+          status: "pending" | "counter_offered" | "accepted" | "rejected" | "approved" | "cancelled";
+          founder_platform_fee: number | null;
+          founder_per_feature_rate: number | null;
+          founder_max_employees: number | null;
+          founder_notes: string | null;
+          rejection_reason: string | null;
+          created_at: string;
+          reviewed_at: string | null;
+          activated_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          requested_by_employee_id?: string | null;
+          requested_features: unknown;
+          requested_employees: number;
+          requested_billing_cycle: "monthly" | "annual";
+          status?: "pending" | "counter_offered" | "accepted" | "rejected" | "approved" | "cancelled";
+          founder_platform_fee?: number | null;
+          founder_per_feature_rate?: number | null;
+          founder_max_employees?: number | null;
+          founder_notes?: string | null;
+          rejection_reason?: string | null;
+          created_at?: string;
+          reviewed_at?: string | null;
+          activated_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          org_id?: string;
+          requested_by_employee_id?: string | null;
+          requested_features?: unknown;
+          requested_employees?: number;
+          requested_billing_cycle?: "monthly" | "annual";
+          status?: "pending" | "counter_offered" | "accepted" | "rejected" | "approved" | "cancelled";
+          founder_platform_fee?: number | null;
+          founder_per_feature_rate?: number | null;
+          founder_max_employees?: number | null;
+          founder_notes?: string | null;
+          rejection_reason?: string | null;
+          created_at?: string;
+          reviewed_at?: string | null;
+          activated_at?: string | null;
+        };
+      };
+      geofences: {
+        Row: {
+          id: string;
+          org_id: string;
+          name: string;
+          type: "client" | "office";
+          center_lat: number;
+          center_lng: number;
+          radius_m: number;
+          is_active: boolean;
+          notes: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          name: string;
+          type: "client" | "office";
+          center_lat: number;
+          center_lng: number;
+          radius_m: number;
+          is_active?: boolean;
+          notes?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          org_id?: string;
+          name?: string;
+          type?: "client" | "office";
+          center_lat?: number;
+          center_lng?: number;
+          radius_m?: number;
+          is_active?: boolean;
+          notes?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      leads: {
+        Row: {
+          id: string;
+          org_id: string;
+          name: string;
+          contact_phone: string | null;
+          contact_email: string | null;
+          company: string | null;
+          lat: number | null;
+          lng: number | null;
+          address: string | null;
+          assigned_to: string | null;
+          stage: "new" | "contacted" | "visited" | "negotiation" | "converted" | "lost";
+          value_inr: number | null;
+          source: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          name: string;
+          contact_phone?: string | null;
+          contact_email?: string | null;
+          company?: string | null;
+          lat?: number | null;
+          lng?: number | null;
+          address?: string | null;
+          assigned_to?: string | null;
+          stage?: "new" | "contacted" | "visited" | "negotiation" | "converted" | "lost";
+          value_inr?: number | null;
+          source?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          org_id?: string;
+          name?: string;
+          contact_phone?: string | null;
+          contact_email?: string | null;
+          company?: string | null;
+          lat?: number | null;
+          lng?: number | null;
+          address?: string | null;
+          assigned_to?: string | null;
+          stage?: "new" | "contacted" | "visited" | "negotiation" | "converted" | "lost";
+          value_inr?: number | null;
+          source?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      lead_visits: {
+        Row: {
+          id: string;
+          lead_id: string;
+          org_id: string;
+          employee_id: string;
+          session_id: string | null;
+          lat: number | null;
+          lng: number | null;
+          notes: string | null;
+          outcome: "in_progress" | "converted" | "pending" | "follow_up" | "lost";
+          follow_up_date: string | null;
+          photo_url: string | null;
+          source: "web" | "mobile";
+          system: boolean;
+          visited_at: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          lead_id: string;
+          org_id: string;
+          employee_id: string;
+          session_id?: string | null;
+          lat?: number | null;
+          lng?: number | null;
+          notes?: string | null;
+          outcome: "in_progress" | "converted" | "pending" | "follow_up" | "lost";
+          follow_up_date?: string | null;
+          photo_url?: string | null;
+          source?: "web" | "mobile";
+          system?: boolean;
+          visited_at?: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          lead_id?: string;
+          org_id?: string;
+          employee_id?: string;
+          session_id?: string | null;
+          lat?: number | null;
+          lng?: number | null;
+          notes?: string | null;
+          outcome?: "in_progress" | "converted" | "pending" | "follow_up" | "lost";
+          follow_up_date?: string | null;
+          photo_url?: string | null;
+          source?: "web" | "mobile";
+          system?: boolean;
+          visited_at?: string;
+          created_at?: string;
+        };
+      };
+      duty_sessions: {
+        Row: {
+          id: string;
+          org_id: string;
+          employee_id: string;
+          status: "active" | "paused" | "ended";
+          started_at: string;
+          ended_at: string | null;
+          last_lat: number | null;
+          last_lng: number | null;
+          last_ping_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          employee_id: string;
+          status?: "active" | "paused" | "ended";
+          started_at?: string;
+          ended_at?: string | null;
+          last_lat?: number | null;
+          last_lng?: number | null;
+          last_ping_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          org_id?: string;
+          employee_id?: string;
+          status?: "active" | "paused" | "ended";
+          started_at?: string;
+          ended_at?: string | null;
+          last_lat?: number | null;
+          last_lng?: number | null;
+          last_ping_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      location_pings: {
+        Row: {
+          id: string;
+          session_id: string;
+          org_id: string;
+          employee_id: string;
+          lat: number;
+          lng: number;
+          accuracy_m: number | null;
+          battery_pct: number | null;
+          pinged_at: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          session_id: string;
+          org_id: string;
+          employee_id: string;
+          lat: number;
+          lng: number;
+          accuracy_m?: number | null;
+          battery_pct?: number | null;
+          pinged_at?: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          session_id?: string;
+          org_id?: string;
+          employee_id?: string;
+          lat?: number;
+          lng?: number;
+          accuracy_m?: number | null;
+          battery_pct?: number | null;
+          pinged_at?: string;
+          created_at?: string;
+        };
+      };
+      geo_consents: {
+        Row: {
+          id: string;
+          org_id: string;
+          employee_id: string;
+          granted: boolean;
+          retention_days: number;
+          granted_at: string | null;
+          revoked_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          employee_id: string;
+          granted?: boolean;
+          retention_days?: number;
+          granted_at?: string | null;
+          revoked_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          org_id?: string;
+          employee_id?: string;
+          granted?: boolean;
+          retention_days?: number;
+          granted_at?: string | null;
+          revoked_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      webhook_events: {
+        Row: {
+          id: string;
+          event_type: string;
+          processed_at: string;
+        };
+        Insert: {
+          id: string;
+          event_type: string;
+          processed_at?: string;
+        };
+        Update: {
+          id?: string;
+          event_type?: string;
+          processed_at?: string;
+        };
+      };
+    };
+    Views: Record<string, never>;
+    Functions: Record<string, never>;
+    Enums: Record<string, never>;
+  };
+}

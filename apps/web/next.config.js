@@ -2,6 +2,7 @@
 const { withSentryConfig } = require("@sentry/nextjs");
 
 const nextConfig = {
+  transpilePackages: ["@jambahr/shared", "@jambahr/supabase"],
   typescript: {
     ignoreBuildErrors: true,
   },

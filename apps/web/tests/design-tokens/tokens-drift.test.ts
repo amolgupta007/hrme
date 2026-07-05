@@ -29,7 +29,8 @@ function cssVars(block: string): Record<string, string> {
 }
 
 const rootBlock = css.slice(css.indexOf(":root"), css.indexOf(".dark"));
-const darkBlock = css.slice(css.indexOf(".dark"));
+const darkStart = css.indexOf(".dark");
+const darkBlock = css.slice(darkStart, css.indexOf("}", darkStart) + 1);
 
 /** "hsl(172, 50%, 36%)" -> "172 50% 36%" */
 function toTriplet(hsl: string): string {
@@ -69,5 +70,7 @@ describe("design token drift (globals.css ↔ @jambahr/config/tokens)", () => {
   it("radius.lg matches --radius (0.625rem = 10px)", () => {
     expect(css).toContain("--radius: 0.625rem");
     expect(radius.lg).toBe(10);
+    expect(radius.md).toBe(8);
+    expect(radius.sm).toBe(6);
   });
 });

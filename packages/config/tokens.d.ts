@@ -29,3 +29,14 @@ export declare const fontSize: {
   xl: number; "2xl": number; "3xl": number;
 };
 export declare const nativewindTheme: Record<string, unknown>;
+
+declare const tokens: {
+  palette: { light: TokenPalette; dark: TokenPalette };
+  radius: { sm: number; md: number; lg: number };
+  fontSize: {
+    xs: number; sm: number; base: number; lg: number;
+    xl: number; "2xl": number; "3xl": number;
+  };
+  nativewindTheme: Record<string, unknown>;
+};
+export default tokens;

@@ -37,7 +37,11 @@
         }
       ],
       "expo-secure-store",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "@sentry/react-native/expo",
+        { "organization": "jambahr", "project": "jambahr-mobile" }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

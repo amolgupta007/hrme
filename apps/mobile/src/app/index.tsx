@@ -11,11 +11,22 @@ export default function Index() {
   const [me, setMe] = useState<MobileMeResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // TODO(spike): remove diagnostics after device checkpoint passes
+  useEffect(() => {
+    console.log("[spike] index auth state — isLoaded:", isLoaded, "isSignedIn:", isSignedIn);
+  }, [isLoaded, isSignedIn]);
+
   useEffect(() => {
     if (!isSignedIn) return;
     apiFetch<MobileMeResponse>("/api/mobile/me")
-      .then(setMe)
-      .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
+      .then((res) => {
+        console.log("[spike] /api/mobile/me OK — role:", res.role, "org:", res.orgName);
+        setMe(res);
+      })
+      .catch((e) => {
+        console.log("[spike] /api/mobile/me FAILED —", e instanceof ApiError ? `HTTP ${e.status}: ${e.message}` : String(e));
+        setError(e instanceof ApiError ? e.message : String(e));
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSignedIn]);
 

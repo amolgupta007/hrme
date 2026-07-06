@@ -75,16 +75,8 @@ export default function SignIn() {
     setError(null);
     try {
       const attempt = await attemptPromise;
-      // TODO(spike): remove diagnostics after device checkpoint passes
-      console.log(
-        "[spike] verify result — status:",
-        attempt.status,
-        "sessionId:",
-        attempt.createdSessionId ? "present" : "null"
-      );
       if (attempt.status === "complete" && attempt.createdSessionId) {
         await setActive!({ session: attempt.createdSessionId });
-        console.log("[spike] setActive done, navigating to /");
         router.replace("/");
       } else {
         setError("Additional verification required — contact your admin.");

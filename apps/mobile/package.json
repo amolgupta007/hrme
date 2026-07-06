@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@clerk/clerk-expo": "^2.19.31",
+    "@expo/vector-icons": "^15.0.2",
     "@jambahr/config": "*",
     "@jambahr/shared": "*",
     "expo": "~57.0.2",

@@ -1,54 +1,56 @@
-import { useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, Text } from "react-native";
+import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { Redirect } from "expo-router";
 import { useAuth } from "@clerk/clerk-expo";
-import type { MobileMeResponse } from "@jambahr/shared/auth/types";
-import { useApi, ApiError } from "@/lib/api";
+import { hasPermission } from "@jambahr/shared";
+import { useSession } from "@/lib/session";
 
 export default function Index() {
   const { isLoaded, isSignedIn, signOut } = useAuth();
-  const apiFetch = useApi();
-  const [me, setMe] = useState<MobileMeResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  // TODO(spike): remove diagnostics after device checkpoint passes
-  useEffect(() => {
-    console.log("[spike] index auth state — isLoaded:", isLoaded, "isSignedIn:", isSignedIn);
-  }, [isLoaded, isSignedIn]);
-
-  useEffect(() => {
-    if (!isSignedIn) return;
-    apiFetch<MobileMeResponse>("/api/mobile/me")
-      .then((res) => {
-        console.log("[spike] /api/mobile/me OK — role:", res.role, "org:", res.orgName);
-        setMe(res);
-      })
-      .catch((e) => {
-        console.log("[spike] /api/mobile/me FAILED —", e instanceof ApiError ? `HTTP ${e.status}: ${e.message}` : String(e));
-        setError(e instanceof ApiError ? e.message : String(e));
-      });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isSignedIn]);
+  const { me, loading, error, refresh } = useSession();
 
   if (!isLoaded) return null;
   if (!isSignedIn) return <Redirect href="/(auth)/sign-in" />;
 
-  return (
-    <ScrollView className="flex-1 bg-background px-6 pt-16">
-      <Text className="text-lg font-bold text-foreground">/api/mobile/me spike</Text>
-      {error && <Text className="mt-4 text-destructive">{error}</Text>}
-      {!me && !error && <ActivityIndicator className="mt-8" />}
-      {me && (
-        <Text className="mt-4 font-mono text-xs text-foreground">
-          {JSON.stringify(me, null, 2)}
+  if (loading || (!me && !error)) {
+    return (
+      <View className="flex-1 items-center justify-center bg-background">
+        <ActivityIndicator />
+      </View>
+    );
+  }
+
+  if (error === "no_membership") {
+    return (
+      <View className="flex-1 items-center justify-center bg-background px-8">
+        <Text className="text-center text-base font-semibold text-foreground">
+          Your account isn&apos;t linked to an organisation yet.
         </Text>
-      )}
-      <Pressable
-        className="mb-16 mt-8 items-center rounded-lg bg-secondary py-3"
-        onPress={() => void signOut()}
-      >
-        <Text className="font-semibold text-secondary-foreground">Sign out</Text>
-      </Pressable>
-    </ScrollView>
+        <Text className="mt-2 text-center text-sm text-muted-foreground">
+          Ask your admin to add you in JambaHR, then sign in again.
+        </Text>
+        <Pressable className="mt-6" onPress={() => void signOut()}>
+          <Text className="font-semibold text-primary">Sign out</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  if (error || !me) {
+    return (
+      <View className="flex-1 items-center justify-center bg-background px-8">
+        <Text className="text-center text-sm text-muted-foreground">
+          Couldn&apos;t reach JambaHR. Check your connection.
+        </Text>
+        <Pressable className="mt-6" onPress={() => void refresh()}>
+          <Text className="font-semibold text-primary">Retry</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  return hasPermission(me.role, "admin") ? (
+    <Redirect href="/(admin)/home" />
+  ) : (
+    <Redirect href="/(staff)/home" />
   );
 }

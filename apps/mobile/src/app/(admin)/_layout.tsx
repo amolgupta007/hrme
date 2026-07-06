@@ -2,11 +2,17 @@ import { Redirect, Tabs } from "expo-router";
 import { useAuth } from "@clerk/clerk-expo";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { palette } from "@jambahr/config/tokens";
+import { hasPermission } from "@jambahr/shared";
+import { useSession } from "@/lib/session";
 
 export default function AdminTabs() {
   const { isLoaded, isSignedIn } = useAuth();
+  const { me } = useSession();
   if (!isLoaded) return null;
   if (!isSignedIn) return <Redirect href="/(auth)/sign-in" />;
+  // Defense-in-depth: index.tsx routes by role; this backstop protects against
+  // deep links. Real authorization lives server-side in the BFF.
+  if (me && !hasPermission(me.role, "admin")) return <Redirect href="/" />;
 
   return (
     <Tabs

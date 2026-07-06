@@ -190,7 +190,7 @@ See `PAYROLL_AUDIT.md` for the per-finding closure log and `docs/payroll-overhau
 - Clerk webhook (`api/webhooks/clerk/route.ts`) now handles **only** `user.created` (log) + `user.updated` (name/avatar sync). All `organization.*` / `organizationMembership.*` cases removed.
 - `organizations.clerk_org_id` column is **vestigial** (kept, unused; drop later). No table queries resolve tenancy by it anymore — every action resolves the internal org id via `getCurrentUser()`.
 
-### Mobile BFF (`/api/mobile/*`) — Phase C, shipped 2026-07-XX
+### Mobile BFF (`/api/mobile/*`) — Phase C, shipped 2026-07-06
 - Mobile (`apps/mobile`) authenticates with `@clerk/clerk-expo` (same Clerk instance) and calls
   `/api/mobile/*` route handlers with `Authorization: Bearer <session token>`; clerkMiddleware
   verifies it. Routes are in the middleware public matcher (they 401 JSON themselves — no
@@ -203,9 +203,9 @@ See `PAYROLL_AUDIT.md` for the per-finding closure log and `docs/payroll-overhau
 - Rule: mobile NEVER gets a Supabase client. All mobile data = new `/api/mobile/*` endpoints
   reusing the existing server-action guards.
 - **Mobile app structure** (`apps/mobile/src/`, Expo Router root is `src/app/`, NOT `app/`):
-  `app/_layout.tsx` (Sentry + ClerkProvider + SessionProvider), `app/index.tsx` (auth gate +
-  role router), `app/(auth)/sign-in.tsx`, `app/(staff)/…` (Home/Attendance/Leave/Payslips/Profile),
-  `app/(admin)/…` (Home/Approvals/People/Reports/Profile), `src/lib/api.ts` (BFF fetch,
+  `src/app/_layout.tsx` (Sentry + ClerkProvider + SessionProvider), `src/app/index.tsx` (auth gate +
+  role router), `src/app/(auth)/sign-in.tsx`, `src/app/(staff)/…` (Home/Attendance/Leave/Payslips/Profile),
+  `src/app/(admin)/…` (Home/Approvals/People/Reports/Profile), `src/lib/api.ts` (BFF fetch,
   Bearer + X-Org-Id), `src/lib/session.tsx` (`/api/mobile/me` context), `src/lib/sentry.ts`
   (Sentry init, DSN-gated). Design tokens come from `@jambahr/config/tokens` (single source,
   drift-tested against the web theme in `apps/web/tests/design-tokens/`). Full dev-loop /

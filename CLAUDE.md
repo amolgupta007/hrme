@@ -239,6 +239,26 @@ See `PAYROLL_AUDIT.md` for the per-finding closure log and `docs/payroll-overhau
   - Windows Firewall must allow Node.js on private networks or a phone can't reach Metro (8081)
     or the BFF (3000). `npx expo start --tunnel` is the fallback.
 
+### Mobile Phase D (Staff MVP) — PLANNED, awaiting go-ahead (2026-07-06)
+- **Decision record: `docs/prds/mobile/02A-PHASE-D-DECISIONS.md`** (read before implementing
+  any Phase D work) · Slice-1 task plan: `docs/superpowers/plans/2026-07-06-mobile-phase-d-slice1-attendance-home.md`
+  · Specs: `docs/prds/mobile/02-PRD-Staff-MVP.md` + `PRD-addendum-mobile-data-layer.md` (binding).
+- Slices: **D1** attendance + home (punch, offline queue, month calendar, EAS Android dev
+  build) → **D2** leave (incl. half-day — mobile-first, no web UI for it) + payslips (native
+  render, no PDF) + profile → **D3** push (new PRD), FlashList sweep, payslip PDF.
+- Locked decisions (detail in 02A): mobile punches go through **`attendance_punch_events`
+  (`source:'mobile'`) + `recomputeAttendanceDay`**, never web's direct `attendance_records`
+  write; idempotency via new `client_event_id` column; mobile GPS punches **bypass zone
+  filtering**; month calendar = new pure `computeMonthCalendar` in `packages/shared`; leave
+  balances are **derived by aggregation** (`leave_balances` table is written by nothing — the
+  dashboard widget reading it is a known bug); regularization v1 = **pending punch events**
+  approved via the existing web punch-review flow (no new table); all mobile data via composed
+  `/api/mobile/*` BFF endpoints (one per screen), DTOs in `packages/shared/src/mobile/`;
+  TanStack Query + MMKV per the addendum (**MMKV/FlashList need a dev build, not Expo Go**).
+- Known web gaps found during Phase D investigation (fix candidates): `cancelLeave` lacks an
+  ownership check; `requestLeave` lacks server-side overlap/balance validation; web `clockIn`
+  direct-write contends with the ADMS rollup upsert (last writer wins).
+
 ### Route protection (`middleware.ts`)
 Public: `/`, `/sign-in(.*)`, `/sign-up(.*)`, `/api/webhooks(.*)`, `/api/cron(.*)`, `/blog(.*)`, `/careers(.*)`, `/offers(.*)`, `/apply/r(.*)`, `/pricing`, `/api/attendance/punch`, `/sitemap.xml`, `/robots.txt`, `/privacy`, `/terms`
 

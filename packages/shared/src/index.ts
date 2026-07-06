@@ -17,3 +17,4 @@ export * from "./payroll/ctc";
 export * from "./payroll/line-items";
 export * from "./payroll/late-penalty";
 export * from "./employees/employee-schema";
+export * from "./auth/types";

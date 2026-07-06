@@ -7,6 +7,10 @@ const isPublicRoute = createRouteMatcher([
   "/sign-up(.*)",
   "/api/webhooks(.*)",
   "/api/cron(.*)",
+  // Mobile BFF routes authenticate via Bearer token inside the handler
+  // (401 JSON, not a sign-in redirect). clerkMiddleware still verifies the
+  // Authorization header and populates auth() for these requests.
+  "/api/mobile(.*)",
   "/careers(.*)",
   "/offers(.*)",
   "/loi(.*)",

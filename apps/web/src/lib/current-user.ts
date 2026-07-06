@@ -30,7 +30,9 @@ export type UserContext = {
  * Org is resolved from the caller's employees rows + active-org cookie.
  * Clerk is used only for userId (no sessionOrgId / Clerk org membership).
  */
-export async function getCurrentUser(): Promise<UserContext | null> {
+export async function getCurrentUser(
+  opts?: { orgIdHint?: string | null }
+): Promise<UserContext | null> {
   const { userId } = auth();
   if (!userId) return null;
 
@@ -120,8 +122,11 @@ export async function getCurrentUser(): Promise<UserContext | null> {
   // Signed-in user with no org membership → route to /onboarding
   if (memberships.length === 0) return null;
 
-  // Resolve the active org via cookie, falling back to the first membership
-  const cookieOrg = cookies().get(ACTIVE_ORG_COOKIE)?.value ?? null;
+  // Mobile BFF passes the org via X-Org-Id header instead of the cookie.
+  // Either way the value is only a hint — resolveActiveOrg validates it
+  // against real memberships, so a forged header/cookie can't widen access.
+  const cookieOrg =
+    opts?.orgIdHint ?? cookies().get(ACTIVE_ORG_COOKIE)?.value ?? null;
   const activeOrgId = resolveActiveOrg(
     memberships.map((m) => ({ orgId: m.org_id as string })),
     cookieOrg

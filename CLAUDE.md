@@ -43,19 +43,22 @@ Mobile PRDs live in `/docs/prds/mobile/` and are future-state specs; always insp
 
 ## Project Structure
 
-**Monorepo since 2026-07-05 (Mobile PRD-01 Phase B):** Turborepo + npm workspaces. The Next.js app moved to **`apps/web`** (Vercel Root Directory = `apps/web`). `docs/`, `supabase/` (migrations), and `CLAUDE.md` stay at the repo root. `.env.local` lives in **`apps/web/.env.local`**. `apps/mobile` (Expo) arrives in Phase C.
+**Monorepo since 2026-07-05 (Mobile PRD-01 Phase B):** Turborepo + npm workspaces. The Next.js app moved to **`apps/web`** (Vercel Root Directory = `apps/web`). `docs/`, `supabase/` (migrations), and `CLAUDE.md` stay at the repo root. `.env.local` lives in **`apps/web/.env.local`**. `apps/mobile` (Expo) landed in Phase C (2026-07-05).
 
 ```
 jambahr/  (repo root)
 ├── apps/web/             # the entire Next.js app — src/, public/, tests/, scripts/,
 │                         #   eslint-rules/, next.config.js, vercel.json (18 crons), sentry configs
+├── apps/mobile/          # Expo SDK 57 + expo-router + NativeWind shell (Phase C, 2026-07-05):
+│                         #   Clerk sign-in → BFF /api/mobile/* (Bearer + X-Org-Id) — NO direct
+│                         #   Supabase from mobile, ever. Tokens from @jambahr/config/tokens.
 ├── packages/shared/      # @jambahr/shared — pure types/schemas/compute (web + mobile):
 │                         #   attendance compute (week-off, lateness, daily-attendance, pair-punches,
 │                         #   shift-time, attribute-date, ot, overtime-types, late-penalty-bands),
 │                         #   payroll (ctc, line-items, late-penalty), phone, plans, format, types
 ├── packages/supabase/    # @jambahr/supabase — generated Database types (db:generate writes here)
 ├── packages/config/      # @jambahr/config — tsconfig base
-├── turbo.json / package.json (workspaces) / .github/workflows/ci.yml (lint+test)
+├── turbo.json / package.json (workspaces) / .github/workflows/ci.yml (lint+test+typecheck gate)
 ```
 
 **Extraction shims:** every module moved to `packages/*` left a one-line `export * from "@jambahr/…"` shim at its old `apps/web/src/...` path, so `@/lib/...`/`@/types/...`/`@/config/plans` imports still work. New code may import `@jambahr/shared/...` directly. `cn()` stays web-only in `@/lib/utils`.
@@ -186,6 +189,55 @@ See `PAYROLL_AUDIT.md` for the per-finding closure log and `docs/payroll-overhau
 - **Invitations are our own Resend emails** (`AccountSetupEmail`), not Clerk org invitations. Admin adds an email/phone employee → Resend "set up your account" email → on first sign-in `getCurrentUser`'s email/phone auto-link backfills `clerk_user_id` onto the row (this is how an invitee "joins"). Phone-only employees are provisioned directly (`provisionPhoneOnlyUser` now makes **no** Clerk org-membership call — that was the quota bug). All `createOrganizationInvitation`/`revokeOrganizationInvitation` removed.
 - Clerk webhook (`api/webhooks/clerk/route.ts`) now handles **only** `user.created` (log) + `user.updated` (name/avatar sync). All `organization.*` / `organizationMembership.*` cases removed.
 - `organizations.clerk_org_id` column is **vestigial** (kept, unused; drop later). No table queries resolve tenancy by it anymore — every action resolves the internal org id via `getCurrentUser()`.
+
+### Mobile BFF (`/api/mobile/*`) — Phase C, shipped 2026-07-06
+- Mobile (`apps/mobile`) authenticates with `@clerk/clerk-expo` (same Clerk instance) and calls
+  `/api/mobile/*` route handlers with `Authorization: Bearer <session token>`; clerkMiddleware
+  verifies it. Routes are in the middleware public matcher (they 401 JSON themselves — no
+  sign-in redirect for API clients).
+- Active org: `X-Org-Id` header instead of the `jambahr_active_org` cookie. `getCurrentUser`
+  accepts `{ orgIdHint }` — validated against real memberships by `resolveActiveOrg`, same
+  tamper-safety as the cookie. No hint/invalid hint → first membership.
+- Contract types live in `@jambahr/shared/auth/types` (`MobileMeResponse` etc.) — the thin
+  auth interface from PRD-01; web route and mobile client both import them.
+- Rule: mobile NEVER gets a Supabase client. All mobile data = new `/api/mobile/*` endpoints
+  reusing the existing server-action guards.
+- **Mobile app structure** (`apps/mobile/src/`, Expo Router root is `src/app/`, NOT `app/`):
+  `src/app/_layout.tsx` (Sentry + ClerkProvider + SessionProvider), `src/app/index.tsx` (auth gate +
+  role router), `src/app/(auth)/sign-in.tsx`, `src/app/(staff)/…` (Home/Attendance/Leave/Payslips/Profile),
+  `src/app/(admin)/…` (Home/Approvals/People/Reports/Profile), `src/lib/api.ts` (BFF fetch,
+  Bearer + X-Org-Id), `src/lib/session.tsx` (`/api/mobile/me` context), `src/lib/sentry.ts`
+  (Sentry init, DSN-gated). Design tokens come from `@jambahr/config/tokens` (single source,
+  drift-tested against the web theme in `apps/web/tests/design-tokens/`). Full dev-loop /
+  env-var docs: `apps/mobile/README.md`.
+- **Mobile gotchas** (cost real debugging time in Tasks 3–7 — do not "fix" these without reading
+  the history first):
+  - **Expo Go on iOS is frozen at SDK 54** (App Store review stall since ~May 2026; see
+    expo.dev/changelog/expo-go-and-app-store-may-2026). The working device loop today is
+    **Android**: sideload the Expo Go 57 APK from expo.dev/go. iPhone testing waits on the
+    Apple Developer org enrollment (D-U-N-S initiated 2026-07-05, pending) → then EAS
+    development builds / `eas go` via TestFlight.
+  - Root `npm run dev` starts **only** the web app (`turbo dev --filter=web`). Metro is
+    separate: `npm run dev:mobile` from root, or `npx expo start` from `apps/mobile`. Running
+    two Metros against one project causes a port clash + Expo Go confusion.
+  - `npx expo start --clear` is required after any babel/metro/tailwind config change — Metro's
+    transform cache serves stale resolutions otherwise.
+  - `apps/mobile/metro.config.js` has a **load-bearing** `resolveRequest` pinning
+    `react-native-css-interop` to a single instance (npm can't hoist it past the web app's
+    React 18; two copies silently no-op NativeWind styles on device). **Do not modify this
+    file** without understanding why it's there.
+  - `apps/mobile/eslint.config.js` is a **manual port** of `eslint-config-expo/flat/default.js`
+    (the stock config's `require('eslint/config')` resolves the monorepo root's ESLint 8 and
+    crashes). Re-sync it by hand if upstream `eslint-config-expo` changes.
+  - The Clerk **dev** instance had `force_organization_selection: true`, which held mobile
+    sessions in `pending` (`isSignedIn` stays false — sign-in appears to silently bounce back).
+    PATCHed off on the dev instance 2026-07-06. **Check the production Clerk instance for the
+    same setting before pointing the mobile app at prod** — custom native auth flows don't
+    auto-handle Clerk session tasks the way the web `<SignIn>` components do.
+  - Phone-OTP sign-in does not deliver SMS on the dev Clerk instance (MSG91 webhook is wired to
+    the production instance only). Use email-code as the dev sign-in factor.
+  - Windows Firewall must allow Node.js on private networks or a phone can't reach Metro (8081)
+    or the BFF (3000). `npx expo start --tunnel` is the fallback.
 
 ### Route protection (`middleware.ts`)
 Public: `/`, `/sign-in(.*)`, `/sign-up(.*)`, `/api/webhooks(.*)`, `/api/cron(.*)`, `/blog(.*)`, `/careers(.*)`, `/offers(.*)`, `/apply/r(.*)`, `/pricing`, `/api/attendance/punch`, `/sitemap.xml`, `/robots.txt`, `/privacy`, `/terms`
@@ -871,12 +923,16 @@ npx turbo build --filter=web                  # scope to one workspace
 npx turbo typecheck --filter=@jambahr/shared  # packages are strictly typechecked
                                               # (apps/web typecheck is advisory — ~454 known
                                               #  Supabase never-type errors, gotcha #3)
+npx turbo dev|typecheck|lint --filter=mobile  # mobile (Expo) — strictly typechecked, CI-gated
 
 # From apps/web (app-specific scripts):
 npm run db:generate   # Regenerate Supabase types → packages/supabase/src/database.types.ts
 npm run db:push       # Push migrations (needs CLI; supabase/ stays at repo root)
 npm run embed:help    # tsx --env-file=.env.local (env lives in apps/web/.env.local)
 ```
+
+Mobile env lives in `apps/mobile/.env` (untracked; var **names** documented in
+`apps/mobile/README.md` — never commit real values or an `.env.example`).
 
 ---
 

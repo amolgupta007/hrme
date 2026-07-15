@@ -3,11 +3,11 @@
 import * as React from "react";
 import * as Label from "@radix-ui/react-label";
 import * as Select from "@radix-ui/react-select";
-import { Pencil, X, ChevronDown, User, Copy, AlertCircle } from "lucide-react";
+import { Pencil, X, ChevronDown, User, Copy, AlertCircle, Camera, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { cn, getInitials, formatDate } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { updateMyProfile, updateEmergencyContact } from "@/actions/profile";
+import { updateMyProfile, updateEmergencyContact, updateMyAvatar, removeMyAvatar } from "@/actions/profile";
 import { maskPAN, maskAadhar, calcAge } from "@/lib/profile-utils";
 import type { EmployeeProfile, Address } from "@/actions/profile";
 
@@ -34,6 +34,44 @@ export function ProfileClient({ profile }: { profile: EmployeeProfile }) {
   const [editing, setEditing] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const [sameAddress, setSameAddress] = React.useState(false);
+  const [avatarUrl, setAvatarUrl] = React.useState(profile.avatar_url);
+  const [avatarBusy, setAvatarBusy] = React.useState(false);
+  const avatarInputRef = React.useRef<HTMLInputElement>(null);
+
+  async function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file
+    if (!file) return;
+    setAvatarBusy(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const result = await updateMyAvatar(fd);
+      if (result.success) {
+        setAvatarUrl(result.data.avatarUrl);
+        toast.success("Profile photo updated");
+      } else {
+        toast.error(result.error);
+      }
+    } finally {
+      setAvatarBusy(false);
+    }
+  }
+
+  async function handleAvatarRemove() {
+    setAvatarBusy(true);
+    try {
+      const result = await removeMyAvatar();
+      if (result.success) {
+        setAvatarUrl(null);
+        toast.success("Profile photo removed");
+      } else {
+        toast.error(result.error);
+      }
+    } finally {
+      setAvatarBusy(false);
+    }
+  }
 
   const [fieldErrors, setFieldErrors] = React.useState<Record<string, string>>({});
 
@@ -129,17 +167,45 @@ export function ProfileClient({ profile }: { profile: EmployeeProfile }) {
       {/* Header card */}
       <div className="rounded-xl border border-border bg-card p-6 flex items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 text-primary text-xl font-bold shrink-0 overflow-hidden">
-            {profile.avatar_url ? (
-              <img src={profile.avatar_url} alt={fullName} className="h-16 w-16 object-cover rounded-full" />
-            ) : (
-              getInitials(fullName)
-            )}
+          <div className="relative shrink-0">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 text-primary text-xl font-bold overflow-hidden">
+              {avatarUrl ? (
+                <img src={avatarUrl} alt={fullName} className="h-16 w-16 object-cover rounded-full" />
+              ) : (
+                getInitials(fullName)
+              )}
+            </div>
+            <input
+              ref={avatarInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="hidden"
+              onChange={handleAvatarChange}
+            />
+            <button
+              type="button"
+              aria-label="Change profile photo"
+              title="Change profile photo"
+              disabled={avatarBusy}
+              onClick={() => avatarInputRef.current?.click()}
+              className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-sm hover:text-foreground disabled:opacity-50"
+            >
+              {avatarBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Camera className="h-3.5 w-3.5" />}
+            </button>
           </div>
           <div>
             <h2 className="text-xl font-bold">{fullName}</h2>
             <p className="text-sm text-muted-foreground">{profile.designation ?? "—"}</p>
             <p className="text-xs text-muted-foreground capitalize mt-0.5">{profile.role} · {profile.employment_type.replace("_", " ")}</p>
+            {avatarUrl && !avatarBusy && (
+              <button
+                type="button"
+                onClick={handleAvatarRemove}
+                className="mt-1 text-xs text-muted-foreground underline-offset-2 hover:text-destructive hover:underline"
+              >
+                Remove photo
+              </button>
+            )}
           </div>
         </div>
         {!editing ? (

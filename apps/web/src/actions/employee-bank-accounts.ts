@@ -5,7 +5,7 @@ import { z } from "zod";
 import { waitUntil } from "@vercel/functions";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { getCurrentUser, isAdmin } from "@/lib/current-user";
-import { encrypt, decrypt, hashSha256 } from "@/lib/crypto/aes-gcm";
+import { encrypt, decrypt, hashSha256, isEncryptionConfigured } from "@/lib/crypto/aes-gcm";
 import {
   createRazorpayXClient,
   createContact,
@@ -71,6 +71,20 @@ function buildEncryptedFields(input: z.infer<typeof BankAccountInputSchema>) {
   };
 }
 
+// Missing/malformed RAZORPAYX_CRED_ENCRYPTION_KEY previously threw uncaught
+// from encrypt() inside the save actions and 500'd on employees (2026-07-15
+// incident). Degrade with an actionable error instead.
+const ENCRYPTION_UNAVAILABLE =
+  "Bank details are temporarily unavailable — please try again later or contact your admin.";
+
+function encryptionGuard(): string | null {
+  if (isEncryptionConfigured()) return null;
+  console.error(
+    "employee-bank-accounts: RAZORPAYX_CRED_ENCRYPTION_KEY missing or malformed — bank detail saves are failing"
+  );
+  return ENCRYPTION_UNAVAILABLE;
+}
+
 // ---- Employee-facing: own bank account ----
 
 export async function getMyBankAccount(): Promise<ActionResult<MaskedBankAccount | null>> {
@@ -96,6 +110,9 @@ export async function upsertMyBankAccount(input: z.infer<typeof BankAccountInput
 
   const parsed = BankAccountInputSchema.safeParse(input);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+
+  const guardError = encryptionGuard();
+  if (guardError) return { success: false, error: guardError };
 
   const sb = createAdminSupabase();
   const enc = buildEncryptedFields(parsed.data);
@@ -165,6 +182,9 @@ export async function upsertEmployeeBankAccount(employeeId: string, input: z.inf
     .eq("id", employeeId)
     .maybeSingle();
   if (!empOk) return { success: false, error: "Employee not found in your organisation" };
+
+  const guardError = encryptionGuard();
+  if (guardError) return { success: false, error: guardError };
 
   const enc = buildEncryptedFields(parsed.data);
   const { data, error } = await sb

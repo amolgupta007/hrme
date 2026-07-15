@@ -68,18 +68,56 @@ export async function listEmployees(): Promise<
   const now = new Date();
   const inviteMap = new Map((inviteResult.data ?? []).map((r: any) => [r.employee_id, r]));
 
+  // clerk_user_id is stamped at PROVISIONING time (identifier sync for anyone
+  // with a phone), so it does not mean the person ever signed in — the invite
+  // badge/actions must key off actual sign-in evidence. One batched Clerk call
+  // answers lastSignInAt for the whole org; on failure we fall back to treating
+  // linked as active (the old behavior) rather than mislabeling everyone.
+  const clerkIds: string[] = (empResult.data ?? [])
+    .map((e: any) => e.clerk_user_id)
+    .filter((id: string | null): id is string => !!id);
+  const signedInSet = new Set<string>();
+  let signInLookupOk = false;
+  if (clerkIds.length > 0) {
+    try {
+      const client = await clerkClient();
+      for (let i = 0; i < clerkIds.length; i += 100) {
+        const chunk = clerkIds.slice(i, i + 100);
+        const res = await client.users.getUserList({ userId: chunk, limit: chunk.length });
+        for (const u of res.data) {
+          if (u.lastSignInAt) signedInSet.add(u.id);
+        }
+      }
+      signInLookupOk = true;
+    } catch (e: any) {
+      console.warn("listEmployees: Clerk sign-in lookup failed (falling back):", e?.message ?? e);
+    }
+  }
+
   const employees = (empResult.data ?? []).map((e: any) => {
+    const hasSignedIn = e.clerk_user_id
+      ? signInLookupOk
+        ? signedInSet.has(e.clerk_user_id)
+        : true // fallback: assume linked = active, as before
+      : false;
+
     let invite_status: "none" | "sent" | "expired" | null = null;
-    if (!e.clerk_user_id) {
-      const invite = inviteMap.get(e.id);
-      if (!invite) {
-        invite_status = "none";
-      } else if (invite.accepted_at) {
-        invite_status = null;
-      } else if (new Date(invite.expires_at) <= now) {
-        invite_status = "expired";
+    if (!hasSignedIn) {
+      if (!e.email) {
+        // Phone-only: "none" only while unprovisioned (drives "Activate phone
+        // login"); once provisioned there is nothing to send.
+        invite_status = e.clerk_user_id ? null : "none";
       } else {
-        invite_status = "sent";
+        const invite = inviteMap.get(e.id);
+        if (!invite) {
+          invite_status = "none";
+        } else if (invite.accepted_at) {
+          invite_status = null;
+        } else if (new Date(invite.expires_at) <= now) {
+          invite_status = "expired";
+        } else {
+          invite_status = "sent";
+        }
       }
     }
     return {

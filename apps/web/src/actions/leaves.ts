@@ -224,6 +224,7 @@ export async function requestLeave(
         .from("employees")
         .select("first_name, last_name, reporting_manager_id, reporting_manager_2_id")
         .eq("id", validated.data.employeeId)
+        .eq("org_id", ctx.orgId)
         .single(),
       supabase
         .from("leave_policies")

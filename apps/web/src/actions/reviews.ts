@@ -5,7 +5,7 @@ import { z } from "zod";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { getCurrentUser, isAdmin, isManagerOrAbove, getOrgContext } from "@/lib/current-user";
 import { getApprovedObjectivesForEmployees } from "@/actions/objectives";
-import { isManagerOfEmployee } from "@/lib/managers";
+import { getDirectReportIds, isManagerOfEmployee } from "@/lib/managers";
 import type { ObjectiveSet } from "@/actions/objectives";
 import { normalizeGoalsData } from "@/lib/performance-settings";
 import type { ActionResult } from "@/types";
@@ -243,7 +243,13 @@ export async function listCycleReviews(
     if (roleFilter.role === "employee") {
       query = query.eq("employee_id", roleFilter.employeeId);
     } else if (roleFilter.role === "manager") {
-      query = query.eq("reviewer_id", roleFilter.employeeId);
+      // Dual-manager visibility: reviewer of record, or any review for a
+      // direct report (either reporting_manager_id/_2_id slot) — matches
+      // the widened submitManagerReview eligibility.
+      const reportIds = await getDirectReportIds(ctx.orgId, roleFilter.employeeId);
+      const orClauses = [`reviewer_id.eq.${roleFilter.employeeId}`];
+      if (reportIds.length > 0) orClauses.push(`employee_id.in.(${reportIds.join(",")})`);
+      query = query.or(orClauses.join(","));
     }
     // admin/owner: no filter — sees all
   }

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { getCurrentUser, isManagerOrAbove, getOrgContext } from "@/lib/current-user";
+import { getDirectReportIds } from "@/lib/managers";
 import type { ActionResult } from "@/types";
 
 
@@ -137,12 +138,19 @@ export async function listPendingApprovals(): Promise<ActionResult<ObjectiveSet[
 
   if (!emp) return { success: false, error: "Employee record not found" };
 
+  const empId = (emp as { id: string }).id;
+
+  // Get direct reports for dual-manager visibility
+  const reportIds = await getDirectReportIds(ctx.orgId, empId);
+  const orClauses = [`manager_id.eq.${empId}`];
+  if (reportIds.length > 0) orClauses.push(`employee_id.in.(${reportIds.join(",")})`);
+
   const { data, error } = await supabase
     .from("objectives")
     .select(OBJ_SELECT)
-    .eq("manager_id", (emp as { id: string }).id)
     .eq("org_id", ctx.orgId)
     .eq("status", "submitted")
+    .or(orClauses.join(","))
     .order("submitted_at", { ascending: true });
 
   if (error) return { success: false, error: error.message };
@@ -484,12 +492,19 @@ export async function getPendingObjectivesCount(orgId: string, clerkUserId: stri
 
   if (!emp) return 0;
 
+  const empId = (emp as { id: string }).id;
+
+  // Get direct reports for dual-manager visibility
+  const reportIds = await getDirectReportIds(orgId, empId);
+  const orClauses = [`manager_id.eq.${empId}`];
+  if (reportIds.length > 0) orClauses.push(`employee_id.in.(${reportIds.join(",")})`);
+
   const { count } = await supabase
     .from("objectives")
     .select("*", { count: "exact", head: true })
-    .eq("manager_id", (emp as { id: string }).id)
     .eq("org_id", orgId)
-    .eq("status", "submitted");
+    .eq("status", "submitted")
+    .or(orClauses.join(","));
 
   return count ?? 0;
 }

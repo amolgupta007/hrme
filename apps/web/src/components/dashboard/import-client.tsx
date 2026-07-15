@@ -32,6 +32,7 @@ const COLUMN_REFERENCE = [
   { col: "designation", accepts: "Optional — free text job title" },
   { col: "date_of_birth", accepts: "Optional — YYYY-MM-DD" },
   { col: "reporting_manager_email", accepts: "Optional — must match existing employee email" },
+  { col: "reporting_manager_2_email", accepts: "Optional — secondary manager, must match existing employee email" },
   { col: "device_code", accepts: "Optional — biometric PIN, digits only, unique per org" },
 ];
 

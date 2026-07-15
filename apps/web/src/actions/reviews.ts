@@ -5,6 +5,7 @@ import { z } from "zod";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { getCurrentUser, isAdmin, isManagerOrAbove, getOrgContext } from "@/lib/current-user";
 import { getApprovedObjectivesForEmployees } from "@/actions/objectives";
+import { getDirectReportIds, isManagerOfEmployee } from "@/lib/managers";
 import type { ObjectiveSet } from "@/actions/objectives";
 import { normalizeGoalsData } from "@/lib/performance-settings";
 import type { ActionResult } from "@/types";
@@ -33,6 +34,8 @@ export type ReviewWithDetails = {
   reviewer_id: string;
   employee_name: string;
   reviewer_name: string;
+  manager_review_submitted_by: string | null;
+  manager_review_submitted_by_name: string | null;
   self_rating: number | null;
   manager_rating: number | null;
   self_comments: string | null;
@@ -229,7 +232,9 @@ export async function listCycleReviews(
 
   let query = supabase
     .from("reviews")
-    .select("*, employees!employee_id(first_name, last_name), reviewers:employees!reviewer_id(first_name, last_name)")
+    .select(
+      "*, employees!employee_id(first_name, last_name), reviewers:employees!reviewer_id(first_name, last_name), submitted_by_employee:employees!manager_review_submitted_by(first_name, last_name)"
+    )
     .eq("cycle_id", cycleId)
     .eq("org_id", ctx.orgId)
     .order("created_at");
@@ -238,7 +243,13 @@ export async function listCycleReviews(
     if (roleFilter.role === "employee") {
       query = query.eq("employee_id", roleFilter.employeeId);
     } else if (roleFilter.role === "manager") {
-      query = query.eq("reviewer_id", roleFilter.employeeId);
+      // Dual-manager visibility: reviewer of record, or any review for a
+      // direct report (either reporting_manager_id/_2_id slot) — matches
+      // the widened submitManagerReview eligibility.
+      const reportIds = await getDirectReportIds(ctx.orgId, roleFilter.employeeId);
+      const orClauses = [`reviewer_id.eq.${roleFilter.employeeId}`];
+      if (reportIds.length > 0) orClauses.push(`employee_id.in.(${reportIds.join(",")})`);
+      query = query.or(orClauses.join(","));
     }
     // admin/owner: no filter — sees all
   }
@@ -254,6 +265,10 @@ export async function listCycleReviews(
     reviewer_id: r.reviewer_id,
     employee_name: `${r.employees?.first_name ?? ""} ${r.employees?.last_name ?? ""}`.trim(),
     reviewer_name: `${r.reviewers?.first_name ?? ""} ${r.reviewers?.last_name ?? ""}`.trim(),
+    manager_review_submitted_by: r.manager_review_submitted_by,
+    manager_review_submitted_by_name: r.submitted_by_employee
+      ? `${r.submitted_by_employee?.first_name ?? ""} ${r.submitted_by_employee?.last_name ?? ""}`.trim()
+      : null,
     self_rating: r.self_rating,
     manager_rating: r.manager_rating,
     self_comments: r.self_comments,
@@ -305,7 +320,9 @@ export async function listMyReviews(): Promise<ActionResult<MyReviewWithCycle[]>
 
   const { data, error } = await supabase
     .from("reviews")
-    .select("*, review_cycles(name, start_date, end_date, rating_scale, status), employees!employee_id(first_name, last_name), reviewers:employees!reviewer_id(first_name, last_name)")
+    .select(
+      "*, review_cycles(name, start_date, end_date, rating_scale, status), employees!employee_id(first_name, last_name), reviewers:employees!reviewer_id(first_name, last_name), submitted_by_employee:employees!manager_review_submitted_by(first_name, last_name)"
+    )
     .eq("employee_id", user.employeeId)
     .eq("org_id", user.orgId)
     .order("created_at", { ascending: false });
@@ -324,6 +341,10 @@ export async function listMyReviews(): Promise<ActionResult<MyReviewWithCycle[]>
     reviewer_id: r.reviewer_id,
     employee_name: `${r.employees?.first_name ?? ""} ${r.employees?.last_name ?? ""}`.trim(),
     reviewer_name: `${r.reviewers?.first_name ?? ""} ${r.reviewers?.last_name ?? ""}`.trim(),
+    manager_review_submitted_by: r.manager_review_submitted_by,
+    manager_review_submitted_by_name: r.submitted_by_employee
+      ? `${r.submitted_by_employee?.first_name ?? ""} ${r.submitted_by_employee?.last_name ?? ""}`.trim()
+      : null,
     self_rating: r.self_rating,
     manager_rating: r.manager_rating,
     self_comments: r.self_comments,
@@ -418,16 +439,28 @@ export async function submitManagerReview(
 
   const supabase = createAdminSupabase();
 
-  // Verify the caller is the assigned reviewer; pull existing goals to preserve self state
+  // Verify the caller is the assigned reviewer or one of the reviewee's reporting managers;
+  // pull existing goals to preserve self state
   const { data: review } = await supabase
     .from("reviews")
-    .select("reviewer_id, goals")
+    .select("reviewer_id, goals, employee_id")
     .eq("id", reviewId)
     .eq("org_id", user.orgId)
     .single();
+  if (!review) return { success: false, error: "Review not found" };
 
-  if (!review || (review as any).reviewer_id !== user.employeeId) {
-    return { success: false, error: "You are not the assigned reviewer for this review" };
+  let allowed = (review as any).reviewer_id === user.employeeId;
+  if (!allowed && user.employeeId) {
+    const { data: reviewee } = await supabase
+      .from("employees")
+      .select("reporting_manager_id, reporting_manager_2_id")
+      .eq("id", (review as any).employee_id)
+      .eq("org_id", user.orgId)
+      .single();
+    allowed = !!reviewee && isManagerOfEmployee(user.employeeId, reviewee as any);
+  }
+  if (!allowed) {
+    return { success: false, error: "Only the employee's reporting managers can submit this review" };
   }
 
   const existing = normalizeGoalsData((review as any).goals);
@@ -446,6 +479,7 @@ export async function submitManagerReview(
       status: "completed",
       completed_at: new Date().toISOString(),
       goals: goalsPayload,
+      manager_review_submitted_by: user.employeeId,
     })
     .eq("id", reviewId)
     .eq("org_id", user.orgId);

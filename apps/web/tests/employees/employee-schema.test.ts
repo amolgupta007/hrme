@@ -39,3 +39,26 @@ describe("employeeSchema identity refinement", () => {
     expect(r.success).toBe(true);
   });
 });
+
+describe("employeeSchema reportingManager2Id", () => {
+  it("accepts an empty string", () => {
+    const r = employeeSchema.safeParse({ ...base, email: "asha@x.com", reportingManager2Id: "" });
+    expect(r.success).toBe(true);
+  });
+  it("accepts a valid uuid", () => {
+    const r = employeeSchema.safeParse({
+      ...base,
+      email: "asha@x.com",
+      reportingManager2Id: "11111111-1111-1111-1111-111111111111",
+    });
+    expect(r.success).toBe(true);
+  });
+  it("accepts being omitted entirely", () => {
+    const r = employeeSchema.safeParse({ ...base, email: "asha@x.com" });
+    expect(r.success).toBe(true);
+  });
+  it("rejects a non-uuid value", () => {
+    const r = employeeSchema.safeParse({ ...base, email: "asha@x.com", reportingManager2Id: "not-a-uuid" });
+    expect(r.success).toBe(false);
+  });
+});

@@ -205,6 +205,10 @@ export async function addEmployee(
       employment_type: validated.data.employmentType,
       role: validated.data.role,
       reporting_manager_id: validated.data.reportingManagerId || null,
+      reporting_manager_2_id:
+        validated.data.reportingManager2Id && validated.data.reportingManager2Id !== validated.data.reportingManagerId
+          ? validated.data.reportingManager2Id
+          : null,
       status: "active",
       metadata: {},
     })
@@ -302,6 +306,10 @@ export async function updateEmployee(
       employment_type: validated.data.employmentType,
       role: validated.data.role,
       reporting_manager_id: validated.data.reportingManagerId || null,
+      reporting_manager_2_id:
+        validated.data.reportingManager2Id && validated.data.reportingManager2Id !== validated.data.reportingManagerId
+          ? validated.data.reportingManager2Id
+          : null,
     })
     .eq("id", id)
     .eq("org_id", orgId);
@@ -517,6 +525,7 @@ export type ImportRow = {
   designation?: string;
   date_of_birth?: string;
   reporting_manager_email?: string;
+  reporting_manager_2_email?: string;
   device_code?: string;
 };
 
@@ -674,6 +683,14 @@ export async function bulkImportEmployees(
     const reportingManagerId = row.reporting_manager_email
       ? (managerEmailMap.get(row.reporting_manager_email.toLowerCase()) ?? null)
       : null;
+    let reportingManager2Id = row.reporting_manager_2_email
+      ? (managerEmailMap.get(row.reporting_manager_2_email.toLowerCase()) ?? null)
+      : null;
+    if (reportingManager2Id && emailOk && row.reporting_manager_2_email!.toLowerCase() === rowEmail.toLowerCase()) {
+      errors.push({ row: rowNum, reason: "reporting_manager_2_email cannot be the employee's own email", data: row });
+      continue;
+    }
+    if (reportingManager2Id && reportingManager2Id === reportingManagerId) reportingManager2Id = null; // silent dedupe
 
     if (row.date_of_birth && !/^\d{4}-\d{2}-\d{2}$/.test(row.date_of_birth)) {
       errors.push({ row: rowNum, reason: "Invalid date_of_birth format (use YYYY-MM-DD)", data: row });
@@ -717,6 +734,7 @@ export async function bulkImportEmployees(
       designation: row.designation?.trim() || null,
       date_of_birth: row.date_of_birth || null,
       reporting_manager_id: reportingManagerId,
+      reporting_manager_2_id: reportingManager2Id,
       device_code: deviceCode,
       status: "active",
     });

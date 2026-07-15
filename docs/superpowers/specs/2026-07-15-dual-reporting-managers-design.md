@@ -37,8 +37,8 @@ No consumer re-implements the relationship. All checks below are **live** (curre
 ## 3. Module changes
 
 ### Objectives
-- `approveObjective`/`rejectObjective`: allow when `isAdmin(role)` OR `isManagerOfEmployee(actor, objectiveOwnerRow)` (live). The stored `objectives.manager_id` (snapshot of primary at submission) is retained for display/back-compat; it no longer solely gates approval.
-- Manager-facing pending/team objective queries: widen from `manager_id = me` to `employee_id IN getDirectReportIds(me)`; keep admin behavior unchanged.
+- **Spec reconciliation (Task 9):** Investigation during implementation showed `approveObjective`/`rejectObjective` are ALREADY org-wide role-gated (`isManagerOrAbove` only — `objectives.ts:375-421`), exactly like leave approvals. The real single-manager bottleneck was visibility, not authorization: `listPendingApprovals` and `getPendingObjectivesCount` filtered `manager_id = me`, so a second manager never saw pending items. Resolution: **widen the list/count queries; leave the approve/reject guards untouched** (tightening them would restrict currently-working behavior, which was explicitly declined for leave for the same reason).
+- Manager-facing pending/team objective queries: widened from `manager_id = me` to a live union of `manager_id = me` (legacy snapshot, kept so a manager still sees items snapshotted to them before a reassignment) OR `employee_id IN getDirectReportIds(me)`; admin behavior unchanged.
 
 ### Reviews
 - `submitManagerReview` guard: `reviewer_id === me` OR `isManagerOfEmployee(me, revieweeRow)` OR admin (match whatever admin behavior exists today — do not narrow it).

@@ -226,6 +226,11 @@ export function ProfileClient({ profile }: { profile: EmployeeProfile }) {
             <h2 className="text-xl font-bold">{fullName}</h2>
             <p className="text-sm text-muted-foreground">{profile.designation ?? "—"}</p>
             <p className="text-xs text-muted-foreground capitalize mt-0.5">{profile.role} · {profile.employment_type.replace("_", " ")}</p>
+            {(profile.manager_name || profile.manager_2_name) && (
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Reports to {[profile.manager_name, profile.manager_2_name].filter(Boolean).join(" · ")}
+              </p>
+            )}
             {avatarUrl && !avatarBusy && (
               <button
                 type="button"

@@ -47,3 +47,19 @@ export function decrypt(payload: string): string {
 export function hashSha256(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
 }
+
+/**
+ * True when RAZORPAYX_CRED_ENCRYPTION_KEY is present and well-formed. Callers
+ * that would otherwise throw deep inside encrypt()/decrypt() (crashing a page
+ * or server action — see the 2026-07-15 /dashboard/profile incident) should
+ * check this first and degrade with a friendly error instead.
+ */
+export function isEncryptionConfigured(): boolean {
+  const raw = process.env.RAZORPAYX_CRED_ENCRYPTION_KEY;
+  if (!raw) return false;
+  try {
+    return Buffer.from(raw, "base64").length === 32;
+  } catch {
+    return false;
+  }
+}

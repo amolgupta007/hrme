@@ -281,3 +281,105 @@ export async function updateEmergencyContact(
   revalidatePath("/dashboard/profile");
   return { success: true, data: undefined };
 }
+
+// ---- Avatar (self-service) ----
+
+const AVATAR_BUCKET = "avatars"; // public bucket, already provisioned
+const AVATAR_MAX_BYTES = 3 * 1024 * 1024;
+const AVATAR_TYPES: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+};
+
+export async function updateMyAvatar(
+  formData: FormData
+): Promise<ActionResult<{ avatarUrl: string }>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!user.employeeId) return { success: false, error: "No employee record found" };
+
+  const file = formData.get("file");
+  if (!(file instanceof File)) return { success: false, error: "No file provided" };
+  if (file.size > AVATAR_MAX_BYTES) return { success: false, error: "Photo must be 3MB or smaller" };
+  const ext = AVATAR_TYPES[file.type];
+  if (!ext) return { success: false, error: "JPG, PNG, or WebP only" };
+
+  const supabase = createAdminSupabase();
+
+  // Timestamped filename: public-bucket URLs are CDN-cached, so overwriting a
+  // fixed path would serve the stale photo for hours. Old file removed after.
+  const path = `${user.orgId}/${user.employeeId}-${Date.now()}.${ext}`;
+  const { error: uploadError } = await supabase.storage
+    .from(AVATAR_BUCKET)
+    .upload(path, file, { contentType: file.type, upsert: false });
+  if (uploadError) return { success: false, error: uploadError.message };
+
+  const { data: urlData } = supabase.storage.from(AVATAR_BUCKET).getPublicUrl(path);
+  const avatarUrl = urlData.publicUrl;
+
+  const { data: prev } = await supabase
+    .from("employees")
+    .select("avatar_url")
+    .eq("id", user.employeeId)
+    .eq("org_id", user.orgId)
+    .single();
+
+  const { error: updateError } = await supabase
+    .from("employees")
+    .update({ avatar_url: avatarUrl })
+    .eq("id", user.employeeId)
+    .eq("org_id", user.orgId);
+  if (updateError) return { success: false, error: updateError.message };
+
+  // Best-effort cleanup of the previous upload (only files we manage in this
+  // bucket — Clerk-hosted image URLs are left alone).
+  const prevUrl = (prev as { avatar_url: string | null } | null)?.avatar_url;
+  const marker = `/${AVATAR_BUCKET}/`;
+  if (prevUrl && prevUrl.includes(marker)) {
+    const prevPath = decodeURIComponent(prevUrl.split(marker)[1] ?? "");
+    if (prevPath && prevPath.startsWith(`${user.orgId}/`)) {
+      await supabase.storage.from(AVATAR_BUCKET).remove([prevPath]);
+    }
+  }
+
+  revalidatePath("/dashboard/profile");
+  revalidatePath("/dashboard/employees");
+  revalidatePath("/dashboard/directory");
+  return { success: true, data: { avatarUrl } };
+}
+
+export async function removeMyAvatar(): Promise<ActionResult<void>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!user.employeeId) return { success: false, error: "No employee record found" };
+
+  const supabase = createAdminSupabase();
+  const { data: prev } = await supabase
+    .from("employees")
+    .select("avatar_url")
+    .eq("id", user.employeeId)
+    .eq("org_id", user.orgId)
+    .single();
+
+  const { error } = await supabase
+    .from("employees")
+    .update({ avatar_url: null })
+    .eq("id", user.employeeId)
+    .eq("org_id", user.orgId);
+  if (error) return { success: false, error: error.message };
+
+  const prevUrl = (prev as { avatar_url: string | null } | null)?.avatar_url;
+  const marker = `/${AVATAR_BUCKET}/`;
+  if (prevUrl && prevUrl.includes(marker)) {
+    const prevPath = decodeURIComponent(prevUrl.split(marker)[1] ?? "");
+    if (prevPath && prevPath.startsWith(`${user.orgId}/`)) {
+      await supabase.storage.from(AVATAR_BUCKET).remove([prevPath]);
+    }
+  }
+
+  revalidatePath("/dashboard/profile");
+  revalidatePath("/dashboard/employees");
+  revalidatePath("/dashboard/directory");
+  return { success: true, data: undefined };
+}

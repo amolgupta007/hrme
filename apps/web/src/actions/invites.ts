@@ -1,14 +1,11 @@
 "use server";
 
+import { clerkClient } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
-import { render } from "@react-email/render";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { getCurrentUser, isAdmin } from "@/lib/current-user";
-import { resend, FROM_EMAIL } from "@/lib/resend";
-import { AccountSetupEmail } from "@/components/emails/account-setup";
+import { sendAccountSetupInvite } from "@/lib/invites/send-account-setup";
 import type { ActionResult } from "@/types";
-
-const INVITE_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 // Helper: get org context for invite actions. Org membership now lives entirely
 // in our `employees` table (Clerk Organizations decoupled), so the active org
@@ -39,48 +36,42 @@ export async function sendInvite(employeeId: string): Promise<ActionResult<void>
     .single();
 
   if (!emp) return { success: false, error: "Employee not found" };
-  if ((emp as any).clerk_user_id) return { success: false, error: "Employee already has an active account" };
 
   if (!(emp as any).email) {
     return { success: false, error: "This employee signs in by phone — no email invite needed." };
   }
 
-  const email = (emp as any).email as string;
+  // clerk_user_id is set eagerly at provisioning time (syncEmployeeAuthIdentifiers
+  // runs when an employee is added with a phone) — it does NOT mean the person
+  // ever signed in. Only block the invite for accounts that were actually used;
+  // if the Clerk lookup fails, send anyway (a duplicate invite is harmless,
+  // a silently missing one is not).
+  if ((emp as any).clerk_user_id) {
+    try {
+      const client = await clerkClient();
+      const clerkUser = await client.users.getUser((emp as any).clerk_user_id);
+      if (clerkUser.lastSignInAt) {
+        return { success: false, error: "Employee has already signed in — no invite needed" };
+      }
+    } catch (err: any) {
+      console.warn(
+        `sendInvite: Clerk lookup failed for employee ${employeeId} (sending anyway):`,
+        err?.message ?? err
+      );
+    }
+  }
 
   // Send our own account-setup email. The invitee signs in with this email and
   // getCurrentUser's auto-link backfills their clerk_user_id onto this row —
   // there is no Clerk org to join.
-  const signInUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? "https://jambahr.com"}/sign-in`;
-  try {
-    const html = await render(
-      AccountSetupEmail({
-        orgName: ctx.orgName,
-        firstName: (emp as any).first_name ?? "there",
-        signInUrl,
-      })
-    );
-    await resend.emails.send({
-      from: FROM_EMAIL,
-      to: email,
-      subject: "Set up your JambaHR account",
-      html,
-    });
-  } catch (err: any) {
-    return { success: false, error: err?.message ?? "Failed to send invite email" };
-  }
-
-  await supabase.from("employee_invites").upsert(
-    {
-      org_id: ctx.internalOrgId,
-      employee_id: employeeId,
-      email,
-      clerk_invitation_id: null,
-      sent_at: new Date().toISOString(),
-      accepted_at: null,
-      expires_at: new Date(Date.now() + INVITE_EXPIRY_MS).toISOString(),
-    },
-    { onConflict: "employee_id" }
-  );
+  const sent = await sendAccountSetupInvite(supabase, {
+    orgId: ctx.internalOrgId,
+    orgName: ctx.orgName,
+    employeeId,
+    email: (emp as any).email as string,
+    firstName: (emp as any).first_name ?? null,
+  });
+  if (!sent.ok) return { success: false, error: sent.error };
 
   revalidatePath("/dashboard/employees");
   return { success: true, data: undefined };

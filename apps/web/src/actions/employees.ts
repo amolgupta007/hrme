@@ -10,6 +10,7 @@ import type { ActionResult, Employee, Department, UserRole } from "@/types";
 import { employeeSchema } from "@/lib/employees/employee-schema";
 import { normalizePhone } from "@/lib/phone";
 import { provisionPhoneOnlyUser, syncEmployeeAuthIdentifiers } from "@/lib/clerk/provision-phone-user";
+import { sendAccountSetupInvite } from "@/lib/invites/send-account-setup";
 import { sendInvite } from "./invites";
 
 // ---- Helpers ----
@@ -212,8 +213,13 @@ export async function addEmployee(
   if (email) {
     // Has email: send our own account-setup email (Clerk org invitations dropped).
     // Best-effort — failure doesn't block the add; admin can resend from the directory.
+    // sendInvite returns an ActionResult rather than throwing — check it, or
+    // failures are invisible (this hid the Medialoop invite outage, 2026-07-15).
     try {
-      await sendInvite(newId);
+      const inviteResult = await sendInvite(newId);
+      if (!inviteResult.success) {
+        console.warn(`Invite email not sent for employee ${newId} (non-fatal):`, inviteResult.error);
+      }
     } catch (inviteErr: any) {
       console.warn("Invite email failed (non-fatal):", inviteErr?.message ?? inviteErr);
     }
@@ -479,6 +485,7 @@ export type ImportRow = {
 export type ImportResult = {
   imported: number;
   skipped: number;
+  invitesSent: number;
   errors: { row: number; reason: string; data: ImportRow }[];
 };
 
@@ -496,13 +503,14 @@ export async function bulkImportEmployees(
 
   const supabase = createAdminSupabase();
 
-  // Fetch plan limit
+  // Fetch plan limit (+ name for the account-setup invite emails)
   const { data: org } = await supabase
     .from("organizations")
-    .select("max_employees")
+    .select("max_employees, name")
     .eq("id", orgId)
     .single();
   const maxEmployees = (org as any)?.max_employees ?? 10;
+  const orgName = ((org as any)?.name as string | undefined) ?? "your team";
 
   // Fetch current active count
   const { count: currentCount } = await supabase
@@ -689,11 +697,12 @@ export async function bulkImportEmployees(
     }
   }
 
+  let invitesSent = 0;
   if (toInsert.length > 0) {
     const { data: inserted, error: insertError } = await supabase
       .from("employees")
       .insert(toInsert)
-      .select("id, phone");
+      .select("id, phone, email, first_name");
     if (insertError) {
       if (insertError.message?.includes("uq_employees_org_device_code")) {
         return { success: false, error: "A device_code (PIN) is already used by another employee in this organization." };
@@ -705,7 +714,12 @@ export async function bulkImportEmployees(
     // email+phone rows can sign in by either (not just phone-only rows).
     // Best-effort, non-fatal.
     if (phoneRowIndices.length > 0 && inserted) {
-      const insertedRows = inserted as { id: string; phone: string | null }[];
+      const insertedRows = inserted as {
+        id: string;
+        phone: string | null;
+        email: string | null;
+        first_name: string | null;
+      }[];
       const client = await clerkClient();
       for (const { insertIndex, phoneE164, email, role } of phoneRowIndices) {
         const insertedRow = insertedRows[insertIndex];
@@ -730,6 +744,30 @@ export async function bulkImportEmployees(
         }
       }
     }
+
+    // Send account-setup invites to every imported row that has an email.
+    // The import path previously sent nothing at all — imported employees never
+    // learned they had an account (Medialoop outage, 2026-07-15). Sequential on
+    // purpose: it naturally respects Resend's rate limit; best-effort, non-fatal.
+    // Runs AFTER identifier sync — freshly imported rows have never signed in,
+    // so no already-signed-in guard is needed here.
+    if (inserted) {
+      for (const row of inserted as {
+        id: string;
+        email: string | null;
+        first_name: string | null;
+      }[]) {
+        if (!row.email) continue;
+        const sent = await sendAccountSetupInvite(supabase, {
+          orgId,
+          orgName,
+          employeeId: row.id,
+          email: row.email,
+          firstName: row.first_name,
+        });
+        if (sent.ok) invitesSent++;
+      }
+    }
   }
 
   revalidatePath("/dashboard/employees");
@@ -739,6 +777,7 @@ export async function bulkImportEmployees(
     data: {
       imported: toInsert.length,
       skipped: errors.length,
+      invitesSent,
       errors,
     },
   };

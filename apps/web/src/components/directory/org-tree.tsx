@@ -261,6 +261,9 @@ function EmployeeNodeCard({
             </span>
           )}
         </div>
+        {node.manager_2_name && (
+          <span className="text-[10px] text-muted-foreground truncate">also → {node.manager_2_name}</span>
+        )}
       </div>
 
       {/* Expand / collapse */}

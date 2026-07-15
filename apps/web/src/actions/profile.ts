@@ -94,6 +94,8 @@ export type EmployeeProfile = Employee & {
   emergency_contact_relationship: string | null;
   whatsapp_opt_in: boolean | null;
   whatsapp_opt_in_at: string | null;
+  manager_name: string | null;
+  manager_2_name: string | null;
 };
 
 // ---- Helpers ----
@@ -146,7 +148,28 @@ export async function getMyProfile(): Promise<ActionResult<EmployeeProfile>> {
   }
 
   if (!data) return { success: false, error: "No employee profile found for your account" };
-  return { success: true, data: data as EmployeeProfile };
+
+  const emp = data as Employee;
+  const managerIds = [emp.reporting_manager_id, emp.reporting_manager_2_id].filter(Boolean) as string[];
+  let managerNames = new Map<string, string>();
+  if (managerIds.length > 0) {
+    const { data: mgrs } = await supabase
+      .from("employees")
+      .select("id, first_name, last_name")
+      .in("id", managerIds);
+    managerNames = new Map(
+      ((mgrs ?? []) as any[]).map((m) => [m.id, `${m.first_name} ${m.last_name}`])
+    );
+  }
+
+  return {
+    success: true,
+    data: {
+      ...(data as EmployeeProfile),
+      manager_name: emp.reporting_manager_id ? managerNames.get(emp.reporting_manager_id) ?? null : null,
+      manager_2_name: emp.reporting_manager_2_id ? managerNames.get(emp.reporting_manager_2_id) ?? null : null,
+    },
+  };
 }
 
 const addressSchema = z.object({

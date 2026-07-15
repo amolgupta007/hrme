@@ -23,6 +23,8 @@ export type DirectoryEmployee = {
   department_name: string | null;
   reporting_manager_id: string | null;
   manager_name: string | null;
+  reporting_manager_2_id: string | null;
+  manager_2_name: string | null;
 };
 
 export async function listDirectoryEmployees(): Promise<ActionResult<DirectoryEmployee[]>> {
@@ -32,7 +34,7 @@ export async function listDirectoryEmployees(): Promise<ActionResult<DirectoryEm
   const supabase = createAdminSupabase();
   const { data, error } = await supabase
     .from("employees")
-    .select("id, first_name, last_name, email, designation, role, employment_type, status, avatar_url, department_id, reporting_manager_id, departments!department_id(name)")
+    .select("id, first_name, last_name, email, designation, role, employment_type, status, avatar_url, department_id, reporting_manager_id, reporting_manager_2_id, departments!department_id(name)")
     .eq("org_id", orgId)
     .neq("status", "terminated")
     .order("first_name");
@@ -70,6 +72,8 @@ export async function listDirectoryEmployees(): Promise<ActionResult<DirectoryEm
     department_name: e.departments?.name ?? null,
     reporting_manager_id: e.reporting_manager_id,
     manager_name: e.reporting_manager_id ? (empMap.get(e.reporting_manager_id) ?? null) : null,
+    reporting_manager_2_id: e.reporting_manager_2_id,
+    manager_2_name: e.reporting_manager_2_id ? (empMap.get(e.reporting_manager_2_id) ?? null) : null,
   }));
 
   return { success: true, data: employees };

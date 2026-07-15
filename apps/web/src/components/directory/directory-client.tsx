@@ -182,11 +182,14 @@ function EmployeeCard({ employee: e }: { employee: DirectoryEmployee }) {
       )}
 
       {/* Manager */}
-      {e.manager_name && (
+      {(e.manager_name || e.manager_2_name) && (
         <div className="pt-2.5 border-t border-border flex items-center gap-2">
           <UserCheck className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
           <span className="text-xs text-muted-foreground">Reports to</span>
-          <span className="text-xs font-medium truncate">{e.manager_name}</span>
+          <span className="text-xs font-medium truncate">
+            {e.manager_name ?? e.manager_2_name}
+            {e.manager_name && e.manager_2_name ? ` · also ${e.manager_2_name}` : ""}
+          </span>
         </div>
       )}
     </div>

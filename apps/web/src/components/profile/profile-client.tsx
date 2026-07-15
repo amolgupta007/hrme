@@ -18,6 +18,31 @@ const inputErrCn = cn(inputCnBase, "border-destructive focus:ring-destructive");
 
 const EMPTY_ADDRESS: Address = { line1: "", line2: "", city: "", state: "", pincode: "" };
 
+const AVATAR_MAX_DIM = 512;
+
+/** Resize + re-encode to JPEG ≤512px on the long edge (EXIF orientation respected). */
+async function downscaleImage(file: File): Promise<File> {
+  const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+  try {
+    const scale = Math.min(1, AVATAR_MAX_DIM / Math.max(bitmap.width, bitmap.height));
+    const w = Math.max(1, Math.round(bitmap.width * scale));
+    const h = Math.max(1, Math.round(bitmap.height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("canvas unsupported");
+    ctx.drawImage(bitmap, 0, 0, w, h);
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, "image/jpeg", 0.85)
+    );
+    if (!blob) throw new Error("encode failed");
+    return new File([blob], "avatar.jpg", { type: "image/jpeg" });
+  } finally {
+    bitmap.close();
+  }
+}
+
 function toAddress(v: unknown): Address {
   if (!v || typeof v !== "object") return EMPTY_ADDRESS;
   const a = v as Partial<Address>;
@@ -44,8 +69,12 @@ export function ProfileClient({ profile }: { profile: EmployeeProfile }) {
     if (!file) return;
     setAvatarBusy(true);
     try {
+      // Downscale in the browser: phone photos routinely exceed upload limits,
+      // and an avatar never needs more than 512px. Falls back to the original
+      // file if decoding fails (e.g. exotic formats) — server limits still apply.
+      const upload = await downscaleImage(file).catch(() => file);
       const fd = new FormData();
-      fd.append("file", file);
+      fd.append("file", upload);
       const result = await updateMyAvatar(fd);
       if (result.success) {
         setAvatarUrl(result.data.avatarUrl);

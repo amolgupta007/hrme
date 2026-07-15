@@ -226,6 +226,7 @@ export async function updateMyProfile(
   if (error) return { success: false, error: error.message };
 
   revalidatePath("/dashboard/profile");
+  revalidatePath("/dashboard"); // onboarding checklist card derives from these fields
   return { success: true, data: undefined };
 }
 
@@ -279,6 +280,7 @@ export async function updateEmergencyContact(
   if (error) return { success: false, error: error.message };
 
   revalidatePath("/dashboard/profile");
+  revalidatePath("/dashboard"); // onboarding checklist card derives from these fields
   return { success: true, data: undefined };
 }
 
@@ -344,6 +346,7 @@ export async function updateMyAvatar(
   }
 
   revalidatePath("/dashboard/profile");
+  revalidatePath("/dashboard"); // onboarding checklist card derives from these fields
   revalidatePath("/dashboard/employees");
   revalidatePath("/dashboard/directory");
   return { success: true, data: { avatarUrl } };
@@ -379,6 +382,7 @@ export async function removeMyAvatar(): Promise<ActionResult<void>> {
   }
 
   revalidatePath("/dashboard/profile");
+  revalidatePath("/dashboard"); // onboarding checklist card derives from these fields
   revalidatePath("/dashboard/employees");
   revalidatePath("/dashboard/directory");
   return { success: true, data: undefined };

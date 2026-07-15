@@ -144,6 +144,7 @@ export async function upsertMyBankAccount(input: z.infer<typeof BankAccountInput
     // waitUntil is a no-op outside Vercel; swallow.
   }
   revalidatePath("/dashboard/profile");
+  revalidatePath("/dashboard"); // onboarding checklist card derives from these fields
   return { success: true, data: toMasked(data as any) };
 }
 

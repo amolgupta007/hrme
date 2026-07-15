@@ -22,6 +22,7 @@ export const employeeSchema = z
     employmentType: z.enum(["full_time", "part_time", "contract", "intern"]),
     role: z.enum(["admin", "manager", "employee"]),
     reportingManagerId: z.string().uuid().optional().or(z.literal("")),
+    reportingManager2Id: z.string().uuid().optional().or(z.literal("")),
   })
   .refine(
     (d) => (!!d.email && d.email.trim() !== "") || !!d.phone,

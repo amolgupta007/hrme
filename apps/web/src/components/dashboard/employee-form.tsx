@@ -30,6 +30,7 @@ const EMPTY_FORM = {
   employmentType: "full_time" as const,
   role: "employee" as const,
   reportingManagerId: "",
+  reportingManager2Id: "",
 };
 
 export function EmployeeForm({ open, onOpenChange, employee, departments, employees }: EmployeeFormProps) {
@@ -52,6 +53,7 @@ export function EmployeeForm({ open, onOpenChange, employee, departments, employ
         employmentType: employee.employment_type as typeof EMPTY_FORM.employmentType,
         role: (employee.role === "owner" ? "admin" : employee.role) as typeof EMPTY_FORM.role,
         reportingManagerId: employee.reporting_manager_id ?? "",
+        reportingManager2Id: employee.reporting_manager_2_id ?? "",
       });
     } else {
       setForm(EMPTY_FORM);
@@ -225,7 +227,10 @@ export function EmployeeForm({ open, onOpenChange, employee, departments, employ
             <Field label="Reporting Manager">
               <SelectField
                 value={form.reportingManagerId}
-                onValueChange={(v) => set("reportingManagerId", v)}
+                onValueChange={(v) => {
+                  if (v === form.reportingManager2Id) set("reportingManager2Id", "");
+                  set("reportingManagerId", v);
+                }}
                 placeholder="No manager"
                 options={employees
                   .filter((e) => e.id !== employee?.id)
@@ -233,6 +238,17 @@ export function EmployeeForm({ open, onOpenChange, employee, departments, employ
                     value: e.id,
                     label: `${e.first_name} ${e.last_name}`,
                   }))}
+              />
+            </Field>
+
+            <Field label="Secondary manager (optional)">
+              <SelectField
+                value={form.reportingManager2Id}
+                onValueChange={(v) => set("reportingManager2Id", v)}
+                placeholder="No secondary manager"
+                options={employees
+                  .filter((e) => e.id !== employee?.id && e.id !== form.reportingManagerId)
+                  .map((e) => ({ value: e.id, label: `${e.first_name} ${e.last_name}` }))}
               />
             </Field>
 

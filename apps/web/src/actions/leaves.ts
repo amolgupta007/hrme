@@ -7,6 +7,8 @@ import { render } from "@react-email/render";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { getCurrentUser, isManagerOrAbove } from "@/lib/current-user";
 import { resend, FROM_EMAIL } from "@/lib/resend";
+import { resolveLeaveRecipients, type LeaveNotifiable } from "@/lib/leaves/request-recipients";
+import { managerIdsOf } from "@/lib/managers";
 import { LeaveRequestEmail } from "@/components/emails/leave-request";
 import { LeaveStatusEmail } from "@/components/emails/leave-status";
 import type { ActionResult, LeavePolicy, LeaveRequest } from "@/types";
@@ -220,7 +222,7 @@ export async function requestLeave(
     const [{ data: employee }, { data: policy }, { data: managers }] = await Promise.all([
       supabase
         .from("employees")
-        .select("first_name, last_name")
+        .select("first_name, last_name, reporting_manager_id, reporting_manager_2_id")
         .eq("id", validated.data.employeeId)
         .single(),
       supabase
@@ -230,14 +232,17 @@ export async function requestLeave(
         .single(),
       supabase
         .from("employees")
-        .select("email")
+        .select("id, role, email")
         .eq("org_id", ctx.orgId)
         .in("role", ["owner", "admin", "manager"])
         .eq("status", "active"),
     ]);
 
     // Phase 1: filter out managers/admins with no email (phone-only staff). Phase 2 will route to WhatsApp.
-    const managerEmails = (managers ?? []).map((m: { email: string | null }) => m.email?.trim() ?? "").filter(Boolean);
+    const managerEmails = resolveLeaveRecipients(
+      managerIdsOf(employee as any),
+      (managers ?? []) as LeaveNotifiable[]
+    );
     if (managerEmails.length > 0 && employee && policy) {
       const employeeName = `${(employee as any).first_name} ${(employee as any).last_name}`.trim();
       const html = await render(

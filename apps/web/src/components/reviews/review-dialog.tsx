@@ -202,6 +202,12 @@ export function ReviewDialog({ open, onOpenChange, review, mode, performanceSett
             <div>
               <Dialog.Title className="text-lg font-semibold">{title}</Dialog.Title>
               <p className="text-sm text-muted-foreground mt-0.5">{review.employee_name}</p>
+              {review.manager_review_submitted_by_name &&
+                review.manager_review_submitted_by !== review.reviewer_id && (
+                  <p className="text-xs text-muted-foreground">
+                    Manager review by {review.manager_review_submitted_by_name}
+                  </p>
+                )}
             </div>
             <Dialog.Close asChild>
               <Button variant="ghost" size="icon"><X className="h-4 w-4" /></Button>

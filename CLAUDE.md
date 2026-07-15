@@ -270,6 +270,9 @@ Public: `/`, `/sign-in(.*)`, `/sign-up(.*)`, `/api/webhooks(.*)`, `/api/cron(.*)
 - `isManagerOrAbove(role)` → owner | admin | manager
 - Resolution: loads ALL `employees` rows for the `clerk_user_id` (joined to organizations), resolves the active org via the cookie, returns that org's role. If zero memberships exist it runs the email→phone auto-link once, then returns **`null`** (signed-in but org-less → dashboard layout redirects to `/onboarding`). The old synthetic-`admin` fallback was removed (2026-06-18) — a missing employee row no longer silently grants admin.
 
+### Dual reporting managers (shipped 2026-07-16)
+Employees support TWO reporting managers (`employees.reporting_manager_2_id`, migration `101`), with permanently equal powers — not temporary delegation. Relationship helpers live in `src/lib/managers.ts` (`managerIdsOf`, `isManagerOfEmployee`, `getDirectReportIds`) — always use them rather than re-deriving the relationship. Either manager sees the employee's pending objectives (list/count widened; approve/reject guards were already org-wide role-gated and stayed unchanged) and can submit the shared manager review (`reviews.manager_review_submitted_by` audits who actually submitted). Manager scope for attendance/punch approvals = department-head members ∪ direct reports (`getManagerScopedEmployeeIds`). Leave request emails route to the employee's manager(s)-of-record + owner/admins, falling back to the all-manager blast when no manager is set.
+
 ### Server action guards (security layer)
 | Action | Required Role |
 |--------|--------------|

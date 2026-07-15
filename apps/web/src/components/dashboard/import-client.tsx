@@ -261,6 +261,9 @@ export function ImportClient({ plan }: ImportClientProps) {
         <h2 className="text-xl font-semibold">Import complete</h2>
         <p className="text-muted-foreground">
           <span className="font-medium text-foreground">{result?.imported ?? 0} employees</span> imported successfully.
+          {(result?.invitesSent ?? 0) > 0 && (
+            <> <span className="font-medium text-foreground">{result!.invitesSent} account-setup invites</span> emailed.</>
+          )}
           {(result?.skipped ?? 0) > 0 && (
             <> <span className="font-medium text-destructive">{result!.skipped} skipped</span> due to errors.</>
           )}

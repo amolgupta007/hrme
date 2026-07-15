@@ -156,7 +156,8 @@ export async function getMyProfile(): Promise<ActionResult<EmployeeProfile>> {
     const { data: mgrs } = await supabase
       .from("employees")
       .select("id, first_name, last_name")
-      .in("id", managerIds);
+      .in("id", managerIds)
+      .eq("org_id", emp.org_id); // app-layer org scoping is the only tenant boundary (gotcha #5)
     managerNames = new Map(
       ((mgrs ?? []) as any[]).map((m) => [m.id, `${m.first_name} ${m.last_name}`])
     );

@@ -60,7 +60,7 @@ export function DirectoryClient({ employees }: DirectoryClientProps) {
     const matchesSearch =
       !q ||
       `${e.first_name} ${e.last_name}`.toLowerCase().includes(q) ||
-      e.email.toLowerCase().includes(q) ||
+      (e.email ?? "").toLowerCase().includes(q) ||
       e.designation?.toLowerCase().includes(q) ||
       e.department_name?.toLowerCase().includes(q) ||
       e.manager_name?.toLowerCase().includes(q);

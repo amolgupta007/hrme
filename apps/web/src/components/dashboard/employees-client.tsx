@@ -60,7 +60,7 @@ export function EmployeesClient({ employees, departments, role, onboardingData }
         q &&
         !emp.first_name.toLowerCase().includes(q) &&
         !emp.last_name.toLowerCase().includes(q) &&
-        !emp.email.toLowerCase().includes(q) &&
+        !(emp.email ?? "").toLowerCase().includes(q) &&
         !emp.designation?.toLowerCase().includes(q) &&
         !emp.department_name?.toLowerCase().includes(q)
       ) return false;

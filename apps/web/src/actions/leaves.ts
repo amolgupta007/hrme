@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { render } from "@react-email/render";
 import { createAdminSupabase } from "@/lib/supabase/server";
-import { getCurrentUser, isManagerOrAbove } from "@/lib/current-user";
+import { getCurrentUser, isAdmin, isManagerOrAbove } from "@/lib/current-user";
 import { resend, FROM_EMAIL } from "@/lib/resend";
 import { resolveLeaveRecipients, type LeaveNotifiable } from "@/lib/leaves/request-recipients";
 import { managerIdsOf } from "@/lib/managers";
@@ -197,6 +197,30 @@ export async function requestLeave(
   }
 
   const supabase = createAdminSupabase();
+
+  // Scope enforcement: the target employee must belong to this org, and the
+  // caller may only request for themselves unless they are an admin, or a
+  // manager-of-record of the target (either manager slot).
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+
+  const { data: targetEmployee } = await supabase
+    .from("employees")
+    .select("id, reporting_manager_id, reporting_manager_2_id")
+    .eq("id", validated.data.employeeId)
+    .eq("org_id", ctx.orgId)
+    .single();
+  if (!targetEmployee) return { success: false, error: "Employee not found" };
+
+  const isSelf = user.employeeId === targetEmployee.id;
+  const isTheirManager =
+    user.role === "manager" &&
+    !!user.employeeId &&
+    managerIdsOf(targetEmployee as { reporting_manager_id: string | null; reporting_manager_2_id: string | null }).includes(user.employeeId);
+  if (!isAdmin(user.role) && !isSelf && !isTheirManager) {
+    return { success: false, error: "You can only request leave for yourself or your direct reports" };
+  }
+
   const { data, error } = await supabase
     .from("leave_requests")
     .insert({

@@ -28,6 +28,11 @@ export async function getOrgProfile(): Promise<ActionResult<OrgProfile>> {
   const ctx = await getOrgContext();
   if (!ctx) return { success: false, error: "Not authenticated" };
 
+  // Org profile (plan / billing / headcount) is an admin-only read — its only
+  // consumers are the Settings and JambaHire pages, both admin-gated.
+  const user = await getCurrentUser();
+  if (!user || !isAdmin(user.role)) return { success: false, error: "Unauthorized" };
+
   const supabase = createAdminSupabase();
 
   const { data: org, error } = await supabase

@@ -64,6 +64,21 @@ export function EmployeeForm({ open, onOpenChange, employee, departments, employ
     setForm((prev) => ({ ...prev, [field]: value }));
   }
 
+  // Reporting managers must hold a manager/admin role; keep a legacy assignee
+  // visible when editing so a previously saved value still renders.
+  const managerOptions = React.useMemo(() => {
+    const eligible = employees.filter(
+      (e) => e.id !== employee?.id && e.role !== "employee"
+    );
+    for (const id of [employee?.reporting_manager_id, employee?.reporting_manager_2_id]) {
+      if (id && id !== employee?.id && !eligible.some((e) => e.id === id)) {
+        const legacy = employees.find((e) => e.id === id);
+        if (legacy) eligible.push(legacy);
+      }
+    }
+    return eligible;
+  }, [employees, employee]);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
@@ -181,15 +196,23 @@ export function EmployeeForm({ open, onOpenChange, employee, departments, employ
 
             <div className="grid grid-cols-2 gap-4">
               <Field label="Role" required>
-                <SelectField
-                  value={form.role}
-                  onValueChange={(v) => set("role", v)}
-                  options={[
-                    { value: "employee", label: "Employee" },
-                    { value: "manager", label: "Manager" },
-                    { value: "admin", label: "Admin" },
-                  ]}
-                />
+                {employee?.role === "owner" ? (
+                  // Owner role is immutable here — it only moves via the
+                  // Transfer Ownership flow (server enforces this too).
+                  <div className={cn(inputCn, "items-center bg-muted/50")} title="Change via Settings → Transfer Ownership">
+                    Owner
+                  </div>
+                ) : (
+                  <SelectField
+                    value={form.role}
+                    onValueChange={(v) => set("role", v)}
+                    options={[
+                      { value: "employee", label: "Employee" },
+                      { value: "manager", label: "Manager" },
+                      { value: "admin", label: "Admin" },
+                    ]}
+                  />
+                )}
               </Field>
               <Field label="Employment Type" required>
                 <SelectField
@@ -232,12 +255,10 @@ export function EmployeeForm({ open, onOpenChange, employee, departments, employ
                   set("reportingManagerId", v);
                 }}
                 placeholder="No manager"
-                options={employees
-                  .filter((e) => e.id !== employee?.id)
-                  .map((e) => ({
-                    value: e.id,
-                    label: `${e.first_name} ${e.last_name}`,
-                  }))}
+                options={managerOptions.map((e) => ({
+                  value: e.id,
+                  label: `${e.first_name} ${e.last_name}`,
+                }))}
               />
             </Field>
 
@@ -246,8 +267,8 @@ export function EmployeeForm({ open, onOpenChange, employee, departments, employ
                 value={form.reportingManager2Id}
                 onValueChange={(v) => set("reportingManager2Id", v)}
                 placeholder="No secondary manager"
-                options={employees
-                  .filter((e) => e.id !== employee?.id && e.id !== form.reportingManagerId)
+                options={managerOptions
+                  .filter((e) => e.id !== form.reportingManagerId)
                   .map((e) => ({ value: e.id, label: `${e.first_name} ${e.last_name}` }))}
               />
             </Field>

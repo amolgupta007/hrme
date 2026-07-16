@@ -199,8 +199,12 @@ export async function deactivateShift(shiftId: string): Promise<ActionResult<voi
  * Phase-1 bootstrap (OD-5): if an org with attendance enabled has no shifts yet,
  * seed a single default shift from its existing `standard_workday_hours`.
  * Idempotent — only inserts when zero shifts exist.
+ *
+ * NOT exported: exporting from a "use server" file would make this a
+ * browser-callable RPC accepting an arbitrary orgId (cross-tenant write).
+ * Only invoked internally by listShifts with the caller's own org.
  */
-export async function bootstrapDefaultShiftIfMissing(orgId: string): Promise<void> {
+async function bootstrapDefaultShiftIfMissing(orgId: string): Promise<void> {
   const sb = createAdminSupabase();
   const { count } = await sb.from("shifts").select("*", { count: "exact", head: true }).eq("org_id", orgId);
   if ((count ?? 0) > 0) return;

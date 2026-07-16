@@ -97,6 +97,7 @@ export function LeavesClient({ employees, policies, requests, balances, role, cu
         employees={employees}
         policies={policies}
         balances={balances}
+        currentEmployeeId={currentEmployeeId}
       />
     </>
   );

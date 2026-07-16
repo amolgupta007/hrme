@@ -14,10 +14,24 @@ export default async function LeavesPage() {
 
   const policies = policiesResult.success ? policiesResult.data : [];
   const requests = requestsResult.success ? requestsResult.data : [];
-  const employees = employeesResult.success ? employeesResult.data : [];
+  const allEmployees = employeesResult.success ? employeesResult.data : [];
   const balances = balancesResult.success ? balancesResult.data : [];
   const role = userCtx?.role ?? "employee";
   const currentEmployeeId = userCtx?.employeeId ?? null;
+
+  // Scope the request-for list: admins see everyone, managers see themselves +
+  // their direct reports (either manager slot), employees see only themselves.
+  const employees =
+    role === "owner" || role === "admin"
+      ? allEmployees
+      : role === "manager"
+        ? allEmployees.filter(
+            (e) =>
+              e.id === currentEmployeeId ||
+              e.reporting_manager_id === currentEmployeeId ||
+              e.reporting_manager_2_id === currentEmployeeId
+          )
+        : allEmployees.filter((e) => e.id === currentEmployeeId);
 
   return (
     <div className="space-y-6">

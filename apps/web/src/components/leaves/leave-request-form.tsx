@@ -18,6 +18,7 @@ interface LeaveRequestFormProps {
   employees: Employee[];
   policies: PolicyWithUsage[];
   balances: EmployeeBalance[];
+  currentEmployeeId: string | null;
 }
 
 const NONE = "__none__";
@@ -33,11 +34,21 @@ function calcDays(start: string, end: string): number {
 }
 
 export function LeaveRequestForm({
-  open, onOpenChange, employees, policies, balances,
+  open, onOpenChange, employees, policies, balances, currentEmployeeId,
 }: LeaveRequestFormProps) {
   const [loading, setLoading] = React.useState(false);
+
+  // Default the request to the signed-in user; when the scoped list has a
+  // single entry (regular employees) the field is locked to it.
+  const defaultEmployeeId =
+    employees.length === 1
+      ? employees[0].id
+      : employees.some((e) => e.id === currentEmployeeId)
+        ? currentEmployeeId!
+        : "";
+
   const [form, setForm] = React.useState({
-    employeeId: "",
+    employeeId: defaultEmployeeId,
     policyId: "",
     startDate: "",
     endDate: "",
@@ -46,8 +57,8 @@ export function LeaveRequestForm({
   });
 
   React.useEffect(() => {
-    if (!open) setForm({ employeeId: "", policyId: "", startDate: "", endDate: "", reason: "", ticketNumber: "" });
-  }, [open]);
+    if (!open) setForm({ employeeId: defaultEmployeeId, policyId: "", startDate: "", endDate: "", reason: "", ticketNumber: "" });
+  }, [open, defaultEmployeeId]);
 
   function set(field: keyof typeof form, value: string) {
     setForm((f) => ({ ...f, [field]: value }));
@@ -122,12 +133,18 @@ export function LeaveRequestForm({
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <Field label="Employee" required>
-              <SelectField
-                value={form.employeeId}
-                onValueChange={(v) => set("employeeId", v)}
-                placeholder="Select employee"
-                options={employees.map((e) => ({ value: e.id, label: `${e.first_name} ${e.last_name}` }))}
-              />
+              {employees.length === 1 ? (
+                <div className={cn(inputCn, "items-center bg-muted/50")}>
+                  {employees[0].first_name} {employees[0].last_name}
+                </div>
+              ) : (
+                <SelectField
+                  value={form.employeeId}
+                  onValueChange={(v) => set("employeeId", v)}
+                  placeholder="Select employee"
+                  options={employees.map((e) => ({ value: e.id, label: `${e.first_name} ${e.last_name}` }))}
+                />
+              )}
             </Field>
 
             <Field label="Leave Type" required>

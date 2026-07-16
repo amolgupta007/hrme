@@ -3,7 +3,8 @@ import { getOrgProfile, listSettingsPolicies } from "@/actions/settings";
 import { OrgProfileSection } from "@/components/settings/org-profile-section";
 import { BillingSection } from "@/components/settings/billing-section";
 import { SettingsContent } from "@/components/settings/settings-content";
-import { getCurrentUser } from "@/lib/current-user";
+import { redirect } from "next/navigation";
+import { getCurrentUser, isAdmin } from "@/lib/current-user";
 import { hasFeature } from "@/config/plans";
 import { getOrgOnboardingConfig } from "@/actions/onboarding";
 import {
@@ -34,11 +35,15 @@ const DEFAULT_OT_SETTINGS_FALLBACK: OvertimeSettings = {
 };
 
 export default async function SettingsPage() {
+  // Settings is admin-only (the sidebar already hides it for other roles);
+  // block direct navigation before fetching any org-wide configuration.
+  const userCtx = await getCurrentUser();
+  if (!userCtx || !isAdmin(userCtx.role)) redirect("/dashboard");
+
   const [
     departmentsResult,
     profileResult,
     policiesResult,
-    userCtx,
     onboardingSteps,
     fingerprintConfigResult,
     fingerprintEmployeesResult,
@@ -62,7 +67,6 @@ export default async function SettingsPage() {
     listDepartments(),
     getOrgProfile(),
     listSettingsPolicies(),
-    getCurrentUser(),
     getOrgOnboardingConfig(),
     getFingerprintConfig(),
     listEmployeesWithDeviceCodes(),

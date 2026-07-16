@@ -293,6 +293,22 @@ export async function updateEmployee(
   const phone = normalizePhone(validated.data.phone ?? null);
 
   const supabase = createAdminSupabase();
+
+  // Never change an owner's role through this form. The dialog has no "owner"
+  // option (schema enum excludes it), so editing an owner would silently
+  // demote them to admin — this de-owned four live orgs before being caught.
+  // Ownership only moves via the Transfer Ownership flow.
+  const { data: existingRow } = await supabase
+    .from("employees")
+    .select("role")
+    .eq("id", id)
+    .eq("org_id", orgId)
+    .single();
+  const role =
+    (existingRow as { role?: string } | null)?.role === "owner"
+      ? "owner"
+      : validated.data.role;
+
   const { error } = await supabase
     .from("employees")
     .update({
@@ -304,7 +320,7 @@ export async function updateEmployee(
       designation: validated.data.designation || null,
       date_of_joining: validated.data.dateOfJoining,
       employment_type: validated.data.employmentType,
-      role: validated.data.role,
+      role,
       reporting_manager_id: validated.data.reportingManagerId || null,
       reporting_manager_2_id:
         validated.data.reportingManager2Id && validated.data.reportingManager2Id !== validated.data.reportingManagerId

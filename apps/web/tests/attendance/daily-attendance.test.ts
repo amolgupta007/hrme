@@ -7,10 +7,15 @@ import {
 
 // Helper: build a punch at an IST wall-clock time on 2026-06-23.
 // IST is UTC+5:30, so 09:00 IST = 03:30 UTC.
-function punch(istHHMM: string, locationId: string | null, id = istHHMM): PunchEvent {
+function punch(
+  istHHMM: string,
+  locationId: string | null,
+  id = istHHMM,
+  source?: PunchEvent["source"],
+): PunchEvent {
   const [h, m] = istHHMM.split(":").map(Number);
   const utcMs = Date.UTC(2026, 5, 23, h, m) - 5.5 * 3600 * 1000;
-  return { id, punched_at: new Date(utcMs).toISOString(), location_id: locationId };
+  return { id, punched_at: new Date(utcMs).toISOString(), location_id: locationId, source };
 }
 
 describe("computeDailyAttendance", () => {
@@ -75,6 +80,70 @@ describe("computeDailyAttendance", () => {
     const r = computeDailyAttendance({ events, zoneLocationIds: null });
     expect(r.totalMinutes).toBe(540);
     expect(r.noZoneFallback).toBe(true);
+  });
+});
+
+describe("computeDailyAttendance mobile-source zone exemption", () => {
+  it("mobile punch outside the zone still counts and extends the span (lenient GPS punches)", () => {
+    const events = [
+      punch("09:00", "A"),
+      punch("18:00", "B"),
+      punch("20:00", "C", "mobile-late", "mobile"), // out of zone, but source=mobile
+    ];
+    const r = computeDailyAttendance({ events, zoneLocationIds: ["A", "B"] });
+    expect(r.status).toBe("present");
+    expect(r.totalMinutes).toBe(660); // 09:00 -> 20:00, mobile punch extends last-out
+    expect(r.lastOutLocationId).toBe("C");
+    expect(r.punchCount).toBe(3);
+    expect(r.contributingIds).toContain("mobile-late");
+    expect(r.outOfZoneCount).toBe(0);
+  });
+
+  it("device punch outside the zone is still excluded (unchanged behavior)", () => {
+    const events = [
+      punch("09:00", "A"),
+      punch("18:00", "B"),
+      punch("13:00", "C", "device-mid", "device"), // out of zone, source=device
+    ];
+    const r = computeDailyAttendance({ events, zoneLocationIds: ["A", "B"] });
+    expect(r.totalMinutes).toBe(540); // unaffected by the excluded mid-day punch
+    expect(r.punchCount).toBe(2);
+    expect(r.contributingIds).not.toContain("device-mid");
+    expect(r.outOfZoneCount).toBe(1);
+  });
+
+  it("out_of_zone_count only reflects non-mobile exclusions when both are out of zone", () => {
+    const events = [
+      punch("09:00", "A"),
+      punch("12:00", "D", "device-oob", "device"),
+      punch("15:00", "C", "mobile-oob", "mobile"),
+      punch("18:00", "B"),
+    ];
+    const r = computeDailyAttendance({ events, zoneLocationIds: ["A", "B"] });
+    expect(r.totalMinutes).toBe(540); // 09:00 -> 18:00 (firstIn/lastOut unaffected)
+    expect(r.punchCount).toBe(3); // A, mobile-oob, B all count
+    expect(r.contributingIds).toContain("mobile-oob");
+    expect(r.contributingIds).not.toContain("device-oob");
+    expect(r.outOfZoneCount).toBe(1); // only the device punch is excluded
+  });
+
+  it("undefined source (legacy events, e.g. adms) behaves exactly as before — excluded when out of zone", () => {
+    const events = [punch("08:00", "C"), punch("09:00", "A"), punch("18:00", "B")];
+    const r = computeDailyAttendance({ events, zoneLocationIds: ["A", "B"] });
+    expect(r.totalMinutes).toBe(540);
+    expect(r.firstInLocationId).toBe("A");
+    expect(r.outOfZoneCount).toBe(1);
+  });
+
+  it("mobile punch with null location_id still counts (GPS punch, no location mapping)", () => {
+    const events = [
+      punch("09:00", "A"),
+      punch("18:30", null, "mobile-no-loc", "mobile"),
+    ];
+    const r = computeDailyAttendance({ events, zoneLocationIds: ["A", "B"] });
+    expect(r.status).toBe("present");
+    expect(r.totalMinutes).toBe(570); // 09:00 -> 18:30
+    expect(r.outOfZoneCount).toBe(0);
   });
 });
 

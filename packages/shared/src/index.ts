@@ -7,6 +7,7 @@ export * from "./plans";
 export * from "./attendance/week-off";
 export * from "./attendance/lateness";
 export * from "./attendance/daily-attendance";
+export * from "./attendance/month-calendar";
 export * from "./attendance/pair-punches";
 export * from "./attendance/shift-time";
 export * from "./attendance/attribute-date";

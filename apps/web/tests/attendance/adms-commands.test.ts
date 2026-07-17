@@ -5,6 +5,7 @@ import {
   buildUserCommand,
   buildDeleteCommand,
   parseDeviceCmdAck,
+  parseDeviceCmdAcks,
 } from "@/lib/attendance/adms-commands";
 
 describe("sanitizeName", () => {
@@ -52,5 +53,25 @@ describe("parseDeviceCmdAck", () => {
   });
   it("returns nulls when fields absent", () => {
     expect(parseDeviceCmdAck("garbage")).toEqual({ id: null, ret: null, raw: "garbage" });
+  });
+});
+
+describe("parseDeviceCmdAcks (batched)", () => {
+  it("parses a multi-line eSSL batch, one ack per line", () => {
+    const body = "ID=394&Return=0&CMD=DATA\nID=395&Return=0&CMD=DATA\nID=396&Return=-1&CMD=DATA";
+    expect(parseDeviceCmdAcks(body)).toEqual([
+      { id: 394, ret: 0 },
+      { id: 395, ret: 0 },
+      { id: 396, ret: -1 },
+    ]);
+  });
+  it("handles a single-ack body (ZKTeco style)", () => {
+    expect(parseDeviceCmdAcks("ID=7&Return=0&CMD=DATA")).toEqual([{ id: 7, ret: 0 }]);
+  });
+  it("skips lines without an ID and handles CRLF", () => {
+    expect(parseDeviceCmdAcks("garbage\r\nID=3&Return=0\r\n\r\n")).toEqual([{ id: 3, ret: 0 }]);
+  });
+  it("returns empty for empty body", () => {
+    expect(parseDeviceCmdAcks("")).toEqual([]);
   });
 });

@@ -39,3 +39,23 @@ export function parseDeviceCmdAck(body: string): { id: number | null; ret: numbe
     raw,
   };
 }
+
+/**
+ * Parse a devicecmd POST body that may batch MULTIPLE acks, one per line
+ * (`ID=394&Return=0&CMD=DATA\nID=395&Return=0&CMD=DATA\n…`). eSSL firmware
+ * batches all outstanding acks into a single POST; ZKTeco units usually send
+ * one at a time. Lines without an ID are skipped.
+ */
+export function parseDeviceCmdAcks(body: string): Array<{ id: number; ret: number | null }> {
+  const acks: Array<{ id: number; ret: number | null }> = [];
+  for (const line of (body ?? "").split(/\r?\n/)) {
+    const idMatch = line.match(/\bID=(-?\d+)/i);
+    if (!idMatch) continue;
+    const retMatch = line.match(/\bReturn=(-?\d+)/i);
+    acks.push({
+      id: parseInt(idMatch[1], 10),
+      ret: retMatch ? parseInt(retMatch[1], 10) : null,
+    });
+  }
+  return acks;
+}

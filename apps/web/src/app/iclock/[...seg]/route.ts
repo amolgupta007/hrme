@@ -9,7 +9,7 @@ import { createAdminSupabase } from "@/lib/supabase/server";
 import {
   buildUserCommand,
   buildDeleteCommand,
-  parseDeviceCmdAck,
+  parseDeviceCmdAcks,
 } from "@/lib/attendance/adms-commands";
 
 /**
@@ -81,19 +81,28 @@ async function dispatchCommands(sn: string): Promise<string | null> {
   return lines.join("\n") + "\n";
 }
 
-/** Record a device's command ack (ID=<cmd_seq>&Return=<code>). */
+/**
+ * Record a device's command ack(s). eSSL firmware batches every outstanding
+ * ack into one POST (one `ID=<cmd_seq>&Return=<code>` per line); ZKTeco units
+ * usually send one per POST. Handle both.
+ */
 async function recordAck(body: string): Promise<void> {
-  const { id, ret } = parseDeviceCmdAck(body);
-  if (id === null) return;
+  const acks = parseDeviceCmdAcks(body);
+  if (acks.length === 0) return;
   const supabase = createAdminSupabase();
-  const success = ret !== null && ret >= 0;
-  await (supabase.from("device_commands") as any)
-    .update(
-      success
-        ? { status: "confirmed", confirmed_at: new Date().toISOString() }
-        : { status: "failed", last_error: `Return=${ret}` }
-    )
-    .eq("cmd_seq", id);
+  const now = new Date().toISOString();
+  const confirmedIds = acks.filter((a) => a.ret !== null && a.ret >= 0).map((a) => a.id);
+  const failures = acks.filter((a) => a.ret === null || a.ret < 0);
+  if (confirmedIds.length > 0) {
+    await (supabase.from("device_commands") as any)
+      .update({ status: "confirmed", confirmed_at: now })
+      .in("cmd_seq", confirmedIds);
+  }
+  for (const a of failures) {
+    await (supabase.from("device_commands") as any)
+      .update({ status: "failed", last_error: `Return=${a.ret}` })
+      .eq("cmd_seq", a.id);
+  }
 }
 
 async function capture(req: Request, seg: string[]): Promise<NextResponse> {

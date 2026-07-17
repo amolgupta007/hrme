@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#f0eee9;font-family:system-ui,-apple-system,sans-serif}
+a{color:#17806D;text-decoration:none}a:hover{color:#0E5E4F}
+.dv-turn{padding:40px 44px 32px;border-bottom:1px solid rgba(0,0,0,.08);scroll-margin-top:16px}
+.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 20px}
+.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#1a1a1a;color:#fff;border-radius:4px;text-decoration:none}
+.dv-tname{font:600 13px/1.2 system-ui,sans-serif;color:#1a1a1a}
+.dv-opts{display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start}
+.dv-opt{flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px}
+.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(0,0,0,.08);color:#1a1a1a;border-radius:5px;text-decoration:none}
+.dv-olabel{display:flex;align-items:baseline;gap:8px;font:400 11px/1.3 system-ui,sans-serif;color:rgba(0,0,0,.55)}
+.dv-card{max-width:100%;background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden}
+.dv-opt:target .dv-oid{background:#2a78d6;color:#fff}
+.dv-next{margin:22px 0 0;font:12px/1.5 system-ui,sans-serif;color:rgba(0,0,0,.5)}
+/* wireframe primitives */
+.wf{font-family:'Patrick Hand',cursive;color:#2b2b2b}
+.ph{width:300px;background:#fff;border:2px solid #2b2b2b;border-radius:24px;padding:10px 10px 0;display:flex;flex-direction:column;height:640px;overflow:hidden;position:relative}
+.ph h4{font:400 15px 'Patrick Hand',cursive;margin:0}
+.wf-box{border:1.5px solid #555;border-radius:8px;background:#fff}
+.wf-dash{border:1.5px dashed #999;border-radius:8px;background:#fafafa}
+.wf-line{height:6px;border-radius:3px;background:#d8d8d8}
+.wf-chip{display:inline-block;border:1.5px solid #555;border-radius:99px;padding:1px 9px;font-size:12px;line-height:1.5;background:#fff}
+.wf-btn{border:1.5px solid #17806D;background:#e7f3f0;color:#0E5E4F;border-radius:10px;text-align:center;padding:8px;font-size:14px}
+.wf-tab{display:flex;border-top:1.5px solid #555;margin:auto -10px 0;padding:7px 6px 12px;justify-content:space-around;font-size:11px;text-align:center;background:#fafafa}
+.wf-note{font:400 12px 'Patrick Hand',cursive;color:#8a6d1f;background:#fdf6dd;border:1px dashed #d8bd6a;border-radius:6px;padding:3px 8px}
+.wf-av{width:30px;height:30px;border-radius:50%;border:1.5px solid #555;background:#eee;flex:none;display:flex;align-items:center;justify-content:center;font-size:11px}
+.wf-seg{display:flex;border:1.5px solid #555;border-radius:9px;overflow:hidden;font-size:12px;text-align:center}
+.wf-seg div{flex:1;padding:4px 0;border-right:1px solid #999}
+.wf-seg div:last-child{border-right:none}
+.wf-prog{height:7px;border:1px solid #555;border-radius:99px;overflow:hidden;background:#fff}
+.wf-prog i{display:block;height:100%;background:#7dbfae}
+/* spec sheet primitives */
+.ds{font-family:-apple-system,system-ui,sans-serif;color:#0B1220}
+.ds h3{font:700 15px/1 -apple-system,system-ui,sans-serif;margin:0 0 12px;letter-spacing:.02em}
+.ds-sec{padding:22px 26px;border-bottom:1px solid #ECEDEF}
+.ds-sw{width:118px}
+.ds-sw i{display:block;height:44px;border-radius:8px;border:1px solid rgba(0,0,0,.08)}
+.ds-sw b{display:block;font:600 11px/1.3 system-ui;margin-top:6px}
+.ds-sw span{display:block;font:400 10px/1.4 ui-monospace,Menlo,monospace;color:#5B6472}
+.ds-sw em{display:block;font:italic 400 10px/1.3 system-ui;color:#8A919C}
+.ds-lbl{font:600 10px/1 ui-monospace,Menlo,monospace;color:#5B6472;letter-spacing:.05em}
+</style>
+</helmet>
+
+<section class="dv-turn" id="t1" data-screen-label="Turn 1 — Design system + IA + wireframes">
+<div class="dv-thd"><a class="dv-tid" href="#t1">1</a><span class="dv-tname">JambaHR iOS — design-system reference, information architecture, and core-flow wireframes (from jambahr.com web app)</span></div>
+<div class="dv-opts">
+
+<!-- ============ 1a DESIGN SYSTEM SHEET ============ -->
+<div class="dv-opt" id="1a">
+<div class="dv-olabel"><a class="dv-oid" href="#1a">1a</a>Design-system reference sheet — tokens &amp; components for coding</div>
+<div class="dv-card ds" style="width:1120px">
+<div style="padding:24px 26px;border-bottom:1px solid #ECEDEF;display:flex;align-items:center;gap:14px;background:#F7F7F4">
+  <div style="width:40px;height:40px;border-radius:10px;background:#17806D;color:#fff;display:flex;align-items:center;justify-content:center;font:800 18px system-ui">J</div>
+  <div>
+    <div style="font:800 20px/1.1 -apple-system,system-ui;color:#0B1220">Jamba<span style="color:#17806D">HR</span> iOS Design System</div>
+    <div style="font:400 12px/1.4 system-ui;color:#5B6472">v1 · Light mode · iPhone 15/16 Pro (393×852pt) · SF Pro · derived from jambahr.com</div>
+  </div>
+</div>
+
+<div class="ds-sec">
+<h3>COLOR TOKENS</h3>
+<div style="display:flex;flex-wrap:wrap;gap:14px">
+  <div class="ds-sw"><i style="background:#17806D"></i><b>brand/primary</b><span>#17806D</span><em>CTAs, active tab, links</em></div>
+  <div class="ds-sw"><i style="background:#0E5E4F"></i><b>brand/pressed</b><span>#0E5E4F</span><em>pressed state</em></div>
+  <div class="ds-sw"><i style="background:#E7F3F0"></i><b>brand/tint</b><span>#E7F3F0</span><em>selected rows, chips</em></div>
+  <div class="ds-sw"><i style="background:#0B1220"></i><b>ink/900</b><span>#0B1220</span><em>headings, primary text</em></div>
+  <div class="ds-sw"><i style="background:#5B6472"></i><b>ink/600</b><span>#5B6472</span><em>secondary text</em></div>
+  <div class="ds-sw"><i style="background:#9AA1AB"></i><b>ink/400</b><span>#9AA1AB</span><em>placeholders, icons off</em></div>
+  <div class="ds-sw"><i style="background:#F7F7F4"></i><b>bg/canvas</b><span>#F7F7F4</span><em>screen background</em></div>
+  <div class="ds-sw"><i style="background:#FFFFFF"></i><b>bg/card</b><span>#FFFFFF</span><em>cards, sheets, bars</em></div>
+  <div class="ds-sw"><i style="background:#E7E9EC"></i><b>border/default</b><span>#E7E9EC</span><em>hairlines, card strokes</em></div>
+  <div class="ds-sw"><i style="background:#5B5BD6"></i><b>hire/accent</b><span>#5B5BD6</span><em>JambaHire module only</em></div>
+  <div class="ds-sw"><i style="background:#EDEDFB"></i><b>hire/tint</b><span>#EDEDFB</span><em>hire chips &amp; icons</em></div>
+</div>
+<div style="display:flex;flex-wrap:wrap;gap:14px;margin-top:16px">
+  <div class="ds-sw"><i style="background:#1E9E63"></i><b>status/success</b><span>#1E9E63</span><em>Approved, Completed</em></div>
+  <div class="ds-sw"><i style="background:#E5F6EA"></i><b>success/tint</b><span>#E5F6EA</span></div>
+  <div class="ds-sw"><i style="background:#B45309"></i><b>status/warning</b><span>#B45309</span><em>Pending, Manager badge</em></div>
+  <div class="ds-sw"><i style="background:#FBF0D9"></i><b>warning/tint</b><span>#FBF0D9</span></div>
+  <div class="ds-sw"><i style="background:#DC2626"></i><b>status/danger</b><span>#DC2626</span><em>Overdue, Rejected, badges</em></div>
+  <div class="ds-sw"><i style="background:#FDE8E8"></i><b>danger/tint</b><span>#FDE8E8</span></div>
+  <div class="ds-sw"><i style="background:#3B63D8"></i><b>status/info</b><span>#3B63D8</span><em>Admin badge, Sent</em></div>
+  <div class="ds-sw"><i style="background:#E8EEFC"></i><b>info/tint</b><span>#E8EEFC</span></div>
+</div>
+</div>
+
+<div class="ds-sec" style="display:flex;gap:40px">
+<div style="flex:1.2">
+<h3>TYPOGRAPHY — SF PRO (system)</h3>
+<div style="display:grid;grid-template-columns:150px 1fr;row-gap:14px;align-items:baseline">
+  <span class="ds-lbl">largeTitle 34/41 ·700</span><div style="font:700 34px/1.2 -apple-system,system-ui">Leaves</div>
+  <span class="ds-lbl">title2 22/28 ·700</span><div style="font:700 22px/1.27 -apple-system,system-ui">Leave Management</div>
+  <span class="ds-lbl">headline 17/22 ·600</span><div style="font:600 17px/1.3 -apple-system,system-ui">Code of Conduct</div>
+  <span class="ds-lbl">body 17/22 ·400</span><div style="font:400 17px/1.3 -apple-system,system-ui">Request time off and manage approvals.</div>
+  <span class="ds-lbl">subhead 15/20 ·400</span><div style="font:400 15px/1.33 -apple-system,system-ui;color:#5B6472">neha.patel@nexustech.in · Product &amp; Design</div>
+  <span class="ds-lbl">footnote 13/18 ·400</span><div style="font:400 13px/1.38 -apple-system,system-ui;color:#5B6472">Training deadline · Mar 31, 2026</div>
+  <span class="ds-lbl">caption 11/13 ·600</span><div style="font:600 11px/1.2 -apple-system,system-ui;color:#5B6472;letter-spacing:.04em">EARNINGS</div>
+  <span class="ds-lbl">stat 28/34 ·800</span><div style="font:800 28px/1.2 -apple-system,system-ui">15 <span style="font:400 15px -apple-system,system-ui;color:#5B6472">/ 21 days</span></div>
+  <span class="ds-lbl">money · mono</span><div style="font:600 17px/1.3 ui-monospace,'SF Mono',Menlo,monospace">₹2,51,200 <span style="color:#DC2626">−₹44,000</span></div>
+</div>
+</div>
+<div style="flex:1">
+<h3>SPACING · RADIUS · METRICS</h3>
+<div style="font:400 13px/1.5 system-ui;color:#5B6472;margin-bottom:10px">4pt base grid</div>
+<div style="display:flex;align-items:flex-end;gap:8px;margin-bottom:18px">
+  <div style="width:4px;height:4px;background:#17806D"></div><div style="width:8px;height:8px;background:#17806D"></div><div style="width:12px;height:12px;background:#17806D"></div><div style="width:16px;height:16px;background:#17806D"></div><div style="width:20px;height:20px;background:#17806D"></div><div style="width:24px;height:24px;background:#17806D"></div><div style="width:32px;height:32px;background:#17806D"></div>
+  <div style="font:400 11px ui-monospace,monospace;color:#5B6472;margin-left:6px">4·8·12·16·20·24·32</div>
+</div>
+<div style="display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font:400 13px/1.6 system-ui;color:#0B1220">
+  <span class="ds-lbl" style="line-height:1.6">SCREEN MARGIN</span><span>16pt</span>
+  <span class="ds-lbl" style="line-height:1.6">CARD RADIUS</span><span>16pt · padding 16pt · border 1pt #E7E9EC (no shadow, or y1 b3 @6%)</span>
+  <span class="ds-lbl" style="line-height:1.6">BUTTON</span><span>50pt tall · radius 14pt · 17pt semibold</span>
+  <span class="ds-lbl" style="line-height:1.6">CHIP / BADGE</span><span>24pt tall · pill · 13pt medium on tint bg</span>
+  <span class="ds-lbl" style="line-height:1.6">LIST ROW</span><span>≥ 56pt · avatar 40pt · inset divider</span>
+  <span class="ds-lbl" style="line-height:1.6">NAV BAR</span><span>44pt + large title; TAB BAR 49pt + 34pt home indicator</span>
+  <span class="ds-lbl" style="line-height:1.6">HIT TARGET</span><span>44×44pt minimum, everywhere</span>
+</div>
+</div>
+</div>
+
+<div class="ds-sec">
+<h3>CORE COMPONENTS</h3>
+<div style="display:flex;flex-wrap:wrap;gap:26px;align-items:flex-start">
+  <div>
+    <div class="ds-lbl" style="margin-bottom:8px">BUTTONS</div>
+    <div style="display:flex;flex-direction:column;gap:8px;width:210px">
+      <div style="height:50px;border-radius:14px;background:#17806D;color:#fff;display:flex;align-items:center;justify-content:center;font:600 17px -apple-system,system-ui">Request Leave</div>
+      <div style="height:50px;border-radius:14px;background:#E7F3F0;color:#0E5E4F;display:flex;align-items:center;justify-content:center;font:600 17px -apple-system,system-ui">Secondary</div>
+      <div style="height:44px;border-radius:12px;border:1px solid #E7E9EC;color:#0B1220;display:flex;align-items:center;justify-content:center;font:600 15px -apple-system,system-ui;background:#fff">Tertiary / quiet</div>
+      <div style="height:44px;border-radius:12px;background:#FDE8E8;color:#DC2626;display:flex;align-items:center;justify-content:center;font:600 15px -apple-system,system-ui">Destructive</div>
+    </div>
+  </div>
+  <div>
+    <div class="ds-lbl" style="margin-bottom:8px">BADGES &amp; CHIPS</div>
+    <div style="display:flex;flex-direction:column;gap:8px;width:230px">
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <span style="font:500 13px -apple-system,system-ui;padding:3px 10px;border-radius:99px;background:#E5F6EA;color:#177245">Approved</span>
+        <span style="font:500 13px -apple-system,system-ui;padding:3px 10px;border-radius:99px;background:#FBF0D9;color:#8A5A06">Pending</span>
+        <span style="font:500 13px -apple-system,system-ui;padding:3px 10px;border-radius:99px;background:#FDE8E8;color:#B91C1C">Overdue</span>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <span style="font:500 13px -apple-system,system-ui;padding:3px 10px;border-radius:99px;background:#FBF0D9;color:#8A5A06">Manager</span>
+        <span style="font:500 13px -apple-system,system-ui;padding:3px 10px;border-radius:99px;background:#E8EEFC;color:#2A4BB5">Admin</span>
+        <span style="font:500 13px -apple-system,system-ui;padding:3px 10px;border-radius:99px;background:#EFF1F3;color:#5B6472">Employee</span>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <span style="font:500 13px -apple-system,system-ui;padding:3px 10px;border-radius:99px;background:#EDEDFB;color:#4747B8">Paid</span>
+        <span style="font:500 13px -apple-system,system-ui;padding:3px 10px;border-radius:99px;background:#FBF0D9;color:#8A5A06">Casual</span>
+        <span style="font:500 13px -apple-system,system-ui;padding:3px 10px;border-radius:99px;background:#FDE8E8;color:#B91C1C">Sick</span>
+        <span style="font:500 13px -apple-system,system-ui;padding:3px 10px;border-radius:99px;background:#FDE8E8;color:#B91C1C">Mandatory</span>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center;margin-top:2px">
+        <span style="min-width:20px;height:20px;border-radius:99px;background:#DC2626;color:#fff;font:700 12px/20px -apple-system,system-ui;text-align:center;padding:0 5px">2</span>
+        <span style="font:400 12px system-ui;color:#5B6472">count badge — tab &amp; row</span>
+      </div>
+    </div>
+  </div>
+  <div>
+    <div class="ds-lbl" style="margin-bottom:8px">STAT CARD (balance / KPI)</div>
+    <div style="width:200px;background:#fff;border:1px solid #E7E9EC;border-radius:16px;padding:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font:600 15px -apple-system,system-ui">Annual Leave</span>
+        <span style="font:500 12px -apple-system,system-ui;padding:2px 9px;border-radius:99px;background:#EDEDFB;color:#4747B8">Paid</span>
+      </div>
+      <div style="font:800 28px/1.3 -apple-system,system-ui;margin-top:6px">6 <span style="font:400 15px -apple-system,system-ui;color:#5B6472">/ 21 days</span></div>
+      <div style="height:6px;border-radius:99px;background:#EFF1F3;margin-top:8px;overflow:hidden"><div style="width:71%;height:100%;background:#17806D;border-radius:99px"></div></div>
+      <div style="font:400 13px -apple-system,system-ui;color:#5B6472;margin-top:8px">15 used this year</div>
+    </div>
+  </div>
+  <div>
+    <div class="ds-lbl" style="margin-bottom:8px">LIST ROW (person / course)</div>
+    <div style="width:300px;background:#fff;border:1px solid #E7E9EC;border-radius:16px;overflow:hidden">
+      <div style="display:flex;align-items:center;gap:12px;padding:12px 16px">
+        <div style="width:40px;height:40px;border-radius:99px;background:#E7F3F0;color:#0E5E4F;font:700 14px/40px -apple-system,system-ui;text-align:center">NP</div>
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;gap:6px;align-items:center"><span style="font:600 16px -apple-system,system-ui">Neha Patel</span><span style="font:500 11px -apple-system,system-ui;padding:2px 8px;border-radius:99px;background:#FBF0D9;color:#8A5A06">Manager</span></div>
+          <div style="font:400 13px -apple-system,system-ui;color:#5B6472">Product &amp; Design</div>
+        </div>
+        <div style="color:#9AA1AB;font:400 17px -apple-system,system-ui">›</div>
+      </div>
+      <div style="height:1px;background:#E7E9EC;margin-left:68px"></div>
+      <div style="display:flex;align-items:center;gap:12px;padding:12px 16px">
+        <div style="width:40px;height:40px;border-radius:99px;background:#FDE8E8;color:#B91C1C;font:700 14px/40px -apple-system,system-ui;text-align:center">!</div>
+        <div style="flex:1;min-width:0">
+          <div style="font:600 16px -apple-system,system-ui">Code of Conduct</div>
+          <div style="font:400 13px -apple-system,system-ui;color:#5B6472">Due Mar 31, 2026</div>
+        </div>
+        <span style="font:500 12px -apple-system,system-ui;padding:2px 9px;border-radius:99px;background:#FDE8E8;color:#B91C1C">Overdue</span>
+      </div>
+    </div>
+  </div>
+  <div>
+    <div class="ds-lbl" style="margin-bottom:8px">SEGMENTED FILTER · INPUT · SEARCH</div>
+    <div style="width:300px;display:flex;flex-direction:column;gap:10px">
+      <div style="display:flex;background:#EFF1F3;border-radius:10px;padding:2px">
+        <div style="flex:1;text-align:center;font:600 13px/28px -apple-system,system-ui;background:#fff;border-radius:8px;box-shadow:0 1px 2px rgba(0,0,0,.08)">All</div>
+        <div style="flex:1;text-align:center;font:400 13px/28px -apple-system,system-ui;color:#5B6472">Pending</div>
+        <div style="flex:1;text-align:center;font:400 13px/28px -apple-system,system-ui;color:#5B6472">Approved</div>
+        <div style="flex:1;text-align:center;font:400 13px/28px -apple-system,system-ui;color:#5B6472">Rejected</div>
+      </div>
+      <div style="height:44px;border-radius:12px;border:1px solid #E7E9EC;background:#fff;display:flex;align-items:center;padding:0 14px;font:400 15px -apple-system,system-ui;color:#9AA1AB">⌕&nbsp; Search people, leaves, docs…</div>
+      <div>
+        <div style="font:600 13px -apple-system,system-ui;margin-bottom:5px">Reason</div>
+        <div style="height:44px;border-radius:12px;border:1.5px solid #17806D;background:#fff;display:flex;align-items:center;padding:0 14px;font:400 15px -apple-system,system-ui">Wedding in family|</div>
+      </div>
+    </div>
+  </div>
+  <div>
+    <div class="ds-lbl" style="margin-bottom:8px">TAB BAR (49pt + home indicator)</div>
+    <div style="width:340px;background:#fff;border:1px solid #E7E9EC;border-radius:16px 16px 12px 12px;padding:8px 4px 6px">
+      <div style="display:flex;text-align:center">
+        <div style="flex:1;color:#17806D"><div style="font-size:20px;line-height:1">⌂</div><div style="font:600 10px -apple-system,system-ui">Home</div></div>
+        <div style="flex:1;color:#9AA1AB;position:relative"><div style="font-size:20px;line-height:1">▤</div><div style="font:500 10px -apple-system,system-ui">Leaves</div><span style="position:absolute;top:-4px;right:22px;min-width:16px;height:16px;border-radius:99px;background:#DC2626;color:#fff;font:700 10px/16px -apple-system,system-ui">2</span></div>
+        <div style="flex:1;color:#9AA1AB"><div style="font-size:20px;line-height:1">◎</div><div style="font:500 10px -apple-system,system-ui">People</div></div>
+        <div style="flex:1;color:#9AA1AB"><div style="font-size:20px;line-height:1">✦</div><div style="font:500 10px -apple-system,system-ui">Grow</div></div>
+        <div style="flex:1;color:#9AA1AB"><div style="font-size:20px;line-height:1">≡</div><div style="font:500 10px -apple-system,system-ui">More</div></div>
+      </div>
+      <div style="width:120px;height:4px;border-radius:99px;background:#0B1220;margin:8px auto 0"></div>
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="ds-sec" style="background:#F7F7F4;border-bottom:none">
+<h3>USAGE RULES</h3>
+<div style="columns:3;column-gap:32px;font:400 13px/1.55 system-ui;color:#3A4250">
+<p style="margin:0 0 10px"><b style="color:#0B1220">Green is the only brand color.</b> One primary CTA per screen. JambaHire indigo (#5B5BD6) appears only inside the hiring module — never mix the two on one screen.</p>
+<p style="margin:0 0 10px"><b style="color:#0B1220">Status colors always sit on their tint</b>, never as solid fills except the Approved pill and count badges. Red is reserved for overdue/rejected/deductions — not decoration.</p>
+<p style="margin:0"><b style="color:#0B1220">Money is monospaced</b> (SF Mono), Indian digit grouping (₹2,51,200), deductions in danger red with a leading −. Cards over #F7F7F4 canvas; avoid stacked shadows.</p>
+</div>
+</div>
+</div>
+</div>
+
+<!-- ============ 1b IA MAP ============ -->
+<div class="dv-opt" id="1b">
+<div class="dv-olabel"><a class="dv-oid" href="#1b">1b</a>Information architecture — tab map &amp; role gating</div>
+<div class="dv-card wf" style="width:760px;padding:26px 28px;font-size:14px">
+<div style="display:flex;gap:14px;justify-content:space-between">
+  <div style="flex:1;display:flex;flex-direction:column;gap:8px">
+    <div class="wf-box" style="padding:8px 10px;text-align:center;background:#e7f3f0;border-color:#17806D"><b>⌂ Home</b></div>
+    <div class="wf-dash" style="padding:6px 10px">Greeting + role switch</div>
+    <div class="wf-dash" style="padding:6px 10px">Quick actions</div>
+    <div class="wf-dash" style="padding:6px 10px">Needs attention (approvals, overdue training)</div>
+    <div class="wf-dash" style="padding:6px 10px">Announcements feed</div>
+  </div>
+  <div style="flex:1;display:flex;flex-direction:column;gap:8px">
+    <div class="wf-box" style="padding:8px 10px;text-align:center"><b>▤ Leaves</b> <span class="wf-chip" style="border-color:#c33;color:#c33;font-size:10px">2</span></div>
+    <div class="wf-dash" style="padding:6px 10px">Balances (annual / casual / sick)</div>
+    <div class="wf-dash" style="padding:6px 10px">My requests + status</div>
+    <div class="wf-dash" style="padding:6px 10px">Request leave (sheet)</div>
+    <div class="wf-dash" style="padding:6px 10px;border-color:#b8860b;color:#7a5a08">Approvals tab — managers only</div>
+  </div>
+  <div style="flex:1;display:flex;flex-direction:column;gap:8px">
+    <div class="wf-box" style="padding:8px 10px;text-align:center"><b>◎ People</b></div>
+    <div class="wf-dash" style="padding:6px 10px">Directory (search, dept filter)</div>
+    <div class="wf-dash" style="padding:6px 10px">Org chart (reports-to)</div>
+    <div class="wf-dash" style="padding:6px 10px">Person profile → leave, docs, reviews</div>
+  </div>
+  <div style="flex:1;display:flex;flex-direction:column;gap:8px">
+    <div class="wf-box" style="padding:8px 10px;text-align:center"><b>✦ Grow</b></div>
+    <div class="wf-dash" style="padding:6px 10px">Training &amp; compliance (progress)</div>
+    <div class="wf-dash" style="padding:6px 10px">Objectives (OKRs, approval flow)</div>
+    <div class="wf-dash" style="padding:6px 10px">Reviews (cycles, self + manager)</div>
+  </div>
+  <div style="flex:1;display:flex;flex-direction:column;gap:8px">
+    <div class="wf-box" style="padding:8px 10px;text-align:center"><b>≡ More</b></div>
+    <div class="wf-dash" style="padding:6px 10px">Payslips (view + PDF)</div>
+    <div class="wf-dash" style="padding:6px 10px">Documents <span class="wf-chip" style="border-color:#c33;color:#c33;font-size:10px">2</span></div>
+    <div class="wf-dash" style="padding:6px 10px;border-color:#b8860b;color:#7a5a08">Payroll admin — admins only</div>
+    <div class="wf-dash" style="padding:6px 10px;border-color:#7a7ad0;color:#4747b8">JambaHire (jobs, pipeline) — admins</div>
+    <div class="wf-dash" style="padding:6px 10px">Profile &amp; settings</div>
+  </div>
+</div>
+<div style="display:flex;gap:10px;margin-top:16px;align-items:center">
+  <span class="wf-note">One app, three roles: sections appear/hide by role — no separate admin app</span>
+  <span class="wf-note" style="background:#eef;border-color:#99c;color:#446">Web sidebar's 10 items fold into 5 tabs; Reviews+Objectives+Training merge into "Grow"</span>
+</div>
+</div>
+</div>
+
+<!-- ============ 1c WIREFRAMES ============ -->
+<div class="dv-opt" id="1c">
+<div class="dv-olabel"><a class="dv-oid" href="#1c">1c</a>Core-flow wireframes — 9 screens, low-fi</div>
+<div style="display:flex;flex-wrap:wrap;gap:20px;max-width:1300px" class="wf">
+
+<!-- HOME -->
+<div class="ph" data-screen-label="WF Home">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span style="font-size:11px">9:41</span><span style="font-size:11px">▮▮ ᯤ</span></div>
+  <div style="display:flex;justify-content:space-between;align-items:center">
+    <div><h4 style="font-size:20px">Hi Priya 👋</h4><span style="font-size:12px;color:#777">Tue, Jul 17 · NexusTech</span></div>
+    <div class="wf-av">PS</div>
+  </div>
+  <div class="wf-box" style="margin-top:10px;padding:8px 10px;display:flex;gap:8px;justify-content:space-between;text-align:center">
+    <div style="flex:1"><b style="font-size:17px">6</b><div style="font-size:11px;color:#777">leave left</div></div>
+    <div style="border-left:1px solid #ccc"></div>
+    <div style="flex:1"><b style="font-size:17px;color:#c33">2</b><div style="font-size:11px;color:#777">to approve</div></div>
+    <div style="border-left:1px solid #ccc"></div>
+    <div style="flex:1"><b style="font-size:17px;color:#c33">3</b><div style="font-size:11px;color:#777">overdue trainings</div></div>
+  </div>
+  <div style="display:flex;gap:8px;margin-top:10px">
+    <div class="wf-btn" style="flex:1">+ Request leave</div>
+    <div class="wf-btn" style="flex:1;background:#fff;border-color:#555;color:#333">View payslip</div>
+  </div>
+  <div style="margin-top:12px;font-size:13px"><b>Needs attention</b></div>
+  <div class="wf-box" style="margin-top:6px;padding:8px 10px;display:flex;gap:8px;align-items:center"><span class="wf-chip" style="border-color:#c33;color:#c33">!</span><div style="flex:1;font-size:13px">2 leave requests waiting on you<div style="color:#777;font-size:11px">Kavita · Sneha</div></div>›</div>
+  <div class="wf-box" style="margin-top:6px;padding:8px 10px;display:flex;gap:8px;align-items:center"><span class="wf-chip" style="border-color:#c33;color:#c33">!</span><div style="flex:1;font-size:13px">Code of Conduct overdue<div style="color:#777;font-size:11px">was due Mar 31</div></div>›</div>
+  <div style="margin-top:12px;font-size:13px;display:flex;justify-content:space-between"><b>Announcements</b><span style="color:#17806D;font-size:12px">all ›</span></div>
+  <div class="wf-box" style="margin-top:6px;padding:8px 10px;font-size:13px">Diwali holiday calendar published<div class="wf-line" style="width:70%;margin-top:5px"></div></div>
+  <div class="wf-tab"><div style="color:#17806D"><b>⌂<br>Home</b></div><div>▤<br>Leaves</div><div>◎<br>People</div><div>✦<br>Grow</div><div>≡<br>More</div></div>
+</div>
+
+<!-- LEAVES -->
+<div class="ph" data-screen-label="WF Leaves">
+  <h4 style="font-size:20px">Leaves</h4>
+  <div style="display:flex;gap:6px;margin-top:8px">
+    <div class="wf-box" style="flex:1;padding:6px 8px"><span style="font-size:11px">Annual</span><br><b style="font-size:16px">6</b><span style="font-size:10px;color:#777">/21</span><div class="wf-prog" style="margin-top:4px"><i style="width:71%"></i></div></div>
+    <div class="wf-box" style="flex:1;padding:6px 8px"><span style="font-size:11px">Casual</span><br><b style="font-size:16px">4</b><span style="font-size:10px;color:#777">/7</span><div class="wf-prog" style="margin-top:4px"><i style="width:43%"></i></div></div>
+    <div class="wf-box" style="flex:1;padding:6px 8px"><span style="font-size:11px">Sick</span><br><b style="font-size:16px">8</b><span style="font-size:10px;color:#777">/10</span><div class="wf-prog" style="margin-top:4px"><i style="width:20%"></i></div></div>
+  </div>
+  <div class="wf-seg" style="margin-top:10px"><div style="background:#e7f3f0"><b>Mine</b></div><div>Approvals <span style="color:#c33">(2)</span></div></div>
+  <div class="wf-seg" style="margin-top:8px;border-style:dashed"><div><b>All</b></div><div>Pending</div><div>Approved</div><div>Rejected</div></div>
+  <div class="wf-box" style="margin-top:10px;padding:8px 10px;font-size:13px"><div style="display:flex;justify-content:space-between"><b>Annual · Mar 10→14</b><span class="wf-chip" style="font-size:11px;background:#e5f6ea;border-color:#1e9e63;color:#177245">Approved</span></div><span style="color:#777;font-size:12px">5d · Wedding in family</span></div>
+  <div class="wf-box" style="margin-top:6px;padding:8px 10px;font-size:13px"><div style="display:flex;justify-content:space-between"><b>Casual · Mar 20→21</b><span class="wf-chip" style="font-size:11px;background:#fbf0d9;border-color:#b8860b;color:#7a5a08">Pending</span></div><span style="color:#777;font-size:12px">2d · Personal errand</span></div>
+  <div class="wf-box" style="margin-top:6px;padding:8px 10px;font-size:13px"><div style="display:flex;justify-content:space-between"><b>Sick · Feb 2</b><span class="wf-chip" style="font-size:11px;border-color:#c33;color:#c33">Rejected</span></div><span class="wf-line" style="width:50%;margin-top:5px;display:block"></span></div>
+  <div class="wf-btn" style="margin-top:auto;margin-bottom:10px">＋ Request Leave</div>
+  <div class="wf-tab"><div>⌂<br>Home</div><div style="color:#17806D"><b>▤<br>Leaves</b></div><div>◎<br>People</div><div>✦<br>Grow</div><div>≡<br>More</div></div>
+</div>
+
+<!-- REQUEST LEAVE SHEET -->
+<div class="ph" data-screen-label="WF Request Leave">
+  <div style="background:#eee;margin:-10px -10px 0;padding:26px 10px 0;flex:none">
+    <div class="wf-box" style="border-radius:18px 18px 0 0;border-bottom:none;padding:12px 12px 0;background:#fff;height:100%">
+      <div style="width:36px;height:4px;background:#bbb;border-radius:99px;margin:0 auto 10px"></div>
+      <div style="display:flex;justify-content:space-between"><span style="color:#777">Cancel</span><h4><b>Request Leave</b></h4><span style="color:#17806D"><b>Submit</b></span></div>
+    </div>
+  </div>
+  <div style="border:1.5px solid #555;border-top:none;margin:0 -0px;padding:12px;flex:1;display:flex;flex-direction:column;gap:10px;background:#fff">
+    <div><span style="font-size:12px;color:#777">TYPE</span><div style="display:flex;gap:6px;margin-top:4px"><span class="wf-chip" style="background:#e7f3f0;border-color:#17806D">Annual ✓</span><span class="wf-chip">Casual</span><span class="wf-chip">Sick</span></div></div>
+    <div><span style="font-size:12px;color:#777">DATES</span><div class="wf-box" style="padding:7px 10px;margin-top:4px;font-size:13px">Mar 10 → Mar 14 &nbsp;·&nbsp; 5 days 📅</div>
+      <div class="wf-dash" style="margin-top:6px;padding:6px;text-align:center;font-size:12px">[ inline calendar — range select ]<br><span style="color:#999">holidays &amp; weekends greyed</span></div>
+    </div>
+    <div style="display:flex;gap:6px"><span class="wf-chip" style="font-size:11px">☐ half-day start</span><span class="wf-chip" style="font-size:11px">☐ half-day end</span></div>
+    <div><span style="font-size:12px;color:#777">REASON</span><div class="wf-box" style="padding:7px 10px;margin-top:4px;font-size:13px;height:40px">Wedding in family</div></div>
+    <div class="wf-box" style="padding:7px 10px;font-size:12px;background:#f6f6f6">Balance after: <b>1 / 21 days</b> · Approver: <b>Neha Patel</b></div>
+    <div class="wf-note">Validation: over-balance → warn + block; overlapping request → error</div>
+  </div>
+</div>
+
+<!-- APPROVALS -->
+<div class="ph" data-screen-label="WF Approvals">
+  <h4 style="font-size:20px">Approvals <span class="wf-chip" style="border-color:#c33;color:#c33;font-size:11px">2</span></h4>
+  <span style="font-size:12px;color:#777">Manager view · Leaves segment</span>
+  <div class="wf-box" style="margin-top:10px;padding:10px">
+    <div style="display:flex;gap:8px;align-items:center"><div class="wf-av">KR</div><div style="flex:1;font-size:13px"><b>Kavita Rao</b><br><span style="color:#777;font-size:12px">Annual · Mar 10→14 · 5d</span></div></div>
+    <div style="font-size:12px;color:#777;margin-top:4px">"Wedding in family" · balance 6/21 · no team overlap ✓</div>
+    <div style="display:flex;gap:8px;margin-top:8px"><div class="wf-btn" style="flex:1;font-size:13px;padding:6px">✓ Approve</div><div class="wf-btn" style="flex:1;font-size:13px;padding:6px;background:#fde8e8;border-color:#c33;color:#a22">✗ Reject</div></div>
+  </div>
+  <div class="wf-box" style="margin-top:8px;padding:10px">
+    <div style="display:flex;gap:8px;align-items:center"><div class="wf-av">SI</div><div style="flex:1;font-size:13px"><b>Sneha Iyer</b><br><span style="color:#777;font-size:12px">Casual · Mar 20→21 · 2d</span></div></div>
+    <div style="font-size:12px;color:#b8860b;margin-top:4px">⚠ overlaps with Pooja's approved leave</div>
+    <div style="display:flex;gap:8px;margin-top:8px"><div class="wf-btn" style="flex:1;font-size:13px;padding:6px">✓ Approve</div><div class="wf-btn" style="flex:1;font-size:13px;padding:6px;background:#fde8e8;border-color:#c33;color:#a22">✗ Reject</div></div>
+  </div>
+  <div class="wf-note" style="margin-top:10px">Swipe right = approve, left = reject (with confirm). Reject requires a note.</div>
+  <div class="wf-dash" style="margin-top:8px;padding:8px;text-align:center;font-size:12px;color:#999">Decided requests collapse below ─ history</div>
+  <div class="wf-tab"><div>⌂<br>Home</div><div style="color:#17806D"><b>▤<br>Leaves</b></div><div>◎<br>People</div><div>✦<br>Grow</div><div>≡<br>More</div></div>
+</div>
+
+<!-- DIRECTORY -->
+<div class="ph" data-screen-label="WF Directory">
+  <h4 style="font-size:20px">People</h4>
+  <div class="wf-box" style="margin-top:8px;padding:7px 10px;font-size:13px;color:#999">⌕ Search name, dept, role…</div>
+  <div class="wf-seg" style="margin-top:8px"><div style="background:#e7f3f0"><b>Directory</b></div><div>Org chart</div></div>
+  <div style="display:flex;gap:6px;margin-top:8px"><span class="wf-chip" style="font-size:11px">All depts ▾</span><span class="wf-chip" style="font-size:11px">Role ▾</span></div>
+  <div style="margin-top:8px;font-size:11px;color:#999">ENGINEERING</div>
+  <div class="wf-box" style="margin-top:4px;padding:8px 10px;display:flex;gap:8px;align-items:center"><div class="wf-av">RV</div><div style="flex:1;font-size:13px"><b>Rahul Verma</b> <span class="wf-chip" style="font-size:10px;background:#fbf0d9;border-color:#b8860b;color:#7a5a08">Manager</span><br><span style="color:#777;font-size:12px">rahul.verma@nexustech.in</span></div>›</div>
+  <div style="margin-top:8px;font-size:11px;color:#999">PRODUCT &amp; DESIGN</div>
+  <div class="wf-box" style="margin-top:4px;padding:8px 10px;display:flex;gap:8px;align-items:center"><div class="wf-av">NP</div><div style="flex:1;font-size:13px"><b>Neha Patel</b> <span class="wf-chip" style="font-size:10px;background:#fbf0d9;border-color:#b8860b;color:#7a5a08">Manager</span><br><span style="color:#777;font-size:12px">Product &amp; Design</span></div>›</div>
+  <div class="wf-box" style="margin-top:4px;padding:8px 10px;display:flex;gap:8px;align-items:center;margin-left:16px;border-style:dashed"><div class="wf-av">SI</div><div style="flex:1;font-size:13px"><b>Sneha Iyer</b> <span class="wf-chip" style="font-size:10px">Employee</span><br><span style="color:#777;font-size:12px">reports to Neha</span></div>›</div>
+  <div class="wf-note" style="margin-top:8px">Tap row → profile: contact, manager, leave status today, docs</div>
+  <div class="wf-tab"><div>⌂<br>Home</div><div>▤<br>Leaves</div><div style="color:#17806D"><b>◎<br>People</b></div><div>✦<br>Grow</div><div>≡<br>More</div></div>
+</div>
+
+<!-- GROW / TRAINING -->
+<div class="ph" data-screen-label="WF Grow Training">
+  <h4 style="font-size:20px">Grow</h4>
+  <div class="wf-seg" style="margin-top:8px"><div style="background:#e7f3f0"><b>Training</b></div><div>Objectives</div><div>Reviews</div></div>
+  <div class="wf-box" style="margin-top:10px;padding:8px 10px;background:#fde8e8;border-color:#c33;font-size:13px"><b style="color:#a22">3 mandatory courses overdue</b><br><span style="font-size:12px;color:#a22">complete by Jul 31 to stay compliant</span></div>
+  <div class="wf-box" style="margin-top:8px;padding:10px;font-size:13px">
+    <div style="display:flex;justify-content:space-between"><b>Code of Conduct</b><span class="wf-chip" style="font-size:10px;border-color:#c33;color:#c33">Mandatory</span></div>
+    <span style="color:#777;font-size:12px">Ethics · Due Mar 31, 2026</span>
+    <div class="wf-prog" style="margin-top:6px"><i style="width:100%"></i></div>
+    <div style="display:flex;justify-content:space-between;font-size:11px;color:#777"><span>Progress</span><span>100% ✓</span></div>
+  </div>
+  <div class="wf-box" style="margin-top:6px;padding:10px;font-size:13px">
+    <div style="display:flex;justify-content:space-between"><b>Security Awareness</b><span class="wf-chip" style="font-size:10px;border-color:#c33;color:#c33">Mandatory</span></div>
+    <span style="color:#777;font-size:12px">Safety · Due Mar 31, 2026</span>
+    <div class="wf-prog" style="margin-top:6px"><i style="width:40%"></i></div>
+    <div style="display:flex;justify-content:space-between;font-size:11px;color:#777"><span>Progress</span><span>40% · Resume ›</span></div>
+  </div>
+  <div class="wf-dash" style="margin-top:6px;padding:8px;text-align:center;font-size:12px;color:#999">Course library ▾ (optional courses)</div>
+  <div class="wf-tab"><div>⌂<br>Home</div><div>▤<br>Leaves</div><div>◎<br>People</div><div style="color:#17806D"><b>✦<br>Grow</b></div><div>≡<br>More</div></div>
+</div>
+
+<!-- OBJECTIVES / REVIEWS -->
+<div class="ph" data-screen-label="WF Objectives Reviews">
+  <h4 style="font-size:20px">Grow</h4>
+  <div class="wf-seg" style="margin-top:8px"><div>Training</div><div style="background:#e7f3f0"><b>Objectives</b></div><div>Reviews</div></div>
+  <div style="margin-top:10px;font-size:12px;color:#777">Q3 2026 · 3 objectives</div>
+  <div class="wf-box" style="margin-top:6px;padding:10px;font-size:13px">
+    <div style="display:flex;justify-content:space-between"><b>Ship mobile app v1</b><span class="wf-chip" style="font-size:10px;background:#e5f6ea;border-color:#1e9e63;color:#177245">Approved</span></div>
+    <div class="wf-prog" style="margin-top:6px"><i style="width:60%"></i></div>
+    <div style="font-size:11px;color:#777">60% · 3/5 key results · update ›</div>
+  </div>
+  <div class="wf-box" style="margin-top:6px;padding:10px;font-size:13px">
+    <div style="display:flex;justify-content:space-between"><b>Reduce churn to 4%</b><span class="wf-chip" style="font-size:10px;background:#fbf0d9;border-color:#b8860b;color:#7a5a08">Awaiting approval</span></div>
+    <div style="font-size:11px;color:#777;margin-top:4px">sent to Neha · Jul 12</div>
+  </div>
+  <div class="wf-btn" style="margin-top:8px;font-size:13px;padding:6px">＋ Draft objective</div>
+  <div style="margin-top:12px;font-size:13px"><b>Review cycle</b></div>
+  <div class="wf-box" style="margin-top:6px;padding:10px;font-size:13px">
+    <b>Q1 2026 Performance Review</b><br>
+    <span style="font-size:12px;color:#777">Self-review due Jul 25</span>
+    <div style="display:flex;gap:4px;margin-top:6px;font-size:10px;text-align:center">
+      <div style="flex:1;background:#e7f3f0;border:1px solid #17806D;border-radius:4px;padding:2px">Self ✓</div>
+      <div style="flex:1;border:1px dashed #999;border-radius:4px;padding:2px">Manager</div>
+      <div style="flex:1;border:1px dashed #999;border-radius:4px;padding:2px">Shared</div>
+    </div>
+  </div>
+  <div class="wf-tab"><div>⌂<br>Home</div><div>▤<br>Leaves</div><div>◎<br>People</div><div style="color:#17806D"><b>✦<br>Grow</b></div><div>≡<br>More</div></div>
+</div>
+
+<!-- MORE -->
+<div class="ph" data-screen-label="WF More">
+  <div style="display:flex;gap:10px;align-items:center"><div class="wf-av" style="width:44px;height:44px">PS</div><div><h4><b>Priya Sharma</b> <span class="wf-chip" style="font-size:10px;background:#e8eefc;border-color:#3b63d8;color:#2a4bb5">Admin</span></h4><span style="font-size:12px;color:#777">Operations &amp; HR · NexusTech</span></div></div>
+  <div style="margin-top:12px;font-size:11px;color:#999">ME</div>
+  <div class="wf-box" style="margin-top:4px">
+    <div style="padding:9px 10px;display:flex;justify-content:space-between;font-size:14px;border-bottom:1px solid #ddd"><span>💰 Payslips</span><span style="color:#999">Mar 2026 ›</span></div>
+    <div style="padding:9px 10px;display:flex;justify-content:space-between;font-size:14px;border-bottom:1px solid #ddd"><span>📄 Documents</span><span><span class="wf-chip" style="font-size:10px;border-color:#c33;color:#c33">2 to sign</span> ›</span></div>
+    <div style="padding:9px 10px;display:flex;justify-content:space-between;font-size:14px"><span>📣 Announcements</span><span style="color:#999">›</span></div>
+  </div>
+  <div style="margin-top:12px;font-size:11px;color:#999">ADMIN · role-gated</div>
+  <div class="wf-box" style="margin-top:4px;border-style:dashed;border-color:#b8860b">
+    <div style="padding:9px 10px;display:flex;justify-content:space-between;font-size:14px;border-bottom:1px dashed #d8bd6a"><span>🏦 Payroll runs &amp; structures</span><span style="color:#999">›</span></div>
+    <div style="padding:9px 10px;display:flex;justify-content:space-between;font-size:14px;border-bottom:1px dashed #d8bd6a"><span>💼 JambaHire (jobs, pipeline, offers)</span><span style="color:#999">›</span></div>
+    <div style="padding:9px 10px;display:flex;justify-content:space-between;font-size:14px"><span>⚙ Company settings, billing</span><span style="color:#999">›</span></div>
+  </div>
+  <div style="margin-top:12px;font-size:11px;color:#999">APP</div>
+  <div class="wf-box" style="margin-top:4px"><div style="padding:9px 10px;font-size:14px;border-bottom:1px solid #ddd">🔔 Notifications</div><div style="padding:9px 10px;font-size:14px">Sign out</div></div>
+  <div class="wf-tab"><div>⌂<br>Home</div><div>▤<br>Leaves</div><div>◎<br>People</div><div>✦<br>Grow</div><div style="color:#17806D"><b>≡<br>More</b></div></div>
+</div>
+
+<!-- PAYSLIP -->
+<div class="ph" data-screen-label="WF Payslip">
+  <div style="display:flex;justify-content:space-between;align-items:center"><span style="color:#17806D">‹ Payslips</span><h4><b>March 2026</b></h4><span style="font-size:16px">⇪</span></div>
+  <div class="wf-seg" style="margin-top:8px;font-size:11px"><div>‹ Feb</div><div style="background:#e7f3f0"><b>March 2026</b></div><div>Apr ›</div></div>
+  <div class="wf-box" style="margin-top:10px;padding:10px;background:#e7f3f0;border-color:#17806D;text-align:center">
+    <span style="font-size:12px;color:#555">Net Pay (take home)</span><br><b style="font-size:24px;color:#0E5E4F">₹61,584</b><br><span style="font-size:11px;color:#777">New Tax Regime · Engineering</span>
+  </div>
+  <div style="margin-top:10px;font-size:11px;color:#999">EARNINGS</div>
+  <div class="wf-box" style="margin-top:4px;font-size:13px">
+    <div style="padding:7px 10px;display:flex;justify-content:space-between;border-bottom:1px solid #ddd"><span>Basic Salary</span><b>₹26,667</b></div>
+    <div style="padding:7px 10px;display:flex;justify-content:space-between;border-bottom:1px solid #ddd"><span>House Rent Allowance</span><b>₹13,333</b></div>
+    <div style="padding:7px 10px;display:flex;justify-content:space-between;border-bottom:1px solid #ddd"><span>Special Allowance</span><b>₹23,584</b></div>
+    <div style="padding:7px 10px;display:flex;justify-content:space-between;background:#f6f6f6"><span><b>Gross</b></span><b>₹63,584</b></div>
+  </div>
+  <div style="margin-top:8px;font-size:11px;color:#999">DEDUCTIONS</div>
+  <div class="wf-box" style="margin-top:4px;font-size:13px">
+    <div style="padding:7px 10px;display:flex;justify-content:space-between;border-bottom:1px solid #ddd"><span>Provident Fund (12%)</span><b style="color:#c33">−₹1,800</b></div>
+    <div style="padding:7px 10px;display:flex;justify-content:space-between"><span>Professional Tax</span><b style="color:#c33">−₹200</b></div>
+  </div>
+  <div class="wf-btn" style="margin-top:10px;font-size:13px;padding:7px">⇩ Download PDF</div>
+  <div class="wf-note" style="margin-top:8px">Amounts monospaced, Indian grouping. Share sheet for PDF.</div>
+</div>
+
+</div>
+</div>
+
+</div>
+<p class="dv-next">Try next: "hi-fi the Home + Leaves screens from <a class="dv-oid" href="#1c">1c</a> using <a class="dv-oid" href="#1a">1a</a> tokens" · "add JambaHire mobile wireframes" · "riff on the Home layout — 3 alternatives"</p>
+</section>
+
+</x-dc>
+</body>
+</html>

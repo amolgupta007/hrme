@@ -31,4 +31,24 @@ describe("parseIclockPath", () => {
   it("handles empty segments", () => {
     expect(parseIclockPath([])).toEqual({ token: null, endpoint: "", rest: [] });
   });
+
+  it("strips the .aspx suffix eSSL firmware appends to ADMS verbs", () => {
+    expect(parseIclockPath(["cdata.aspx"])).toEqual({ token: null, endpoint: "cdata", rest: [] });
+    expect(parseIclockPath(["getrequest.aspx"])).toEqual({
+      token: null,
+      endpoint: "getrequest",
+      rest: [],
+    });
+    expect(parseIclockPath(["devicecmd.ASPX"])).toEqual({
+      token: null,
+      endpoint: "devicecmd",
+      rest: [],
+    });
+    // token-prefixed variant
+    expect(parseIclockPath(["abc123token", "cdata.aspx"])).toEqual({
+      token: "abc123token",
+      endpoint: "cdata",
+      rest: [],
+    });
+  });
 });

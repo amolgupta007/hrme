@@ -29,13 +29,23 @@ export type IclockPath = {
   rest: string[];
 };
 
+/**
+ * eSSL firmware appends ".aspx" to the ADMS verbs (GET /iclock/getrequest.aspx,
+ * POST /iclock/cdata.aspx) where ZKTeco-branded units send the bare verb.
+ * Strip the suffix so both dialects hit the same handlers. Ingest tokens are
+ * base64url (no dots), so a token can never be mangled by this.
+ */
+function normalizeVerb(s: string): string {
+  return s.replace(/\.aspx$/i, "");
+}
+
 export function parseIclockPath(seg: string[]): IclockPath {
   if (!seg || seg.length === 0) return { token: null, endpoint: "", rest: [] };
 
-  const first = seg[0]?.toLowerCase() ?? "";
-  if (KNOWN_ADMS_VERBS.has(first)) {
-    return { token: null, endpoint: seg[0], rest: seg.slice(1) };
+  const first = normalizeVerb(seg[0] ?? "");
+  if (KNOWN_ADMS_VERBS.has(first.toLowerCase())) {
+    return { token: null, endpoint: first, rest: seg.slice(1) };
   }
   // First segment isn't a verb → treat it as the ingest token; verb is next.
-  return { token: seg[0], endpoint: seg[1] ?? "", rest: seg.slice(2) };
+  return { token: seg[0], endpoint: normalizeVerb(seg[1] ?? ""), rest: seg.slice(2) };
 }

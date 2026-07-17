@@ -100,6 +100,22 @@ Settings → Attendance → Biometric Devices → **Sync users to devices**:
 - PINs come from `employees.device_code` — set per-employee under "Employee PINs", or in bulk via the CSV importer's **`device_code`** column (digits only, unique per org).
 - **Fingerprints are NOT pushed** — only the user record (PIN + Name). The employee still enrolls their fingerprint physically at the device. Provisioning just means the device already knows who PIN *N* is, so the first punch resolves correctly.
 
+### 4.6 eSSL devices & the HTTP relay (learned during the Medialoop go-live, 2026-07-17)
+
+eSSL terminals are ZKTeco OEMs but differ on the wire; all of this is now handled natively:
+
+- **`.aspx` verb dialect** — eSSL polls `/iclock/getrequest.aspx` and posts `/iclock/cdata.aspx`. `parseIclockPath` strips the suffix (commit `dcbc0e7`). Pre-fix symptom: device shows **Connected** (liveness bumps in the catch-all handler) but commands never dispatch and punches are acknowledged-then-dropped.
+- **Batched command acks** — eSSL acks every outstanding command in ONE devicecmd POST (one `ID=<seq>&Return=<code>` per line). `recordAck` parses all lines via `parseDeviceCmdAcks` (commit `076b421`). Pre-fix symptom: commands stuck at `sent` although the device executed them.
+- **Zero-padded PINs** — the tested eSSL unit transmits PINs exactly as enrolled (`016`). Ingest matches `employees.device_code` by exact string; after any new model's first punch, check the PIN form in `attendance_punch_events`.
+- **Name-only sync onto pre-enrolled users works**: `DATA UPDATE USERINFO` renames an existing PIN without touching fingerprint templates. Caveats: it resets device-admin privilege to normal user and clears punch passwords/RFID cards on the synced users (fields sent empty).
+
+**First-connect debugging order** for a registered device that never shows Connected:
+
+1. **Network config on the device** — a plugged-in Ethernet cable takes routing priority over WiFi, and a static config with Gateway `0.0.0.0` (very common) silently kills all push. DHCP is fine for ADMS (device only dials out). "Enable Domain Name" must be ON *before* the Server Address field will accept a hostname; settings apply only after reboot.
+2. **Vercel runtime logs** (`query=/iclock`, filter by SN) — shows the device's real wire behavior; zero requests = device-side network/TLS, requests present = server-side handling.
+3. **TLS capability** — if the device has a healthy config and internet but zero requests ever arrive, the firmware can't complete the TLS handshake Vercel requires (confirmed on the Medialoop eSSL unit; also ZKTeco K40). Fix = the on-prem **Caddy HTTP→HTTPS relay**: full runbook at `/superadmin/runbooks/biometric-relay`; a ready-to-run Windows package is caddy.exe + a Caddyfile (`:8080 { reverse_proxy https://jambahr.com { header_up Host jambahr.com } }`) + a scheduled-task installer (auto-start as SYSTEM, firewall rule on 8080). Device then points at the relay machine's LAN IP : 8080, HTTPS OFF. Give the relay machine a DHCP reservation and disable sleep-when-plugged-in. Relay downtime is safe — devices buffer punches and deliver on reconnect.
+4. **TLS-capable units (MB140-class) connect direct** — prefer them for new purchases to skip the relay entirely.
+
 **How it works:** commands sit in the `device_commands` queue (`pending`). On each `GET /iclock/getrequest` poll, the route drains a batch, builds ADMS command lines (`C:<seq>:DATA UPDATE USERINFO …`), and flips them to `sent`. The device executes them and `POST`s an ack to `/iclock/devicecmd` (`ID=<seq>&Return=0`), which flips the row to `confirmed` (or `failed` on a negative return). All command-string building/parsing is pure and unit-tested (`adms-commands.ts`); enqueue is best-effort and never blocks punch ingestion.
 
 ---

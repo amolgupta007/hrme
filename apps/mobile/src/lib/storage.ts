@@ -67,8 +67,14 @@ function createMmkvStorage(id: string): AppStorage | null {
 
 /**
  * `namespace` should identify the owning storage scope — e.g. a Clerk user
- * id, or a `${clerkUserId}:${orgId}` compound key for data that must be
- * scoped per-org. Different namespaces never share data.
+ * id. Different namespaces never share data.
+ *
+ * MMKV instances with the same id map onto the same underlying file, so
+ * calling `createAppStorage(ns)` twice yields two adapters over ONE store —
+ * that sharing is what makes wipe-by-old-key (`wipeNamespaceStorage`) work.
+ * The in-memory fallback does NOT share state between calls; acceptable
+ * because the fallback has no at-rest persistence to wipe in the first
+ * place (data dies with the adapter reference / the process).
  */
 export function createAppStorage(namespace: string): AppStorage {
   const mmkv = createMmkvStorage(`jambahr-mobile-${namespace}`);
@@ -79,4 +85,26 @@ export function createAppStorage(namespace: string): AppStorage {
     );
   }
   return createMemoryStorage();
+}
+
+/**
+ * Storage namespace for an identity's offline punch queue. Defined here
+ * (not in offline-queue.ts) so `wipeNamespaceStorage` can clear it without
+ * a circular import.
+ */
+export function offlineQueueNamespace(identityNamespace: string): string {
+  return `${identityNamespace}:offline-queue`;
+}
+
+/**
+ * DPDP wipe for everything persisted under an identity namespace: the
+ * query-cache storage AND its offline punch queue. Re-opens each store by
+ * key, so it works no matter who currently holds an adapter for it (see the
+ * shared-by-id note on `createAppStorage`) and independent of Clerk's
+ * render timing. Queued-but-unsent punches from a departing identity are
+ * deliberately dropped — DPDP wins over delivery.
+ */
+export function wipeNamespaceStorage(identityNamespace: string): void {
+  createAppStorage(identityNamespace).clearAll();
+  createAppStorage(offlineQueueNamespace(identityNamespace)).clearAll();
 }

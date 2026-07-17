@@ -8,7 +8,11 @@
  * This module intentionally stops at enqueue/peek/remove.
  */
 import type { MobilePunchRequest } from "@jambahr/shared/mobile/types";
-import { createAppStorage, type AppStorage } from "@/lib/storage";
+import {
+  createAppStorage,
+  offlineQueueNamespace,
+  type AppStorage,
+} from "@/lib/storage";
 
 export type QueuedPunch = MobilePunchRequest & {
   /** ms since epoch when this punch was captured — oldest-first draining. */
@@ -39,12 +43,13 @@ function writeQueue(storage: AppStorage, items: QueuedPunch[]): void {
 }
 
 /**
- * `namespace` should match the identity namespace used elsewhere (see
- * `query.tsx`'s `${clerkUserId}`-keyed storage) so a queued punch can never
- * be replayed against the wrong account.
+ * `namespace` must be the identity namespace used elsewhere (the Clerk user
+ * id — see `query.tsx`) so a queued punch can never be replayed against the
+ * wrong account, and so the DPDP wipe (`wipeNamespaceStorage`) can find and
+ * clear this queue when that identity signs out or is switched away from.
  */
 export function createOfflineQueue(namespace: string): OfflineQueue {
-  const storage = createAppStorage(`${namespace}:offline-queue`);
+  const storage = createAppStorage(offlineQueueNamespace(namespace));
 
   return {
     enqueue(punch) {

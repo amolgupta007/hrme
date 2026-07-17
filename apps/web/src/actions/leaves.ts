@@ -83,18 +83,25 @@ export async function listLeavePolicies(): Promise<ActionResult<PolicyWithUsage[
 
   if (error) return { success: false, error: error.message };
 
-  // Calculate used days per policy from approved requests this year
-  const { data: approved } = await supabase
-    .from("leave_requests")
-    .select("policy_id, days")
-    .eq("org_id", ctx.orgId)
-    .eq("status", "approved")
-    .gte("start_date", `${currentYear}-01-01`)
-    .lte("end_date", `${currentYear}-12-31`);
-
+  // Calculate used days per policy from the CALLER's own approved requests
+  // this year. This feeds the personal balance cards — it must be scoped to
+  // one employee, or everyone's displayed balance drops whenever anyone in
+  // the org takes leave (bug reported 2026-07-17).
+  const user = await getCurrentUser();
   const usedByPolicy: Record<string, number> = {};
-  for (const req of approved ?? []) {
-    usedByPolicy[req.policy_id] = (usedByPolicy[req.policy_id] ?? 0) + Number(req.days);
+  if (user?.employeeId) {
+    const { data: approved } = await supabase
+      .from("leave_requests")
+      .select("policy_id, days")
+      .eq("org_id", ctx.orgId)
+      .eq("employee_id", user.employeeId)
+      .eq("status", "approved")
+      .gte("start_date", `${currentYear}-01-01`)
+      .lte("end_date", `${currentYear}-12-31`);
+
+    for (const req of approved ?? []) {
+      usedByPolicy[req.policy_id] = (usedByPolicy[req.policy_id] ?? 0) + Number(req.days);
+    }
   }
 
   const result = (policies ?? []).map((p: LeavePolicy) => ({

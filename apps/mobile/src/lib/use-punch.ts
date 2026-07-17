@@ -77,8 +77,25 @@ export function usePunch({
   const [drainFailures, setDrainFailures] = useState(0);
   const [punchError, setPunchError] = useState<string | null>(null);
   const draining = useRef(false);
+  /**
+   * clientEventIds whose FIRST (immediate, at-tap) POST is still in flight.
+   * A punch is enqueued BEFORE its POST (durability — see `punch()`), so the
+   * entry exists in the queue during its own request; the drain filters these
+   * out so a reconnect/foreground trigger can never double-send an in-flight
+   * punch, and the Syncing badge doesn't flicker on every successful online
+   * punch (the badge counts only entries NOT in flight).
+   */
+  const inFlight = useRef<Set<string>>(new Set());
 
-  // Re-sync the badge to the NEW queue when the identity/org changes (queue is
+  /** Queue entries truly *waiting* for the drain (not currently being POSTed). */
+  const pendingCount = useCallback(
+    () =>
+      queue.peekAll().filter((p) => !inFlight.current.has(p.clientEventId))
+        .length,
+    [queue]
+  );
+
+  // Re-sync the badge to the NEW queue when the identity changes (queue is
   // memoized on `namespace`). React's sanctioned "adjust state during render on
   // a changed dependency" pattern — avoids a setState-in-effect and applies the
   // reset before paint.
@@ -140,7 +157,13 @@ export function usePunch({
     if (draining.current) return;
     draining.current = true;
     try {
-      const items = queue.peekAll();
+      // Skip entries whose first (at-tap) POST is still in flight — replaying
+      // one now would double-send it (harmless server-side via clientEventId
+      // dedupe, but wasteful and it could race the immediate handler's
+      // remove-on-success).
+      const items = queue
+        .peekAll()
+        .filter((p) => !inFlight.current.has(p.clientEventId));
       if (items.length === 0) {
         setQueueCount(0);
         setDrainFailures(0);
@@ -179,12 +202,12 @@ export function usePunch({
           }
         }
       }
-      setQueueCount(queue.peekAll().length);
+      setQueueCount(pendingCount());
       setDrainFailures((n) => (transientFailure ? n + 1 : 0));
     } finally {
       draining.current = false;
     }
-  }, [apiFetch, orgId, queue, queryClient, key]);
+  }, [apiFetch, orgId, queue, queryClient, key, pendingCount]);
 
   // Drain on reconnect AND on app foreground. Both are natural "we might be
   // online now" signals; the concurrency guard makes overlapping fires safe.
@@ -201,27 +224,54 @@ export function usePunch({
     };
   }, [drain]);
 
+  // Kick a drain pass on mount and whenever the active org changes. The org
+  // switch case (same identity → same queue instance, so the render-adjust
+  // above doesn't fire) matters because `query.tsx` wipes this identity's
+  // queue store in ITS effect — the setTimeout defers past that wipe, and the
+  // drain's empty-queue branch then resets queueCount + drainFailures, so no
+  // stale "Syncing" badge survives an org switch. On mount it also replays any
+  // punches left over from a previous app run without waiting for a
+  // reconnect/foreground event.
+  useEffect(() => {
+    const id = setTimeout(() => void drain(), 0);
+    return () => clearTimeout(id);
+  }, [orgId, drain]);
+
   /**
-   * Tap handler. Mints the clientEventId + punchedAt ONCE, here, and freezes
-   * them: the same values are replayed by the drain so the server dedupes an
-   * eventual retry against the first attempt.
+   * Tap handler. Mints the clientEventId + punchedAt ONCE, here, freezes them,
+   * and enqueues BEFORE attempting the POST — so a process kill mid-request
+   * can never lose the punch (on relaunch the entry is still in MMKV and the
+   * mount/reconnect drain replays it; if the killed request had actually
+   * reached the server, the replay is deduped on clientEventId → idempotent
+   * SUCCESS). The entry is removed on success or on a 4xx permanent rejection
+   * (4xx is never retried); it stays queued only for network/5xx failures.
    */
   const punch = useCallback(async () => {
     const vars: PunchVars = {
       clientEventId: Crypto.randomUUID(),
       punchedAt: new Date().toISOString(),
     };
+    // Durability first: persist, then send. Marked in-flight so the drain
+    // won't replay it while this immediate POST is still pending (and so the
+    // Syncing badge doesn't count it).
+    const queued: QueuedPunch = { ...vars, queuedAt: Date.now() };
+    queue.enqueue(queued);
+    inFlight.current.add(vars.clientEventId);
     try {
       await mutation.mutateAsync(vars);
+      queue.remove(vars.clientEventId);
     } catch (error) {
-      // A 4xx is already surfaced + rolled back in onError — nothing to queue.
-      if (is4xx(error)) return;
-      // Network / 5xx: freeze this punch into the queue for the drain.
-      const queued: QueuedPunch = { ...vars, queuedAt: Date.now() };
-      queue.enqueue(queued);
-      setQueueCount(queue.peekAll().length);
+      if (is4xx(error)) {
+        // Deterministic rejection (already rolled back + surfaced in onError)
+        // — must never be retried, so drop it from the queue.
+        queue.remove(vars.clientEventId);
+      }
+      // Network / 5xx: leave the frozen entry queued for the drain.
+    } finally {
+      inFlight.current.delete(vars.clientEventId);
+      setQueueCount(pendingCount());
     }
-  }, [mutation, queue]);
+  }, [mutation, queue, pendingCount]);
 
   return {
     punch,

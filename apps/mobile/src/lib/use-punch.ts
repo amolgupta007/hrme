@@ -10,6 +10,7 @@ import type {
 } from "@jambahr/shared/mobile/types";
 import { ApiError, useApi } from "@/lib/api";
 import { homeQueryKey, optimisticToday } from "@/lib/home";
+import { attendanceMonthQueryKey, currentIstMonth } from "@/lib/attendance";
 import { createOfflineQueue, type QueuedPunch } from "@/lib/offline-queue";
 
 const PUNCH_PATH = "/api/mobile/attendance/punch";
@@ -108,6 +109,19 @@ export function usePunch({
 
   const key = homeQueryKey(orgId);
 
+  /**
+   * A recorded punch changes today's attendance day — nudge the current IST
+   * month's calendar query so a mounted Attendance screen reflects it. Cheap
+   * and guarded to exactly one key (the live month); no-op when that query
+   * isn't cached/mounted. Past months never change from a punch, so they're
+   * left untouched.
+   */
+  const invalidateCurrentMonth = useCallback(() => {
+    void queryClient.invalidateQueries({
+      queryKey: attendanceMonthQueryKey(orgId, currentIstMonth()),
+    });
+  }, [queryClient, orgId]);
+
   const mutation = useMutation<MobilePunchResponse, unknown, PunchVars, PunchContext>({
     mutationFn: (vars) =>
       apiFetch<MobilePunchResponse>(
@@ -131,6 +145,7 @@ export function usePunch({
       queryClient.setQueryData<MobileHomeResponse>(key, (old) =>
         old ? { ...old, today: data.today } : old
       );
+      invalidateCurrentMonth();
     },
     onError: (error, _vars, context) => {
       if (is4xx(error)) {
@@ -189,6 +204,7 @@ export function usePunch({
           queryClient.setQueryData<MobileHomeResponse>(key, (old) =>
             old ? { ...old, today: res.today } : old
           );
+          invalidateCurrentMonth();
         } catch (error) {
           if (is4xx(error)) {
             // Deterministic rejection (e.g. a punch queued > 24h → clock_skew):
@@ -207,7 +223,7 @@ export function usePunch({
     } finally {
       draining.current = false;
     }
-  }, [apiFetch, orgId, queue, queryClient, key, pendingCount]);
+  }, [apiFetch, orgId, queue, queryClient, key, pendingCount, invalidateCurrentMonth]);
 
   // Drain on reconnect AND on app foreground. Both are natural "we might be
   // online now" signals; the concurrency guard makes overlapping fires safe.

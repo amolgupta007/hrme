@@ -1,8 +1,11 @@
+import { useState } from "react";
 import { Modal, Platform, Pressable, Text, View } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import type { MonthDay } from "@jambahr/shared/attendance/month-calendar";
 import type { MobileAttendanceDayDetail } from "@jambahr/shared/mobile/types";
+import { istToday } from "@jambahr/shared/attendance/ist";
 import { STATE_META } from "@/components/attendance/state-legend";
+import { RegularizeForm } from "@/components/attendance/regularize-form";
 
 /** Reliable monospace family for the hours readout (design: money/duration mono). */
 const MONO = Platform.select({ ios: "Menlo", default: "monospace" });
@@ -51,23 +54,51 @@ const SOURCE_LABEL: Record<string, string> = {
  * Bottom sheet for a tapped calendar day. Dependency-free — a slide-up
  * `Modal` with a tap-scrim backdrop and a card (grabber pill, design §usage).
  * Shows the day's state, punch pairs (in/out + monospace hours), the record
- * source chip(s), an out-of-zone note when relevant, and a DISABLED "Request
- * correction" action wired in Task 7.
+ * source chip(s), an out-of-zone note when relevant, and — for past
+ * non-holiday days — the "Request correction" regularization flow (Task 7):
+ * a form proposing in/out + reason that lands as pending punch events for
+ * admin review. `hasPendingRegularization` renders the amber "Correction
+ * pending" chip.
  */
 export function DayDetailSheet({
   day,
   detail,
   visible,
   onClose,
+  hasPendingRegularization = false,
+  orgId,
 }: {
   day: MonthDay | null;
   detail: MobileAttendanceDayDetail | undefined;
   visible: boolean;
   onClose: () => void;
+  hasPendingRegularization?: boolean;
+  orgId?: string | null;
 }) {
   const meta = day ? STATE_META[day.state] : null;
   const pairs = detail?.pairs ?? [];
   const hasPunches = pairs.some((p) => p.in || p.out);
+
+  type Mode = "detail" | "form" | "success";
+  const [mode, setMode] = useState<Mode>("detail");
+  // Reset the sheet back to the detail view whenever it targets a new day
+  // (render-adjust on a changed dependency — same idiom as use-punch.ts).
+  const [trackedDate, setTrackedDate] = useState(day?.date);
+  if (trackedDate !== day?.date) {
+    setTrackedDate(day?.date);
+    setMode("detail");
+  }
+
+  // Regularization is for PAST days only (today's fixes go through normal
+  // punching) and never for holidays. Week-off/leave days stay eligible — an
+  // employee may genuinely have worked one.
+  const canRequestCorrection =
+    !!day && day.date < istToday() && day.state !== "holiday";
+
+  const close = () => {
+    setMode("detail");
+    onClose();
+  };
 
   const sourceChips: string[] = [];
   if (detail?.source && SOURCE_LABEL[detail.source]) sourceChips.push(SOURCE_LABEL[detail.source]);
@@ -78,10 +109,10 @@ export function DayDetailSheet({
       visible={visible}
       transparent
       animationType="slide"
-      onRequestClose={onClose}
+      onRequestClose={close}
       statusBarTranslucent
     >
-      <Pressable className="flex-1 justify-end bg-black/40" onPress={onClose}>
+      <Pressable className="flex-1 justify-end bg-black/40" onPress={close}>
         {/* Stop propagation so taps inside the card don't dismiss. */}
         <Pressable
           onPress={() => {}}
@@ -94,11 +125,47 @@ export function DayDetailSheet({
             <>
               <View className="mb-3 flex-row items-center justify-between">
                 <Text className="text-[17px] font-semibold text-ink-900">{longDate(day.date)}</Text>
-                <View className={`rounded-full px-2.5 py-1 ${meta.chipBg}`}>
-                  <Text className={`text-[11px] font-medium ${meta.chipText}`}>{meta.label}</Text>
+                <View className="flex-row items-center gap-1.5">
+                  {hasPendingRegularization ? (
+                    <View className="rounded-full bg-warning-tint px-2.5 py-1">
+                      <Text className="text-[11px] font-medium text-warning-ontint">Pending</Text>
+                    </View>
+                  ) : null}
+                  <View className={`rounded-full px-2.5 py-1 ${meta.chipBg}`}>
+                    <Text className={`text-[11px] font-medium ${meta.chipText}`}>{meta.label}</Text>
+                  </View>
                 </View>
               </View>
 
+              {mode === "form" ? (
+                <RegularizeForm
+                  date={day.date}
+                  orgId={orgId}
+                  onSuccess={() => setMode("success")}
+                  onCancel={() => setMode("detail")}
+                />
+              ) : mode === "success" ? (
+                <View className="items-center py-4">
+                  <View className="h-12 w-12 items-center justify-center rounded-full bg-success-tint">
+                    <Ionicons name="checkmark" size={26} color="#177245" />
+                  </View>
+                  <Text className="mt-3 text-[17px] font-semibold text-ink-900">
+                    Request sent
+                  </Text>
+                  <Text className="mt-1 text-center text-[13px] leading-5 text-ink-600">
+                    Your correction is pending — it counts toward your attendance once your
+                    manager approves it.
+                  </Text>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={close}
+                    className="mt-4 h-11 w-full items-center justify-center rounded-xl border border-line bg-surface active:bg-brand-tint"
+                  >
+                    <Text className="text-[15px] font-medium text-ink-900">Done</Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <>
               {/* Punch pairs */}
               {hasPunches ? (
                 <View className="rounded-xl border border-line">
@@ -158,18 +225,28 @@ export function DayDetailSheet({
                 </View>
               ) : null}
 
-              {/* Request correction — disabled placeholder (Task 7). */}
-              <Pressable
-                accessibilityRole="button"
-                accessibilityState={{ disabled: true }}
-                disabled
-                className="mt-4 h-11 flex-row items-center justify-center rounded-xl border border-line bg-surface opacity-50"
-              >
-                <Ionicons name="create-outline" size={16} color="#9AA1AB" />
-                <Text className="ml-1.5 text-[15px] font-medium text-ink-400">
-                  Request correction
-                </Text>
-              </Pressable>
+              {/* Request correction — past non-holiday days only. */}
+              {hasPendingRegularization ? (
+                <View className="mt-4 flex-row items-center justify-center rounded-xl bg-warning-tint px-3 py-2.5">
+                  <Ionicons name="hourglass-outline" size={16} color="#8A5A06" />
+                  <Text className="ml-1.5 text-[13px] font-medium text-warning-ontint">
+                    Correction pending review
+                  </Text>
+                </View>
+              ) : canRequestCorrection ? (
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => setMode("form")}
+                  className="mt-4 h-11 flex-row items-center justify-center rounded-xl border border-line bg-surface active:bg-brand-tint"
+                >
+                  <Ionicons name="create-outline" size={16} color="#17806D" />
+                  <Text className="ml-1.5 text-[15px] font-medium text-brand">
+                    Request correction
+                  </Text>
+                </Pressable>
+              ) : null}
+                </>
+              )}
             </>
           ) : null}
         </Pressable>

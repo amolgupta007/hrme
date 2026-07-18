@@ -34,11 +34,15 @@ function dayNumber(dateStr: string): string {
 export function MonthGrid({
   days,
   onDayPress,
+  pendingDates,
 }: {
   days: MonthDay[];
   onDayPress: (day: MonthDay) => void;
+  /** IST dates carrying a pending regularization — rendered as an amber dot. */
+  pendingDates?: string[];
 }) {
   const leadingBlanks = days.length > 0 ? mondayIndex(days[0].date) : 0;
+  const pending = new Set(pendingDates ?? []);
 
   return (
     <View>
@@ -78,6 +82,9 @@ export function MonthGrid({
                 >
                   {dayNumber(day.date)}
                 </Text>
+                {pending.has(day.date) ? (
+                  <View className="absolute bottom-1 h-1 w-1 rounded-full bg-warning" />
+                ) : null}
               </Pressable>
             </View>
           );

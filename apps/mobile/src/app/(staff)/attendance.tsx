@@ -139,7 +139,11 @@ export default function Attendance() {
           {!data && (query.isLoading || !orgId) ? (
             <CalendarSkeleton />
           ) : data ? (
-            <MonthGrid days={data.days} onDayPress={openDay} />
+            <MonthGrid
+              days={data.days}
+              onDayPress={openDay}
+              pendingDates={data.pendingRegularizationDates}
+            />
           ) : (
             <Text className="text-[15px] text-ink-600">
               Couldn&apos;t load this month. Pull to refresh once you&apos;re back online.
@@ -156,6 +160,10 @@ export default function Attendance() {
         detail={detail}
         visible={sheetOpen}
         onClose={() => setSheetOpen(false)}
+        hasPendingRegularization={
+          !!selected && !!data?.pendingRegularizationDates?.includes(selected.date)
+        }
+        orgId={orgId}
       />
     </SafeAreaView>
   );

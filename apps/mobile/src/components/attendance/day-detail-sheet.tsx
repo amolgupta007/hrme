@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Modal, Platform, Pressable, Text, View } from "react-native";
+import { KeyboardAvoidingView, Modal, Platform, Pressable, Text, View } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import type { MonthDay } from "@jambahr/shared/attendance/month-calendar";
 import type { MobileAttendanceDayDetail } from "@jambahr/shared/mobile/types";
@@ -112,6 +112,12 @@ export function DayDetailSheet({
       onRequestClose={close}
       statusBarTranslucent
     >
+      {/* Keep the form's reason field above the keyboard (iOS needs explicit
+          padding behavior; Android's resize mode handles it natively). */}
+      <KeyboardAvoidingView
+        className="flex-1"
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
       <Pressable className="flex-1 justify-end bg-black/40" onPress={close}>
         {/* Stop propagation so taps inside the card don't dismiss. */}
         <Pressable
@@ -251,6 +257,7 @@ export function DayDetailSheet({
           ) : null}
         </Pressable>
       </Pressable>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

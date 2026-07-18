@@ -351,10 +351,23 @@ describe("POST /api/mobile/attendance/regularize (200 + validation)", () => {
     expect((await res.json()).error).toBe("inactive_employee");
   });
 
-  it("returns 500 on a real insert error", async () => {
-    punchInsertError = { code: "23503", message: "fk violation" };
+  it("returns 409 duplicate_time on a unique-violation (23505) — e.g. resubmit after rejection", async () => {
+    punchInsertError = { code: "23505", message: "duplicate key value violates uq_punch_events_dedupe" };
+    const res = await post(regularizeBody());
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toBe("duplicate_time");
+    // The 2-row insert is one atomic statement — nothing persisted, so no
+    // recompute (and no partial IN-only state to clean up).
+    expect(recomputeSpy).not.toHaveBeenCalled();
+  });
+
+  it("returns a generic 500 on a real insert error without leaking the DB message", async () => {
+    punchInsertError = { code: "23503", message: "fk violation on attendance_punch_events" };
     const res = await post(regularizeBody());
     expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json.error).toBe("insert_failed");
+    expect(JSON.stringify(json)).not.toContain("fk violation");
     expect(recomputeSpy).not.toHaveBeenCalled();
   });
 });

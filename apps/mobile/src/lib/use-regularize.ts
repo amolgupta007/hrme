@@ -22,6 +22,8 @@ export function regularizeErrorCopy(error: unknown): string {
       return "The times must fall on the selected day.";
     case "out_before_in":
       return "Punch-out must be after punch-in.";
+    case "duplicate_time":
+      return "A punch already exists at this exact time — adjust the time by a minute and resubmit.";
     case "attendance_disabled":
       return "Attendance isn't enabled for your organization.";
     case "inactive_employee":

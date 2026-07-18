@@ -163,7 +163,9 @@ export function DailyAttendanceTab() {
                       className="rounded px-1 font-medium text-primary underline-offset-2 hover:underline"
                       title="View punch timeline"
                     >
-                      {r.punch_count ?? 0} punch{(r.punch_count ?? 0) === 1 ? "" : "es"}
+                      {(r.punch_count ?? 0) === 0 && r.has_pending_punches
+                        ? "Review punches"
+                        : `${r.punch_count ?? 0} punch${(r.punch_count ?? 0) === 1 ? "" : "es"}`}
                     </button>
                     {(r.out_of_zone_count ?? 0) > 0 && (
                       <span className="ml-1 inline-flex items-center gap-0.5 rounded bg-amber-100 px-1 text-[10px] font-medium text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">

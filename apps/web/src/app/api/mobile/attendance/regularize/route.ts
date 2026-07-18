@@ -89,11 +89,26 @@ export async function POST(request: NextRequest) {
     // insert arg infers `never` (gotcha #3). Matches the punch route idiom.
   }));
 
+  // Both rows go through ONE insert statement, so Postgres applies it
+  // atomically — a unique violation on either row persists NEITHER (no
+  // partial IN-only state to clean up).
   const { error: insertErr } = await supabase
     .from("attendance_punch_events")
     .insert(rows as never);
   if (insertErr) {
-    return NextResponse.json({ error: insertErr.message }, { status: 500 });
+    // 23505 on uq_punch_events_dedupe (078): with device_id null the key
+    // collapses to (org, employee, punched_at) — an existing event at exactly
+    // that instant (e.g. a previously REJECTED correction) blocks the insert.
+    // Deliberately NOT idempotent-success like the punch route: a resubmit
+    // after rejection wants a genuinely NEW pending row, so claiming success
+    // would falsely tell the user "pending". Deterministic 409 instead; the
+    // client asks the user to nudge the time.
+    if (insertErr.code === "23505") {
+      return NextResponse.json({ error: "duplicate_time" }, { status: 409 });
+    }
+    // Never leak the raw DB error message to the client.
+    console.error("[mobile/regularize] insert failed:", insertErr.message);
+    return NextResponse.json({ error: "insert_failed" }, { status: 500 });
   }
 
   // Surface the pending punches in the admin review queue (flags the rollup

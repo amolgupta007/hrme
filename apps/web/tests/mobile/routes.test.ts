@@ -76,9 +76,26 @@ import { GET as meGET } from "@/app/api/mobile/me/route";
 import { GET as homeGET } from "@/app/api/mobile/home/route";
 import { GET as attendanceGET } from "@/app/api/mobile/attendance/route";
 import { POST as punchPOST } from "@/app/api/mobile/attendance/punch/route";
+import { POST as regularizePOST } from "@/app/api/mobile/attendance/regularize/route";
 
 function req(url = "http://localhost/api/mobile/x", init?: RequestInit) {
   return new Request(url, init) as any;
+}
+
+/** IST calendar date `n` days before today (YYYY-MM-DD). */
+function istDaysAgo(n: number): string {
+  return new Date(Date.now() + 5.5 * 3600 * 1000 - n * 86400 * 1000).toISOString().slice(0, 10);
+}
+
+function regularizeBody(overrides?: Record<string, unknown>) {
+  const date = istDaysAgo(2);
+  return JSON.stringify({
+    date,
+    proposedIn: `${date}T09:30:00+05:30`,
+    proposedOut: `${date}T18:00:00+05:30`,
+    reason: "Forgot to punch in",
+    ...overrides,
+  });
 }
 
 const VALID_USER = {
@@ -113,6 +130,16 @@ const routes = [
             clientEventId: "b3f1c2de-0000-4000-8000-000000000001",
             punchedAt: new Date().toISOString(),
           }),
+        }),
+      ),
+  },
+  {
+    name: "POST /api/mobile/attendance/regularize",
+    call: () =>
+      regularizePOST(
+        req("http://localhost/api/mobile/attendance/regularize", {
+          method: "POST",
+          body: regularizeBody(),
         }),
       ),
   },
@@ -236,5 +263,114 @@ describe("POST /api/mobile/attendance/punch (200 + validation)", () => {
       }),
     );
     expect(res.status).toBe(400);
+  });
+});
+
+describe("POST /api/mobile/attendance/regularize (200 + validation)", () => {
+  const post = (body: string) =>
+    regularizePOST(
+      req("http://localhost/api/mobile/attendance/regularize", { method: "POST", body }),
+    );
+
+  it("records pending in+out events, recomputes the day, and returns eventsCreated=2", async () => {
+    const res = await post(regularizeBody());
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json).toEqual({ ok: true, eventsCreated: 2 });
+    expect(recomputeSpy).toHaveBeenCalledTimes(1);
+    expect(recomputeSpy).toHaveBeenCalledWith(expect.anything(), "org-1", "emp-1", istDaysAgo(2));
+  });
+
+  it("returns eventsCreated=1 for an in-only submission", async () => {
+    const res = await post(regularizeBody({ proposedOut: null }));
+    expect(res.status).toBe(200);
+    expect((await res.json()).eventsCreated).toBe(1);
+  });
+
+  it("rejects today's date with 400 date_not_past", async () => {
+    const today = istDaysAgo(0);
+    const res = await post(
+      regularizeBody({
+        date: today,
+        proposedIn: `${today}T09:30:00+05:30`,
+        proposedOut: null,
+      }),
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("date_not_past");
+    expect(recomputeSpy).not.toHaveBeenCalled();
+  });
+
+  it("rejects a date before employment with 400 before_employment", async () => {
+    tableConfig.employees.single.date_of_joining = istDaysAgo(1);
+    const res = await post(regularizeBody());
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("before_employment");
+  });
+
+  it("rejects out at-or-before in with 400 out_before_in", async () => {
+    const date = istDaysAgo(2);
+    const res = await post(
+      regularizeBody({
+        proposedIn: `${date}T18:00:00+05:30`,
+        proposedOut: `${date}T09:30:00+05:30`,
+      }),
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("out_before_in");
+  });
+
+  it("rejects a proposedIn on a different IST day with 400 in_not_on_date", async () => {
+    const date = istDaysAgo(2);
+    const other = istDaysAgo(3);
+    const res = await post(
+      regularizeBody({ proposedIn: `${other}T09:30:00+05:30`, proposedOut: null }),
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("in_not_on_date");
+    void date;
+  });
+
+  it("rejects a missing reason with 400", async () => {
+    const res = await post(regularizeBody({ reason: "" }));
+    expect(res.status).toBe(400);
+    expect(recomputeSpy).not.toHaveBeenCalled();
+  });
+
+  it("returns 403 attendance_disabled when the org has attendance off", async () => {
+    currentUser = { ...VALID_USER, attendanceEnabled: false };
+    const res = await post(regularizeBody());
+    expect(res.status).toBe(403);
+    expect((await res.json()).error).toBe("attendance_disabled");
+  });
+
+  it("returns 403 inactive_employee for a terminated employee", async () => {
+    tableConfig.employees.single.status = "terminated";
+    const res = await post(regularizeBody());
+    expect(res.status).toBe(403);
+    expect((await res.json()).error).toBe("inactive_employee");
+  });
+
+  it("returns 500 on a real insert error", async () => {
+    punchInsertError = { code: "23503", message: "fk violation" };
+    const res = await post(regularizeBody());
+    expect(res.status).toBe(500);
+    expect(recomputeSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("GET /api/mobile/attendance — pendingRegularizationDates", () => {
+  it("lists IST dates that carry a pending punch event", async () => {
+    tableConfig.attendance_punch_events = {
+      rows: [
+        { punched_at: "2026-07-10T04:00:00Z", status: "pending" },
+        { punched_at: "2026-07-11T04:00:00Z", status: "approved" },
+      ],
+      count: 1,
+    };
+    const res = await attendanceGET(req("http://localhost/api/mobile/attendance?month=2026-07"));
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.pendingRegularizationDates).toEqual(["2026-07-10"]);
   });
 });

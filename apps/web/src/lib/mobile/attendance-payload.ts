@@ -78,12 +78,21 @@ export function buildAttendanceMonthPayload(input: {
   weekOff: WeekOffPolicy;
   todayIst: string;
 }): MobileAttendanceMonthResponse {
-  const recordsLite: DailyRecordLite[] = input.records.map((r) => ({
-    date: r.date,
-    // Half-day classification uses net worked minutes; fall back to gross span.
-    minutes: r.worked_minutes ?? r.total_minutes ?? null,
-    half_day_threshold_minutes: r.half_day_threshold_minutes ?? null,
-  }));
+  const recordsLite: DailyRecordLite[] = input.records
+    // A rollup row created purely to flag a pending regularization on an
+    // otherwise-absent day (no clock-in, no worked/total minutes) must NOT read
+    // as "present" on the calendar — treat it as no-record so the day stays
+    // absent until the correction is approved.
+    .filter(
+      (r) =>
+        r.clock_in_at != null || r.worked_minutes != null || r.total_minutes != null,
+    )
+    .map((r) => ({
+      date: r.date,
+      // Half-day classification uses net worked minutes; fall back to gross span.
+      minutes: r.worked_minutes ?? r.total_minutes ?? null,
+      half_day_threshold_minutes: r.half_day_threshold_minutes ?? null,
+    }));
 
   const days = computeMonthCalendar({
     year: input.year,
@@ -99,9 +108,18 @@ export function buildAttendanceMonthPayload(input: {
     buildDayDetail(r, input.punchEventsByDate[r.date]),
   );
 
+  // Dates carrying an unresolved pending punch (regularization awaiting admin
+  // approval). Derived from the raw event stream, independent of whether a
+  // rollup record exists for the day.
+  const pendingRegularizationDates = Object.entries(input.punchEventsByDate)
+    .filter(([, evs]) => evs.some((e) => e.status === "pending"))
+    .map(([date]) => date)
+    .sort();
+
   return {
     month: `${input.year}-${pad2(input.month)}`,
     days,
     details,
+    pendingRegularizationDates,
   };
 }

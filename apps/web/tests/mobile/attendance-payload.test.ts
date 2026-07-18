@@ -130,3 +130,59 @@ describe("buildAttendanceMonthPayload", () => {
     expect(detail.pairs).toEqual([{ in: "2026-07-10T04:00:00Z", out: "2026-07-10T12:00:00Z" }]);
   });
 });
+
+describe("buildAttendanceMonthPayload — pending regularizations", () => {
+  it("keeps a pending-only shell record classified absent and lists its date as pending", () => {
+    const res = buildAttendanceMonthPayload({
+      year: 2026,
+      month: 7,
+      records: [
+        // Rollup row created only to flag a pending regularization on an
+        // absent day: no clock-in, no minutes.
+        {
+          date: "2026-07-14",
+          clock_in_at: null,
+          clock_out_at: null,
+          worked_minutes: null,
+          total_minutes: null,
+          source: "mobile",
+          auto_closed: false,
+          out_of_zone_count: 0,
+          half_day_threshold_minutes: null,
+        },
+      ],
+      punchEventsByDate: {
+        "2026-07-14": [
+          { punched_at: "2026-07-14T04:00:00Z", status: "pending" },
+          { punched_at: "2026-07-14T12:30:00Z", status: "pending" },
+        ],
+      },
+      holidays: [],
+      approvedLeaves: [],
+      weekOff,
+      todayIst: "2026-07-17",
+    });
+
+    const byDate = Object.fromEntries(res.days.map((d) => [d.date, d.state]));
+    // Pending events must NOT flip the day to present before approval.
+    expect(byDate["2026-07-14"]).toBe("absent");
+    expect(res.pendingRegularizationDates).toEqual(["2026-07-14"]);
+  });
+
+  it("does not list dates whose events are all approved/rejected", () => {
+    const res = buildAttendanceMonthPayload({
+      year: 2026,
+      month: 7,
+      records: [],
+      punchEventsByDate: {
+        "2026-07-10": [{ punched_at: "2026-07-10T04:00:00Z", status: "approved" }],
+        "2026-07-11": [{ punched_at: "2026-07-11T04:00:00Z", status: "rejected" }],
+      },
+      holidays: [],
+      approvedLeaves: [],
+      weekOff,
+      todayIst: "2026-07-17",
+    });
+    expect(res.pendingRegularizationDates).toEqual([]);
+  });
+});

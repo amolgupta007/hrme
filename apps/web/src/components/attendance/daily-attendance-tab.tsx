@@ -103,7 +103,7 @@ export function DailyAttendanceTab() {
             className="h-3.5 w-3.5"
           />
           Review queue only
-          <span className="text-xs text-muted-foreground">(incomplete / out-of-zone)</span>
+          <span className="text-xs text-muted-foreground">(incomplete / out-of-zone / pending punches)</span>
         </label>
       </div>
 
@@ -169,6 +169,11 @@ export function DailyAttendanceTab() {
                       <span className="ml-1 inline-flex items-center gap-0.5 rounded bg-amber-100 px-1 text-[10px] font-medium text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">
                         <AlertTriangle className="h-2.5 w-2.5" />
                         {r.out_of_zone_count} out-of-zone
+                      </span>
+                    )}
+                    {r.has_pending_punches && (
+                      <span className="ml-1 inline-flex items-center rounded bg-amber-100 px-1 text-[10px] font-medium text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">
+                        pending approval
                       </span>
                     )}
                   </td>

@@ -1,4 +1,4 @@
-import { Alert, Pressable, ScrollView, Text, View } from "react-native";
+import { Alert, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useAuth } from "@clerk/clerk-expo";
@@ -69,6 +69,9 @@ export function HomeScreen({ isAdmin = false }: { isAdmin?: boolean }) {
         className="flex-1"
         contentContainerClassName="px-4 pb-10 pt-2 gap-4"
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={home.isRefetching} onRefresh={() => home.refetch()} />
+        }
       >
         {/* Greeting */}
         <View className="flex-row items-start justify-between pt-2">

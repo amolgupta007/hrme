@@ -19,14 +19,26 @@ const PUNCH_PATH = "/api/mobile/attendance/punch";
 const DRAIN_FAILURE_BANNER_THRESHOLD = 3;
 
 /**
- * A 4xx from the BFF is a *deterministic* rejection (bad body, clock skew,
- * attendance disabled, inactive employee) — replaying the same punch will
- * always fail, so it must be surfaced and dropped, NEVER queued/retried. A
- * network error or a 5xx is transient: the punch is queued (idempotent on
- * `clientEventId`) and replayed on reconnect/foreground.
+ * A 4xx from the BFF is *usually* a deterministic rejection (bad body, clock
+ * skew, attendance disabled, inactive employee) — replaying the same punch
+ * will always fail, so `onError` surfaces it immediately. A network error or
+ * a 5xx is transient: the punch is queued (idempotent on `clientEventId`)
+ * and replayed on reconnect/foreground.
  */
 function is4xx(error: unknown): error is ApiError {
   return error instanceof ApiError && error.status >= 400 && error.status < 500;
+}
+
+/**
+ * Whether a 4xx should be treated as *permanent* — dropped from the offline
+ * queue and never retried. Excludes 401: an expired/refreshing Clerk token
+ * is a transient condition (a fresh token on the next attempt can succeed),
+ * not a rejection of the punch itself, so a 401'd punch must stay queued and
+ * be retried exactly like a network error or a 5xx — same as `is4xx` in
+ * every other case, just carved out for 401.
+ */
+function isPermanentRejection(error: unknown): boolean {
+  return is4xx(error) && error.status !== 401;
 }
 
 /** Human copy for the BFF error codes a punch can return (4xx surface path). */
@@ -166,7 +178,8 @@ export function usePunch({
    * AppState-foreground firing together can't run two drains concurrently
    * (which would double-POST — harmless on the server thanks to idempotency,
    * but wasteful and could double-remove). Stops at the first transient
-   * failure and retries on the next trigger; drops 4xx-rejected items.
+   * failure (network, 5xx, or 401) and retries on the next trigger; drops
+   * only permanently-rejected (non-401) 4xx items.
    */
   const drain = useCallback(async () => {
     if (draining.current) return;
@@ -206,13 +219,14 @@ export function usePunch({
           );
           invalidateCurrentMonth();
         } catch (error) {
-          if (is4xx(error)) {
+          if (isPermanentRejection(error)) {
             // Deterministic rejection (e.g. a punch queued > 24h → clock_skew):
             // drop it, surface, and keep draining the rest.
             queue.remove(item.clientEventId);
             setPunchError(punchErrorCopy(error));
           } else {
-            // Still offline / server transient — stop; retry on next trigger.
+            // Still offline / server transient / 401 token blip — stop;
+            // retry on next trigger. The entry stays queued.
             transientFailure = true;
             break;
           }
@@ -259,8 +273,9 @@ export function usePunch({
    * can never lose the punch (on relaunch the entry is still in MMKV and the
    * mount/reconnect drain replays it; if the killed request had actually
    * reached the server, the replay is deduped on clientEventId → idempotent
-   * SUCCESS). The entry is removed on success or on a 4xx permanent rejection
-   * (4xx is never retried); it stays queued only for network/5xx failures.
+   * SUCCESS). The entry is removed on success or on a permanent (non-401)
+   * 4xx rejection; it stays queued for network/5xx failures and for a 401
+   * (transient token blip — never permanently rejected).
    */
   const punch = useCallback(async () => {
     const vars: PunchVars = {
@@ -277,12 +292,16 @@ export function usePunch({
       await mutation.mutateAsync(vars);
       queue.remove(vars.clientEventId);
     } catch (error) {
-      if (is4xx(error)) {
+      if (isPermanentRejection(error)) {
         // Deterministic rejection (already rolled back + surfaced in onError)
         // — must never be retried, so drop it from the queue.
         queue.remove(vars.clientEventId);
       }
-      // Network / 5xx: leave the frozen entry queued for the drain.
+      // Network / 5xx / 401: leave the frozen entry queued for the drain.
+      // (A 401 is still surfaced to the user via `onError` above — that's
+      // just user feedback; the underlying token blip is transient, so the
+      // punch itself must stay queued and retried, same reasoning as the
+      // drain loop.)
     } finally {
       inFlight.current.delete(vars.clientEventId);
       setQueueCount(pendingCount());

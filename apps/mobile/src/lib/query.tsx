@@ -5,8 +5,12 @@ import {
   useMemo,
   type ReactNode,
 } from "react";
+import { AppState, Platform, type AppStateStatus } from "react-native";
+import NetInfo from "@react-native-community/netinfo";
 import { useAuth } from "@clerk/clerk-expo";
 import {
+  focusManager,
+  onlineManager,
   QueryClient,
   useQuery,
   useQueryClient,
@@ -23,6 +27,28 @@ import {
   wipeNamespaceStorage,
   type AppStorage,
 } from "@/lib/storage";
+
+/**
+ * Standard TanStack Query React Native recipe, wired once at module load
+ * (this module is imported exactly once for the app's lifetime, same as the
+ * `queryClient` singleton below). Without this, `refetchOnReconnect` /
+ * `refetchOnWindowFocus` are inert on RN — TanStack's default browser
+ * `navigator.onLine` / `visibilitychange` detection never fires.
+ */
+onlineManager.setEventListener((setOnline) => {
+  return NetInfo.addEventListener((state) => {
+    setOnline(!!state.isConnected);
+  });
+});
+
+function onAppStateChange(status: AppStateStatus) {
+  // Guard mirrors the TanStack RN recipe — a no-op on web, where the
+  // default browser focus detection already applies.
+  if (Platform.OS !== "web") {
+    focusManager.setFocused(status === "active");
+  }
+}
+AppState.addEventListener("change", onAppStateChange);
 
 /**
  * Bump whenever a cached query's shape changes incompatibly — the persister

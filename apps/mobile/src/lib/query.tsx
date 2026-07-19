@@ -133,6 +133,18 @@ const queryClient = new QueryClient({
       staleTime: 60_000,
       retry: 1,
     },
+    mutations: {
+      // Fail fast when offline instead of TanStack's default 'online' mode,
+      // which — now that `onlineManager` is wired to NetInfo above — would
+      // PAUSE an offline `mutateAsync` indefinitely (isPending stuck true,
+      // finally never runs, punch entry stuck inFlight) rather than
+      // rejecting. Our mutations own their offline story by hand (the punch
+      // MMKV queue + drain in use-punch.ts, the offline copy in
+      // use-regularize.ts) and need the rejection to reach them. Queries
+      // intentionally KEEP the default 'online' mode: paused-then-resume on
+      // reconnect is an improvement there.
+      networkMode: "always",
+    },
   },
 });
 

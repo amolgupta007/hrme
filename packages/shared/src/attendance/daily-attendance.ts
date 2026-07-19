@@ -14,10 +14,19 @@
  */
 import { pairPunches } from "./pair-punches";
 
+/** Mirrors the attendance_punch_events.source CHECK constraint (migration 102). */
+export type PunchSource = "web" | "device" | "manual" | "adms" | "mobile";
+
 export type PunchEvent = {
   id: string;
   punched_at: string; // ISO 8601 (UTC)
   location_id: string | null;
+  /**
+   * Optional for back-compat — existing call sites (e.g. the ADMS ingest path,
+   * which doesn't select this column) omit it entirely and get the pre-existing
+   * zone-exclusion behavior. Only `'mobile'` changes behavior (see below).
+   */
+  source?: PunchSource;
 };
 
 export type DailyAttendanceStatus = "present" | "incomplete" | "absent";
@@ -99,9 +108,17 @@ export function computeDailyAttendance(params: {
 
   // No zone assigned → fall back to ALL locations (PRD §4.4) and flag it.
   const noZoneFallback = zoneLocationIds === null;
+  // Mobile GPS punches are exempt from zone filtering (lenient — field staff
+  // punching at client sites aren't "out of zone"; see 02A-PHASE-D-DECISIONS.md
+  // decision 3). All other sources (including no source, e.g. legacy/ADMS
+  // events that don't select this column) keep the original zone check.
   const inZone = noZoneFallback
     ? deduped
-    : deduped.filter((e) => e.location_id !== null && zoneLocationIds!.includes(e.location_id));
+    : deduped.filter(
+        (e) =>
+          e.source === "mobile" ||
+          (e.location_id !== null && zoneLocationIds!.includes(e.location_id)),
+      );
   const outOfZoneCount = deduped.length - inZone.length;
 
   if (inZone.length === 0) {

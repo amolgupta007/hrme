@@ -35,6 +35,25 @@ export default function Index() {
     );
   }
 
+  if (error === "unauthenticated") {
+    // Session token is invalid/expired server-side. Retrying won't help —
+    // only a fresh sign-in will. Closes the Phase C follow-up (previously
+    // this fell through to the generic "check your connection" retry CTA).
+    return (
+      <View className="flex-1 items-center justify-center bg-background px-8">
+        <Text className="text-center text-base font-semibold text-foreground">
+          Your session has expired.
+        </Text>
+        <Text className="mt-2 text-center text-sm text-muted-foreground">
+          Sign out and sign back in to continue.
+        </Text>
+        <Pressable className="mt-6" onPress={() => void signOut()}>
+          <Text className="font-semibold text-primary">Sign out</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
   if (error || !me) {
     return (
       <View className="flex-1 items-center justify-center bg-background px-8">

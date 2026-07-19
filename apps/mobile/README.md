@@ -26,10 +26,10 @@ upload — set via `eas env:create`, never in files.
 **iOS via Expo Go is currently blocked.** Expo Go on the iOS App Store is
 frozen at SDK 54 — it's been stuck in Apple review since ~May 2026 (see
 [expo.dev/changelog/expo-go-and-app-store-may-2026](https://expo.dev/changelog/expo-go-and-app-store-may-2026)).
-The TestFlight External Beta is at capacity, and `eas go` needs an Apple
-Developer account. iPhone testing resumes once the Apple Developer org
-enrollment (D-U-N-S, initiated 2026-07-05) clears — then via EAS development
-builds or `eas go` through TestFlight.
+The Apple Developer Program enrollment is now **ACTIVE** (D-U-N-S cleared,
+2026-07-17), so iPhone testing goes through **EAS development builds** — see
+"Development builds (EAS)" below. Expo Go on iOS stays unusable until Apple
+approves the SDK 57 Go build.
 
 **The working device loop today is Android**: sideload the official Expo Go
 57 APK from [expo.dev/go](https://expo.dev/go) (or
@@ -76,20 +76,80 @@ before relying on this path.
 ## What Expo Go can't do
 
 - No native crash reporting (Sentry captures JS errors only in Go).
-- No custom native modules. None are needed for the current shell.
+- **No `react-native-mmkv`** (v4 Nitro module): in Expo Go the storage layer
+  falls back to an **in-memory** adapter — the offline punch queue and the
+  TanStack Query cache do NOT survive an app restart. Fine for JS-only UI
+  work; useless for testing offline/persistence behavior.
 - (Today, additionally: no iOS Expo Go at all — see "Dev loop" above.)
 
-When native modules or iOS device testing are needed: **EAS development
-build** (cloud — iOS builds require the Apple Developer org account;
-enrollment is in progress separately):
+For anything involving native modules, persistence, or iOS devices, use a
+development build (next section). Expo Go remains the quick loop for
+JS-only changes.
+
+## Development builds (EAS)
+
+A development build = your own app binary (bundle id `com.jambahr.mobile`)
+with the `expo-dev-client` launcher baked in. It replaces Expo Go for this
+app: MMKV really persists (offline queue + query cache survive restarts),
+Sentry captures native crashes, and it runs on iPhone.
+
+> **Bundle id is permanent once registered with Apple.** The shipped ids are
+> `com.jambahr.mobile` (iOS `bundleIdentifier` + Android `package`, set in
+> Phase C). Note: PRD 05 (`docs/prds/mobile/05-PRD-Release-Compliance.md`)
+> mentions `com.jambahr.app` — the shipped `com.jambahr.mobile` wins unless
+> deliberately changed **before** the first iOS build creates the App ID in
+> the Apple Developer portal. After that, changing it means a new App ID,
+> new provisioning, and (later) a different App Store listing identity.
+
+Rebuild the binary only when native config changes (new native module, plugin
+change in `app.json`, SDK upgrade). JS-only changes just need Metro.
+
+### One-time setup + first builds (interactive — needs Expo/Apple accounts)
 
     npm i -g eas-cli
-    eas login
-    eas init          # links the project (one-time)
-    eas build --profile development --platform ios
+    eas login                       # Expo account
+    cd apps/mobile
 
-`apps/mobile/eas.json` already has `development` / `preview` / `production`
-build profiles scaffolded — no `eas init` or first build has been run yet.
+    # Android — APK for sideloading (profile sets buildType: apk)
+    eas build --profile development --platform android
+    #   First run: prompts to create/link the EAS project (writes
+    #   extra.eas.projectId into app.json — commit that change) and to
+    #   generate an Android keystore (let EAS manage it).
+
+    # iOS — register the iPhone FIRST, then build
+    eas device:create               # emits a QR/URL; open on the iPhone to
+    #                                 register its UDID for ad-hoc installs
+    eas build --profile development --platform ios
+    #   First run: sign in with the Apple Developer account when prompted —
+    #   EAS creates the App ID, certificate, and ad-hoc provisioning profile
+    #   for the registered device(s). (Apple Developer Program enrollment is
+    #   ACTIVE as of 2026-07-17.)
+
+Devices registered with `eas device:create` AFTER an iOS build are not in
+that build's provisioning profile — rebuild to add them.
+
+### Installing the artifacts
+
+- **Android**: build page (or terminal) gives an APK link — open it on the
+  phone and install directly (same sideload flow as the Expo Go APK). If
+  Expo Go is also installed, the dev build is a separate app ("JambaHR").
+- **iOS**: open the build link (or expo.dev → project → Builds) on the
+  registered iPhone in Safari → Install. First launch needs
+  Settings → General → VPN & Device Management → trust the developer
+  profile if iOS prompts.
+
+### Daily loop with a dev build
+
+1. Start the BFF LAN-visible as usual (`npx next dev -H 0.0.0.0`).
+2. `npx expo start` (cwd `apps/mobile`) — the dev client discovers Metro on
+   the LAN, or scan the QR from inside the dev-build app. Same
+   single-Metro/firewall rules as the Expo Go loop above.
+3. After any babel/metro/tailwind/app-config change: `npx expo start --clear`
+   (unchanged from the Expo Go loop — Metro cache will not self-heal).
+
+`--profile development` comes from `apps/mobile/eas.json` (developmentClient
++ internal distribution; Android `buildType: apk`, iOS device build).
+`preview` / `production` profiles are scaffolded but unused so far.
 
 ## Commands
 

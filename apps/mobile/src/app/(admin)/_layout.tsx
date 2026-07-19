@@ -26,6 +26,8 @@ export default function AdminTabs() {
         name="home"
         options={{
           title: "Home",
+          // Home renders its own large-title greeting (design language) — no nav bar.
+          headerShown: false,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="home-outline" size={size} color={color} />
           ),

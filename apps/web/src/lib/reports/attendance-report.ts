@@ -160,6 +160,9 @@ export function buildReportData(input: RawReportInputs): AttendanceReportData {
           pairs.push({ in: istClock(paired.danglingInAt), out: null, minutes: 0 });
           singlePunch = true;
         }
+        // Prefer the record's rollup (recomputeAttendanceDay is zone/break-aware;
+        // raw event re-pairing here is not) — pairs remain the raw punch times, so
+        // the pair span may legitimately exceed the counted minutes.
         minutes = rec?.total_minutes ?? paired.workedMinutes;
       } else if (rec?.clock_in_at) {
         pairs = [{

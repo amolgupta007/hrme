@@ -11,8 +11,15 @@ const MAX_RANGE_MSG = "Range too large — maximum 92 days";
 function iso(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
+// Presets must follow the org's IST calendar, not the browser's UTC date —
+// between 00:00 and 05:29 IST the UTC month/day is still "yesterday", which
+// would make "This month" point at the wrong month on the 1st.
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+function istNow(): Date {
+  return new Date(Date.now() + IST_OFFSET_MS);
+}
 function monthBounds(offset: number): { from: string; to: string } {
-  const now = new Date();
+  const now = istNow();
   const first = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + offset, 1));
   const last = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + offset + 1, 0));
   return { from: iso(first), to: iso(last) };
@@ -43,7 +50,7 @@ export function AttendanceReportsTab() {
     if (preset === "this_month") return monthBounds(0);
     if (preset === "last_month") return monthBounds(-1);
     if (preset === "last_7") {
-      const now = new Date();
+      const now = istNow();
       const from = new Date(now.getTime() - 6 * 86_400_000);
       return { from: iso(from), to: iso(now) };
     }

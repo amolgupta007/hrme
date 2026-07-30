@@ -34,6 +34,9 @@ export async function listReportDepartments(): Promise<ActionResult<{ id: string
   if (!isAdmin(user.role)) return { success: false, error: "Unauthorized" };
   const sb = createAdminSupabase();
   const { data, error } = await sb.from("departments").select("id, name").eq("org_id", user.orgId).order("name");
-  if (error) return { success: false, error: "Failed to load departments" };
+  if (error) {
+    console.error("[attendance-reports] departments:", error.message);
+    return { success: false, error: "Failed to load departments" };
+  }
   return { success: true, data: (data ?? []) as { id: string; name: string }[] };
 }

@@ -92,11 +92,16 @@ export async function fetchAttendanceReportData(
         sb.from("attendance_punch_events")
           .select("employee_id, punched_at")
           .eq("org_id", orgId).eq("status", "approved")
-          // punched_at window widened +2 days so IST attribution at range edges is complete
-          .gte("punched_at", `${from}T00:00:00Z`)
+          // punched_at window widened −1/+2 days (UTC) so IST attribution at BOTH range
+          // edges is complete: an IST punch at 00:00–05:29 on `from` is the previous UTC
+          // day (≥18:30Z), and one late on `to` spills into the next UTC day.
+          // buildReportData ignores events whose IST day falls outside `dates`.
+          .gte("punched_at", new Date(new Date(`${from}T00:00:00Z`).getTime() - 86_400_000).toISOString())
           .lte("punched_at", new Date(new Date(`${to}T00:00:00Z`).getTime() + 2 * 86_400_000).toISOString())
           .in("employee_id", empIds)
-          .order("punched_at")
+          // Deterministic total order across .range() pages: punched_at has
+          // second-precision ties (shift change), so tiebreak on the uuid PK.
+          .order("punched_at").order("id")
           .range(a, b),
       ),
       sb.from("holidays").select("date").eq("org_id", orgId).gte("date", from).lte("date", to),
@@ -106,6 +111,8 @@ export async function fetchAttendanceReportData(
           .eq("org_id", orgId).eq("status", "approved")
           .lte("start_date", to).gte("end_date", from)
           .in("employee_id", empIds)
+          // Deterministic total order across .range() pages (uuid PK).
+          .order("id")
           .range(a, b),
       ),
       sb.from("week_off_policy").select("week_type, off_days, alt_saturday_rule").eq("org_id", orgId).maybeSingle(),

@@ -4,6 +4,7 @@ import {
   stateLetter, csvRows, formatHours,
   type RawReportInputs,
 } from "@/lib/reports/attendance-report";
+import { validateRange } from "@/lib/reports/fetch-report-data";
 
 const POLICY = { week_type: 6 as const, off_days: [0] }; // Sundays off
 
@@ -149,5 +150,19 @@ describe("csvRows", () => {
     expect(worked[5]).toBe("09:02-18:20");
     expect(worked[6]).toBe("mobile");
     expect(rows).toHaveLength(1 + 7); // header + 7 days
+  });
+});
+
+describe("validateRange", () => {
+  it("accepts a normal month", () => {
+    expect(validateRange("2026-07-01", "2026-07-31")).toBeNull();
+  });
+  it("rejects bad format, inverted, and >92 days", () => {
+    expect(validateRange("2026/07/01", "2026-07-31")).toMatch(/invalid/i);
+    expect(validateRange("2026-07-31", "2026-07-01")).toMatch(/invalid/i);
+    expect(validateRange("2026-01-01", "2026-04-15")).toBe("Range too large — maximum 92 days");
+  });
+  it("accepts exactly 92 days", () => {
+    expect(validateRange("2026-01-01", "2026-04-02")).toBeNull(); // 92 days inclusive
   });
 });

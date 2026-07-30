@@ -519,6 +519,7 @@ Feature-flagged via `organizations.settings.attendance_enabled`. Optional payrol
   - `auto_closed = true`, `source = 'auto_close'`
   - Skips orgs with `attendance_enabled = false`
   - Idempotent (re-checks `clock_out_at IS NULL` at update time)
+- **Reports tab** (admin-only, shipped 2026-07-30): period presets/custom range (≤92 days) + department filter → preview totals, landscape PDF (employee×date matrix with source markers d/m/w/* + day states W/H/L/A, then per-employee punch-pair detail) via `GET /api/reports/attendance/pdf` (streams, `maxDuration=60`), CSV client-side. Pure assembly in `src/lib/reports/attendance-report.ts` (paginated fetch in `fetch-report-data.ts` — range queries page at 1000 rows; the older `getDailyAttendance` still truncates at 1000, known issue).
 
 ### Phase 1 — Shifts + Week-Off (PRD 01, shipped 2026-06-07)
 

@@ -12,6 +12,7 @@ import type { RosterGrid as RosterGridData } from "@/actions/shifts";
 import type { WeekOffPolicy } from "@/lib/attendance/week-off";
 import { OvertimeTab } from "./overtime-tab";
 import { DailyAttendanceTab } from "./daily-attendance-tab";
+import { AttendanceReportsTab } from "./attendance-reports-tab";
 import { PunchTimelineDialog } from "./punch-timeline-dialog";
 import type { OvertimeRecord } from "@/actions/overtime";
 import type { OvertimeSettings } from "@/lib/attendance/overtime-types";
@@ -53,7 +54,7 @@ export function AttendanceClient({ today, history, team, employees, isManager, i
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [liveTime, setLiveTime] = useState("");
-  const [activeTab, setActiveTab] = useState<"my" | "team" | "roster" | "overtime" | "daily">(isManager ? "team" : "my");
+  const [activeTab, setActiveTab] = useState<"my" | "team" | "roster" | "overtime" | "daily" | "reports">(isManager ? "team" : "my");
   const [filterEmployee, setFilterEmployee] = useState("");
   const [punchTimeline, setPunchTimeline] = useState<AttendanceRecord | null>(null);
   const [filteredHistory, setFilteredHistory] = useState<AttendanceRecord[]>(history);
@@ -228,11 +229,12 @@ export function AttendanceClient({ today, history, team, employees, isManager, i
             { label: "Roster", value: "roster" },
             ...(isAdmin && overtimeSettings.enabled ? [{ label: "Overtime", value: "overtime" }] : []),
             ...(isAdmin ? [{ label: "Locations", value: "daily" }] : []),
+            ...(isAdmin ? [{ label: "Reports", value: "reports" }] : []),
             { label: "My History", value: "my" },
           ].map((tab) => (
             <button
               key={tab.value}
-              onClick={() => setActiveTab(tab.value as "my" | "team" | "roster" | "overtime" | "daily")}
+              onClick={() => setActiveTab(tab.value as "my" | "team" | "roster" | "overtime" | "daily" | "reports")}
               className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
                 activeTab === tab.value
                   ? "border-primary text-primary"
@@ -294,6 +296,8 @@ export function AttendanceClient({ today, history, team, employees, isManager, i
       )}
 
       {activeTab === "daily" && isAdmin && <DailyAttendanceTab />}
+
+      {activeTab === "reports" && isAdmin && <AttendanceReportsTab />}
 
       {/* My history tab */}
       {(activeTab === "my" || !isManager) && (

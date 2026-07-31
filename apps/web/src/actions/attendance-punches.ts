@@ -12,6 +12,7 @@ import {
   autoApproveOnAdd,
   type PunchActor,
 } from "@/lib/attendance/punch-permissions";
+import { validateManualPunch, istTodayDate } from "@/lib/attendance/manual-punch-validation";
 import type { ActionResult } from "@/types";
 
 export type PunchEventRow = {
@@ -139,6 +140,16 @@ export async function addManualPunch(
   const istDate = punchedAtLocal.slice(0, 10);
   // Admin-added punches auto-approve; everyone else's land pending.
   const autoApprove = autoApproveOnAdd(ctx.actor);
+
+  // No future punches (any actor); non-admins must supply a correction note.
+  const validationError = validateManualPunch({
+    istDate,
+    todayIst: istTodayDate(),
+    note,
+    isAdmin: autoApprove,
+  });
+  if (validationError) return { success: false, error: validationError };
+
   const status = autoApprove ? "approved" : "pending";
 
   const sb = createAdminSupabase();

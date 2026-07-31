@@ -51,7 +51,14 @@ export function PunchTimelineDialog({
   const [adding, setAdding] = useState(false);
   const [newTime, setNewTime] = useState(`${date}T09:00`);
   const [newType, setNewType] = useState<"in" | "out">("in");
+  const [newNote, setNewNote] = useState("");
   const [busy, setBusy] = useState(false);
+
+  // Non-admins (employees + managers) file a correction *request* that lands
+  // pending — the server requires an explanatory note. `canVoid` is admin-only,
+  // so it mirrors the auto-approve path exactly.
+  const noteRequired = !canVoid;
+  const noteTooShort = newNote.trim().length < 3;
 
   useEffect(() => {
     if (!open) return;
@@ -71,17 +78,22 @@ export function PunchTimelineDialog({
   approved.forEach((r, i) => typeById.set(r.id, inferredType(i)));
 
   async function submitAdd() {
+    if (noteRequired && noteTooShort) {
+      toast.error("A note explaining the correction is required");
+      return;
+    }
     setBusy(true);
     const res = await addManualPunch({
       employeeId,
       punchedAtLocal: newTime,
       punchType: newType,
-      note: null,
+      note: newNote.trim() || null,
     });
     setBusy(false);
     if (res.success) {
       toast.success(res.data.status === "approved" ? "Punch added" : "Punch requested — pending approval");
       setAdding(false);
+      setNewNote("");
       const refreshed = await listPunchEvents({ employeeId, date });
       if (refreshed.success) setRows(refreshed.data);
       router.refresh();
@@ -153,9 +165,17 @@ export function PunchTimelineDialog({
                 <option value="out">Out</option>
               </select>
             </div>
+            <textarea
+              className="w-full rounded-md border px-2 py-1.5 text-sm"
+              rows={2}
+              placeholder={noteRequired ? "Reason for this correction (required)" : "Note (optional)"}
+              value={newNote}
+              onChange={(e) => setNewNote(e.target.value)}
+              required={noteRequired}
+            />
             <p className="text-xs text-muted-foreground">
-              {readOnly
-                ? "Your request is submitted for admin approval and won't count until approved."
+              {noteRequired
+                ? "A note explaining the correction is required. Your request is submitted for admin approval and won't count until approved."
                 : canApprove
                   ? "Added as an approved punch."
                   : "Submitted for approval."}
@@ -166,7 +186,7 @@ export function PunchTimelineDialog({
               </button>
               <button
                 onClick={submitAdd}
-                disabled={busy}
+                disabled={busy || (noteRequired && noteTooShort)}
                 className="rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground disabled:opacity-50"
               >
                 {readOnly ? "Submit request" : "Add punch"}

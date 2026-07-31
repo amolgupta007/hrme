@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { waitUntil } from "@vercel/functions";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { getCurrentUser, isAdmin, isManagerOrAbove } from "@/lib/current-user";
+import { getManagerScopedEmployeeIds } from "@/lib/attendance/manager-scope";
 import type { ActionResult } from "@/types";
 import { getActiveShiftForEmployee } from "@/actions/shifts";
 import { attributedDateForClockIn } from "@/lib/attendance/attribute-date";
@@ -270,8 +271,24 @@ export async function listAttendance(filters?: {
   if (!isManagerOrAbove(user.role)) {
     if (!user.employeeId) return { success: true, data: [] };
     query = query.eq("employee_id", user.employeeId);
-  } else if (filters?.employeeId) {
-    query = query.eq("employee_id", filters.employeeId);
+  } else if (isAdmin(user.role)) {
+    // Admins/owners: org-wide, optional single-employee filter.
+    if (filters?.employeeId) query = query.eq("employee_id", filters.employeeId);
+  } else {
+    // Managers: scoped to their reports (dept members ∪ direct reports) ∪ self.
+    const scoped = new Set<string>();
+    if (user.employeeId) {
+      scoped.add(user.employeeId);
+      for (const id of await getManagerScopedEmployeeIds(user.orgId, user.employeeId)) {
+        scoped.add(id);
+      }
+    }
+    if (filters?.employeeId) {
+      if (!scoped.has(filters.employeeId)) return { success: false, error: "Unauthorized" };
+      query = query.eq("employee_id", filters.employeeId);
+    } else {
+      query = query.in("employee_id", [...scoped]);
+    }
   }
 
   if (filters?.from) query = query.gte("date", filters.from);
@@ -297,17 +314,38 @@ export async function getTeamTodayAttendance(): Promise<ActionResult<{
   const supabase = createAdminSupabase();
   const today = new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
+  // Managers see only their reports (dept members ∪ direct reports) ∪ self;
+  // admins/owners see the whole org.
+  let scopedIds: string[] | null = null;
+  if (user.role === "manager") {
+    const scoped = new Set<string>();
+    if (user.employeeId) {
+      scoped.add(user.employeeId);
+      for (const id of await getManagerScopedEmployeeIds(user.orgId, user.employeeId)) {
+        scoped.add(id);
+      }
+    }
+    scopedIds = [...scoped];
+  }
+
+  let employeeCountQuery = supabase
+    .from("employees")
+    .select("*", { count: "exact", head: true })
+    .eq("org_id", user.orgId)
+    .eq("status", "active");
+  let recordsQuery = supabase
+    .from("attendance_records")
+    .select(`*, employees!employee_id(first_name, last_name)`)
+    .eq("org_id", user.orgId)
+    .eq("date", today);
+  if (scopedIds !== null) {
+    employeeCountQuery = employeeCountQuery.in("id", scopedIds);
+    recordsQuery = recordsQuery.in("employee_id", scopedIds);
+  }
+
   const [{ count: totalEmployees }, { data: todayRecords }] = await Promise.all([
-    supabase
-      .from("employees")
-      .select("*", { count: "exact", head: true })
-      .eq("org_id", user.orgId)
-      .eq("status", "active"),
-    supabase
-      .from("attendance_records")
-      .select(`*, employees!employee_id(first_name, last_name)`)
-      .eq("org_id", user.orgId)
-      .eq("date", today),
+    employeeCountQuery,
+    recordsQuery,
   ]);
 
   const records = (todayRecords ?? []).map(formatRecord);

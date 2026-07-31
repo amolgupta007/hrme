@@ -7,6 +7,7 @@ import { getWeekOffPolicy, listAllWeekOffOverrides, listAllDepartmentWeekOffOver
 import { resolveEffectiveWeekOff, type WeekOffPolicy } from "@/lib/attendance/week-off";
 import { getOvertimeRecords, getOvertimeSettings } from "@/actions/overtime";
 import { DEFAULT_OT_SETTINGS } from "@/lib/attendance/overtime-types";
+import { getManagerScopedEmployeeIds } from "@/lib/attendance/manager-scope";
 import { AttendanceClient } from "@/components/attendance/attendance-client";
 
 function defaultWeekRange(): { from: string; to: string } {
@@ -76,12 +77,29 @@ export default async function AttendancePage() {
   const overtimeRecords = otRecordsResult?.success ? otRecordsResult.data : [];
   const overtimeSettings = otSettingsResult?.success ? otSettingsResult.data : DEFAULT_OT_SETTINGS;
 
+  // Scope the My-History employee filter for managers: their reports (dept
+  // members ∪ direct reports) ∪ self. Admins/owners keep the full org list.
+  // Only the My-History <select> consumes this prop; the roster palette reads
+  // `roster`/`weekOffByEmployee`, so the full-list week-off map above is
+  // intentionally left untouched.
+  let visibleEmployees = employees ?? [];
+  if (isManager && !isAdminUser && employees) {
+    const scoped = new Set<string>();
+    if (user.employeeId) {
+      scoped.add(user.employeeId);
+      for (const id of await getManagerScopedEmployeeIds(user.orgId, user.employeeId)) {
+        scoped.add(id);
+      }
+    }
+    visibleEmployees = employees.filter((e) => scoped.has(e.id));
+  }
+
   return (
     <AttendanceClient
       today={today}
       history={history}
       team={team}
-      employees={employees ?? []}
+      employees={visibleEmployees}
       isManager={isManager}
       isAdmin={isAdminUser}
       attendancePayrollEnabled={user.attendancePayrollEnabled}

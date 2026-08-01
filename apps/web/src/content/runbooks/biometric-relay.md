@@ -4,6 +4,8 @@ summary: "How to connect an old-firmware ZKTeco device (HTTP-only) to jambahr.co
 updated: "2026-06-28"
 ---
 
+> **Device and relay laptop on the same office LAN?** Use the newer step-by-step companion: **Caddy Relay — Step-by-Step Setup (Office LAN laptop)** (`/superadmin/runbooks/caddy-relay-setup`) — written from the Medialoop go-live. This runbook covers the isolated direct-cable (dual-NIC) topology.
+
 > **⚠️ Does your device even need this relay?** Newer HTTPS-capable units (e.g. **ZKTeco MB140**) complete modern TLS themselves and connect **directly** to `jambahr.com` over WiFi — **no relay, no on-prem PC, no Caddy/NSSM.** Just point the device's ADMS server at `jambahr.com` (port 443, HTTPS ON, Enable Domain Name ON), register the serial, and map PINs. This relay is **only** for legacy devices whose firmware can't do TLS, like the **ZKTeco K40 (firmware 8.0.4.3)**. Confirmed 2026-06-28: an MB140 synced punches to prod pointed straight at `jambahr.com`. When buying more devices, prefer MB140-class units and skip everything below.
 
 ## Why this exists

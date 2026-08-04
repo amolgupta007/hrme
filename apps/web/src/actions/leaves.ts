@@ -8,7 +8,8 @@ import { createAdminSupabase } from "@/lib/supabase/server";
 import { getCurrentUser, isAdmin, isManagerOrAbove } from "@/lib/current-user";
 import { resend, FROM_EMAIL } from "@/lib/resend";
 import { resolveLeaveRecipients, type LeaveNotifiable } from "@/lib/leaves/request-recipients";
-import { managerIdsOf } from "@/lib/managers";
+import { managerIdsOf, isManagerOfEmployee } from "@/lib/managers";
+import { findOverlap, computeRemainingDays, type LeaveInterval } from "@/lib/leaves/validation";
 import { LeaveRequestEmail } from "@/components/emails/leave-request";
 import { LeaveStatusEmail } from "@/components/emails/leave-status";
 import type { ActionResult, LeavePolicy, LeaveRequest } from "@/types";
@@ -228,6 +229,65 @@ export async function requestLeave(
     return { success: false, error: "You can only request leave for yourself or your direct reports" };
   }
 
+  // ---- Server-side overlap + balance validation ----
+  // These guard the direct-action path: a client that skips the in-form checks
+  // (or a stale/hostile caller) must not be able to double-book a date range or
+  // silently overdraw a leave balance. Admins are NOT exempt when filing for
+  // others — data integrity is the whole point.
+  const { data: policy } = await supabase
+    .from("leave_policies")
+    .select("type, days_per_year")
+    .eq("id", validated.data.policyId)
+    .eq("org_id", ctx.orgId)
+    .single();
+  if (!policy) return { success: false, error: "Leave type not found" };
+
+  // Fetch the target's active (pending/approved) requests once — this serves
+  // both the overlap check and the current-year used-days aggregation.
+  const { data: activeRequests } = await supabase
+    .from("leave_requests")
+    .select("start_date, end_date, status, policy_id, days")
+    .eq("org_id", ctx.orgId)
+    .eq("employee_id", validated.data.employeeId)
+    .in("status", ["pending", "approved"]);
+
+  const existing = (activeRequests ?? []) as (LeaveInterval & {
+    policy_id: string;
+    days: number;
+  })[];
+
+  const conflict = findOverlap(existing, startDate, endDate);
+  if (conflict) {
+    return {
+      success: false,
+      error: `Overlaps an existing leave request (${conflict.start_date} to ${conflict.end_date})`,
+    };
+  }
+
+  // Balance check. Unpaid leave has no meaningful cap (LOP flows depend on it
+  // staying requestable), and the sanctioned over-balance path — exceeds_balance
+  // with a mandatory ticket number, enforced above — is honoured here too.
+  const isUnpaid = (policy as { type: string }).type === "unpaid";
+  if (!isUnpaid && !exceedsBalance) {
+    const currentYear = new Date().getFullYear();
+    const usedApproved = existing
+      .filter(
+        (r) =>
+          r.status === "approved" &&
+          r.policy_id === validated.data.policyId &&
+          r.start_date >= `${currentYear}-01-01` &&
+          r.end_date <= `${currentYear}-12-31`
+      )
+      .reduce((sum, r) => sum + Number(r.days), 0);
+    const remaining = computeRemainingDays({
+      daysPerYear: (policy as { days_per_year: number }).days_per_year,
+      usedApproved,
+    });
+    if (validated.data.days > remaining) {
+      return { success: false, error: `Insufficient balance — ${remaining} days remaining` };
+    }
+  }
+
   const { data, error } = await supabase
     .from("leave_requests")
     .insert({
@@ -443,8 +503,37 @@ export async function rejectLeave(
 export async function cancelLeave(requestId: string): Promise<ActionResult<void>> {
   const ctx = await getOrgContext();
   if (!ctx) return { success: false, error: "Not authenticated" };
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
 
   const supabase = createAdminSupabase();
+
+  // Load the request scoped to the caller's org, with the owning employee's
+  // manager slots so we can authorise a manager-of-record cancel.
+  const { data: leaveReq } = await supabase
+    .from("leave_requests")
+    .select("id, employee_id, status, employees!employee_id(reporting_manager_id, reporting_manager_2_id)")
+    .eq("id", requestId)
+    .eq("org_id", ctx.orgId)
+    .single();
+  if (!leaveReq) return { success: false, error: "Leave request not found" };
+
+  const req = leaveReq as {
+    employee_id: string;
+    status: string;
+    employees: { reporting_manager_id: string | null; reporting_manager_2_id: string | null } | null;
+  };
+
+  // Ownership gate: own request, or admin, or a manager-of-record of the owner.
+  const isOwnRequest = !!user.employeeId && user.employeeId === req.employee_id;
+  const isManager =
+    !!user.employeeId &&
+    !!req.employees &&
+    isManagerOfEmployee(user.employeeId, req.employees);
+  if (!isOwnRequest && !isAdmin(user.role) && !isManager) {
+    return { success: false, error: "Unauthorized" };
+  }
+
   const { error } = await supabase
     .from("leave_requests")
     .update({ status: "cancelled" })

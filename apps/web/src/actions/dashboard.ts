@@ -311,25 +311,28 @@ export async function getDashboardData(): Promise<DashboardData | null> {
   if (employeeId) {
     const [
       empResult,
-      leaveBalancesResult,
+      leavePoliciesResult,
       myPendingResult,
       myOverdueResult,
       myObjectivesResult,
       myReviewResult,
       myEnrollmentsResult,
       myCompletedEnrollmentsResult,
+      myApprovedLeavesResult,
     ] = await Promise.all([
       supabase
         .from("employees")
         .select("first_name")
         .eq("id", employeeId)
         .single(),
+      // Leave balances are DERIVED (the leave_balances table is dead — never
+      // written). Allocation comes from the org's leave policies; used-days are
+      // aggregated from the viewer's own approved requests this year. This
+      // mirrors the canonical balance-card idiom in listLeavePolicies.
       supabase
-        .from("leave_balances")
-        .select("total_days, used_days, carried_forward_days, leave_policies!policy_id(type)")
-        .eq("org_id", orgId)
-        .eq("employee_id", employeeId)
-        .eq("year", now.getFullYear()),
+        .from("leave_policies")
+        .select("id, type, days_per_year")
+        .eq("org_id", orgId),
       supabase
         .from("leave_requests")
         .select("id", { count: "exact", head: true })
@@ -370,6 +373,14 @@ export async function getDashboardData(): Promise<DashboardData | null> {
         .eq("org_id", orgId)
         .eq("employee_id", employeeId)
         .eq("status", "completed"),
+      supabase
+        .from("leave_requests")
+        .select("policy_id, days")
+        .eq("org_id", orgId)
+        .eq("employee_id", employeeId)
+        .eq("status", "approved")
+        .gte("start_date", `${now.getFullYear()}-01-01`)
+        .lte("end_date", `${now.getFullYear()}-12-31`),
     ]);
 
     userFirstName = (empResult.data as any)?.first_name ?? "";
@@ -379,16 +390,29 @@ export async function getDashboardData(): Promise<DashboardData | null> {
     myTrainingCompletion =
       myTotal > 0 ? Math.round(((myCompletedEnrollmentsResult.count ?? 0) / myTotal) * 100) : 0;
 
-    myLeaveBalances = (leaveBalancesResult.data ?? []).map((b: any) => {
-      const total = (b.total_days ?? 0) + (b.carried_forward_days ?? 0);
-      const used = b.used_days ?? 0;
-      return {
-        leave_type: b.leave_policies?.type ?? "unknown",
-        total_days: total,
-        used_days: used,
-        remaining: Math.max(0, total - used),
-      };
-    });
+    // Derive per-policy balances: sum the viewer's approved days per policy,
+    // then subtract from each policy's annual allocation. Zero-allocation
+    // policies (e.g. unpaid) carry no balance and are omitted from the widget.
+    const usedByPolicy: Record<string, number> = {};
+    for (const r of (myApprovedLeavesResult.data ?? []) as { policy_id: string; days: number }[]) {
+      usedByPolicy[r.policy_id] = (usedByPolicy[r.policy_id] ?? 0) + Number(r.days);
+    }
+    myLeaveBalances = ((leavePoliciesResult.data ?? []) as {
+      id: string;
+      type: string;
+      days_per_year: number;
+    }[])
+      .filter((p) => (p.days_per_year ?? 0) > 0)
+      .map((p) => {
+        const total = p.days_per_year ?? 0;
+        const used = usedByPolicy[p.id] ?? 0;
+        return {
+          leave_type: p.type ?? "unknown",
+          total_days: total,
+          used_days: used,
+          remaining: Math.max(0, total - used),
+        };
+      });
 
     const objRow = myObjectivesResult.data as any;
     if (objRow) {

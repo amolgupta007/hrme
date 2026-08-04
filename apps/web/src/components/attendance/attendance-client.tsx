@@ -14,6 +14,8 @@ import { OvertimeTab } from "./overtime-tab";
 import { DailyAttendanceTab } from "./daily-attendance-tab";
 import { AttendanceReportsTab } from "./attendance-reports-tab";
 import { PunchTimelineDialog } from "./punch-timeline-dialog";
+import { MyScheduleCard } from "./my-schedule-card";
+import type { MyScheduleDay } from "@/lib/attendance/schedule-resolve";
 import type { OvertimeRecord } from "@/actions/overtime";
 import type { OvertimeSettings } from "@/lib/attendance/overtime-types";
 
@@ -26,6 +28,7 @@ interface Props {
   isAdmin: boolean;
   attendancePayrollEnabled: boolean;
   activeShift: { id: string; name: string; start_time: string; end_time: string; is_overnight: boolean } | null;
+  mySchedule: MyScheduleDay[];
   roster: RosterGridData | null;
   weekOff: WeekOffPolicy | null;
   weekOffByEmployee: Record<string, WeekOffPolicy>;
@@ -50,7 +53,7 @@ function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
 }
 
-export function AttendanceClient({ today, history, team, employees, isManager, isAdmin, attendancePayrollEnabled, activeShift, roster, weekOff, weekOffByEmployee, rosterRange, overtimeRecords, overtimeSettings }: Props) {
+export function AttendanceClient({ today, history, team, employees, isManager, isAdmin, attendancePayrollEnabled, activeShift, mySchedule, roster, weekOff, weekOffByEmployee, rosterRange, overtimeRecords, overtimeSettings }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [liveTime, setLiveTime] = useState("");
@@ -299,8 +302,10 @@ export function AttendanceClient({ today, history, team, employees, isManager, i
 
       {activeTab === "reports" && isAdmin && <AttendanceReportsTab />}
 
-      {/* My history tab */}
+      {/* My schedule + history tab */}
       {(activeTab === "my" || !isManager) && (
+        <div className="space-y-6">
+        <MyScheduleCard schedule={mySchedule} />
         <div className="rounded-xl border border-border bg-card overflow-hidden">
           <div className="flex items-center justify-between px-5 py-3 border-b border-border gap-4">
             <div className="flex items-center gap-2">
@@ -371,6 +376,7 @@ export function AttendanceClient({ today, history, team, employees, isManager, i
               ))}
             </div>
           )}
+        </div>
         </div>
       )}
 

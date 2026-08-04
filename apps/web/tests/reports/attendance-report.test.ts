@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   buildReportData, enumerateDates, chunkDateColumns, sourceMarker,
-  stateLetter, csvRows, formatHours,
+  stateLetter, csvRows, formatHours, computeStatusCode,
   type RawReportInputs,
 } from "@/lib/reports/attendance-report";
 import { validateRange } from "@/lib/reports/fetch-report-data";
@@ -129,6 +129,9 @@ describe("half-day classification (plan §3)", () => {
       records: [{ employee_id: "e1", date: "2026-07-01", clock_in_at: "2026-07-01T03:30:00Z", clock_out_at: "2026-07-01T12:30:00Z", total_minutes: 480, source: "device", auto_closed: false, out_of_zone_count: 0, is_late: false, half_day_threshold_minutes: 240 }],
     })).employees[0].days.find((x) => x.date === "2026-07-01")!;
     expect(d.statusCode).toBe("FD");
+  });
+  it("zero-minute worked day (dangling punch) stays FD even below threshold", () => {
+    expect(computeStatusCode("worked", 0, 240)).toBe("FD");
   });
   it("no threshold on the record -> FD even with very low minutes", () => {
     const d = buildReportData(baseInput({

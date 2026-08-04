@@ -122,7 +122,9 @@ export function stateLetter(state: DayState): string {
   }
 }
 
-// worked minutes < threshold -> HD; == or > threshold -> FD; no threshold -> FD
+// worked minutes > 0 AND < threshold -> HD (plan §3); 0-minute worked days (dangling
+// single punch) stay FD-classified — the ! marker already flags them; == or > threshold
+// -> FD; no threshold -> FD
 // (mirrors mobile's computeMonthCalendar half-day rule — plan §3).
 export function computeStatusCode(
   state: DayState,
@@ -131,7 +133,7 @@ export function computeStatusCode(
 ): StatusCode {
   switch (state) {
     case "worked":
-      return halfDayThresholdMinutes != null && minutes < halfDayThresholdMinutes ? "HD" : "FD";
+      return halfDayThresholdMinutes != null && minutes > 0 && minutes < halfDayThresholdMinutes ? "HD" : "FD";
     case "week_off": return "WO";
     case "holiday": return "H";
     case "leave": return "L";

@@ -7,6 +7,18 @@ import { getCurrentUser, isAdmin } from "@/lib/current-user";
 import type { ActionResult } from "@/types";
 import { computeShiftTotalHours, isOvernight } from "@/lib/attendance/shift-time";
 import { getManagerScopedEmployeeIds } from "@/lib/attendance/manager-scope";
+import {
+  resolveAssignmentForDate,
+  computeScheduleDay,
+  type MyScheduleDay,
+} from "@/lib/attendance/schedule-resolve";
+import {
+  resolveEffectiveWeekOff,
+  type WeekOffPolicy,
+  type WeekOffOverride,
+} from "@/lib/attendance/week-off";
+
+export type { MyScheduleDay };
 
 export type Shift = {
   id: string;
@@ -374,7 +386,7 @@ export async function getActiveShiftForEmployee(employeeId: string, date: string
     .lte("date_from", date)
     .order("date_from", { ascending: false })
     .limit(5);
-  const row = (data ?? []).find((r: any) => !r.date_to || r.date_to >= date);
+  const row = resolveAssignmentForDate((data ?? []) as any[], date);
   return row ? ((row as any).shifts as Shift) : null;
 }
 
@@ -576,4 +588,112 @@ export async function deleteShiftAssignment(assignmentId: string): Promise<Actio
   revalidatePath("/dashboard/settings");
   revalidatePath("/dashboard/attendance");
   return { success: true, data: undefined };
+}
+
+/**
+ * Employee self-view of their own upcoming schedule: today + the next 6 IST days.
+ * Self-scoped by construction — resolves ONLY the caller's own employeeId (no
+ * params), so any authenticated org member may call it. Returns per-day shift
+ * (name + times) or the effective week-off / holiday state. Reuses the Phase-1
+ * assignment resolver + effective week-off precedence (employee > dept > org).
+ */
+export async function getMySchedule(): Promise<ActionResult<MyScheduleDay[]>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!user.employeeId) return { success: true, data: [] };
+
+  const sb = createAdminSupabase();
+
+  // 7-day IST window: today + next 6.
+  const istNow = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
+  const dates: string[] = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(istNow);
+    d.setUTCDate(istNow.getUTCDate() + i);
+    dates.push(d.toISOString().slice(0, 10));
+  }
+  const from = dates[0];
+  const to = dates[6];
+
+  // Employee department (for the dept-level week-off override).
+  const { data: emp } = await sb
+    .from("employees")
+    .select("department_id")
+    .eq("org_id", user.orgId)
+    .eq("id", user.employeeId)
+    .maybeSingle();
+  const departmentId = (emp as any)?.department_id ?? null;
+
+  const [assignmentsRes, policyRes, deptOvRes, empOvRes, holidayRes] = await Promise.all([
+    sb
+      .from("shift_assignments")
+      .select("shift_id, date_from, date_to, shifts(name, start_time, end_time)")
+      .eq("org_id", user.orgId)
+      .eq("employee_id", user.employeeId)
+      .lte("date_from", to)
+      .or(`date_to.is.null,date_to.gte.${from}`),
+    sb
+      .from("week_off_policy")
+      .select("week_type, off_days, alt_saturday_rule")
+      .eq("org_id", user.orgId)
+      .maybeSingle(),
+    departmentId
+      ? sb
+          .from("department_week_off_override")
+          .select("week_type, off_days, alt_saturday_rule")
+          .eq("org_id", user.orgId)
+          .eq("department_id", departmentId)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    sb
+      .from("employee_week_off_override")
+      .select("week_type, off_days, alt_saturday_rule")
+      .eq("org_id", user.orgId)
+      .eq("employee_id", user.employeeId)
+      .maybeSingle(),
+    sb
+      .from("holidays")
+      .select("name, date")
+      .eq("org_id", user.orgId)
+      .gte("date", from)
+      .lte("date", to),
+  ]);
+
+  const toOverride = (r: any): WeekOffOverride | undefined =>
+    r
+      ? {
+          week_type: r.week_type,
+          off_days: r.off_days,
+          alt_saturday_rule: r.alt_saturday_rule ?? "none",
+        }
+      : undefined;
+
+  const basePolicy: WeekOffPolicy = policyRes.data
+    ? {
+        week_type: (policyRes.data as any).week_type,
+        off_days: (policyRes.data as any).off_days,
+        alt_saturday_rule: (policyRes.data as any).alt_saturday_rule ?? "none",
+      }
+    : { week_type: 6, off_days: [] };
+
+  const effectivePolicy = resolveEffectiveWeekOff(
+    basePolicy,
+    toOverride(deptOvRes.data),
+    toOverride(empOvRes.data)
+  );
+
+  const holidayByDate = new Map<string, string>();
+  for (const h of ((holidayRes.data ?? []) as any[])) holidayByDate.set(h.date, h.name);
+
+  const assignments = (assignmentsRes.data ?? []) as any[];
+  const data: MyScheduleDay[] = dates.map((date) =>
+    computeScheduleDay({
+      date,
+      assignment: resolveAssignmentForDate(assignments, date),
+      effectivePolicy,
+      holidayName: holidayByDate.get(date) ?? null,
+    })
+  );
+
+  return { success: true, data };
 }

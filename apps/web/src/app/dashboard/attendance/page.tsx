@@ -2,7 +2,7 @@ import { getCurrentUser, isAdmin, isManagerOrAbove } from "@/lib/current-user";
 import { redirect } from "next/navigation";
 import { getTodayStatus, listAttendance, getTeamTodayAttendance } from "@/actions/attendance";
 import { listEmployees } from "@/actions/employees";
-import { getActiveShiftForEmployee, getRosterGrid } from "@/actions/shifts";
+import { getActiveShiftForEmployee, getRosterGrid, getMySchedule } from "@/actions/shifts";
 import { getWeekOffPolicy, listAllWeekOffOverrides, listAllDepartmentWeekOffOverrides } from "@/actions/week-off";
 import { resolveEffectiveWeekOff, type WeekOffPolicy } from "@/lib/attendance/week-off";
 import { getOvertimeRecords, getOvertimeSettings } from "@/actions/overtime";
@@ -34,17 +34,19 @@ export default async function AttendancePage() {
   const istToday = new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const activeShift = user.employeeId ? await getActiveShiftForEmployee(user.employeeId, istToday) : null;
 
-  const [todayResult, historyResult, teamResult, employeesResult] = await Promise.all([
+  const [todayResult, historyResult, teamResult, employeesResult, myScheduleResult] = await Promise.all([
     getTodayStatus(),
     listAttendance({ from: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10) }),
     isManager ? getTeamTodayAttendance() : Promise.resolve(null),
     isManager ? listEmployees() : Promise.resolve(null),
+    getMySchedule(),
   ]);
 
   const today = todayResult.success ? todayResult.data : null;
   const history = historyResult.success ? historyResult.data : [];
   const team = teamResult?.success ? teamResult.data : null;
   const employees = employeesResult?.success ? employeesResult.data : [];
+  const mySchedule = myScheduleResult.success ? myScheduleResult.data : [];
 
   const { from: rosterFrom, to: rosterTo } = defaultWeekRange();
   const [rosterResult, weekOffResult, empOverridesResult, deptOverridesResult] = await Promise.all([
@@ -104,6 +106,7 @@ export default async function AttendancePage() {
       isAdmin={isAdminUser}
       attendancePayrollEnabled={user.attendancePayrollEnabled}
       activeShift={activeShift}
+      mySchedule={mySchedule}
       roster={roster}
       weekOff={weekOff}
       weekOffByEmployee={weekOffByEmployee}

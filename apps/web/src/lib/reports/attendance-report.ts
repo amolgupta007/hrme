@@ -8,6 +8,8 @@ import { pairPunches } from "@/lib/attendance/pair-punches";
 
 export type DayState = "worked" | "week_off" | "holiday" | "leave" | "absent" | "future";
 export type SourceMarker = "d" | "m" | "w" | "*" | "";
+// Full day / Half day / Absent / Week-off / Holiday / Leave / future-dash.
+export type StatusCode = "FD" | "HD" | "A" | "WO" | "H" | "L" | "–";
 export type ReportPair = { in: string; out: string | null; minutes: number };
 export type ReportDay = {
   date: string;
@@ -19,6 +21,20 @@ export type ReportDay = {
   outOfZoneCount: number;
   isLate: boolean;
   singlePunch: boolean;
+  // IST HH:MM of first-in / last-out, derived from `pairs`. Both null when the
+  // day has no punches; lastOut is also null when the last pair is dangling
+  // (open — no clock-out yet). See plan 2026-08-04 §2/§5 Task 1.
+  firstIn: string | null;
+  lastOut: string | null;
+  statusCode: StatusCode;
+};
+export type ReportSummary = {
+  fullDays: number;
+  halfDays: number;
+  absents: number;
+  weekOffs: number;
+  leaves: number;
+  holidays: number;
 };
 export type ReportEmployee = {
   id: string;
@@ -27,6 +43,7 @@ export type ReportEmployee = {
   days: ReportDay[];
   totalMinutes: number;
   daysPresent: number;
+  summary: ReportSummary;
 };
 export type AttendanceReportData = {
   from: string;
@@ -49,6 +66,10 @@ export type RawReportInputs = {
     clock_in_at: string | null; clock_out_at: string | null;
     total_minutes: number | null; source: string | null;
     auto_closed: boolean | null; out_of_zone_count: number | null; is_late: boolean | null;
+    // From the assigned shift's half-day threshold (fetch layer flattens the
+    // `shifts!shift_id(half_day_threshold_minutes)` embed onto the row).
+    // Absent/null → half-day classification is skipped (worked days are FD).
+    half_day_threshold_minutes?: number | null;
   }[];
   events: { employee_id: string; punched_at: string }[];
   holidays: { date: string }[];
@@ -101,6 +122,26 @@ export function stateLetter(state: DayState): string {
   }
 }
 
+// worked minutes > 0 AND < threshold -> HD (plan §3); 0-minute worked days (dangling
+// single punch) stay FD-classified — the ! marker already flags them; == or > threshold
+// -> FD; no threshold -> FD
+// (mirrors mobile's computeMonthCalendar half-day rule — plan §3).
+export function computeStatusCode(
+  state: DayState,
+  minutes: number,
+  halfDayThresholdMinutes?: number | null,
+): StatusCode {
+  switch (state) {
+    case "worked":
+      return halfDayThresholdMinutes != null && minutes > 0 && minutes < halfDayThresholdMinutes ? "HD" : "FD";
+    case "week_off": return "WO";
+    case "holiday": return "H";
+    case "leave": return "L";
+    case "absent": return "A";
+    case "future": return "–";
+  }
+}
+
 export function chunkDateColumns(dates: string[], maxPerChunk = 16): string[][] {
   const chunks: string[][] = [];
   for (let i = 0; i < dates.length; i += maxPerChunk) chunks.push(dates.slice(i, i + maxPerChunk));
@@ -143,6 +184,9 @@ export function buildReportData(input: RawReportInputs): AttendanceReportData {
 
     let totalMinutes = 0;
     let daysPresent = 0;
+    const summary: ReportSummary = {
+      fullDays: 0, halfDays: 0, absents: 0, weekOffs: 0, leaves: 0, holidays: 0,
+    };
 
     const days: ReportDay[] = dates.map((date) => {
       const rec = recordsByEmpDate.get(`${emp.id}:${date}`);
@@ -184,24 +228,46 @@ export function buildReportData(input: RawReportInputs): AttendanceReportData {
       else if (date > input.todayIst) state = "future";
       else state = "absent";
 
-      if (state === "worked") {
-        totalMinutes += minutes;
-        daysPresent += 1;
+      // Plan 2026-08-04 §2/§5 Task 1: a day with punches whose state is an
+      // off-state (week_off/holiday/leave — those checks run before `worked`
+      // above, so they still win the state) now KEEPS its worked minutes and
+      // source marker instead of zeroing them; the hours fold into
+      // totalMinutes but count under the off-state summary bucket below, not
+      // daysPresent/fullDays/halfDays. Only `worked` (has punches) gates this,
+      // not `state === "worked"`.
+      if (worked) totalMinutes += minutes;
+      if (state === "worked") daysPresent += 1;
+
+      const statusCode = computeStatusCode(state, minutes, rec?.half_day_threshold_minutes ?? null);
+      switch (statusCode) {
+        case "FD": summary.fullDays += 1; break;
+        case "HD": summary.halfDays += 1; break;
+        case "A": summary.absents += 1; break;
+        case "WO": summary.weekOffs += 1; break;
+        case "L": summary.leaves += 1; break;
+        case "H": summary.holidays += 1; break;
+        case "–": break; // future days count nowhere
       }
 
       return {
         date, state,
-        minutes: state === "worked" ? minutes : 0,
-        marker: state === "worked" ? sourceMarker(rec?.source ?? null) : "",
+        minutes: worked ? minutes : 0,
+        marker: worked ? sourceMarker(rec?.source ?? null) : "",
         autoClosed: rec?.auto_closed ?? false,
         pairs,
         outOfZoneCount: rec?.out_of_zone_count ?? 0,
         isLate: rec?.is_late ?? false,
         singlePunch,
+        firstIn: pairs.length > 0 ? pairs[0].in : null,
+        lastOut: pairs.length > 0 ? pairs[pairs.length - 1].out : null,
+        statusCode,
       };
     });
 
-    return { id: emp.id, name: emp.name, department: emp.department, days, totalMinutes, daysPresent };
+    return {
+      id: emp.id, name: emp.name, department: emp.department, days,
+      totalMinutes, daysPresent, summary,
+    };
   });
 
   return {
@@ -213,17 +279,19 @@ export function buildReportData(input: RawReportInputs): AttendanceReportData {
 
 export function csvRows(data: AttendanceReportData): string[][] {
   const rows: string[][] = [[
-    "date", "employee", "department", "state", "hours",
+    "date", "employee", "department", "state", "status_code", "hours",
     "punch_pairs", "source", "auto_closed", "out_of_zone", "late",
   ]];
   const markerToSource: Record<string, string> = { d: "device", m: "mobile", w: "web", "*": "auto_close" };
   for (const emp of data.employees) {
     for (const day of emp.days) {
       rows.push([
-        day.date, emp.name, emp.department ?? "", day.state,
-        day.state === "worked" ? formatHours(day.minutes) : "",
+        day.date, emp.name, emp.department ?? "", day.state, day.statusCode,
+        // Worked-on-off-day rows now carry real minutes/marker too (see
+        // buildReportData), so gate on the values themselves, not `state`.
+        day.minutes > 0 ? formatHours(day.minutes) : "",
         day.pairs.map((p) => `${p.in}-${p.out ?? "?"}`).join("; "),
-        day.state === "worked" ? markerToSource[day.marker] ?? "" : "",
+        day.marker ? markerToSource[day.marker] ?? "" : "",
         day.autoClosed ? "yes" : "",
         day.outOfZoneCount > 0 ? String(day.outOfZoneCount) : "",
         day.isLate ? "yes" : "",

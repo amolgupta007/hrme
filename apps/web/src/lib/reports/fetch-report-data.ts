@@ -81,8 +81,12 @@ export async function fetchAttendanceReportData(
   const [records, events, holidayRows, leaveRows, policyRow, deptOvRows, empOvRows] =
     await Promise.all([
       fetchAll((a, b) =>
+        // FK-disambiguated embed (departments!department_id precedent above):
+        // attendance_records.shift_id is its only FK to shifts (migration 032),
+        // so `shifts!shift_id(...)` is unambiguous — used explicitly anyway,
+        // matching this file's existing embed idiom.
         sb.from("attendance_records")
-          .select("employee_id, date, clock_in_at, clock_out_at, total_minutes, source, auto_closed, out_of_zone_count, is_late")
+          .select("employee_id, date, clock_in_at, clock_out_at, total_minutes, source, auto_closed, out_of_zone_count, is_late, shifts!shift_id(half_day_threshold_minutes)")
           .eq("org_id", orgId).gte("date", from).lte("date", to)
           .in("employee_id", empIds)
           .order("date").order("employee_id")
@@ -148,11 +152,30 @@ export async function fetchAttendanceReportData(
       }
     : DEFAULT_POLICY;
 
+  // Flatten the shifts!shift_id embed onto each record row (same idiom as the
+  // employees/departments embed above) so the pure lib input stays a flat
+  // record shape (plan §3 half-day classification).
+  const flatRecords: RawReportInputs["records"] = (records as Array<Record<string, unknown>>).map((r) => {
+    const shift = r.shifts as unknown as { half_day_threshold_minutes: number } | null;
+    return {
+      employee_id: r.employee_id as string,
+      date: r.date as string,
+      clock_in_at: r.clock_in_at as string | null,
+      clock_out_at: r.clock_out_at as string | null,
+      total_minutes: r.total_minutes as number | null,
+      source: r.source as string | null,
+      auto_closed: r.auto_closed as boolean | null,
+      out_of_zone_count: r.out_of_zone_count as number | null,
+      is_late: r.is_late as boolean | null,
+      half_day_threshold_minutes: shift?.half_day_threshold_minutes ?? null,
+    };
+  });
+
   return buildReportData({
     from, to, todayIst: istToday(), orgName,
     generatedAt: new Date().toISOString(),
     employees,
-    records: records as RawReportInputs["records"],
+    records: flatRecords,
     events: events as RawReportInputs["events"],
     holidays: (holidayRows.data ?? []) as { date: string }[],
     leaves: (leaveRows ?? []) as RawReportInputs["leaves"],

@@ -147,8 +147,11 @@ export async function GET(req: Request) {
       // 'web' OUT punch at the computed clock-out time so a LATER recompute (e.g. an
       // ADMS backlog replay touching this day) re-derives the SAME closed pair
       // instead of reopening a dangling single-punch. Then flag the rollup
-      // auto_closed / source='auto_close' via a targeted update (recompute leaves
-      // those columns untouched, so the flag persists across future recomputes).
+      // auto_closed=true / source='auto_close' via a targeted update. Durability
+      // note: only `auto_closed` (BOOLEAN, absent from recompute's upsert payload)
+      // persists across future recomputes; `source` IS in that payload
+      // (resolveRollupSource), so a later replay may legitimately revert the label
+      // to device/mobile/web. Consumers key on the boolean, not the label.
       const { error: evErr } = await supabase.from("attendance_punch_events").insert({
         org_id: row.org_id,
         employee_id: row.employee_id,

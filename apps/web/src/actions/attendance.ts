@@ -9,6 +9,7 @@ import type { ActionResult } from "@/types";
 import { getActiveShiftForEmployee } from "@/actions/shifts";
 import { attributedDateForClockIn } from "@/lib/attendance/attribute-date";
 import { recomputeAttendanceDay } from "@/lib/attendance/adms-ingest";
+import { isTooSoonToClockOut } from "@/lib/attendance/clock-out-guard";
 import { computeLateness } from "@/lib/attendance/lateness";
 import { resolveCoveredEmployeeIds } from "@/lib/attendance/late-policy-targets";
 import { planNotificationKinds } from "@/lib/attendance/late-policy-notify";
@@ -242,6 +243,12 @@ export async function clockOut(): Promise<ActionResult<AttendanceRecord>> {
   }
   if ((existing as any).clock_out_at) {
     return { success: false, error: "You have already clocked out today" };
+  }
+  // An OUT event within 60s of the IN event (both null-location web punches)
+  // would be collapsed by dedupePunches — success-reported but silently no-op'd.
+  // Block until the dedupe window has passed (see clock-out-guard.ts).
+  if (isTooSoonToClockOut((existing as any).clock_in_at, Date.now())) {
+    return { success: false, error: "Please wait a minute before clocking out" };
   }
 
   const nowUtc = new Date().toISOString();

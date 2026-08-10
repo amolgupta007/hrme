@@ -244,6 +244,15 @@ See `PAYROLL_AUDIT.md` for the per-finding closure log and `docs/payroll-overhau
   - Windows Firewall must allow Node.js on private networks or a phone can't reach Metro (8081)
     or the BFF (3000). `npx expo start --tunnel` is the fallback.
 
+### Mobile Phase D — Slice 2 (Leave + Payslips + Profile + 5-tab IA) — feat/mobile-d2 (2026-08-11, awaiting device pass)
+- Plan: `docs/superpowers/plans/2026-08-10-mobile-phase-d-slice2.md`. Design (hi-fi 2a/2b/2c): `docs/design/mobile/mobile-design-spec.md`.
+- **5-tab IA**: the `(staff)`/`(admin)` route groups converged into ONE `(tabs)` group — Home · Leaves · People · Grow · More. Attendance/Payslips/Profile are **stacked routes** (not tabs); Attendance opens from the Home TodayCard. `index.tsx` routes every role to `/(tabs)/home`.
+- **Half-day leave** (mobile-first, no web UI): migration `103` adds `leave_requests.start_half_day`/`end_half_day` (booleans). Shared pure `computeLeaveDays(start,end,startHalf,endHalf)` (`@jambahr/shared/leaves`) is the SINGLE source used by the web action (persist), the BFF (validate), the mobile sheet (preview), and the optimistic insert. Web `requestLeave` only re-derives days when a half-day flag is set — web path byte-identical otherwise.
+- **New BFF** (`/api/mobile/leave`{,/apply,/cancel,/approvals,/decide}, `/api/mobile/payslips`{,/[entryId]}, `/api/mobile/profile`{,/avatar}, `/api/mobile/directory`): all built DIRECT (not composing cookie-bound web actions) so they're header-org-correct. **Multi-org rule (load from Task-3 bug):** any mobile MUTATION that composes a web action must thread `orgIdHint` through it — the leave actions gained an optional trailing `orgIdHint?` param; passing `undefined` (web) falls through to cookie unchanged. Composing a cookie-bound action from mobile silently writes the FIRST-membership org for multi-org users (fail-safe but a silent no-op on `decide`).
+- **Payslips**: native render (no PDF). Detail is IDOR-guarded (entry must match caller's org+employee → 404). List excludes draft runs. **Profile**: view-broad, edit-narrow (only phone/personal_email/emergency-contact/whatsapp_opt_in writable; POST schema is `.strict()` so PAN/Aadhaar/names/dob are rejected, not stripped); PAN/Aadhaar rendered masked (last-4); salary NEVER in the profile/directory payload. Avatar EDIT deferred (no `expo-image-picker` dep) — read-only for now; the BFF avatar route exists.
+- **Approvals** (Leaves tab manager segment) is gated at three layers — segment control render, `useMobileQuery enabled: isManager`, and server (empty for non-managers; `decide` has a manager-scope guard closing a latent web gap where any manager+ could approve any org request).
+- Gotcha: leave balances aggregate by CALENDAR year (mirrors web `listLeavePolicies`) but the Leaves header shows an "FY" label — cosmetic mismatch, revisit if FY accrual ships.
+
 ### Mobile Phase D (Staff MVP) — PLANNED, awaiting go-ahead (2026-07-06)
 - **Decision record: `docs/prds/mobile/02A-PHASE-D-DECISIONS.md`** (read before implementing
   any Phase D work) · Slice-1 task plan: `docs/superpowers/plans/2026-07-06-mobile-phase-d-slice1-attendance-home.md`

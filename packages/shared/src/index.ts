@@ -21,4 +21,5 @@ export * from "./payroll/late-penalty";
 export * from "./employees/employee-schema";
 export * from "./auth/types";
 export * from "./mobile/types";
+export * from "./mobile/leave";
 export * from "./leaves/compute-days";

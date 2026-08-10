@@ -34,6 +34,10 @@ function RootLayout() {
               options={{ headerShown: true, title: "Payslips" }}
             />
             <Stack.Screen
+              name="payslip/[entryId]"
+              options={{ headerShown: true, title: "Payslip" }}
+            />
+            <Stack.Screen
               name="profile"
               options={{ headerShown: true, title: "Profile" }}
             />

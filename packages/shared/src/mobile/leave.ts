@@ -13,9 +13,8 @@ import type { MobileLeaveBalance } from "./types";
  * One row in the staff member's own leave history (hi-fi 2b).
  *
  * `approverName` comes from `leave_requests.reviewed_by` joined to employees;
- * it is nullable BOTH because pending requests have no decider AND because the
- * web approve/reject actions do not currently populate `reviewed_by` (they set
- * only `reviewed_at`/`review_note`). `decidedAt` (from `reviewed_at`) is the
+ * the decide paths now populate `reviewed_by`, so it is nullable only because
+ * pending requests have no decider yet. `decidedAt` (from `reviewed_at`) is the
  * reliable "when decided" signal; render the approver name only when present.
  */
 export type MobileLeaveRequestItem = {

@@ -4,6 +4,7 @@ import { auth, clerkClient } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { render } from "@react-email/render";
+import { computeLeaveDays } from "@jambahr/shared";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { getCurrentUser, isAdmin, isManagerOrAbove } from "@/lib/current-user";
 import { resend, FROM_EMAIL } from "@/lib/resend";
@@ -181,6 +182,8 @@ const requestLeaveSchema = z.object({
   reason: z.string().optional(),
   ticketNumber: z.string().optional(),
   exceedsBalance: z.boolean().default(false),
+  startHalfDay: z.boolean().default(false),
+  endHalfDay: z.boolean().default(false),
 });
 
 export async function requestLeave(
@@ -194,9 +197,24 @@ export async function requestLeave(
     return { success: false, error: validated.error.errors[0]?.message ?? "Validation failed" };
   }
 
-  const { startDate, endDate, exceedsBalance, ticketNumber } = validated.data;
+  const { startDate, endDate, exceedsBalance, ticketNumber, startHalfDay, endHalfDay } = validated.data;
   if (new Date(endDate) < new Date(startDate)) {
     return { success: false, error: "End date must be after start date" };
+  }
+
+  // Days resolution: the web dialog computes+sends `days` itself today, and
+  // that path must stay byte-identical (no re-derivation, no drift risk).
+  // The half-day chips are mobile-only for now — when either is set, derive
+  // `days` server-side via the shared pure helper (mirrors the mobile
+  // Request Leave sheet's own preview calc) so validation and the insert
+  // both use a value consistent with the persisted flags.
+  let days = validated.data.days;
+  if (startHalfDay || endHalfDay) {
+    const derived = computeLeaveDays(startDate, endDate, startHalfDay, endHalfDay);
+    if (!derived.ok) {
+      return { success: false, error: derived.error };
+    }
+    days = derived.days;
   }
 
   // Server-side enforcement: ticket number is mandatory when exceeding balance
@@ -283,7 +301,7 @@ export async function requestLeave(
       daysPerYear: (policy as { days_per_year: number }).days_per_year,
       usedApproved,
     });
-    if (validated.data.days > remaining) {
+    if (days > remaining) {
       return { success: false, error: `Insufficient balance — ${remaining} days remaining` };
     }
   }
@@ -296,11 +314,13 @@ export async function requestLeave(
       policy_id: validated.data.policyId,
       start_date: validated.data.startDate,
       end_date: validated.data.endDate,
-      days: validated.data.days,
+      days,
       reason: validated.data.reason || null,
       status: "pending",
       ticket_number: validated.data.ticketNumber?.trim() || null,
       exceeds_balance: validated.data.exceedsBalance ?? false,
+      start_half_day: startHalfDay,
+      end_half_day: endHalfDay,
     })
     .select("id")
     .single();

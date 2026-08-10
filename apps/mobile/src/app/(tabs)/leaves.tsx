@@ -1,11 +1,10 @@
-import { PlaceholderScreen } from "@/components/placeholder-screen";
+import { LeavesScreen } from "@/components/leaves-screen";
 
+/**
+ * Leaves tab (Mobile Phase D Slice 2, Task 6). Balances + own requests +
+ * Request-leave sheet for everyone; a manager-only Approvals segment. Role
+ * gating lives inside `LeavesScreen` (employees never see the segment).
+ */
 export default function Leaves() {
-  return (
-    <PlaceholderScreen
-      icon="calendar-outline"
-      title="Leaves"
-      blurb="Apply for leave and track balances — coming in the next release."
-    />
-  );
+  return <LeavesScreen />;
 }

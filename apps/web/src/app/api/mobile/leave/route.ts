@@ -13,7 +13,8 @@ export const dynamic = "force-dynamic";
  * exactly; the `leave_balances` table is stale/unwritten (never read). The
  * caller's own requests (≤50, reverse-chron) carry approver attribution:
  * `decidedAt` from `reviewed_at` and `approverName` from the `reviewed_by`
- * join (the web actions don't populate `reviewed_by` yet, so it renders null).
+ * join (the approve/reject actions now populate `reviewed_by`, so it renders
+ * the decider's name once a request is decided; null while pending).
  */
 export async function GET(request: NextRequest) {
   const { userId } = auth();

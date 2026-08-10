@@ -1,5 +1,5 @@
-import { ProfileCard } from "@/components/profile-card";
+import { ProfileScreen } from "@/components/profile-screen";
 
 export default function Profile() {
-  return <ProfileCard />;
+  return <ProfileScreen />;
 }

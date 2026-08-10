@@ -63,9 +63,20 @@ export default function More() {
             onPress={() => router.push("/payslips")}
           />
           <MoreRow
-            icon="person-outline"
-            label="Profile"
-            onPress={() => router.push("/profile")}
+            icon="folder-outline"
+            label="Documents"
+            onPress={() =>
+              Alert.alert("Documents", "Your documents are coming to mobile in an upcoming release.")
+            }
+            soon
+          />
+          <MoreRow
+            icon="notifications-outline"
+            label="Notifications"
+            onPress={() =>
+              Alert.alert("Notifications", "Push notifications are coming to mobile in an upcoming release.")
+            }
+            soon
             isLast
           />
         </View>
@@ -89,12 +100,14 @@ function MoreRow({
   label,
   onPress,
   destructive = false,
+  soon = false,
   isLast = false,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   onPress: () => void;
   destructive?: boolean;
+  soon?: boolean;
   isLast?: boolean;
 }) {
   return (
@@ -113,7 +126,13 @@ function MoreRow({
       >
         {label}
       </Text>
-      {!destructive ? <Ionicons name="chevron-forward" size={18} color="#9AA1AB" /> : null}
+      {soon ? (
+        <View className="rounded-full bg-brand-tint px-2 py-0.5">
+          <Text className="text-[11px] font-semibold text-brand-pressed">Soon</Text>
+        </View>
+      ) : !destructive ? (
+        <Ionicons name="chevron-forward" size={18} color="#9AA1AB" />
+      ) : null}
     </Pressable>
   );
 }

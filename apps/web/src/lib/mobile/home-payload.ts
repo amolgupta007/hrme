@@ -3,6 +3,7 @@ import type {
   MobileHolidayLite,
   MobileLeaveBalance,
   MobileTodayStatus,
+  MobileAnnouncementLite,
 } from "@jambahr/shared";
 
 /** The subset of an `attendance_records` row the today card needs. */
@@ -60,6 +61,43 @@ export function buildLeaveBalances(policies: LeavePolicyUsage[]): MobileLeaveBal
   }));
 }
 
+/** The subset of an `announcements` row the Home card needs. */
+export type AnnouncementRow = {
+  id: string;
+  title: string;
+  body: string;
+  category: string | null;
+  created_at: string;
+};
+
+/**
+ * Shape ≤3 latest org announcements for the Home card (2a design). Caller is
+ * expected to have already queried pinned-first/newest-first and limited to
+ * 3 — this just maps the DB row shape to the wire DTO (kept as a pure
+ * function so it's covered without hitting Supabase).
+ */
+export function buildAnnouncements(rows: AnnouncementRow[]): MobileAnnouncementLite[] {
+  return rows.slice(0, 3).map((r) => ({
+    id: r.id,
+    title: r.title,
+    body: r.body,
+    category: r.category ?? null,
+    createdAt: r.created_at,
+  }));
+}
+
+/**
+ * The "to approve" stat cell is manager-only (2a design: center stat only
+ * renders for managers/admins). Returns `null` for employees so the client
+ * hides the cell instead of showing a permanently-zero count.
+ */
+export function resolvePendingApprovals(
+  isManagerOrAbove: boolean,
+  rawCount: number,
+): number | null {
+  return isManagerOrAbove ? rawCount : null;
+}
+
 export function buildHomePayload(input: {
   record: TodayRecordLite;
   shift: ShiftLite;
@@ -67,6 +105,9 @@ export function buildHomePayload(input: {
   holidays: MobileHolidayLite[];
   pendingLeaveRequests: number;
   pendingRegularizations: number;
+  pendingApprovals: number | null;
+  trainingsOverdue: number;
+  announcements: AnnouncementRow[];
 }): MobileHomeResponse {
   return {
     today: buildTodayStatus(input.record, input.shift),
@@ -76,5 +117,8 @@ export function buildHomePayload(input: {
       leaveRequests: input.pendingLeaveRequests,
       regularizations: input.pendingRegularizations,
     },
+    pendingApprovals: input.pendingApprovals,
+    trainingsOverdue: input.trainingsOverdue,
+    announcements: buildAnnouncements(input.announcements),
   };
 }

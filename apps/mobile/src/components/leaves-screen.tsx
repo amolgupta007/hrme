@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useLocalSearchParams } from "expo-router";
 import { hasPermission } from "@jambahr/shared";
 import { istToday } from "@jambahr/shared/attendance/ist";
 import type {
@@ -45,7 +46,14 @@ export function LeavesScreen() {
   const orgId = me?.orgId ?? null;
   const isManager = !!me && hasPermission(me.role, "manager");
 
-  const [segment, setSegment] = useState<Segment>("mine");
+  // Home's "N leave requests waiting on you" row deep-links here with
+  // ?segment=approvals (2a Needs-attention row). Read once as the initial
+  // segment — a plain default, not synced on every param change, so the
+  // user can freely switch segments afterward without the link fighting them.
+  const params = useLocalSearchParams<{ segment?: string }>();
+  const [segment, setSegment] = useState<Segment>(
+    params.segment === "approvals" ? "approvals" : "mine"
+  );
 
   // Approvals payload is fetched for managers regardless of the active segment
   // so the segment's pending-count badge is accurate the moment the tab opens.

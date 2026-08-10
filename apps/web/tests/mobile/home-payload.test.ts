@@ -3,6 +3,8 @@ import {
   buildHomePayload,
   buildTodayStatus,
   buildLeaveBalances,
+  buildAnnouncements,
+  resolvePendingApprovals,
 } from "@/lib/mobile/home-payload";
 
 describe("buildTodayStatus", () => {
@@ -55,6 +57,43 @@ describe("buildLeaveBalances", () => {
   });
 });
 
+describe("buildAnnouncements", () => {
+  it("maps DB rows to the wire DTO, capped at 3", () => {
+    const out = buildAnnouncements([
+      { id: "a1", title: "Diwali holidays", body: "Office closed 20–22 Oct.", category: "policy", created_at: "2026-08-01T10:00:00Z" },
+      { id: "a2", title: "Town hall", body: "Join us Friday.", category: null, created_at: "2026-08-02T10:00:00Z" },
+      { id: "a3", title: "Third", body: "b3", category: "event", created_at: "2026-08-03T10:00:00Z" },
+      { id: "a4", title: "Fourth (dropped)", body: "b4", category: "general", created_at: "2026-08-04T10:00:00Z" },
+    ]);
+    expect(out).toHaveLength(3);
+    expect(out[0]).toEqual({
+      id: "a1",
+      title: "Diwali holidays",
+      body: "Office closed 20–22 Oct.",
+      category: "policy",
+      createdAt: "2026-08-01T10:00:00Z",
+    });
+    expect(out[1].category).toBeNull();
+    expect(out.map((a) => a.id)).not.toContain("a4");
+  });
+
+  it("returns an empty array for an org with no announcements", () => {
+    expect(buildAnnouncements([])).toEqual([]);
+  });
+});
+
+describe("resolvePendingApprovals", () => {
+  it("passes through the raw count for managers/admins", () => {
+    expect(resolvePendingApprovals(true, 4)).toBe(4);
+    expect(resolvePendingApprovals(true, 0)).toBe(0);
+  });
+
+  it("hides the stat (null) for employees regardless of the raw count", () => {
+    expect(resolvePendingApprovals(false, 0)).toBeNull();
+    expect(resolvePendingApprovals(false, 4)).toBeNull();
+  });
+});
+
 describe("buildHomePayload", () => {
   it("assembles today + balances + capped holidays + pending counts", () => {
     const payload = buildHomePayload({
@@ -69,6 +108,9 @@ describe("buildHomePayload", () => {
       ],
       pendingLeaveRequests: 2,
       pendingRegularizations: 1,
+      pendingApprovals: null,
+      trainingsOverdue: 0,
+      announcements: [],
     });
 
     expect(payload.today.isClockedIn).toBe(true);
@@ -77,5 +119,29 @@ describe("buildHomePayload", () => {
     expect(payload.nextHolidays).toHaveLength(3); // capped
     expect(payload.nextHolidays[0].name).toBe("Independence Day");
     expect(payload.pending).toEqual({ leaveRequests: 2, regularizations: 1 });
+    expect(payload.pendingApprovals).toBeNull();
+    expect(payload.trainingsOverdue).toBe(0);
+    expect(payload.announcements).toEqual([]);
+  });
+
+  it("carries manager pending-approvals count and announcements through", () => {
+    const payload = buildHomePayload({
+      record: null,
+      shift: null,
+      policies: [],
+      holidays: [],
+      pendingLeaveRequests: 0,
+      pendingRegularizations: 0,
+      pendingApprovals: 3,
+      trainingsOverdue: 2,
+      announcements: [
+        { id: "a1", title: "Diwali holidays", body: "Office closed 20–22 Oct.", category: "policy", created_at: "2026-08-01T10:00:00Z" },
+      ],
+    });
+
+    expect(payload.pendingApprovals).toBe(3);
+    expect(payload.trainingsOverdue).toBe(2);
+    expect(payload.announcements).toHaveLength(1);
+    expect(payload.announcements[0].title).toBe("Diwali holidays");
   });
 });

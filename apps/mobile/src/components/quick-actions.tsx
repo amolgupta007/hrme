@@ -1,76 +1,36 @@
-import { ActivityIndicator, Pressable, Text, View } from "react-native";
-import Ionicons from "@expo/vector-icons/Ionicons";
+import { Pressable, Text, View } from "react-native";
 
 /**
- * Quick actions (design §usage rule 1: ONE primary CTA per screen). The
- * state-aware Punch in/out is the single primary (50pt, radius 14, brand);
- * Apply leave + Payslips are D1 stubs rendered as tertiary buttons (44pt,
- * radius 12, 1pt border, white bg).
+ * 2a hi-fi CTAs (design §usage rule 1: ONE primary CTA per screen). "＋
+ * Request leave" is the single primary (44pt, radius 12, brand fill);
+ * "View payslip" is the secondary/tint variant (same size, brand-tint bg,
+ * brand-pressed text). Punch In/Out is no longer here — it moved inside
+ * TodayCard (Slice 2 Task 6b) since the design has no room for a second
+ * primary CTA on this screen.
  */
 export function QuickActions({
-  isClockedIn,
-  isPunching,
-  onPunch,
-  onApplyLeave,
-  onPayslips,
+  onRequestLeave,
+  onViewPayslip,
 }: {
-  isClockedIn: boolean;
-  isPunching: boolean;
-  onPunch: () => void;
-  onApplyLeave: () => void;
-  onPayslips: () => void;
+  onRequestLeave: () => void;
+  onViewPayslip: () => void;
 }) {
   return (
-    <View>
+    <View className="flex-row gap-2">
       <Pressable
         accessibilityRole="button"
-        disabled={isPunching}
-        onPress={onPunch}
-        className={`h-[50px] flex-row items-center justify-center rounded-[14px] active:bg-brand-pressed ${
-          isPunching ? "bg-brand/70" : "bg-brand"
-        }`}
+        onPress={onRequestLeave}
+        className="h-11 flex-1 flex-row items-center justify-center rounded-xl bg-brand active:bg-brand-pressed"
       >
-        {isPunching ? (
-          <ActivityIndicator color="#FFFFFF" />
-        ) : (
-          <>
-            <Ionicons
-              name={isClockedIn ? "log-out-outline" : "log-in-outline"}
-              size={18}
-              color="#FFFFFF"
-            />
-            <Text className="ml-2 text-[17px] font-semibold text-white">
-              {isClockedIn ? "Punch out" : "Punch in"}
-            </Text>
-          </>
-        )}
+        <Text className="text-[15px] font-semibold text-white">＋ Request leave</Text>
       </Pressable>
-
-      <View className="mt-3 flex-row gap-3">
-        <TertiaryButton icon="calendar-outline" label="Apply leave" onPress={onApplyLeave} />
-        <TertiaryButton icon="cash-outline" label="Payslips" onPress={onPayslips} />
-      </View>
+      <Pressable
+        accessibilityRole="button"
+        onPress={onViewPayslip}
+        className="h-11 flex-1 flex-row items-center justify-center rounded-xl bg-brand-tint active:bg-brand-pressed/10"
+      >
+        <Text className="text-[15px] font-semibold text-brand-pressed">View payslip</Text>
+      </Pressable>
     </View>
-  );
-}
-
-function TertiaryButton({
-  icon,
-  label,
-  onPress,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={onPress}
-      className="h-11 flex-1 flex-row items-center justify-center rounded-xl border border-line bg-surface active:bg-brand-tint"
-    >
-      <Ionicons name={icon} size={16} color="#5B6472" />
-      <Text className="ml-1.5 text-[15px] font-medium text-ink-900">{label}</Text>
-    </Pressable>
   );
 }

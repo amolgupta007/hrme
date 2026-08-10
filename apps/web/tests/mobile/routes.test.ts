@@ -55,6 +55,8 @@ function makeChain(table: string) {
     gte: () => chain,
     lte: () => chain,
     lt: () => chain,
+    in: () => chain,
+    or: () => chain,
     order: () => chain,
     limit: () => Promise.resolve(awaitResult),
     maybeSingle: () => Promise.resolve({ data: cfg.single ?? null, error: null }),
@@ -66,7 +68,11 @@ function makeChain(table: string) {
 
 // ── module mocks (registered before importing the routes) ─────────────────────
 vi.mock("@clerk/nextjs/server", () => ({ auth: () => ({ userId: clerkUserId }) }));
-vi.mock("@/lib/current-user", () => ({ getCurrentUser: vi.fn(async () => currentUser) }));
+vi.mock("@/lib/current-user", () => ({
+  getCurrentUser: vi.fn(async () => currentUser),
+  isAdmin: (role: string) => role === "owner" || role === "admin",
+  isManagerOrAbove: (role: string) => role === "owner" || role === "admin" || role === "manager",
+}));
 vi.mock("@/lib/supabase/server", () => ({
   createAdminSupabase: () => ({ from: (t: string) => makeChain(t) }),
 }));
@@ -185,6 +191,27 @@ describe("GET /api/mobile/home (200)", () => {
     expect(json.leave.balances[0]).toMatchObject({ policyId: "p1", total: 21, used: 0, remaining: 21 });
     expect(Array.isArray(json.nextHolidays)).toBe(true);
     expect(json.pending).toEqual({ leaveRequests: 0, regularizations: 0 });
+    // Employee (default VALID_USER role) never sees the "to approve" stat.
+    expect(json.pendingApprovals).toBeNull();
+    expect(json.trainingsOverdue).toBe(0);
+    expect(Array.isArray(json.announcements)).toBe(true);
+  });
+
+  it("surfaces a manager's pending-approvals count instead of null", async () => {
+    currentUser = { ...VALID_USER, role: "manager" };
+    tableConfig.leave_requests = { rows: [], count: 3 };
+    // Manager scope (getManagerScopedEmployeeIds → dept-head members ∪ direct
+    // reports) must resolve non-empty or the route short-circuits to 0
+    // without ever querying the pending count.
+    tableConfig.departments = { rows: [{ id: "dept-1" }] };
+    tableConfig.employees = {
+      ...tableConfig.employees,
+      rows: [{ id: "emp-2", org_id: "org-1", role: "employee", organizations: { id: "org-1", name: "Acme" } }],
+    };
+    const res = await homeGET(req());
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.pendingApprovals).toBe(3);
   });
 });
 

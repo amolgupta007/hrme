@@ -22,4 +22,7 @@ export * from "./employees/employee-schema";
 export * from "./auth/types";
 export * from "./mobile/types";
 export * from "./mobile/leave";
+export * from "./mobile/payslips";
+export * from "./mobile/profile";
+export * from "./mobile/directory";
 export * from "./leaves/compute-days";

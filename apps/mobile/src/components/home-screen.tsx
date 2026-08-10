@@ -2,6 +2,7 @@ import { Alert, Pressable, RefreshControl, ScrollView, Text, View } from "react-
 import { SafeAreaView } from "react-native-safe-area-context";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useAuth } from "@clerk/clerk-expo";
+import { useRouter } from "expo-router";
 import type { MobileHomeResponse } from "@jambahr/shared/mobile/types";
 import { useSession } from "@/lib/session";
 import { useMobileQuery } from "@/lib/query";
@@ -41,6 +42,7 @@ function todayLabel(): string {
 export function HomeScreen({ isAdmin = false }: { isAdmin?: boolean }) {
   const { userId } = useAuth();
   const { me } = useSession();
+  const router = useRouter();
   const orgId = me?.orgId ?? null;
 
   const home = useMobileQuery<MobileHomeResponse>(
@@ -121,7 +123,11 @@ export function HomeScreen({ isAdmin = false }: { isAdmin?: boolean }) {
               pending={data.pending.leaveRequests + data.pending.regularizations}
             />
 
-            <TodayCard today={data.today} syncing={queueCount > 0} />
+            <TodayCard
+              today={data.today}
+              syncing={queueCount > 0}
+              onPress={() => router.push("/attendance")}
+            />
 
             <QuickActions
               isClockedIn={data.today.isClockedIn}

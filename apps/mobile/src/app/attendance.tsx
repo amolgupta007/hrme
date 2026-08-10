@@ -34,6 +34,10 @@ function parseIstMonth(nowMs?: number): YM {
  * (staleTime 0 for the live IST month, 5min for past months). ‹ › month nav
  * with no navigation past the current IST month; a "Today" chip jumps back;
  * pull-to-refresh; tap a day → detail bottom sheet.
+ *
+ * Slice 2 Task 5: moved out of the `(staff)` tab group into a stacked route
+ * off Home (design's 5-tab IA has no Attendance tab). Reached via the
+ * TodayCard tap on Home; the root Stack gives it a back nav + title.
  */
 export default function Attendance() {
   const { me } = useSession();

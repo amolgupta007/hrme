@@ -2,17 +2,18 @@ import { Redirect, Tabs } from "expo-router";
 import { useAuth } from "@clerk/clerk-expo";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { palette } from "@jambahr/config/tokens";
-import { hasPermission } from "@jambahr/shared";
-import { useSession } from "@/lib/session";
 
-export default function AdminTabs() {
+/**
+ * The converged 5-tab shell (Mobile Phase D Slice 2, Task 5). Staff and
+ * admins share one tab group now — the old `(staff)`/`(admin)` split is
+ * gone. Role-specific affordances (Approvals segment inside Leaves, admin
+ * People/Grow extras) are gated inline within each tab's screen, not by
+ * routing to a different tab set.
+ */
+export default function TabsLayout() {
   const { isLoaded, isSignedIn } = useAuth();
-  const { me } = useSession();
   if (!isLoaded) return null;
   if (!isSignedIn) return <Redirect href="/(auth)/sign-in" />;
-  // Defense-in-depth: index.tsx routes by role; this backstop protects against
-  // deep links. Real authorization lives server-side in the BFF.
-  if (me && !hasPermission(me.role, "admin")) return <Redirect href="/" />;
 
   return (
     <Tabs
@@ -34,11 +35,11 @@ export default function AdminTabs() {
         }}
       />
       <Tabs.Screen
-        name="approvals"
+        name="leaves"
         options={{
-          title: "Approvals",
+          title: "Leaves",
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="checkmark-done-outline" size={size} color={color} />
+            <Ionicons name="calendar-outline" size={size} color={color} />
           ),
         }}
       />
@@ -52,20 +53,20 @@ export default function AdminTabs() {
         }}
       />
       <Tabs.Screen
-        name="reports"
+        name="grow"
         options={{
-          title: "Reports",
+          title: "Grow",
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="bar-chart-outline" size={size} color={color} />
+            <Ionicons name="trending-up-outline" size={size} color={color} />
           ),
         }}
       />
       <Tabs.Screen
-        name="profile"
+        name="more"
         options={{
-          title: "Profile",
+          title: "More",
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="person-outline" size={size} color={color} />
+            <Ionicons name="menu-outline" size={size} color={color} />
           ),
         }}
       />

@@ -2,10 +2,17 @@ import "../../global.css";
 import { Sentry } from "@/lib/sentry";
 import { ClerkProvider } from "@clerk/clerk-expo";
 import { tokenCache } from "@clerk/clerk-expo/token-cache";
-import { Slot } from "expo-router";
+import { Stack } from "expo-router";
 import { QueryProvider } from "@/lib/query";
 import { SessionProvider } from "@/lib/session";
 
+/**
+ * Root Stack (Slice 2 Task 5). Previously a bare `<Slot />` — promoted to a
+ * Stack navigator so the new top-level screens (`attendance`, `payslips`,
+ * `profile`) opened off the `(tabs)` group get a real back nav + header.
+ * `(auth)`, `index`, and `(tabs)` keep their own chrome (or none) via
+ * `headerShown: false` here — unchanged from the previous Slot behavior.
+ */
 function RootLayout() {
   return (
     <ClerkProvider
@@ -14,7 +21,23 @@ function RootLayout() {
     >
       <QueryProvider>
         <SessionProvider>
-          <Slot />
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="index" />
+            <Stack.Screen name="(auth)" />
+            <Stack.Screen name="(tabs)" />
+            <Stack.Screen
+              name="attendance"
+              options={{ headerShown: true, title: "Attendance" }}
+            />
+            <Stack.Screen
+              name="payslips"
+              options={{ headerShown: true, title: "Payslips" }}
+            />
+            <Stack.Screen
+              name="profile"
+              options={{ headerShown: true, title: "Profile" }}
+            />
+          </Stack>
         </SessionProvider>
       </QueryProvider>
     </ClerkProvider>

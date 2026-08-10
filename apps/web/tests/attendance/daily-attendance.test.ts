@@ -147,6 +147,51 @@ describe("computeDailyAttendance mobile-source zone exemption", () => {
   });
 });
 
+// Web clock-in/out (fix/clockin-event-stream): web punches carry no location
+// (location_id === null) and must be zone-exempt like mobile — historically web
+// clockIn ALWAYS counted regardless of the employee's zone assignment. Without
+// this exemption, unifying web clockIn onto the event stream would silently drop
+// every web punch for a zone-assigned employee (a regression).
+describe("computeDailyAttendance web-source zone exemption", () => {
+  it("web punches (null location) count for a zone-assigned employee — no regression", () => {
+    const events = [
+      punch("09:00", null, "web-in", "web"),
+      punch("18:00", null, "web-out", "web"),
+    ];
+    const r = computeDailyAttendance({ events, zoneLocationIds: ["A", "B"] });
+    expect(r.status).toBe("present");
+    expect(r.totalMinutes).toBe(540); // 09:00 -> 18:00
+    expect(r.outOfZoneCount).toBe(0);
+    expect(r.contributingIds).toEqual(["web-in", "web-out"]);
+  });
+
+  it("a web punch at an out-of-zone location still counts (zone-exempt like mobile)", () => {
+    const events = [
+      punch("09:00", "A"),
+      punch("18:00", "B"),
+      punch("20:00", "C", "web-late", "web"), // out of zone, but source=web
+    ];
+    const r = computeDailyAttendance({ events, zoneLocationIds: ["A", "B"] });
+    expect(r.status).toBe("present");
+    expect(r.totalMinutes).toBe(660); // 09:00 -> 20:00, web punch extends last-out
+    expect(r.lastOutLocationId).toBe("C");
+    expect(r.contributingIds).toContain("web-late");
+    expect(r.outOfZoneCount).toBe(0);
+  });
+
+  it("mixes web (zone-exempt) with an out-of-zone device punch (excluded)", () => {
+    const events = [
+      punch("09:00", null, "web-in", "web"),
+      punch("13:00", "D", "device-oob", "device"), // out of zone -> excluded
+      punch("18:00", null, "web-out", "web"),
+    ];
+    const r = computeDailyAttendance({ events, zoneLocationIds: ["A", "B"] });
+    expect(r.totalMinutes).toBe(540); // 09:00 -> 18:00, device-oob dropped
+    expect(r.contributingIds).not.toContain("device-oob");
+    expect(r.outOfZoneCount).toBe(1);
+  });
+});
+
 describe("dedupePunches", () => {
   it("collapses same-employee same-location punches within the window", () => {
     const events = [punch("09:00:00", "A"), punch("09:00:30", "A", "dup"), punch("18:00", "B")];

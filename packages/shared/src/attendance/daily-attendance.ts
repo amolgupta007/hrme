@@ -108,15 +108,20 @@ export function computeDailyAttendance(params: {
 
   // No zone assigned → fall back to ALL locations (PRD §4.4) and flag it.
   const noZoneFallback = zoneLocationIds === null;
-  // Mobile GPS punches are exempt from zone filtering (lenient — field staff
-  // punching at client sites aren't "out of zone"; see 02A-PHASE-D-DECISIONS.md
-  // decision 3). All other sources (including no source, e.g. legacy/ADMS
-  // events that don't select this column) keep the original zone check.
+  // Mobile GPS punches AND web clock-ins are exempt from zone filtering. Mobile:
+  // lenient — field staff punching at client sites aren't "out of zone" (see
+  // 02A-PHASE-D-DECISIONS.md decision 3). Web: web clockIn/clockOut carry no
+  // location (location_id === null) and historically ALWAYS counted regardless
+  // of zone — unifying web onto the event stream must not silently drop them for
+  // a zone-assigned employee (see fix/clockin-event-stream). All other sources
+  // (device/adms/manual, including no source for legacy events that don't select
+  // this column) keep the original zone check.
   const inZone = noZoneFallback
     ? deduped
     : deduped.filter(
         (e) =>
           e.source === "mobile" ||
+          e.source === "web" ||
           (e.location_id !== null && zoneLocationIds!.includes(e.location_id)),
       );
   const outOfZoneCount = deduped.length - inZone.length;

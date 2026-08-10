@@ -348,7 +348,7 @@ export async function recomputeAttendanceDay(
 
   const { data: allEvents } = await supabase
     .from("attendance_punch_events")
-    .select("id, punched_at, location_id, status")
+    .select("id, punched_at, location_id, status, source")
     .eq("org_id", orgId)
     .eq("employee_id", employeeId)
     .gte("punched_at", start.toISOString())
@@ -377,6 +377,14 @@ export async function recomputeAttendanceDay(
   // An absent day with no pending punches has nothing to record.
   if (result.status === "absent" && !hasPending) return;
 
+  // Rollup source label (attendance_records.source CHECK allows web/device/auto_close/mobile).
+  // A biometric/ADMS punch on the day makes it a 'device' day; a pure-mobile day is 'mobile';
+  // otherwise (manual/web/legacy events) keep the historical 'device' default.
+  const hasDeviceOrAdms = rows.some((r) => r.source === "device" || r.source === "adms");
+  const hasMobile = rows.some((r) => r.source === "mobile");
+  const rollupSource: "device" | "mobile" =
+    hasDeviceOrAdms ? "device" : hasMobile ? "mobile" : "device";
+
   const { error } = await supabase.from("attendance_records").upsert(
     {
       org_id: orgId,
@@ -389,7 +397,7 @@ export async function recomputeAttendanceDay(
       break_minutes: result.breakMinutes,
       needs_review: result.needsReview || hasPending,
       has_pending_punches: hasPending,
-      source: "device", // attendance_records.source CHECK only allows web/device/auto_close
+      source: rollupSource, // 'device' if any device/adms punch that day, else 'mobile' (migration 102)
       // Phase 2 multi-location rollup fields (derived from the event stream).
       first_in_location_id: result.firstInLocationId,
       last_out_location_id: result.lastOutLocationId,

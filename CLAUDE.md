@@ -236,6 +236,11 @@ See `PAYROLL_AUDIT.md` for the per-finding closure log and `docs/payroll-overhau
     auto-handle Clerk session tasks the way the web `<SignIn>` components do.
   - Phone-OTP sign-in does not deliver SMS on the dev Clerk instance (MSG91 webhook is wired to
     the production instance only). Use email-code as the dev sign-in factor.
+  - **iOS bundle id is permanent once the first `eas build --platform ios` registers the App ID
+    with Apple.** Shipped id = `com.jambahr.mobile` (app.json, both platforms, set Phase C) — PRD 05
+    says `com.jambahr.app` but the shipped id wins; change it BEFORE the first iOS build or never.
+    Also: `eas device:create` must run before the iOS build (ad-hoc provisioning), and the first
+    `eas build` writes `extra.eas.projectId` into app.json — commit that change.
   - Windows Firewall must allow Node.js on private networks or a phone can't reach Metro (8081)
     or the BFF (3000). `npx expo start --tunnel` is the fallback.
 

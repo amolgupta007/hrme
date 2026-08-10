@@ -17,6 +17,8 @@ export type DailyAttendanceRow = {
   punch_count: number | null;
   out_of_zone_count: number | null;
   derived_status: "present" | "incomplete" | "absent" | null;
+  /** True when the day has unresolved pending punches (e.g. a mobile regularization). */
+  has_pending_punches: boolean;
   first_in_location: string | null;
   last_out_location: string | null;
 };
@@ -46,7 +48,7 @@ export async function getDailyAttendance(input: {
     .from("attendance_records")
     .select(
       `id, employee_id, date, clock_in_at, clock_out_at, total_minutes,
-       punch_count, out_of_zone_count, derived_status,
+       punch_count, out_of_zone_count, derived_status, has_pending_punches,
        employees(first_name, last_name),
        first_in:locations!first_in_location_id(name),
        last_out:locations!last_out_location_id(name)`,
@@ -73,13 +75,17 @@ export async function getDailyAttendance(input: {
     punch_count: r.punch_count,
     out_of_zone_count: r.out_of_zone_count,
     derived_status: r.derived_status,
+    has_pending_punches: !!r.has_pending_punches,
     first_in_location: r.first_in?.name ?? null,
     last_out_location: r.last_out?.name ?? null,
   }));
 
   if (input.reviewOnly) {
     rows = rows.filter(
-      (r) => r.derived_status === "incomplete" || (r.out_of_zone_count ?? 0) > 0,
+      (r) =>
+        r.derived_status === "incomplete" ||
+        (r.out_of_zone_count ?? 0) > 0 ||
+        r.has_pending_punches,
     );
   }
 

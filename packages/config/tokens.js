@@ -89,4 +89,24 @@ const nativewindTheme = {
   borderRadius: { sm: "6px", md: "8px", lg: "10px" },
 };
 
-module.exports = { palette, radius, fontSize, nativewindTheme };
+/**
+ * Mobile-only design palette (Phase D "Jambahr iOS app design", 2026-07-17).
+ * NOT drift-tested against the web theme — the design intentionally diverges
+ * (brand `#17806D` vs web teal). Consumed only by `apps/mobile`
+ * (tailwind.config.js). Do NOT feed these into `nativewindTheme` above or the
+ * web `palette` — the drift test (apps/web/tests/design-tokens) must stay green.
+ * Hex format so NativeWind + Tailwind can parse directly.
+ */
+const mobilePalette = {
+  brand: { DEFAULT: "#17806D", pressed: "#0E5E4F", tint: "#E7F3F0" },
+  ink: { 900: "#0B1220", 600: "#5B6472", 400: "#9AA1AB" },
+  canvas: "#F7F7F4",
+  surface: "#FFFFFF",
+  line: "#E7E9EC",
+  success: { DEFAULT: "#1E9E63", tint: "#E5F6EA", ontint: "#177245" },
+  warning: { DEFAULT: "#B45309", tint: "#FBF0D9", ontint: "#8A5A06" },
+  danger: { DEFAULT: "#DC2626", tint: "#FDE8E8", ontint: "#B91C1C" },
+  info: { DEFAULT: "#3B63D8", tint: "#E8EEFC", ontint: "#2A4BB5" },
+};
+
+module.exports = { palette, radius, fontSize, nativewindTheme, mobilePalette };

@@ -10,7 +10,10 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.jambahr.mobile",
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.jambahr.mobile",
@@ -28,6 +31,7 @@
     },
     "plugins": [
       "expo-router",
+      "expo-dev-client",
       [
         "expo-splash-screen",
         {
@@ -40,12 +44,21 @@
       "expo-web-browser",
       [
         "@sentry/react-native/expo",
-        { "organization": "jambahr", "project": "jambahr-mobile" }
+        {
+          "organization": "jambahr",
+          "project": "jambahr-mobile"
+        }
       ]
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "1f8b51f9-6ac2-470b-8daa-dace5c50580e"
+      }
     }
   }
 }

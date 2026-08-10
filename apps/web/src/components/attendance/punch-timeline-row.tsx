@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
-import { LogIn, LogOut, Coffee, Cpu, PencilLine, Ban, Check, X } from "lucide-react";
+import { LogIn, LogOut, Coffee, Cpu, PencilLine, Smartphone, Ban, Check, X } from "lucide-react";
 import {
   approvePunch,
   rejectPunch,
@@ -53,6 +53,7 @@ export function PunchTimelineRow({
   const { icon: Icon, cls, label } = typeVisual(t);
 
   const isManual = punch.source === "manual";
+  const isMobile = punch.source === "mobile";
   const dimmed = punch.status === "voided" || punch.status === "rejected" || punch.status === "duplicate";
 
   async function act(fn: () => Promise<{ success: boolean; error?: string }>, ok: string) {
@@ -85,14 +86,25 @@ export function PunchTimelineRow({
           </p>
           <div className="mt-0.5 flex items-center gap-2 text-[11px] text-muted-foreground">
             <span className="inline-flex items-center gap-1">
-              {isManual ? <PencilLine className="h-3 w-3" /> : <Cpu className="h-3 w-3" />}
-              {isManual ? "Manual" : punch.source === "web" ? "Web" : "Device"}
+              {isManual ? (
+                <PencilLine className="h-3 w-3" />
+              ) : isMobile ? (
+                <Smartphone className="h-3 w-3" />
+              ) : (
+                <Cpu className="h-3 w-3" />
+              )}
+              {isManual ? "Manual" : isMobile ? "Mobile" : punch.source === "web" ? "Web" : "Device"}
             </span>
             {punch.status === "pending" && <span className="text-amber-700">Awaiting approval</span>}
             {punch.status === "voided" && <span title={punch.void_reason ?? ""}>Voided</span>}
             {punch.status === "rejected" && <span title={punch.rejection_reason ?? ""}>Rejected</span>}
             {punch.status === "duplicate" && <span>Duplicate</span>}
           </div>
+          {punch.note && (
+            <p className="mt-0.5 max-w-64 truncate text-[11px] italic text-muted-foreground" title={punch.note}>
+              &ldquo;{punch.note}&rdquo;
+            </p>
+          )}
         </div>
       </div>
 

@@ -30,6 +30,20 @@ export declare const fontSize: {
 };
 export declare const nativewindTheme: Record<string, unknown>;
 
+export type MobileStatusColor = { DEFAULT: string; tint: string; ontint: string };
+export type MobilePalette = {
+  brand: { DEFAULT: string; pressed: string; tint: string };
+  ink: { 900: string; 600: string; 400: string };
+  canvas: string;
+  surface: string;
+  line: string;
+  success: MobileStatusColor;
+  warning: MobileStatusColor;
+  danger: MobileStatusColor;
+  info: MobileStatusColor;
+};
+export declare const mobilePalette: MobilePalette;
+
 declare const tokens: {
   palette: { light: TokenPalette; dark: TokenPalette };
   radius: { sm: number; md: number; lg: number };
@@ -38,5 +52,6 @@ declare const tokens: {
     xl: number; "2xl": number; "3xl": number;
   };
   nativewindTheme: Record<string, unknown>;
+  mobilePalette: MobilePalette;
 };
 export default tokens;

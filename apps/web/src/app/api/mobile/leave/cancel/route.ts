@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const result = await cancelLeave(parsed.data.requestId);
+  const result = await cancelLeave(parsed.data.requestId, request.headers.get("x-org-id"));
   if (!result.success) {
     return NextResponse.json({ error: result.error }, { status: 400 });
   }

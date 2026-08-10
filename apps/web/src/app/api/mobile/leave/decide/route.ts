@@ -69,10 +69,14 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // Pass the header org so the action targets the SAME org the scope guard just
+  // validated against — not the action's cookie/first-membership fallback (which
+  // for a multi-org caller would silently update 0 rows and return false success).
+  const orgIdHint = request.headers.get("x-org-id");
   const result =
     decision === "approve"
-      ? await approveLeave(requestId, comment)
-      : await rejectLeave(requestId, comment);
+      ? await approveLeave(requestId, comment, orgIdHint)
+      : await rejectLeave(requestId, comment, orgIdHint);
   if (!result.success) {
     return NextResponse.json({ error: result.error }, { status: 400 });
   }

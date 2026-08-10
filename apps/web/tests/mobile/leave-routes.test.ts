@@ -152,6 +152,7 @@ describe("POST /api/mobile/leave/apply", () => {
     expect((await res.json()).id).toBe("lr-new");
     expect(requestLeaveMock).toHaveBeenCalledWith(
       expect.objectContaining({ employeeId: "emp-1", days: 1, exceedsBalance: false }),
+      null, // no x-org-id header on the test request → hint is null
     );
   });
 
@@ -188,7 +189,7 @@ describe("POST /api/mobile/leave/cancel", () => {
     const res = await cancelPOST(post("http://localhost/api/mobile/leave/cancel", body));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true });
-    expect(cancelLeaveMock).toHaveBeenCalledWith(body.requestId);
+    expect(cancelLeaveMock).toHaveBeenCalledWith(body.requestId, null);
   });
   it("passes the action's error through as 400", async () => {
     cancelLeaveMock.mockResolvedValue({ success: false, error: "Unauthorized" });
@@ -289,7 +290,7 @@ describe("POST /api/mobile/leave/decide", () => {
     const res = await decidePOST(post("http://localhost/api/mobile/leave/decide", body({ comment: "ok" })));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true });
-    expect(approveLeaveMock).toHaveBeenCalledWith("b3f1c2de-0000-4000-8000-000000000009", "ok");
+    expect(approveLeaveMock).toHaveBeenCalledWith("b3f1c2de-0000-4000-8000-000000000009", "ok", null);
     expect(rejectLeaveMock).not.toHaveBeenCalled();
   });
 

@@ -187,10 +187,16 @@ const requestLeaveSchema = z.object({
 });
 
 export async function requestLeave(
-  formData: z.infer<typeof requestLeaveSchema>
+  formData: z.infer<typeof requestLeaveSchema>,
+  // Mobile BFF passes the X-Org-Id header here so the write targets the caller's
+  // ACTIVE org, not their first-membership fallback. Web callers omit it →
+  // getCurrentUser({orgIdHint: undefined}) resolves via the cookie exactly as
+  // before (byte-identical: current-user.ts uses `orgIdHint ?? cookie ?? null`).
+  orgIdHint?: string | null
 ): Promise<ActionResult<{ id: string }>> {
-  const ctx = await getOrgContext();
-  if (!ctx) return { success: false, error: "Not authenticated" };
+  const user = await getCurrentUser({ orgIdHint });
+  if (!user) return { success: false, error: "Not authenticated" };
+  const ctx = { orgId: user.orgId, clerkUserId: user.clerkUserId };
 
   const validated = requestLeaveSchema.safeParse(formData);
   if (!validated.success) {
@@ -226,10 +232,8 @@ export async function requestLeave(
 
   // Scope enforcement: the target employee must belong to this org, and the
   // caller may only request for themselves unless they are an admin, or a
-  // manager-of-record of the target (either manager slot).
-  const user = await getCurrentUser();
-  if (!user) return { success: false, error: "Not authenticated" };
-
+  // manager-of-record of the target (either manager slot). `user` resolved above
+  // (org-hint-aware).
   const { data: targetEmployee } = await supabase
     .from("employees")
     .select("id, reporting_manager_id, reporting_manager_2_id")
@@ -386,13 +390,13 @@ export async function requestLeave(
 
 export async function approveLeave(
   requestId: string,
-  note?: string
+  note?: string,
+  orgIdHint?: string | null // mobile BFF passes X-Org-Id; web omits → cookie path (byte-identical)
 ): Promise<ActionResult<void>> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ orgIdHint });
   if (!user) return { success: false, error: "Not authenticated" };
   if (!isManagerOrAbove(user.role)) return { success: false, error: "Only managers can approve leave" };
-  const ctx = await getOrgContext();
-  if (!ctx) return { success: false, error: "Not authenticated" };
+  const ctx = { orgId: user.orgId, clerkUserId: user.clerkUserId };
 
   const supabase = createAdminSupabase();
 
@@ -409,6 +413,7 @@ export async function approveLeave(
     .update({
       status: "approved",
       reviewed_at: new Date().toISOString(),
+      reviewed_by: user.employeeId, // populate the decider so GET /leave's approverName join resolves (hi-fi 2b)
       review_note: note || null,
     })
     .eq("id", requestId)
@@ -454,13 +459,13 @@ export async function approveLeave(
 
 export async function rejectLeave(
   requestId: string,
-  note?: string
+  note?: string,
+  orgIdHint?: string | null // mobile BFF passes X-Org-Id; web omits → cookie path (byte-identical)
 ): Promise<ActionResult<void>> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ orgIdHint });
   if (!user) return { success: false, error: "Not authenticated" };
   if (!isManagerOrAbove(user.role)) return { success: false, error: "Only managers can reject leave" };
-  const ctx = await getOrgContext();
-  if (!ctx) return { success: false, error: "Not authenticated" };
+  const ctx = { orgId: user.orgId, clerkUserId: user.clerkUserId };
 
   const supabase = createAdminSupabase();
 
@@ -477,6 +482,7 @@ export async function rejectLeave(
     .update({
       status: "rejected",
       reviewed_at: new Date().toISOString(),
+      reviewed_by: user.employeeId, // populate the decider so GET /leave's approverName join resolves (hi-fi 2b)
       review_note: note || null,
     })
     .eq("id", requestId)
@@ -520,11 +526,13 @@ export async function rejectLeave(
   return { success: true, data: undefined };
 }
 
-export async function cancelLeave(requestId: string): Promise<ActionResult<void>> {
-  const ctx = await getOrgContext();
-  if (!ctx) return { success: false, error: "Not authenticated" };
-  const user = await getCurrentUser();
+export async function cancelLeave(
+  requestId: string,
+  orgIdHint?: string | null // mobile BFF passes X-Org-Id; web omits → cookie path (byte-identical)
+): Promise<ActionResult<void>> {
+  const user = await getCurrentUser({ orgIdHint });
   if (!user) return { success: false, error: "Not authenticated" };
+  const ctx = { orgId: user.orgId, clerkUserId: user.clerkUserId };
 
   const supabase = createAdminSupabase();
 

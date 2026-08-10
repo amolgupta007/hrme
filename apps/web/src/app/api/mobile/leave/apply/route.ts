@@ -47,17 +47,22 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: derived.error }, { status: 400 });
   }
 
-  const result = await requestLeave({
-    employeeId: user.employeeId,
-    policyId,
-    startDate,
-    endDate,
-    days: derived.days,
-    reason,
-    exceedsBalance: false,
-    startHalfDay,
-    endHalfDay,
-  });
+  const result = await requestLeave(
+    {
+      employeeId: user.employeeId,
+      policyId,
+      startDate,
+      endDate,
+      days: derived.days,
+      // Mobile v1 has no over-balance/ticket flow, so the balance check is always
+      // enforced. When mobile gains an "exceed with ticket" UX, thread it here.
+      exceedsBalance: false,
+      reason,
+      startHalfDay,
+      endHalfDay,
+    },
+    request.headers.get("x-org-id"),
+  );
   if (!result.success) {
     return NextResponse.json({ error: result.error }, { status: 400 });
   }

@@ -5,6 +5,7 @@ import { createAdminSupabase } from "@/lib/supabase/server";
 import { istToday } from "@jambahr/shared";
 import {
   buildPersonProfile,
+  type PersonProfileApprovedLeaveRow,
   type PersonProfileAttendanceRow,
   type PersonProfileEmployeeRow,
   type PersonProfileLeavePolicyRow,
@@ -48,6 +49,7 @@ export async function GET(request: NextRequest, ctx: { params: { id: string } })
       "id, org_id, first_name, last_name, role, phone, personal_email, whatsapp_opt_in, departments!department_id(name)",
     )
     .eq("id", targetId)
+    .neq("status", "terminated")
     .maybeSingle();
 
   const emp = employee as (PersonProfileEmployeeRow & { org_id: string }) | null;
@@ -58,34 +60,47 @@ export async function GET(request: NextRequest, ctx: { params: { id: string } })
   const today = istToday();
   const currentYear = new Date().getFullYear();
 
-  const [{ data: todayRecord }, { data: policies }, { data: leaveRequests }] = await Promise.all([
-    supabase
-      .from("attendance_records")
-      .select("clock_in_at, clock_out_at")
-      .eq("org_id", user.orgId)
-      .eq("employee_id", targetId)
-      .eq("date", today)
-      .maybeSingle(),
-    supabase
-      .from("leave_policies")
-      .select("id, type, days_per_year")
-      .eq("org_id", user.orgId)
-      .order("name"),
-    supabase
-      .from("leave_requests")
-      .select("policy_id, leave_type, status, start_date, days")
-      .eq("org_id", user.orgId)
-      .eq("employee_id", targetId)
-      .order("created_at", { ascending: false })
-      .limit(30),
-  ]);
+  const [{ data: todayRecord }, { data: policies }, { data: approvedLeaveRequests }, { data: recentLeaveRequests }] =
+    await Promise.all([
+      supabase
+        .from("attendance_records")
+        .select("clock_in_at, clock_out_at")
+        .eq("org_id", user.orgId)
+        .eq("employee_id", targetId)
+        .eq("date", today)
+        .maybeSingle(),
+      supabase
+        .from("leave_policies")
+        .select("id, type, days_per_year")
+        .eq("org_id", user.orgId)
+        .order("name"),
+      // Balance aggregation: the COMPLETE approved/current-year set, unlimited —
+      // mirrors the Home route's query bounds exactly (gotcha-prone if these
+      // drift: summing over a capped/any-status list under-counts used days).
+      supabase
+        .from("leave_requests")
+        .select("policy_id, days")
+        .eq("org_id", user.orgId)
+        .eq("employee_id", targetId)
+        .eq("status", "approved")
+        .gte("start_date", `${currentYear}-01-01`)
+        .lte("end_date", `${currentYear}-12-31`),
+      // Recent-requests list only — any status, capped, newest first.
+      supabase
+        .from("leave_requests")
+        .select("policy_id, leave_type, status, start_date, days")
+        .eq("org_id", user.orgId)
+        .eq("employee_id", targetId)
+        .order("created_at", { ascending: false })
+        .limit(30),
+    ]);
 
   const payload = buildPersonProfile({
     employee: emp,
     todayRecord: (todayRecord as PersonProfileAttendanceRow) ?? null,
     policies: ((policies as PersonProfileLeavePolicyRow[]) ?? []),
-    leaveRequests: ((leaveRequests as PersonProfileLeaveRequestRow[]) ?? []),
-    currentYear,
+    approvedLeaveRequests: ((approvedLeaveRequests as PersonProfileApprovedLeaveRow[]) ?? []),
+    recentLeaveRequests: ((recentLeaveRequests as PersonProfileLeaveRequestRow[]) ?? []),
   });
 
   return NextResponse.json(payload);

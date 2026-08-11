@@ -7,27 +7,47 @@ let currentUser: any = null;
 // Per-table canned results — mirrors the `makeChain` idiom in
 // payslips-profile-directory-routes.test.ts. `single` serves
 // maybeSingle()/single(); `rows` serves an awaited (thenable) chain / .limit().
-const tableConfig: Record<string, { single?: any; rows?: any[] }> = {};
+//
+// The route now issues TWO separate `leave_requests` queries (Finding 1 fix):
+// an unlimited `status='approved'` + current-year query for the balance sum,
+// and a `limit(30)` any-status query for the recent-requests list. Both hit
+// the same mocked table, so the chain distinguishes them by whether
+// `.eq("status", "approved")` was called: `approvedRows` backs that query,
+// `rows` backs the `.limit()`'d recent-requests query (and remains the
+// fallback for every other table that only ever needs one dataset).
+const tableConfig: Record<string, { single?: any; rows?: any[]; approvedRows?: any[] }> = {};
+
+// Records every .neq(col, val) call per table so tests can assert the route
+// actually applies a filter (not just infer it from data-shape side effects).
+const neqCalls: Record<string, [string, unknown][]> = {};
 
 function resetTableConfig() {
   for (const k of Object.keys(tableConfig)) delete tableConfig[k];
+  for (const k of Object.keys(neqCalls)) delete neqCalls[k];
 }
 
 function makeChain(table: string) {
   const cfg = tableConfig[table] ?? {};
-  const awaitResult = { data: cfg.rows ?? [], error: null };
+  let approvedMode = false;
   const chain: any = {
     select: () => chain,
-    eq: () => chain,
-    neq: () => chain,
+    eq: (col: string, val: any) => {
+      if (col === "status" && val === "approved") approvedMode = true;
+      return chain;
+    },
+    neq: (col: string, val: any) => {
+      (neqCalls[table] ??= []).push([col, val]);
+      return chain;
+    },
     gte: () => chain,
     lte: () => chain,
     in: () => chain,
     order: () => chain,
-    limit: () => Promise.resolve(awaitResult),
+    limit: () => Promise.resolve({ data: cfg.rows ?? [], error: null }),
     maybeSingle: () => Promise.resolve({ data: cfg.single ?? null, error: null }),
     single: () => Promise.resolve({ data: cfg.single ?? null, error: null }),
-    then: (resolve: (v: any) => any) => resolve(awaitResult),
+    then: (resolve: (v: any) => any) =>
+      resolve({ data: (approvedMode ? cfg.approvedRows : cfg.rows) ?? [], error: null }),
   };
   return chain;
 }
@@ -127,6 +147,22 @@ describe("GET /api/mobile/directory/[id] — IDOR guard", () => {
     const res = await call();
     expect(res.status).toBe(404);
   });
+
+  it("404 when the target employee is terminated", async () => {
+    // The route adds .neq("status", "terminated") to the employees lookup
+    // (Finding 2 parity fix — matches /api/mobile/directory and /api/mobile/me).
+    // The mock chain's .neq() is a generic pass-through (it doesn't re-filter
+    // `single`), so a terminated target is simulated the same way Postgrest
+    // would represent it once that filter is applied server-side: no matching
+    // row. We additionally assert the route actually issues the filter, so
+    // this doesn't silently degenerate into a duplicate of the
+    // "does not exist" case.
+    tableConfig.employees = { single: null };
+    const res = await call();
+    expect(res.status).toBe(404);
+    expect((await res.json()).error).toBe("not_found");
+    expect(neqCalls.employees).toContainEqual(["status", "terminated"]);
+  });
 });
 
 describe("GET /api/mobile/directory/[id] — 200 shape", () => {
@@ -142,11 +178,16 @@ describe("GET /api/mobile/directory/[id] — 200 shape", () => {
       ],
     };
     tableConfig.leave_requests = {
+      // Recent-requests list: any status, newest first (route's second query).
       rows: [
         { policy_id: "p1", leave_type: "paid", status: "approved", start_date: "2026-08-01", days: 3 },
         { policy_id: "p2", leave_type: "sick", status: "pending", start_date: "2026-07-20", days: 1 },
         { policy_id: "p1", leave_type: "paid", status: "approved", start_date: "2025-06-01", days: 5 },
       ],
+      // Balance query: server-side filtered to approved + current year (2026) —
+      // the 2025-06-01 approved row is correctly excluded here (prior year),
+      // not because it fell off a recency cap.
+      approvedRows: [{ policy_id: "p1", days: 3 }],
     };
 
     const res = await call();
@@ -205,5 +246,54 @@ describe("GET /api/mobile/directory/[id] — 200 shape", () => {
       clockIn: "2026-08-12T04:00:00Z",
       clockOut: "2026-08-12T13:00:00Z",
     });
+  });
+
+  it("leaveBalance sums the FULL approved-current-year set, not just the most-recent-30 window (Finding 1)", async () => {
+    tableConfig.leave_policies = { rows: [{ id: "p1", type: "paid", days_per_year: 40 }] };
+
+    // "Recent requests" (route's second, limit-30 query): the newest 30
+    // leave_requests rows for this employee, mixed statuses. Half are
+    // approved — those alone would under-count balance usage if the balance
+    // sum were (incorrectly) derived from this capped list.
+    const recentThirty = Array.from({ length: 30 }, (_, i) => ({
+      policy_id: "p1",
+      leave_type: "paid",
+      status: i % 2 === 0 ? ("approved" as const) : ("pending" as const),
+      start_date: `2026-08-${String((i % 28) + 1).padStart(2, "0")}`,
+      days: 1,
+    }));
+    const approvedWithinRecentWindow = recentThirty.filter((r) => r.status === "approved");
+
+    // Older current-year APPROVED rows that exist in the DB but fall OUTSIDE
+    // the most-recent-30 window (filed earlier in the year, since superseded
+    // by 30+ newer requests). The unlimited balance query must still return
+    // these — that's exactly what Finding 1 fixes.
+    const olderApprovedOutsideWindow = [
+      { policy_id: "p1", days: 2 },
+      { policy_id: "p1", days: 3 },
+    ];
+
+    tableConfig.leave_requests = {
+      rows: recentThirty,
+      approvedRows: [
+        ...approvedWithinRecentWindow.map((r) => ({ policy_id: r.policy_id, days: r.days })),
+        ...olderApprovedOutsideWindow,
+      ],
+    };
+
+    const res = await call();
+    expect(res.status).toBe(200);
+    const json = await res.json();
+
+    const expectedUsed =
+      approvedWithinRecentWindow.length * 1 /* 1 day each */ +
+      olderApprovedOutsideWindow.reduce((sum, r) => sum + r.days, 0);
+    expect(expectedUsed).toBeGreaterThan(15); // sanity: proves the older rows must be counted
+    expect(json.leaveBalance).toEqual([{ type: "paid", remaining: 40 - expectedUsed }]);
+
+    // The recent-requests list is unaffected — still shaped from the capped,
+    // any-status, newest-first query (buildRecentRequests further slices to
+    // its own display limit of 5).
+    expect(json.recentRequests).toHaveLength(5);
   });
 });

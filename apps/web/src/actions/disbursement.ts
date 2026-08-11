@@ -398,8 +398,9 @@ export async function getDisbursementBatchByRun(runId: string): Promise<ActionRe
  */
 export async function approveDisbursement(
   batchId: string,
+  orgIdHint?: string | null // mobile BFF passes X-Org-Id; web omits → cookie path (byte-identical)
 ): Promise<ActionResult<{ status: string; pushed: number; failed: number }>> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ orgIdHint });
   if (!user) return { success: false, error: "Not authenticated" };
   if (!isAdmin(user.role)) return { success: false, error: "Only admins can approve disbursement" };
 

@@ -35,10 +35,12 @@ function istDateOfIso(iso: string): string {
 }
 
 /** Resolve the calling user's actor + manager scope. Null when unauthenticated / org-less. */
-async function resolveActor(): Promise<
+async function resolveActor(
+  orgIdHint?: string | null // mobile BFF passes X-Org-Id; web omits → cookie path (byte-identical)
+): Promise<
   { user: NonNullable<Awaited<ReturnType<typeof getCurrentUser>>>; actor: PunchActor } | null
 > {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ orgIdHint });
   if (!user || !user.employeeId) return null;
   const scopedEmployeeIds =
     user.role === "manager"
@@ -203,8 +205,11 @@ async function loadPunch(sb: ReturnType<typeof createAdminSupabase>, orgId: stri
     | null;
 }
 
-export async function approvePunch(punchId: string): Promise<ActionResult<void>> {
-  const ctx = await resolveActor();
+export async function approvePunch(
+  punchId: string,
+  orgIdHint?: string | null // mobile BFF passes X-Org-Id; web omits → cookie path (byte-identical)
+): Promise<ActionResult<void>> {
+  const ctx = await resolveActor(orgIdHint);
   if (!ctx) return { success: false, error: "Not authenticated" };
   const sb = createAdminSupabase();
   const punch = await loadPunch(sb, ctx.user.orgId, punchId);
@@ -234,8 +239,12 @@ export async function approvePunch(punchId: string): Promise<ActionResult<void>>
   return { success: true, data: undefined };
 }
 
-export async function rejectPunch(punchId: string, reason: string): Promise<ActionResult<void>> {
-  const ctx = await resolveActor();
+export async function rejectPunch(
+  punchId: string,
+  reason: string,
+  orgIdHint?: string | null // mobile BFF passes X-Org-Id; web omits → cookie path (byte-identical)
+): Promise<ActionResult<void>> {
+  const ctx = await resolveActor(orgIdHint);
   if (!ctx) return { success: false, error: "Not authenticated" };
   if (!reason || reason.trim().length === 0)
     return { success: false, error: "A reason is required" };

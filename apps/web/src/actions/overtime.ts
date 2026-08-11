@@ -302,8 +302,11 @@ export async function computeAndRecordOvertime(
 // ---- Approve / Reject / Bulk approve ----
 // No `enabled` gate here — admins must be able to drain the queue after disabling.
 
-export async function approveOvertime(recordId: string): Promise<ActionResult<void>> {
-  const user = await getCurrentUser();
+export async function approveOvertime(
+  recordId: string,
+  orgIdHint?: string | null // mobile BFF passes X-Org-Id; web omits → cookie path (byte-identical)
+): Promise<ActionResult<void>> {
+  const user = await getCurrentUser({ orgIdHint });
   if (!user) return { success: false, error: "Not authenticated" };
   if (!isAdmin(user.role)) return { success: false, error: "Only admins can approve overtime" };
   const sb = createAdminSupabase();
@@ -326,8 +329,9 @@ export async function approveOvertime(recordId: string): Promise<ActionResult<vo
 export async function rejectOvertime(
   recordId: string,
   reason: string,
+  orgIdHint?: string | null // mobile BFF passes X-Org-Id; web omits → cookie path (byte-identical)
 ): Promise<ActionResult<void>> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ orgIdHint });
   if (!user) return { success: false, error: "Not authenticated" };
   if (!isAdmin(user.role)) return { success: false, error: "Only admins can reject overtime" };
   if (!reason.trim()) return { success: false, error: "Provide a reason" };

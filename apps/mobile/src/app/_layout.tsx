@@ -21,7 +21,14 @@ function RootLayout() {
     >
       <QueryProvider>
         <SessionProvider>
-          <Stack screenOptions={{ headerShown: false }}>
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              // iOS otherwise labels the back button with the previous route
+              // segment ("(tabs)"); show just the chevron.
+              headerBackButtonDisplayMode: "minimal",
+            }}
+          >
             <Stack.Screen name="index" />
             <Stack.Screen name="(auth)" />
             <Stack.Screen name="(tabs)" />

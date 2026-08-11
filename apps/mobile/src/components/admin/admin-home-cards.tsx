@@ -50,8 +50,7 @@ export function AdminHomeCards({ data }: { data: AdminHome }) {
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`Pending approvals, ${totalApprovals}`}
-        // TODO(D4 Task 11): drop cast once /approvals exists
-        onPress={() => router.push("/approvals" as any)}
+        onPress={() => router.push("/approvals")}
         className="flex-row items-center gap-3 rounded-2xl border border-line bg-surface p-4 active:bg-brand-tint"
       >
         <View

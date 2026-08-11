@@ -72,6 +72,10 @@ function RootLayout() {
               options={{ headerShown: true, title: "Profile" }}
             />
             <Stack.Screen
+              name="people/[id]"
+              options={{ headerShown: true, title: "Profile" }}
+            />
+            <Stack.Screen
               name="notifications"
               options={{ headerShown: true, title: "Notifications" }}
             />

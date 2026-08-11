@@ -4,7 +4,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Image } from "expo-image";
 import { FlashList } from "@shopify/flash-list";
 import Ionicons from "@expo/vector-icons/Ionicons";
-import type { MobileDirectoryEntry, MobileDirectoryResponse } from "@jambahr/shared";
+import { useRouter } from "expo-router";
+import { hasPermission, type MobileDirectoryEntry, type MobileDirectoryResponse } from "@jambahr/shared";
 import { useSession } from "@/lib/session";
 import { useMobileQuery } from "@/lib/query";
 import { directoryQueryKey, roleBadge } from "@/lib/directory";
@@ -15,10 +16,17 @@ import { directoryQueryKey, roleBadge } from "@/lib/directory";
  * department; rows carry a role badge and tap-to-call / tap-to-email
  * affordances when a phone/email is on file. Visible to all roles — the
  * directory is employee-safe.
+ *
+ * Manager+ rows are also tappable (D4 Task 12) → the `/people/[id]` mini-profile
+ * (contact + today's attendance + leave balance + recent requests, view-only).
+ * Employees keep the non-navigating row — they only get the directory's own
+ * tap-to-call/tap-to-email affordances, same as before this task.
  */
 export function PeopleScreen() {
   const { me } = useSession();
   const orgId = me?.orgId ?? null;
+  const router = useRouter();
+  const canOpenProfile = !!me && hasPermission(me.role, "manager");
   const [search, setSearch] = useState("");
 
   const query = useMobileQuery<MobileDirectoryResponse>(
@@ -72,7 +80,10 @@ export function PeopleScreen() {
         keyboardShouldPersistTaps="handled"
         renderItem={({ item }) => (
           <View className="pb-2.5">
-            <PersonRow entry={item} />
+            <PersonRow
+              entry={item}
+              onPress={canOpenProfile ? () => router.push(`/people/${item.id}`) : undefined}
+            />
           </View>
         )}
         ListEmptyComponent={
@@ -103,10 +114,21 @@ export function PeopleScreen() {
   );
 }
 
-function PersonRow({ entry }: { entry: MobileDirectoryEntry }) {
+function PersonRow({
+  entry,
+  onPress,
+}: {
+  entry: MobileDirectoryEntry;
+  onPress?: () => void;
+}) {
   const badge = roleBadge(entry.roleBadge);
   return (
-    <View className="flex-row items-center rounded-2xl border border-line bg-surface p-3">
+    <Pressable
+      accessibilityRole={onPress ? "button" : undefined}
+      accessibilityLabel={onPress ? `View ${entry.name}'s profile` : undefined}
+      onPress={onPress}
+      className="flex-row items-center rounded-2xl border border-line bg-surface p-3 active:bg-brand-tint"
+    >
       {entry.avatarUrl ? (
         <Image
           source={{ uri: entry.avatarUrl }}
@@ -143,7 +165,7 @@ function PersonRow({ entry }: { entry: MobileDirectoryEntry }) {
           <ContactButton icon="mail-outline" onPress={() => Linking.openURL(`mailto:${entry.email}`)} />
         ) : null}
       </View>
-    </View>
+    </Pressable>
   );
 }
 

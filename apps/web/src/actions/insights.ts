@@ -222,7 +222,7 @@ export async function getOverviewInsights(
     employeesResult,
     departmentsResult,
     leavesResult,
-    balancesResult,
+    policiesResult,
     { count: totalEnrollments },
     { count: completedEnrollments },
     { count: overdueEnrollments },
@@ -237,15 +237,14 @@ export async function getOverviewInsights(
     supabase.from("departments").select("id, name").in("org_id", ids),
     supabase
       .from("leave_requests")
-      .select("start_date, days")
+      .select("org_id, start_date, days")
       .in("org_id", ids)
       .eq("status", "approved")
       .gte("start_date", windowStart24),
     supabase
-      .from("leave_balances")
-      .select("org_id, total_days, used_days, carried_forward_days")
-      .in("org_id", ids)
-      .eq("year", year),
+      .from("leave_policies")
+      .select("org_id, days_per_year")
+      .in("org_id", ids),
     supabase
       .from("training_enrollments")
       .select("*", { count: "exact", head: true })
@@ -317,18 +316,35 @@ export async function getOverviewInsights(
     0
   );
 
-  // Leave utilization (this calendar year)
+  // Leave utilization (this calendar year), derived from policies + requests.
+  // The old leave_balances table is dead (never written), so we mirror the
+  // canonical source of truth (listLeavePolicies): allocated = each active
+  // employee's entitlement (sum of the org's leave_policies.days_per_year),
+  // used = approved leave_requests.days that start in the current calendar year.
+  // Carry-forward / opening balance is NOT tracked without leave_balances → 0.
+  const yearStart = `${year}-01-01`;
+  const policyDaysByOrg = new Map<string, number>();
+  for (const p of (policiesResult.data ?? []) as { org_id: string; days_per_year: number }[]) {
+    policyDaysByOrg.set(p.org_id, (policyDaysByOrg.get(p.org_id) ?? 0) + (p.days_per_year ?? 0));
+  }
+  const activeHeadByOrg = new Map<string, number>();
+  for (const e of active) {
+    activeHeadByOrg.set(e.org_id, (activeHeadByOrg.get(e.org_id) ?? 0) + 1);
+  }
+  const leaveUsedByOrg = new Map<string, number>();
+  for (const l of (leavesResult.data ?? []) as { org_id: string; start_date: string; days: number }[]) {
+    if (l.start_date < yearStart) continue;
+    leaveUsedByOrg.set(l.org_id, (leaveUsedByOrg.get(l.org_id) ?? 0) + (l.days ?? 0));
+  }
   let totalAllocated = 0;
   let totalUsed = 0;
   const leaveAllocByOrg = new Map<string, number>();
-  const leaveUsedByOrg = new Map<string, number>();
-  for (const b of (balancesResult.data ?? []) as { org_id: string; total_days: number; used_days: number; carried_forward_days: number }[]) {
-    const alloc = (b.total_days ?? 0) + (b.carried_forward_days ?? 0);
-    const used = b.used_days ?? 0;
+  for (const orgId of ids) {
+    const alloc = (policyDaysByOrg.get(orgId) ?? 0) * (activeHeadByOrg.get(orgId) ?? 0);
+    const used = leaveUsedByOrg.get(orgId) ?? 0;
+    leaveAllocByOrg.set(orgId, alloc);
     totalAllocated += alloc;
     totalUsed += used;
-    leaveAllocByOrg.set(b.org_id, (leaveAllocByOrg.get(b.org_id) ?? 0) + alloc);
-    leaveUsedByOrg.set(b.org_id, (leaveUsedByOrg.get(b.org_id) ?? 0) + used);
   }
   const leaveUtilizationPct =
     totalAllocated > 0 ? Math.round((totalUsed / totalAllocated) * 100) : 0;
@@ -501,19 +517,22 @@ export async function getLeaveAttendanceInsights(orgIds?: string[]): Promise<Act
   const today = new Date().toISOString().slice(0, 10);
   const year = new Date().getFullYear();
 
-  const [leavesResult, balancesResult, { count: pendingNow }, { count: activeEmployees }] =
+  const [leavesResult, policiesResult, employeesResult, { count: pendingNow }, { count: activeEmployees }] =
     await Promise.all([
       supabase
         .from("leave_requests")
-        .select("org_id, leave_type, start_date, days")
+        .select("org_id, employee_id, leave_type, start_date, days")
         .in("org_id", ids)
         .eq("status", "approved")
         .gte("start_date", windowStart),
       supabase
-        .from("leave_balances")
-        .select("total_days, used_days, carried_forward_days, employees!employee_id(first_name, last_name, status)")
-        .in("org_id", ids)
-        .eq("year", year),
+        .from("leave_policies")
+        .select("org_id, days_per_year")
+        .in("org_id", ids),
+      supabase
+        .from("employees")
+        .select("id, org_id, first_name, last_name, status")
+        .in("org_id", ids),
       supabase
         .from("leave_requests")
         .select("*", { count: "exact", head: true })
@@ -527,7 +546,7 @@ export async function getLeaveAttendanceInsights(orgIds?: string[]): Promise<Act
     ]);
 
   // Stacked leave-by-type per month
-  const leaves = (leavesResult.data ?? []) as { org_id: string; leave_type: string; start_date: string; days: number }[];
+  const leaves = (leavesResult.data ?? []) as { org_id: string; employee_id: string | null; leave_type: string; start_date: string; days: number }[];
   const typeTotals = new Map<string, number>();
   for (const l of leaves) {
     typeTotals.set(l.leave_type, (typeTotals.get(l.leave_type) ?? 0) + (l.days ?? 0));
@@ -549,17 +568,38 @@ export async function getLeaveAttendanceInsights(orgIds?: string[]): Promise<Act
     daysTaken12m += l.days ?? 0;
   }
 
-  // Utilization + top remaining balances (active employees, summed across policies)
+  // Utilization + top remaining balances (active employees, summed across policies).
+  // Derived from policies + requests — the leave_balances table is dead (never
+  // written). Per-employee allocation = the org's total entitlement (sum of
+  // leave_policies.days_per_year); used = approved leave_requests.days that start
+  // in the current calendar year. Carry-forward / opening balance is NOT tracked
+  // without leave_balances → treated as 0.
+  const yearStart = `${year}-01-01`;
+  const policyDaysByOrg = new Map<string, number>();
+  for (const p of (policiesResult.data ?? []) as { org_id: string; days_per_year: number }[]) {
+    policyDaysByOrg.set(p.org_id, (policyDaysByOrg.get(p.org_id) ?? 0) + (p.days_per_year ?? 0));
+  }
+  const usedByEmployee = new Map<string, number>();
+  for (const l of leaves) {
+    if (!l.employee_id || l.start_date < yearStart) continue;
+    usedByEmployee.set(l.employee_id, (usedByEmployee.get(l.employee_id) ?? 0) + (l.days ?? 0));
+  }
   let totalAllocated = 0;
   let totalUsed = 0;
   const perEmployee = new Map<string, { remaining: number; total: number }>();
-  for (const b of (balancesResult.data ?? []) as any[]) {
-    const total = (b.total_days ?? 0) + (b.carried_forward_days ?? 0);
-    const used = b.used_days ?? 0;
+  for (const e of (employeesResult.data ?? []) as {
+    id: string;
+    org_id: string;
+    first_name: string | null;
+    last_name: string | null;
+    status: string;
+  }[]) {
+    const total = policyDaysByOrg.get(e.org_id) ?? 0;
+    const used = usedByEmployee.get(e.id) ?? 0;
     totalAllocated += total;
     totalUsed += used;
-    if (b.employees?.status === "terminated") continue;
-    const name = `${b.employees?.first_name ?? ""} ${b.employees?.last_name ?? ""}`.trim() || "Unknown";
+    if (e.status === "terminated") continue;
+    const name = `${e.first_name ?? ""} ${e.last_name ?? ""}`.trim() || "Unknown";
     const agg = perEmployee.get(name) ?? { remaining: 0, total: 0 };
     agg.remaining += Math.max(0, total - used);
     agg.total += total;

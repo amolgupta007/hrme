@@ -22,7 +22,12 @@ import { notifyApprovalPending } from "@/lib/mobile/notify";
  * Own try/catch — must never affect the compute call that already committed.
  * Skipped by callers when `approval_required` is off (nothing to review).
  */
-async function notifyAdminsOvertimePending(sb: any, orgId: string, count: number): Promise<void> {
+async function notifyAdminsOvertimePending(
+  sb: any,
+  orgId: string,
+  count: number,
+  callerEmployeeId?: string | null,
+): Promise<void> {
   try {
     const { data: admins } = await sb
       .from("employees")
@@ -32,10 +37,15 @@ async function notifyAdminsOvertimePending(sb: any, orgId: string, count: number
       .eq("status", "active");
     const body =
       count === 1 ? "1 overtime record is awaiting approval" : `${count} overtime records are awaiting approval`;
-    for (const admin of (admins ?? []) as { id: string }[]) {
+    // Exclude the admin who ran compute — they don't need to be told about
+    // their own action (mirrors the maker-exclusion in disbursement.ts).
+    const recipientIds = ((admins ?? []) as { id: string }[])
+      .map((a) => a.id)
+      .filter((id) => id !== callerEmployeeId);
+    for (const recipientId of recipientIds) {
       await notifyApprovalPending(sb, {
         orgId,
-        employeeId: admin.id,
+        employeeId: recipientId,
         approvalType: "ot",
         title: "Overtime to review",
         body,
@@ -272,7 +282,7 @@ export async function computeAndRecordOvertime(
       else skipped++;
     }
     if (settings.approval_required && inserted > 0) {
-      await notifyAdminsOvertimePending(sb, user.orgId, inserted);
+      await notifyAdminsOvertimePending(sb, user.orgId, inserted, user.employeeId);
     }
     revalidatePath("/dashboard/attendance");
     return { success: true, data: { inserted, skipped } };
@@ -328,7 +338,7 @@ export async function computeAndRecordOvertime(
       else skipped++;
     }
     if (settings.approval_required && inserted > 0) {
-      await notifyAdminsOvertimePending(sb, user.orgId, inserted);
+      await notifyAdminsOvertimePending(sb, user.orgId, inserted, user.employeeId);
     }
     revalidatePath("/dashboard/attendance");
     return { success: true, data: { inserted, skipped } };

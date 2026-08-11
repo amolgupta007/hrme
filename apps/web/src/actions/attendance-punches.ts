@@ -216,6 +216,10 @@ export async function addManualPunch(
             .single();
           if ((dept as any)?.head_id) recipientIds.add((dept as any).head_id as string);
         }
+        // Never notify the submitter about their own just-filed request
+        // (e.g. a dept head filing their own punch correction is their
+        // own dept's head_id).
+        recipientIds.delete(employeeId);
         const employeeName = `${(emp as any).first_name ?? ""} ${(emp as any).last_name ?? ""}`.trim();
         for (const recipientId of recipientIds) {
           await notifyApprovalPending(sb, {

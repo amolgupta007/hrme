@@ -148,6 +148,8 @@ export function RequestLeaveSheet({
               className="px-4"
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
+              automaticallyAdjustKeyboardInsets
+              contentContainerStyle={{ paddingBottom: 24 }}
             >
               {/* Leave type */}
               <Text className="mb-2 mt-1 text-[11px] font-semibold uppercase tracking-wider text-ink-600">

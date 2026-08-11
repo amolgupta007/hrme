@@ -126,6 +126,8 @@ export function ProfileEditSheet({
               className="px-4"
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
+              automaticallyAdjustKeyboardInsets
+              contentContainerStyle={{ paddingBottom: 24 }}
             >
               <FieldLabel>Phone</FieldLabel>
               <Field

@@ -200,13 +200,13 @@ function InfoRow({
   last?: boolean;
 }) {
   return (
-    <View className={`flex-row items-center justify-between py-3 ${last ? "" : "border-b border-line"}`}>
-      <Text className="text-[15px] text-ink-600">{label}</Text>
-      <View className="flex-row items-center">
+    <View className={`flex-row items-center justify-between gap-3 py-3 ${last ? "" : "border-b border-line"}`}>
+      <Text className="shrink-0 text-[15px] text-ink-600">{label}</Text>
+      <View className="min-w-0 flex-1 flex-row items-center justify-end">
         {masked && value ? (
           <Ionicons name="lock-closed" size={12} color="#9AA1AB" style={{ marginRight: 4 }} />
         ) : null}
-        <Text className="max-w-[62%] text-right text-[15px] font-medium text-ink-900" numberOfLines={2}>
+        <Text className="text-right text-[15px] font-medium text-ink-900" numberOfLines={2}>
           {value ?? "—"}
         </Text>
       </View>

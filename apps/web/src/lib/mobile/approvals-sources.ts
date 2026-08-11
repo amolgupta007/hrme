@@ -15,6 +15,7 @@ import { isAdmin, isManagerOrAbove, type UserContext } from "@/lib/current-user"
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { getManagerScopedEmployeeIds } from "@/lib/attendance/manager-scope";
 import { computeRemainingDays } from "@/lib/leaves/validation";
+import { computeHourlyRate } from "@/lib/attendance/ot";
 import type { MobileApprovalItem } from "@jambahr/shared";
 
 type Sb = ReturnType<typeof createAdminSupabase>;
@@ -152,6 +153,32 @@ export async function fetchRegularizationApprovals(
   }
 }
 
+/**
+ * Estimates an OT record's payout in rupees using the SAME formula
+ * `pushOvertimeToPayroll` uses at push time (`src/actions/overtime.ts`):
+ * hourly rate (paise) = `computeHourlyRate(gross_monthly, working_days,
+ * shift.total_hours)`, then `amount = minutes/60 × hourlyRate × multiplier`.
+ * `ot_records.amount`/`hourly_rate` are only populated once a record is
+ * `pushed` (both stored in paise, migration `038_ot_records.sql`) — for the
+ * `pending` rows this inbox shows they're always null, so the estimate is
+ * computed at read time instead. Returns `null` (never throws) when the
+ * salary structure or a usable working-days figure isn't available; the
+ * caller renders that as "Rs --".
+ */
+function estimateOtAmountRupees(
+  r: { ot_minutes: number; multiplier?: number | null; shifts?: { total_hours?: number | null } | null },
+  grossMonthly: number | undefined,
+  workingDays: number,
+): number | null {
+  if (!grossMonthly || grossMonthly <= 0 || workingDays <= 0) return null;
+  const shiftHours = r.shifts?.total_hours ? Number(r.shifts.total_hours) : 8;
+  if (shiftHours <= 0) return null;
+  const multiplier = Number(r.multiplier ?? 1.5);
+  const hourlyRatePaise = computeHourlyRate(grossMonthly, workingDays, shiftHours);
+  const amountPaise = Math.round((Number(r.ot_minutes ?? 0) / 60) * hourlyRatePaise * multiplier);
+  return Math.round(amountPaise / 100);
+}
+
 /** Pending `ot_records` in scope. Empty when the org's OT master toggle is off. */
 export async function fetchOtApprovals(sb: Sb, user: UserContext): Promise<MobileApprovalItem[]> {
   try {
@@ -169,24 +196,60 @@ export async function fetchOtApprovals(sb: Sb, user: UserContext): Promise<Mobil
     const me = user.employeeId;
     let q = sb
       .from("ot_records")
-      .select("id, employee_id, ot_minutes, amount, created_at, employees!employee_id(first_name, last_name)")
+      .select(
+        "id, employee_id, ot_minutes, amount, multiplier, date, created_at, employees!employee_id(first_name, last_name), shifts(total_hours)",
+      )
       .eq("org_id", user.orgId)
       .eq("status", "pending");
     if (scope.scopeIds) q = q.in("employee_id", scope.scopeIds);
     else if (me) q = q.neq("employee_id", me);
     const { data, error } = await q;
     if (error) return [];
+    const rows = (data as any[]) ?? [];
+    if (rows.length === 0) return [];
 
-    return ((data as any[]) ?? []).map((r) => {
+    // Same inputs `pushOvertimeToPayroll` uses: gross_monthly per employee,
+    // working_days per month (from that month's payroll run, if it exists).
+    const employeeIds = Array.from(new Set(rows.map((r) => r.employee_id)));
+    const { data: salaries } = await sb
+      .from("salary_structures")
+      .select("employee_id, gross_monthly")
+      .eq("org_id", user.orgId)
+      .in("employee_id", employeeIds);
+    const grossByEmp = new Map<string, number>();
+    for (const s of (salaries as any[]) ?? []) grossByEmp.set(s.employee_id, Number(s.gross_monthly));
+
+    const months = Array.from(new Set(rows.map((r) => String(r.date).slice(0, 7))));
+    const { data: runs } = await sb
+      .from("payroll_runs")
+      .select("month, working_days")
+      .eq("org_id", user.orgId)
+      .in("month", months);
+    const workingDaysByMonth = new Map<string, number>();
+    for (const run of (runs as any[]) ?? []) workingDaysByMonth.set(run.month, Number(run.working_days));
+
+    return rows.map((r) => {
       const who = `${r.employees?.first_name ?? ""} ${r.employees?.last_name ?? ""}`.trim();
       const hours = (Number(r.ot_minutes ?? 0) / 60).toFixed(1);
+
+      // Already pushed (shouldn't reach a `pending`-filtered query, but be
+      // safe) — `ot_records.amount` is stored in paise.
+      const amountRupees =
+        r.amount != null
+          ? Math.round(Number(r.amount) / 100)
+          : estimateOtAmountRupees(
+              r,
+              grossByEmp.get(r.employee_id),
+              workingDaysByMonth.get(String(r.date).slice(0, 7)) ?? 26,
+            );
+
       return {
         id: r.id,
         type: "ot",
         who,
         what: "Overtime",
         when: r.created_at,
-        impact: `${hours}h · ${formatINR(Number(r.amount ?? 0))}`,
+        impact: `${hours}h · ${amountRupees != null ? formatINR(amountRupees) : "Rs --"}`,
         meta: { minutes: r.ot_minutes },
       };
     });

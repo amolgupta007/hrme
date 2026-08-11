@@ -19,6 +19,8 @@ function resetTableConfig() {
   tableConfig.attendance_punch_events = { rows: [] };
   tableConfig.organizations = { single: { settings: { attendance: { overtime: { enabled: true } } } } };
   tableConfig.ot_records = { rows: [] };
+  tableConfig.salary_structures = { rows: [] };
+  tableConfig.payroll_runs = { rows: [] };
   tableConfig.razorpayx_credentials = { single: null };
   tableConfig.disbursement_batches = { rows: [] };
   tableConfig.disbursement_items = { rows: [] };
@@ -144,18 +146,29 @@ describe("GET /api/mobile/approvals", () => {
         },
       ],
     };
+    // Real write path: `ot_records.amount`/`hourly_rate` are only populated
+    // once a record is `pushed` (see `pushOvertimeToPayroll`, migration
+    // 038_ot_records.sql). A `pending` row — exactly what this inbox shows —
+    // has `amount: null`, so the fetcher must estimate it at read time from
+    // gross_monthly + working_days + shift hours, the same inputs the real
+    // push uses.
     tableConfig.ot_records = {
       rows: [
         {
           id: "ot-1",
           employee_id: "emp-2",
           ot_minutes: 90,
-          amount: 500,
+          amount: null,
+          multiplier: 1.5,
+          date: "2026-08-09",
           created_at: "2026-08-09T12:00:00Z",
           employees: { first_name: "Ravi", last_name: "Kumar" },
+          shifts: { total_hours: 8 },
         },
       ],
     };
+    tableConfig.salary_structures = { rows: [{ employee_id: "emp-2", gross_monthly: 60000 }] };
+    tableConfig.payroll_runs = { rows: [{ month: "2026-08", working_days: 26 }] };
 
     const res = await GET(req());
     expect(res.status).toBe(200);
@@ -180,17 +193,48 @@ describe("GET /api/mobile/approvals", () => {
       meta: { punchAt: "2026-08-10T04:00:00Z" },
     });
 
+    // Estimate is computed, not read off a mocked `amount` column: hourly
+    // rate = computeHourlyRate(60000, 26, 8) = round(6000000/208) = 28846
+    // paise; amount = round(1.5h × 28846 × 1.5x) = 64904 paise = Rs 649.
     const otItem = json.items.find((i: any) => i.type === "ot");
     expect(otItem).toMatchObject({
       id: "ot-1",
       who: "Ravi Kumar",
       what: "Overtime",
-      impact: "1.5h · Rs 500",
+      impact: "1.5h · Rs 649",
       meta: { minutes: 90 },
     });
+    expect(otItem.impact).not.toBe("1.5h · Rs 0");
 
     expect(scopeMock).toHaveBeenCalledWith("org-1", "emp-1");
     expect(inCalls).toContainEqual(["employee_id", ["emp-2"]]);
+  });
+
+  it("OT estimate falls back to 'Rs --' (never throws) when the salary structure is missing", async () => {
+    currentUser = { ...MANAGER };
+    tableConfig.ot_records = {
+      rows: [
+        {
+          id: "ot-2",
+          employee_id: "emp-2",
+          ot_minutes: 60,
+          amount: null,
+          multiplier: 1.5,
+          date: "2026-08-09",
+          created_at: "2026-08-09T12:00:00Z",
+          employees: { first_name: "Ravi", last_name: "Kumar" },
+          shifts: { total_hours: 8 },
+        },
+      ],
+    };
+    tableConfig.salary_structures = { rows: [] }; // no salary structure for emp-2
+    tableConfig.payroll_runs = { rows: [] }; // no run for the month either
+
+    const res = await GET(req());
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    const otItem = json.items.find((i: any) => i.type === "ot");
+    expect(otItem.impact).toBe("1.0h · Rs --");
   });
 
   it("excludes payroll for a manager even when RazorpayX is configured (admin-only source)", async () => {

@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
-import { FlatList, Linking, Pressable, Text, TextInput, View } from "react-native";
+import { Linking, Pressable, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Image } from "expo-image";
+import { FlashList } from "@shopify/flash-list";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import type { MobileDirectoryEntry, MobileDirectoryResponse } from "@jambahr/shared";
 import { useSession } from "@/lib/session";
@@ -61,15 +62,19 @@ export function PeopleScreen() {
         </View>
       </View>
 
-      <FlatList
+      <FlashList
         data={filtered}
         keyExtractor={(e) => e.id}
-        contentContainerClassName="px-4 pb-10 pt-1 gap-2.5"
+        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 40 }}
         showsVerticalScrollIndicator={false}
         onRefresh={() => query.refetch()}
         refreshing={query.isRefetching}
         keyboardShouldPersistTaps="handled"
-        renderItem={({ item }) => <PersonRow entry={item} />}
+        renderItem={({ item }) => (
+          <View className="pb-2.5">
+            <PersonRow entry={item} />
+          </View>
+        )}
         ListEmptyComponent={
           !query.data && query.isLoading ? (
             <View className="gap-2.5">

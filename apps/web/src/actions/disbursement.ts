@@ -14,6 +14,7 @@ import {
   type PayoutResponse,
 } from "@/lib/razorpayx";
 import { reconcileBatchAndRunStatus } from "@/lib/payroll/disbursement-reconcile";
+import { notifyApprovalPending } from "@/lib/mobile/notify";
 
 // ---- Types ----
 
@@ -339,6 +340,32 @@ export async function initiateDisbursement(
     item_count: filledRows.length,
     override_wallet_shortfall: opts.override_wallet_shortfall,
   });
+
+  // Notify checker admins (org admins other than the maker) that this batch
+  // is waiting on them (best-effort, own try/catch — must not affect the
+  // initiate call above, which has already committed).
+  try {
+    const { data: admins } = await sb
+      .from("employees")
+      .select("id")
+      .eq("org_id", user.orgId)
+      .in("role", ["owner", "admin"])
+      .eq("status", "active");
+    const checkerIds = ((admins ?? []) as { id: string }[])
+      .map((a) => a.id)
+      .filter((id) => id !== user.employeeId);
+    for (const checkerId of checkerIds) {
+      await notifyApprovalPending(sb, {
+        orgId: user.orgId,
+        employeeId: checkerId,
+        approvalType: "payroll",
+        title: "Payroll approval needed",
+        body: `A disbursement batch of ₹${preflight.data.total_payable.toLocaleString("en-IN")} is awaiting approval`,
+      });
+    }
+  } catch {
+    // Push failure must not break the core action
+  }
 
   revalidatePath("/dashboard/payroll");
   return { success: true, data: { batch_id: batchId } };

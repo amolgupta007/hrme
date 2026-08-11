@@ -13,7 +13,7 @@ import { managerIdsOf, isManagerOfEmployee } from "@/lib/managers";
 import { findOverlap, computeRemainingDays, type LeaveInterval } from "@/lib/leaves/validation";
 import { LeaveRequestEmail } from "@/components/emails/leave-request";
 import { LeaveStatusEmail } from "@/components/emails/leave-status";
-import { notifyLeaveDecision } from "@/lib/mobile/notify";
+import { notifyLeaveDecision, notifyApprovalPending } from "@/lib/mobile/notify";
 import type { ActionResult, LeavePolicy, LeaveRequest } from "@/types";
 
 // ---- Context helper ----
@@ -379,6 +379,36 @@ export async function requestLeave(
         subject: `Leave Request: ${employeeName} — ${(policy as any).name}`,
         html,
       });
+    }
+
+    // Notify mobile approvers (best-effort, own try/catch — must not affect
+    // the email above). Reuses the SAME recipient selection the email above
+    // uses (`resolveLeaveRecipients`'s rule: managers-of-record + admins,
+    // falling back to every manager+ when the employee has no manager set) —
+    // just projected to ids instead of emails, since push doesn't need one.
+    try {
+      const managerIdsOfEmployee = managerIdsOf(employee as any);
+      const allManagerPlus = (managers ?? []) as { id: string; role: string }[];
+      const admins = allManagerPlus.filter((p) => p.role === "owner" || p.role === "admin");
+      const managersOfRecord = allManagerPlus.filter((p) => managerIdsOfEmployee.includes(p.id));
+      const chosen =
+        managerIdsOfEmployee.length > 0 ? [...managersOfRecord, ...admins] : allManagerPlus;
+      const pushRecipientIds = [...new Set(chosen.map((p) => p.id))];
+
+      if (pushRecipientIds.length > 0 && employee) {
+        const employeeName = `${(employee as any).first_name} ${(employee as any).last_name}`.trim();
+        for (const recipientId of pushRecipientIds) {
+          await notifyApprovalPending(supabase, {
+            orgId: ctx.orgId,
+            employeeId: recipientId,
+            approvalType: "leave",
+            title: "New leave request",
+            body: `${employeeName || "An employee"} requested leave`,
+          });
+        }
+      }
+    } catch {
+      // Push failure must not break the core action
     }
   } catch {
     // Email failure must not break the core action

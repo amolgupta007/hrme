@@ -15,6 +15,36 @@ import {
   DEFAULT_OT_SETTINGS,
 } from "@/lib/attendance/overtime-types";
 import type { OvertimeSettings } from "@/lib/attendance/overtime-types";
+import { notifyApprovalPending } from "@/lib/mobile/notify";
+
+/**
+ * Best-effort: page org admins that new OT records are waiting on them.
+ * Own try/catch — must never affect the compute call that already committed.
+ * Skipped by callers when `approval_required` is off (nothing to review).
+ */
+async function notifyAdminsOvertimePending(sb: any, orgId: string, count: number): Promise<void> {
+  try {
+    const { data: admins } = await sb
+      .from("employees")
+      .select("id")
+      .eq("org_id", orgId)
+      .in("role", ["owner", "admin"])
+      .eq("status", "active");
+    const body =
+      count === 1 ? "1 overtime record is awaiting approval" : `${count} overtime records are awaiting approval`;
+    for (const admin of (admins ?? []) as { id: string }[]) {
+      await notifyApprovalPending(sb, {
+        orgId,
+        employeeId: admin.id,
+        approvalType: "ot",
+        title: "Overtime to review",
+        body,
+      });
+    }
+  } catch {
+    // Push failure must not break the core action
+  }
+}
 
 
 export type OvertimeRecord = {
@@ -241,6 +271,9 @@ export async function computeAndRecordOvertime(
       if (!insErr) inserted++;
       else skipped++;
     }
+    if (settings.approval_required && inserted > 0) {
+      await notifyAdminsOvertimePending(sb, user.orgId, inserted);
+    }
     revalidatePath("/dashboard/attendance");
     return { success: true, data: { inserted, skipped } };
   } else {
@@ -293,6 +326,9 @@ export async function computeAndRecordOvertime(
       );
       if (!insErr) inserted++;
       else skipped++;
+    }
+    if (settings.approval_required && inserted > 0) {
+      await notifyAdminsOvertimePending(sb, user.orgId, inserted);
     }
     revalidatePath("/dashboard/attendance");
     return { success: true, data: { inserted, skipped } };

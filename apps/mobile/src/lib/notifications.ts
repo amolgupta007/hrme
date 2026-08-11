@@ -52,7 +52,11 @@ export function useMarkRead(orgId: string | null | undefined) {
  * `apps/mobile/src/app/notifications.tsx`, `(tabs)/leaves.tsx`, `payslips.tsx`,
  * `(tabs)/home.tsx`).
  */
-export type NotificationRoute = "/(tabs)/leaves" | "/payslips" | "/(tabs)/home";
+export type NotificationRoute =
+  | "/(tabs)/leaves"
+  | "/(tabs)/leaves?segment=approvals"
+  | "/payslips"
+  | "/(tabs)/home";
 
 /**
  * `notifications.type` → in-app destination. Single source of truth shared
@@ -72,6 +76,12 @@ export function routeForNotificationType(type: string | null | undefined): Notif
       return "/payslips";
     case "doc_ack":
       return "/(tabs)/home";
+    case "approval_pending":
+      // D4 — pending leave/regularization/OT/payroll approvals all surface in
+      // the Leaves tab's manager "Approvals" segment (mobile has no separate
+      // approvals route; see `leaves-screen.tsx` Segment type + `?segment=`
+      // param already used by the Home "Needs attention" card).
+      return "/(tabs)/leaves?segment=approvals";
     default:
       return null;
   }

@@ -13,6 +13,8 @@ import {
   type PunchActor,
 } from "@/lib/attendance/punch-permissions";
 import { validateManualPunch, istTodayDate } from "@/lib/attendance/manual-punch-validation";
+import { managerIdsOf } from "@/lib/managers";
+import { notifyApprovalPending } from "@/lib/mobile/notify";
 import type { ActionResult } from "@/types";
 
 export type PunchEventRow = {
@@ -188,6 +190,48 @@ export async function addManualPunch(
   });
 
   await recomputeAttendanceDay(sb, ctx.user.orgId, employeeId, istDate);
+
+  // Notify the employee's manager(s) that a regularization is waiting on
+  // them (best-effort, own try/catch — must not affect the core action
+  // above, which has already committed). Auto-approved punches (admin-added)
+  // need no approver notification.
+  if (status === "pending") {
+    try {
+      const { data: emp } = await sb
+        .from("employees")
+        .select("first_name, last_name, reporting_manager_id, reporting_manager_2_id, department_id")
+        .eq("id", employeeId)
+        .eq("org_id", ctx.user.orgId)
+        .single();
+      if (emp) {
+        // Manager scope = dual reporting managers ∪ department head (the same
+        // union `getManagerScopedEmployeeIds` uses in the other direction).
+        const recipientIds = new Set(managerIdsOf(emp as any));
+        const deptId = (emp as any).department_id as string | null;
+        if (deptId) {
+          const { data: dept } = await sb
+            .from("departments")
+            .select("head_id")
+            .eq("id", deptId)
+            .single();
+          if ((dept as any)?.head_id) recipientIds.add((dept as any).head_id as string);
+        }
+        const employeeName = `${(emp as any).first_name ?? ""} ${(emp as any).last_name ?? ""}`.trim();
+        for (const recipientId of recipientIds) {
+          await notifyApprovalPending(sb, {
+            orgId: ctx.user.orgId,
+            employeeId: recipientId,
+            approvalType: "regularization",
+            title: "Regularization request",
+            body: `${employeeName || "An employee"} submitted a punch correction for review`,
+          });
+        }
+      }
+    } catch {
+      // Push failure must not break the core action
+    }
+  }
+
   revalidatePath("/dashboard/attendance");
   return { success: true, data: { id: (data as { id: string }).id, status } };
 }

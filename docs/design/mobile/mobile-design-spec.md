@@ -63,6 +63,41 @@ in danger red with leading −.
 - **Attendance month calendar** (no wireframe exists — apply the language): month header title2, ‹ › as 44pt hit targets; day cells with state colors ON TINTS (present=success tint, half_day=warning tint, absent=danger tint, week_off/holiday=ink/400 on `#EFF1F3` / info tint for holiday, leave=info tint, today ringed 1.5pt brand/primary, future=plain); legend of chips; day-detail bottom sheet = card with grabber (36×4 `#bbb` pill), punch pairs as list rows, source chips, monospace hours.
 - **Tab bar**: keep Phase C tabs for D1; style active=brand/primary, inactive=ink/400, 10pt labels, count badges solid danger.
 
+## Hi-fi screens — Turn 2 (imported 2026-08-10, binding for D2)
+
+The design project gained a second turn with three hi-fi screens (`#2a`–`#2c` in the
+canvas; raw handoff bundle in `jambahr-ios-app-design/`). These are the pixel reference
+for D2's Leaves work and the Home refresh; the Turn-1 wireframes remain the reference for
+screens without a hi-fi pass yet (Request-Leave sheet, More, Payslip).
+
+**2a — Home (hi-fi):** greeting `Hi, {name}` + `{weekday, date} · {org}`; top-right
+notification bell with count badge (push is D3 — render without the bell or with a static
+badge until then) + avatar. Three-stat strip (leave days left / to approve / trainings
+overdue — center stat only for managers). Two CTAs (primary "＋ Request leave", tertiary
+"View payslip"). "Needs attention · N items" section: leave-approvals row (names preview,
+chevron) + overdue row with `Overdue` chip. **Announcements section** (new vs D1 Home):
+"Announcements / See all", card with `Company` chip + relative time + title + 2-line body.
+Tab bar: Leaves carries a count badge.
+
+**2b — Leaves (hi-fi):** title row `Leaves` + right-aligned `FY 2026–27` footnote.
+Mine/Approvals segment — Approvals label carries `· N` in danger red. Three balance cards
+(title 13/600, numeral 22/800 with `/total` 12/400 suffix, 5px brand progress bar on
+`#EFF1F3` track). Filter pills All/Pending/Approved/Rejected — active pill solid brand
+with white text, inactive white with border. Requests grouped under `UPCOMING` / `EARLIER`
+caption headers. Request card: `{DD – DD Mon}` 16/600 title, `{Type · Nd · reason}` 13/400
+sub, status chip right; hairline divider then **approver attribution row**: 22pt mini
+avatar + `Approved by {name} · {date}` 12/400 muted. (DTO implication: leave rows need
+approver name + decided-at.)
+
+**2c — Leaves → Approvals (manager segment, hi-fi):** `PENDING YOUR DECISION` caption.
+Approval card: avatar + name 16/600 + `{dept} · reports to you` sub + type chip; labeled
+rows `DATES {range · Nd}` and `BALANCE AFTER {n / total days}`; quoted reason in italics;
+**overlap advisory line** — `✓ No overlap with other team leave` (success tint) or
+`⚠ Overlaps {name}'s approved leave` (warning); Approve (primary) / Reject (destructive
+tint) buttons side by side. Footer link `Decision history (N)`. (DTO implications:
+approvals need requester dept + reports-to relation, balance-after computation, and a
+team-overlap check against approved leaves in the manager's scope.)
+
 ## Token plumbing note
 
 `@jambahr/config/tokens` stays the single source for the web-drift-tested theme.

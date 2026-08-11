@@ -36,6 +36,15 @@ export type MobileHolidayLite = {
   is_optional: boolean;
 };
 
+/** Latest org-wide announcement, trimmed for the Home card (2a design). */
+export type MobileAnnouncementLite = {
+  id: string;
+  title: string;
+  body: string;
+  category: string | null;
+  createdAt: string;
+};
+
 export type MobileHomeResponse = {
   today: MobileTodayStatus;
   leave: {
@@ -47,6 +56,19 @@ export type MobileHomeResponse = {
     leaveRequests: number;
     regularizations: number;
   };
+  /**
+   * Leave requests pending the caller's decision (manager-scope ∪ direct
+   * reports, admin = org-wide). `null` for employees — hides the "to
+   * approve" stat cell (2a design: center stat is manager-only).
+   */
+  pendingApprovals: number | null;
+  /**
+   * Count of the caller's own `training_enrollments.status = 'overdue'`
+   * rows. Always present (cheap indexed count) — never `null`/faked.
+   */
+  trainingsOverdue: number;
+  /** Latest ≤3 org announcements, pinned first then newest. */
+  announcements: MobileAnnouncementLite[];
 };
 
 /** Per-day punch detail for the calendar tap-through. */

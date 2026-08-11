@@ -1,7 +1,6 @@
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { Redirect } from "expo-router";
 import { useAuth } from "@clerk/clerk-expo";
-import { hasPermission } from "@jambahr/shared";
 import { useSession } from "@/lib/session";
 
 export default function Index() {
@@ -67,9 +66,8 @@ export default function Index() {
     );
   }
 
-  return hasPermission(me.role, "admin") ? (
-    <Redirect href="/(admin)/home" />
-  ) : (
-    <Redirect href="/(staff)/home" />
-  );
+  // Slice 2 Task 5: (staff)/(admin) converged into one 5-tab group — every
+  // signed-in, org-linked user lands on the same tab bar now. Role-specific
+  // affordances are gated inline within each tab's screen.
+  return <Redirect href="/(tabs)/home" />;
 }

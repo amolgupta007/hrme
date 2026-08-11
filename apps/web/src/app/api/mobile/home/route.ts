@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { getCurrentUser } from "@/lib/current-user";
+import { getCurrentUser, isAdmin, isManagerOrAbove } from "@/lib/current-user";
 import { createAdminSupabase } from "@/lib/supabase/server";
+import { getManagerScopedEmployeeIds } from "@/lib/attendance/manager-scope";
 import { istToday, type MobileHolidayLite } from "@jambahr/shared";
 import {
   buildHomePayload,
+  resolvePendingApprovals,
+  type AnnouncementRow,
   type LeavePolicyUsage,
   type TodayRecordLite,
 } from "@/lib/mobile/home-payload";
@@ -116,6 +119,59 @@ export async function GET(request: NextRequest) {
     pendingRegularizations = regCount ?? 0;
   }
 
+  // ── "To approve" — leave requests pending the caller's decision. Manager
+  // scope mirrors /api/mobile/leave/approvals (dept-head ∪ direct reports,
+  // own requests excluded); admin = org-wide minus own. Employees never
+  // query this — resolvePendingApprovals returns null and hides the cell.
+  let pendingApprovalsRaw = 0;
+  if (isManagerOrAbove(user.role)) {
+    if (isAdmin(user.role)) {
+      let q = supabase
+        .from("leave_requests")
+        .select("id", { count: "exact", head: true })
+        .eq("org_id", user.orgId)
+        .eq("status", "pending");
+      if (employeeId) q = q.neq("employee_id", employeeId);
+      const { count } = await q;
+      pendingApprovalsRaw = count ?? 0;
+    } else if (employeeId) {
+      const scopeIds = (await getManagerScopedEmployeeIds(user.orgId, employeeId)).filter(
+        (id) => id !== employeeId,
+      );
+      if (scopeIds.length > 0) {
+        const { count } = await supabase
+          .from("leave_requests")
+          .select("id", { count: "exact", head: true })
+          .eq("org_id", user.orgId)
+          .eq("status", "pending")
+          .in("employee_id", scopeIds);
+        pendingApprovalsRaw = count ?? 0;
+      }
+    }
+  }
+
+  // ── Trainings overdue — cheap single-column-indexed count, no join. Always
+  // returned (0 for orgs/employees with none) rather than omitted, per the
+  // Task 6b "cheap or omit, never fake" rule — this genuinely is cheap.
+  const { count: trainingsOverdueCount } = employeeId
+    ? await supabase
+        .from("training_enrollments")
+        .select("id", { count: "exact", head: true })
+        .eq("org_id", user.orgId)
+        .eq("employee_id", employeeId)
+        .eq("status", "overdue")
+    : { count: 0 };
+
+  // ── Announcements — latest ≤3, pinned first then newest (mirrors the
+  // dashboard's "Latest announcements" query in src/actions/dashboard.ts).
+  const { data: announcementRows } = await supabase
+    .from("announcements")
+    .select("id, title, body, category, created_at")
+    .eq("org_id", user.orgId)
+    .order("is_pinned", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(3);
+
   const payload = buildHomePayload({
     record: (todayRecord as TodayRecordLite) ?? null,
     shift,
@@ -123,6 +179,9 @@ export async function GET(request: NextRequest) {
     holidays,
     pendingLeaveRequests,
     pendingRegularizations,
+    pendingApprovals: resolvePendingApprovals(isManagerOrAbove(user.role), pendingApprovalsRaw),
+    trainingsOverdue: trainingsOverdueCount ?? 0,
+    announcements: ((announcementRows as any[] | null) ?? []) as AnnouncementRow[],
   });
 
   return NextResponse.json(payload);

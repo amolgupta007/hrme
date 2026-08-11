@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Text, View } from "react-native";
+import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import type { MobileTodayStatus } from "@jambahr/shared/mobile/types";
 
 /** "2026-07-17T09:31:00Z" → "9:31 AM" (device-local). */
@@ -24,13 +25,31 @@ function splitHm(totalMinutes: number): { h: number; m: number } {
  * per-second timer per the brief) and show max(server minutesToday, elapsed
  * since clockInAt) so the number climbs monotonically without depending on a
  * precise server snapshot. Clocked out → the server's `minutesToday` as-is.
+ *
+ * Slice 2 Task 5: the whole card is tappable → the Attendance stacked route
+ * (design's 5-tab IA dropped the Attendance tab). Optional so other callers
+ * of this component aren't forced to wire navigation.
+ *
+ * Slice 2 Task 6b: the 2a hi-fi Home has no top-level Punch button (the
+ * design predates the attendance module — see mobile-design-spec.md's D1
+ * mapping note) and "one primary CTA per screen" (usage rule 1) is already
+ * spent on "＋ Request leave". Punch In/Out moves INSIDE this card as a
+ * secondary action instead of competing as a second primary CTA. The
+ * `isPunching`/`onPunch` wiring is unchanged from the old QuickActions
+ * button — only its location moved.
  */
 export function TodayCard({
   today,
   syncing,
+  isPunching,
+  onPunch,
+  onPress,
 }: {
   today: MobileTodayStatus;
   syncing: boolean;
+  isPunching: boolean;
+  onPunch: () => void;
+  onPress?: () => void;
 }) {
   const [now, setNow] = useState(() => Date.now());
 
@@ -55,19 +74,29 @@ export function TodayCard({
       : { label: "Not started", bg: "bg-[#EFF1F3]", fg: "text-ink-600" };
 
   return (
-    <View className="rounded-2xl border border-line bg-surface p-4">
+    <Pressable
+      accessibilityRole={onPress ? "button" : undefined}
+      accessibilityLabel={onPress ? "View attendance" : undefined}
+      onPress={onPress}
+      className="rounded-2xl border border-line bg-surface p-4 active:bg-brand-tint"
+    >
       <View className="flex-row items-center justify-between">
         <Text className="text-[11px] font-semibold uppercase tracking-wider text-ink-600">
           {today.shift ? today.shift.name : "Today"}
         </Text>
-        {syncing ? (
-          <View className="flex-row items-center rounded-full bg-[#EFF1F3] px-2.5 py-1">
-            <View className="mr-1.5 h-1.5 w-1.5 rounded-full bg-info" />
-            <Text className="text-[11px] font-semibold uppercase tracking-wider text-ink-600">
-              Syncing
-            </Text>
-          </View>
-        ) : null}
+        <View className="flex-row items-center gap-2">
+          {syncing ? (
+            <View className="flex-row items-center rounded-full bg-[#EFF1F3] px-2.5 py-1">
+              <View className="mr-1.5 h-1.5 w-1.5 rounded-full bg-info" />
+              <Text className="text-[11px] font-semibold uppercase tracking-wider text-ink-600">
+                Syncing
+              </Text>
+            </View>
+          ) : null}
+          {onPress ? (
+            <Ionicons name="chevron-forward" size={16} color="#9AA1AB" />
+          ) : null}
+        </View>
       </View>
 
       <View className="mt-2 flex-row items-end">
@@ -91,6 +120,34 @@ export function TodayCard({
                 : ""}
         </Text>
       </View>
-    </View>
+
+      {/* Nested Pressable: hit-tested independently of the card's own
+          onPress (navigate-to-attendance) since it's rendered on top and
+          deeper in the tree — standard RN nested-touchable behavior. */}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={today.isClockedIn ? "Punch out" : "Punch in"}
+        disabled={isPunching}
+        onPress={onPunch}
+        className={`mt-3 h-11 flex-row items-center justify-center rounded-xl active:bg-brand-pressed ${
+          isPunching ? "bg-brand/70" : "bg-brand"
+        }`}
+      >
+        {isPunching ? (
+          <ActivityIndicator color="#FFFFFF" />
+        ) : (
+          <>
+            <Ionicons
+              name={today.isClockedIn ? "log-out-outline" : "log-in-outline"}
+              size={16}
+              color="#FFFFFF"
+            />
+            <Text className="ml-2 text-[15px] font-semibold text-white">
+              {today.isClockedIn ? "Punch out" : "Punch in"}
+            </Text>
+          </>
+        )}
+      </Pressable>
+    </Pressable>
   );
 }

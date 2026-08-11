@@ -2,6 +2,7 @@ import { Alert, Pressable, RefreshControl, ScrollView, Text, View } from "react-
 import { SafeAreaView } from "react-native-safe-area-context";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useAuth } from "@clerk/clerk-expo";
+import { useRouter } from "expo-router";
 import type { MobileHomeResponse } from "@jambahr/shared/mobile/types";
 import { useSession } from "@/lib/session";
 import { useMobileQuery } from "@/lib/query";
@@ -11,18 +12,13 @@ import { TodayCard } from "@/components/today-card";
 import { QuickActions } from "@/components/quick-actions";
 import { PendingCard } from "@/components/pending-card";
 import { HolidayCard } from "@/components/holiday-card";
+import { AnnouncementsCard } from "@/components/announcements-card";
 
 const STUB_TITLE = "Coming soon";
 const STUB_BODY = "This is coming in the next update.";
 
-function greeting(): string {
-  const h = new Date().getHours();
-  if (h < 12) return "Good morning";
-  if (h < 17) return "Good afternoon";
-  return "Good evening";
-}
-
-function todayLabel(): string {
+/** "Fri, 17 Jul" (2a design: `{weekday, date} · {org}` on one line). */
+function dateLabel(): string {
   return new Date().toLocaleDateString([], {
     weekday: "short",
     day: "numeric",
@@ -41,6 +37,7 @@ function todayLabel(): string {
 export function HomeScreen({ isAdmin = false }: { isAdmin?: boolean }) {
   const { userId } = useAuth();
   const { me } = useSession();
+  const router = useRouter();
   const orgId = me?.orgId ?? null;
 
   const home = useMobileQuery<MobileHomeResponse>(
@@ -73,20 +70,21 @@ export function HomeScreen({ isAdmin = false }: { isAdmin?: boolean }) {
           <RefreshControl refreshing={home.isRefetching} onRefresh={() => home.refetch()} />
         }
       >
-        {/* Greeting */}
-        <View className="flex-row items-start justify-between pt-2">
+        {/* Greeting (2a: "Hi, {name}" + "{weekday, date} · {org}" — no
+            notification bell yet, that's D3 push; see mobile-design-spec.md) */}
+        <View className="flex-row items-center justify-between pt-2">
           <View className="flex-1">
-            <Text className="text-[13px] font-normal text-ink-600">{todayLabel()}</Text>
-            <Text className="mt-0.5 text-[28px] font-extrabold text-ink-900" numberOfLines={1}>
-              {greeting()}, {firstName} 👋
+            <Text className="text-[28px] font-bold leading-8 text-ink-900" numberOfLines={1}>
+              Hi, {firstName}
             </Text>
-            <Text className="mt-0.5 text-[15px] text-ink-600" numberOfLines={1}>
-              {me?.orgName ?? ""}
+            <Text className="mt-0.5 text-[13px] text-ink-600" numberOfLines={1}>
+              {dateLabel()}
+              {me?.orgName ? ` · ${me.orgName}` : ""}
               {isAdmin ? " · Admin" : ""}
             </Text>
           </View>
-          <View className="ml-3 h-10 w-10 items-center justify-center rounded-full bg-brand-tint">
-            <Text className="text-[15px] font-bold text-brand-pressed">
+          <View className="ml-3 h-10 w-10 items-center justify-center rounded-full bg-brand">
+            <Text className="text-[15px] font-bold text-white">
               {firstName.charAt(0).toUpperCase()}
             </Text>
           </View>
@@ -118,23 +116,32 @@ export function HomeScreen({ isAdmin = false }: { isAdmin?: boolean }) {
           <>
             <StatStrip
               leaveLeft={data.leave.balances.reduce((s, b) => s + (b.remaining ?? 0), 0)}
-              pending={data.pending.leaveRequests + data.pending.regularizations}
+              pendingApprovals={data.pendingApprovals}
+              trainingsOverdue={data.trainingsOverdue}
             />
 
-            <TodayCard today={data.today} syncing={queueCount > 0} />
-
             <QuickActions
-              isClockedIn={data.today.isClockedIn}
+              onRequestLeave={() => router.push("/(tabs)/leaves")}
+              onViewPayslip={() => router.push("/payslips")}
+            />
+
+            <TodayCard
+              today={data.today}
+              syncing={queueCount > 0}
               isPunching={isPunching}
               onPunch={punch}
-              onApplyLeave={stub}
-              onPayslips={stub}
+              onPress={() => router.push("/attendance")}
             />
 
             <PendingCard
+              pendingApprovals={data.pendingApprovals}
+              trainingsOverdue={data.trainingsOverdue}
               leaveRequests={data.pending.leaveRequests}
               regularizations={data.pending.regularizations}
+              onApprovalsPress={() => router.push("/(tabs)/leaves?segment=approvals")}
             />
+
+            <AnnouncementsCard announcements={data.announcements} onSeeAll={stub} />
 
             {data.nextHolidays[0] ? <HolidayCard holiday={data.nextHolidays[0]} /> : null}
           </>
@@ -157,23 +164,45 @@ export function HomeScreen({ isAdmin = false }: { isAdmin?: boolean }) {
   );
 }
 
-function StatStrip({ leaveLeft, pending }: { leaveLeft: number; pending: number }) {
+/**
+ * 2a three-stat strip: leave days left (always), "to approve" (managers
+ * only — `pendingApprovals === null` hides the cell for employees),
+ * trainings overdue (always — see `MobileHomeResponse.trainingsOverdue`
+ * doc-comment for why this one is never omitted/faked).
+ */
+function StatStrip({
+  leaveLeft,
+  pendingApprovals,
+  trainingsOverdue,
+}: {
+  leaveLeft: number;
+  pendingApprovals: number | null;
+  trainingsOverdue: number;
+}) {
   return (
-    <View className="flex-row gap-3">
-      <StatTile label="Leave left" value={leaveLeft} unit="days" />
-      <StatTile label="Pending" value={pending} unit={pending === 1 ? "item" : "items"} />
+    <View className="flex-row gap-2">
+      <StatTile label="leave days left" value={leaveLeft} />
+      {pendingApprovals !== null ? (
+        <StatTile label="to approve" value={pendingApprovals} color="#B45309" />
+      ) : null}
+      <StatTile label="trainings overdue" value={trainingsOverdue} color="#DC2626" />
     </View>
   );
 }
 
-function StatTile({ label, value, unit }: { label: string; value: number; unit: string }) {
+function StatTile({ label, value, color }: { label: string; value: number; color?: string }) {
   return (
-    <View className="flex-1 rounded-2xl border border-line bg-surface p-4">
-      <Text className="text-[13px] font-normal text-ink-600">{label}</Text>
-      <View className="mt-1 flex-row items-end">
-        <Text className="text-[28px] font-extrabold leading-8 text-ink-900">{value}</Text>
-        <Text className="ml-1 mb-1 text-[13px] text-ink-600">{unit}</Text>
-      </View>
+    <View className="flex-1 rounded-2xl border border-line bg-surface p-3">
+      <Text
+        className="text-[24px] font-extrabold leading-7 text-ink-900"
+        style={color ? { color } : undefined}
+        numberOfLines={1}
+      >
+        {value}
+      </Text>
+      <Text className="mt-0.5 text-[12px] leading-4 text-ink-600" numberOfLines={2}>
+        {label}
+      </Text>
     </View>
   );
 }
@@ -181,12 +210,13 @@ function StatTile({ label, value, unit }: { label: string; value: number; unit: 
 function HomeSkeleton() {
   return (
     <View className="gap-4">
-      <View className="flex-row gap-3">
-        <View className="h-20 flex-1 rounded-2xl bg-[#EFF1F3]" />
-        <View className="h-20 flex-1 rounded-2xl bg-[#EFF1F3]" />
+      <View className="flex-row gap-2">
+        <View className="h-[72px] flex-1 rounded-2xl bg-[#EFF1F3]" />
+        <View className="h-[72px] flex-1 rounded-2xl bg-[#EFF1F3]" />
+        <View className="h-[72px] flex-1 rounded-2xl bg-[#EFF1F3]" />
       </View>
-      <View className="h-28 rounded-2xl bg-[#EFF1F3]" />
-      <View className="h-[50px] rounded-[14px] bg-[#EFF1F3]" />
+      <View className="h-11 rounded-xl bg-[#EFF1F3]" />
+      <View className="h-40 rounded-2xl bg-[#EFF1F3]" />
       <View className="h-24 rounded-2xl bg-[#EFF1F3]" />
     </View>
   );

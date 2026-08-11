@@ -323,6 +323,7 @@ export async function getOverviewInsights(
   // used = approved leave_requests.days that start in the current calendar year.
   // Carry-forward / opening balance is NOT tracked without leave_balances → 0.
   const yearStart = `${year}-01-01`;
+  const yearEnd = `${year}-12-31`;
   const policyDaysByOrg = new Map<string, number>();
   for (const p of (policiesResult.data ?? []) as { org_id: string; days_per_year: number }[]) {
     policyDaysByOrg.set(p.org_id, (policyDaysByOrg.get(p.org_id) ?? 0) + (p.days_per_year ?? 0));
@@ -333,7 +334,7 @@ export async function getOverviewInsights(
   }
   const leaveUsedByOrg = new Map<string, number>();
   for (const l of (leavesResult.data ?? []) as { org_id: string; start_date: string; days: number }[]) {
-    if (l.start_date < yearStart) continue;
+    if (l.start_date < yearStart || l.start_date > yearEnd) continue;
     leaveUsedByOrg.set(l.org_id, (leaveUsedByOrg.get(l.org_id) ?? 0) + (l.days ?? 0));
   }
   let totalAllocated = 0;
@@ -575,13 +576,14 @@ export async function getLeaveAttendanceInsights(orgIds?: string[]): Promise<Act
   // in the current calendar year. Carry-forward / opening balance is NOT tracked
   // without leave_balances → treated as 0.
   const yearStart = `${year}-01-01`;
+  const yearEnd = `${year}-12-31`;
   const policyDaysByOrg = new Map<string, number>();
   for (const p of (policiesResult.data ?? []) as { org_id: string; days_per_year: number }[]) {
     policyDaysByOrg.set(p.org_id, (policyDaysByOrg.get(p.org_id) ?? 0) + (p.days_per_year ?? 0));
   }
   const usedByEmployee = new Map<string, number>();
   for (const l of leaves) {
-    if (!l.employee_id || l.start_date < yearStart) continue;
+    if (!l.employee_id || l.start_date < yearStart || l.start_date > yearEnd) continue;
     usedByEmployee.set(l.employee_id, (usedByEmployee.get(l.employee_id) ?? 0) + (l.days ?? 0));
   }
   let totalAllocated = 0;

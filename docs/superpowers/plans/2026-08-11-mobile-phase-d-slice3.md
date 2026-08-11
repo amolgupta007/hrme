@@ -28,7 +28,7 @@ Reuse `@react-pdf/renderer` (already in apps/web, v4.5.1 — same pipeline as at
 - Lockfile guard after install. Code + typecheck/lint + Metro bundle now; on-device perf verify rides Stage D's rebuild or a standalone EAS build.
 - Low-risk, mechanical; bundles naturally with the push rebuild (both need a fresh native build anyway).
 
-## Stage C — Account-deletion flow (needs a POLICY decision first)
+## Stage C — Account-deletion flow — DECIDED (Amol 2026-08-11): **option (a) Request-deletion → notify admin**
 
 Apple requires an in-app account-deletion path for App Store approval (PRD-05). But JambaHR is **B2B** — an employee is an org member; you can't hard-delete the `employees` row (breaks attendance/payroll history, headcount, the admin's records). Options to decide (see the question to Amol):
 - **(a) Request-deletion** (recommended, B2B-correct): "Delete my account" → sends a request to the org admin(s) + records it; admin handles offboarding via the existing terminate flow. Satisfies Apple ("a way to initiate deletion") without destroying org data. Small BFF + confirm UI.

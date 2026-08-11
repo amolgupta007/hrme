@@ -206,7 +206,7 @@ export async function GET(request: NextRequest) {
   if (isManagerOrAbove(user.role)) {
     try {
       const currentMonth = today.slice(0, 7);
-      const payrollFeatureEnabled = hasFeature(user.plan, "payroll");
+      const payrollFeatureEnabled = hasFeature(user.plan, "payroll", user.customFeatures);
       const [
         { count: activeCount },
         { data: todayRows },

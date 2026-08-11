@@ -216,9 +216,14 @@ export async function addManualPunch(
             .single();
           if ((dept as any)?.head_id) recipientIds.add((dept as any).head_id as string);
         }
-        // Never notify the submitter about their own just-filed request
-        // (e.g. a dept head filing their own punch correction is their
-        // own dept's head_id).
+        // Never notify the submitter about their own just-filed request.
+        // The submitter is ctx.actor.employeeId, NOT the punch's target
+        // employeeId — a manager filing a correction FOR a direct report
+        // must not get pushed about the request they just filed (they'd
+        // otherwise be in recipientIds as the report's manager/dept-head).
+        // Also drop the target id itself in case the target is somehow
+        // also in their own manager/dept-head chain.
+        recipientIds.delete(ctx.actor.employeeId);
         recipientIds.delete(employeeId);
         const employeeName = `${(emp as any).first_name ?? ""} ${(emp as any).last_name ?? ""}`.trim();
         for (const recipientId of recipientIds) {

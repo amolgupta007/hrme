@@ -13,6 +13,7 @@ import { managerIdsOf, isManagerOfEmployee } from "@/lib/managers";
 import { findOverlap, computeRemainingDays, type LeaveInterval } from "@/lib/leaves/validation";
 import { LeaveRequestEmail } from "@/components/emails/leave-request";
 import { LeaveStatusEmail } from "@/components/emails/leave-status";
+import { notifyLeaveDecision } from "@/lib/mobile/notify";
 import type { ActionResult, LeavePolicy, LeaveRequest } from "@/types";
 
 // ---- Context helper ----
@@ -452,6 +453,20 @@ export async function approveLeave(
     // Email failure must not break the core action
   }
 
+  // Notify mobile (best-effort, never blocks the core action)
+  try {
+    if (leaveReq) {
+      const req = leaveReq as any;
+      await notifyLeaveDecision(supabase, {
+        orgId: ctx.orgId,
+        employeeId: req.employee_id,
+        approved: true,
+      });
+    }
+  } catch {
+    // Push/notification failure must not break the core action
+  }
+
   revalidatePath("/dashboard/leaves");
   revalidatePath("/dashboard");
   return { success: true, data: undefined };
@@ -519,6 +534,20 @@ export async function rejectLeave(
     }
   } catch {
     // Email failure must not break the core action
+  }
+
+  // Notify mobile (best-effort, never blocks the core action)
+  try {
+    if (leaveReq) {
+      const req = leaveReq as any;
+      await notifyLeaveDecision(supabase, {
+        orgId: ctx.orgId,
+        employeeId: req.employee_id,
+        approved: false,
+      });
+    }
+  } catch {
+    // Push/notification failure must not break the core action
   }
 
   revalidatePath("/dashboard/leaves");

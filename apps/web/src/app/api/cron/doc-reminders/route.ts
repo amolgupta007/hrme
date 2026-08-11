@@ -3,6 +3,7 @@ import { createAdminSupabase } from "@/lib/supabase/server";
 import { render } from "@react-email/render";
 import { resend, FROM_EMAIL } from "@/lib/resend";
 import { DocReminderEmail } from "@/components/emails/doc-reminder";
+import { notifyDocAck } from "@/lib/mobile/notify";
 
 export async function GET(req: Request) {
   // Verify Vercel Cron secret
@@ -100,6 +101,18 @@ export async function GET(req: Request) {
           html,
         });
         sent++;
+
+        // Notify mobile (best-effort, never blocks the reminder cron)
+        try {
+          const docTitle = pending.length === 1 ? pending[0].name : `${pending.length} documents`;
+          await notifyDocAck(supabase, {
+            orgId: employee.org_id,
+            employeeId: employee.id,
+            docTitle,
+          });
+        } catch {
+          // Push/notification failure must not break the cron
+        }
       } catch (err) {
         console.error(`Failed to send doc reminder to ${employee.email}:`, err);
       }

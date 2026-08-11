@@ -1,9 +1,12 @@
+import { useState } from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useAuth } from "@clerk/clerk-expo";
 import { useSession } from "@/lib/session";
+import { useDeletionRequest } from "@/lib/account";
+import { AccountDeletionSheet } from "@/components/account-deletion-sheet";
 
 /**
  * More tab — list shell (Task 5). Payslips/Profile navigate to the stacked
@@ -14,6 +17,11 @@ export default function More() {
   const router = useRouter();
   const { signOut } = useAuth();
   const { me } = useSession();
+  const orgId = me?.orgId ?? null;
+
+  const [deleteVisible, setDeleteVisible] = useState(false);
+  const deletionQuery = useDeletionRequest(orgId);
+  const pendingDeletion = deletionQuery.data?.request ?? null;
 
   const name =
     [me?.employee?.firstName, me?.employee?.lastName].filter(Boolean).join(" ") || "—";
@@ -90,7 +98,39 @@ export default function More() {
             isLast
           />
         </View>
+
+        {/* Account deletion — request flow (Stage C). Pending → static status
+            row; otherwise the actionable danger row. */}
+        <View className="rounded-2xl border border-line bg-surface">
+          {pendingDeletion ? (
+            <View className="flex-row items-center px-4 py-3.5">
+              <Ionicons name="time-outline" size={18} color="#B91C1C" />
+              <View className="ml-3 flex-1">
+                <Text className="text-[15px] font-medium text-danger">
+                  Deletion requested
+                </Text>
+                <Text className="mt-0.5 text-[12px] text-ink-600">
+                  Pending admin review. Your records are retained until then.
+                </Text>
+              </View>
+            </View>
+          ) : (
+            <MoreRow
+              icon="trash-outline"
+              label="Delete my account"
+              onPress={() => setDeleteVisible(true)}
+              destructive
+              isLast
+            />
+          )}
+        </View>
       </ScrollView>
+
+      <AccountDeletionSheet
+        visible={deleteVisible}
+        orgId={orgId}
+        onClose={() => setDeleteVisible(false)}
+      />
     </SafeAreaView>
   );
 }

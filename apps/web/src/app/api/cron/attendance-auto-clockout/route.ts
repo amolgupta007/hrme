@@ -1,7 +1,17 @@
 import { NextResponse } from "next/server";
 import { createAdminSupabase } from "@/lib/supabase/server";
+import { recomputeAttendanceDay } from "@/lib/attendance/adms-ingest";
 
 const DEFAULT_STANDARD_WORKDAY_HOURS = 8;
+const IST_OFFSET = "+05:30";
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// UTC [start, end) instants bounding one IST calendar day (matches recomputeAttendanceDay).
+function istDayWindow(dateStr: string): { startIso: string; endIso: string } {
+  const start = new Date(`${dateStr}T00:00:00${IST_OFFSET}`);
+  const end = new Date(start.getTime() + DAY_MS);
+  return { startIso: start.toISOString(), endIso: end.toISOString() };
+}
 
 // Today's date in IST as YYYY-MM-DD. Records whose `date` is < this value are
 // considered prior-day shifts that need closing.
@@ -30,7 +40,7 @@ export async function GET(req: Request) {
   // Pull every open shift older than today-IST (one query, batch-close in JS).
   const { data: openRows, error: queryErr } = await supabase
     .from("attendance_records")
-    .select("id, org_id, date, clock_in_at, shift_id")
+    .select("id, org_id, employee_id, date, clock_in_at, shift_id")
     .is("clock_out_at", null)
     .not("clock_in_at", "is", null)
     .lt("date", today);
@@ -43,6 +53,7 @@ export async function GET(req: Request) {
   const rows = (openRows ?? []) as Array<{
     id: string;
     org_id: string;
+    employee_id: string;
     date: string;
     clock_in_at: string;
     shift_id: string | null;
@@ -110,20 +121,80 @@ export async function GET(req: Request) {
     const finalClockOut = proposedClockOut.getTime() < dayCap.getTime() ? proposedClockOut : dayCap;
     const totalMinutes = Math.max(0, Math.round((finalClockOut.getTime() - clockInAt.getTime()) / 60000));
 
-    const { error: updateErr } = await supabase
+    // Re-check the row is still open (idempotent if a manual close raced in).
+    const { data: fresh } = await supabase
       .from("attendance_records")
-      .update({
-        clock_out_at: finalClockOut.toISOString(),
-        total_minutes: totalMinutes,
-        auto_closed: true,
-        source: "auto_close",
-      })
+      .select("clock_out_at")
       .eq("id", row.id)
-      .is("clock_out_at", null); // re-check; idempotent if a manual close happened in the meantime
+      .maybeSingle();
+    if (!fresh || (fresh as any).clock_out_at) continue;
 
-    if (updateErr) {
-      console.error("attendance-auto-clockout: update failed", row.id, updateErr);
-      failures.push({ id: row.id, error: updateErr.message });
+    // Is this rollup backed by the event stream (new-style web/mobile/device day)?
+    // Legacy rows written by the pre-unification direct-write clockIn have no events.
+    const { startIso, endIso } = istDayWindow(row.date);
+    const { count: eventCount } = await supabase
+      .from("attendance_punch_events")
+      .select("id", { count: "exact", head: true })
+      .eq("org_id", row.org_id)
+      .eq("employee_id", row.employee_id)
+      .gte("punched_at", startIso)
+      .lt("punched_at", endIso);
+
+    let closeErr: string | null = null;
+
+    if ((eventCount ?? 0) > 0) {
+      // Event-backed day → keep the event stream authoritative. Append a synthetic
+      // 'web' OUT punch at the computed clock-out time so a LATER recompute (e.g. an
+      // ADMS backlog replay touching this day) re-derives the SAME closed pair
+      // instead of reopening a dangling single-punch. Then flag the rollup
+      // auto_closed=true / source='auto_close' via a targeted update. Durability
+      // note: only `auto_closed` (BOOLEAN, absent from recompute's upsert payload)
+      // persists across future recomputes; `source` IS in that payload
+      // (resolveRollupSource), so a later replay may legitimately revert the label
+      // to device/mobile/web. Consumers key on the boolean, not the label.
+      const { error: evErr } = await supabase.from("attendance_punch_events").insert({
+        org_id: row.org_id,
+        employee_id: row.employee_id,
+        device_id: null,
+        location_id: null,
+        punched_at: finalClockOut.toISOString(),
+        source: "web",
+        punch_type: null,
+        status: "approved",
+        note: "auto_close",
+        raw_payload: { auto_close: true },
+      } as never);
+      // 23505 = an out event already exists at that instant → treat as done, still recompute + flag.
+      if (evErr && (evErr as any).code !== "23505") {
+        closeErr = evErr.message;
+      } else {
+        await recomputeAttendanceDay(supabase, row.org_id, row.employee_id, row.date);
+        const { error: flagErr } = await supabase
+          .from("attendance_records")
+          .update({ auto_closed: true, source: "auto_close" })
+          .eq("id", row.id);
+        if (flagErr) closeErr = flagErr.message;
+      }
+    } else {
+      // Legacy row (no backing events) → close it in place, as before. There is
+      // nothing for a future recompute to reopen (recompute derives purely from
+      // events, of which this day has none).
+      const { error: updateErr } = await supabase
+        .from("attendance_records")
+        .update({
+          clock_out_at: finalClockOut.toISOString(),
+          total_minutes: totalMinutes,
+          auto_closed: true,
+          source: "auto_close",
+        })
+        .eq("id", row.id)
+        .is("clock_out_at", null);
+      if (updateErr) closeErr = updateErr.message;
+    }
+
+    if (closeErr) {
+      console.error("attendance-auto-clockout: close failed", row.id, closeErr);
+      failures.push({ id: row.id, error: closeErr });
       continue;
     }
     closedCount++;

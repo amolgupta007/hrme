@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { parseAttlog, istLocalToUtcIso, istDateOf } from "@/lib/attendance/adms-ingest";
+import {
+  parseAttlog,
+  istLocalToUtcIso,
+  istDateOf,
+  resolveRollupSource,
+} from "@/lib/attendance/adms-ingest";
 
 describe("parseAttlog", () => {
   it("parses a real ZKTeco K40 Pro ATTLOG line (tab-separated, trailing fields)", () => {
@@ -49,5 +54,39 @@ describe("istDateOf", () => {
   });
   it("returns null when there is no date", () => {
     expect(istDateOf("garbage")).toBeNull();
+  });
+});
+
+// Rollup source stamping precedence for attendance_records.source, derived from
+// the day's contributing punch-event sources. Precedence: device/adms > mobile >
+// web > (legacy/manual-only fallback) device. This keeps pure-device days stamped
+// 'device' (ADMS behavior byte-identical) while a pure-web day now stamps 'web'
+// and a mixed device+web day stamps the strongest source ('device').
+describe("resolveRollupSource", () => {
+  it("stamps 'device' when any device or adms event is present", () => {
+    expect(resolveRollupSource(["device"])).toBe("device");
+    expect(resolveRollupSource(["adms"])).toBe("device");
+    expect(resolveRollupSource(["adms", "device"])).toBe("device");
+    // Mixed device + web (one person, biometric + web) -> strongest = device.
+    expect(resolveRollupSource(["web", "device"])).toBe("device");
+    // Mixed device + mobile -> device wins.
+    expect(resolveRollupSource(["mobile", "adms"])).toBe("device");
+  });
+
+  it("stamps 'mobile' for a mobile day with no device/adms punches", () => {
+    expect(resolveRollupSource(["mobile"])).toBe("mobile");
+    // Mobile + web (no device) -> mobile outranks web.
+    expect(resolveRollupSource(["web", "mobile"])).toBe("mobile");
+  });
+
+  it("stamps 'web' for a pure-web day", () => {
+    expect(resolveRollupSource(["web"])).toBe("web");
+    expect(resolveRollupSource(["web", "web"])).toBe("web");
+  });
+
+  it("falls back to 'device' for legacy/manual/unknown-only days (byte-identical to prior default)", () => {
+    expect(resolveRollupSource([])).toBe("device");
+    expect(resolveRollupSource(["manual"])).toBe("device");
+    expect(resolveRollupSource([null, undefined])).toBe("device");
   });
 });

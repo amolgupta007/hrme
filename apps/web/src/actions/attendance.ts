@@ -8,6 +8,8 @@ import { getManagerScopedEmployeeIds } from "@/lib/attendance/manager-scope";
 import type { ActionResult } from "@/types";
 import { getActiveShiftForEmployee } from "@/actions/shifts";
 import { attributedDateForClockIn } from "@/lib/attendance/attribute-date";
+import { recomputeAttendanceDay } from "@/lib/attendance/adms-ingest";
+import { isTooSoonToClockOut } from "@/lib/attendance/clock-out-guard";
 import { computeLateness } from "@/lib/attendance/lateness";
 import { resolveCoveredEmployeeIds } from "@/lib/attendance/late-policy-targets";
 import { planNotificationKinds } from "@/lib/attendance/late-policy-notify";
@@ -99,7 +101,7 @@ export type AttendanceRecord = {
   total_minutes: number | null;
   ip_address: string | null;
   notes: string | null;
-  source: "web" | "device" | "auto_close";
+  source: "web" | "device" | "auto_close" | "mobile";
   device_id: string | null;
   auto_closed: boolean;
   shift_id: string | null;
@@ -121,20 +123,27 @@ export async function clockIn(ipAddress?: string): Promise<ActionResult<Attendan
 
   const supabase = createAdminSupabase();
   const nowUtc = new Date().toISOString();
+  // The rollup row is keyed on the ACTUAL IST calendar date of the punch — the
+  // same convention the mobile/ADMS event paths use (recomputeAttendanceDay
+  // windows events by their real punched_at). Phase-1 overnight attribution to
+  // the prior IST date is preserved as the `attributed_date` METADATA stamped
+  // below; the row's `date` follows the event stream. For the rare early-AM
+  // overnight web clock-in this makes `date` the actual IST date rather than the
+  // prior date — an intentional, documented consequence of unifying web onto the
+  // event stream (matching how mobile/ADMS already handle overnight).
   const istToday = new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
   // Resolve assigned shift for the IST date; null if none assigned.
   const shift = await getActiveShiftForEmployee(user.employeeId, istToday);
   const attributedDate = attributedDateForClockIn(nowUtc, shift);
-  const recordDate = attributedDate; // we always set `date` = attributed_date when a shift is in play; identical to istToday when no shift
 
-  // Idempotency: prevent double clock-in for the same (employee, recordDate).
+  // Idempotency: prevent double clock-in. Read the current rollup for today.
   const { data: existing } = await supabase
     .from("attendance_records")
-    .select("*")
+    .select("clock_in_at, clock_out_at")
     .eq("org_id", user.orgId)
     .eq("employee_id", user.employeeId)
-    .eq("date", recordDate)
+    .eq("date", istToday)
     .maybeSingle();
 
   if (existing) {
@@ -146,18 +155,48 @@ export async function clockIn(ipAddress?: string): Promise<ActionResult<Attendan
     }
   }
 
+  // Web clockIn is now an EVENT-STREAM writer (like mobile/ADMS): append a
+  // neutral 'web' punch event and re-derive the daily rollup via
+  // recomputeAttendanceDay, instead of writing attendance_records directly. This
+  // removes the last-writer-wins contention with the device/mobile rollup upsert
+  // (CLAUDE.md "Known web gaps"; 02A §5.2). location_id is null (web has no site);
+  // 'web' events are zone-exempt in computeDailyAttendance so a zone-assigned
+  // employee's web punch still counts.
+  const { error: insertErr } = await supabase.from("attendance_punch_events").insert({
+    org_id: user.orgId,
+    employee_id: user.employeeId,
+    device_id: null,
+    location_id: null,
+    punched_at: nowUtc,
+    source: "web",
+    punch_type: null, // direction is derived (first-in/last-out), never trusted
+    status: "approved",
+    created_by: user.employeeId,
+    raw_payload: { web: true, ip_address: ipAddress ?? null },
+    // Cast: generated Supabase types predate migrations 086/102 (status/punch_type/
+    // source values) → insert arg infers `never` (gotcha #3). Same idiom as the
+    // mobile punch route.
+  } as never);
+  if (insertErr) return { success: false, error: insertErr.message };
+
+  await recomputeAttendanceDay(supabase, user.orgId, user.employeeId, istToday);
+
+  // recomputeAttendanceDay derives the rollup from events but does NOT carry the
+  // web-only side fields: shift_id + attributed_date (used by OT / auto-clockout /
+  // reports) and the request IP have no home on attendance_punch_events (no
+  // ip_address column — migration 078). Stamp them on the rollup row in one
+  // targeted update AFTER recompute. These columns are absent from recompute's
+  // upsert payload, so subsequent recomputes retain them.
   const { data, error } = await supabase
     .from("attendance_records")
-    .insert({
-      org_id: user.orgId,
-      employee_id: user.employeeId,
-      date: recordDate,
-      attributed_date: attributedDate,
+    .update({
       shift_id: shift?.id ?? null,
-      clock_in_at: nowUtc,
+      attributed_date: attributedDate,
       ip_address: ipAddress ?? null,
-      source: "web" as const,
-    })
+    } as never)
+    .eq("org_id", user.orgId)
+    .eq("employee_id", user.employeeId)
+    .eq("date", istToday)
     .select(`*, employees!employee_id(first_name, last_name)`)
     .single();
 
@@ -169,7 +208,7 @@ export async function clockIn(ipAddress?: string): Promise<ActionResult<Attendan
       employeeId: user.employeeId,
       attendanceRecordId: (data as any).id,
       clockInAtUtc: nowUtc,
-      recordDate,
+      recordDate: istToday,
       shift: shift ? { start_time: shift.start_time, grace_minutes: shift.grace_minutes, is_overnight: shift.is_overnight } : null,
     }).catch((e) => console.error("late-policy eval failed", e)),
   );
@@ -193,11 +232,11 @@ export async function clockOut(): Promise<ActionResult<AttendanceRecord>> {
 
   const { data: existing } = await supabase
     .from("attendance_records")
-    .select("*")
+    .select("clock_in_at, clock_out_at")
     .eq("org_id", user.orgId)
     .eq("employee_id", user.employeeId)
     .eq("date", today)
-    .single();
+    .maybeSingle();
 
   if (!existing || !(existing as any).clock_in_at) {
     return { success: false, error: "You have not clocked in today" };
@@ -205,16 +244,41 @@ export async function clockOut(): Promise<ActionResult<AttendanceRecord>> {
   if ((existing as any).clock_out_at) {
     return { success: false, error: "You have already clocked out today" };
   }
+  // An OUT event within 60s of the IN event (both null-location web punches)
+  // would be collapsed by dedupePunches — success-reported but silently no-op'd.
+  // Block until the dedupe window has passed (see clock-out-guard.ts).
+  if (isTooSoonToClockOut((existing as any).clock_in_at, Date.now())) {
+    return { success: false, error: "Please wait a minute before clocking out" };
+  }
 
-  const now = new Date().toISOString();
-  const clockInTime = new Date((existing as any).clock_in_at).getTime();
-  const totalMinutes = Math.floor((Date.now() - clockInTime) / 60000);
+  const nowUtc = new Date().toISOString();
+
+  // Event-stream writer: append a 'web' out event; recomputeAttendanceDay pairs
+  // it with the clock-in event to derive clock_out_at + total_minutes (gross
+  // span) — no direct attendance_records write. shift_id / attributed_date / IP
+  // stamped at clock-in are retained (absent from recompute's upsert payload).
+  const { error: insertErr } = await supabase.from("attendance_punch_events").insert({
+    org_id: user.orgId,
+    employee_id: user.employeeId,
+    device_id: null,
+    location_id: null,
+    punched_at: nowUtc,
+    source: "web",
+    punch_type: null,
+    status: "approved",
+    created_by: user.employeeId,
+    raw_payload: { web: true, clock_out: true },
+  } as never);
+  if (insertErr) return { success: false, error: insertErr.message };
+
+  await recomputeAttendanceDay(supabase, user.orgId, user.employeeId, today);
 
   const { data, error } = await supabase
     .from("attendance_records")
-    .update({ clock_out_at: now, total_minutes: totalMinutes, source: "web" as const })
-    .eq("id", (existing as any).id)
     .select(`*, employees!employee_id(first_name, last_name)`)
+    .eq("org_id", user.orgId)
+    .eq("employee_id", user.employeeId)
+    .eq("date", today)
     .single();
 
   if (error) return { success: false, error: error.message };
@@ -373,7 +437,7 @@ function formatRecord(raw: any): AttendanceRecord {
     total_minutes: raw.total_minutes ?? null,
     ip_address: raw.ip_address ?? null,
     notes: raw.notes ?? null,
-    source: (raw.source ?? "web") as "web" | "device" | "auto_close",
+    source: (raw.source ?? "web") as "web" | "device" | "auto_close" | "mobile",
     device_id: raw.device_id ?? null,
     auto_closed: !!raw.auto_closed,
     shift_id: raw.shift_id ?? null,

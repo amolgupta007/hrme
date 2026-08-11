@@ -72,6 +72,30 @@ export function istDateOf(local: string): string | null {
   return m ? m[1] : null;
 }
 
+/**
+ * Choose the attendance_records.source label for a rollup day from the sources
+ * of the punch events that contributed to it. Precedence:
+ *   device/adms > mobile > web > (legacy/manual/unknown) device-fallback.
+ *
+ * Rationale: a day that saw ANY biometric/ADMS punch is a 'device' day (this is
+ * the historical behavior and keeps pure-device days byte-identical). A day with
+ * only app punches is 'mobile'; a day with only web clock-ins is 'web'. A day
+ * mixing sources stamps the STRONGEST present (a day mixing web + device is
+ * overwhelmingly one person clocking both ways — record it as the device day).
+ * Manual-only / sourceless legacy days keep the pre-existing 'device' default.
+ *
+ * attendance_records.source CHECK allows web/device/auto_close/mobile (migration 102).
+ */
+export function resolveRollupSource(
+  sources: Array<string | null | undefined>,
+): "device" | "mobile" | "web" {
+  const has = (s: string) => sources.some((x) => x === s);
+  if (has("device") || has("adms")) return "device";
+  if (has("mobile")) return "mobile";
+  if (has("web")) return "web";
+  return "device"; // legacy / manual-only / sourceless day → historical default
+}
+
 /** Resolve an org by its per-org device ingest token (security hardening). */
 export async function resolveOrgByIngestToken(token: string): Promise<string | null> {
   if (!token) return null;
@@ -377,13 +401,11 @@ export async function recomputeAttendanceDay(
   // An absent day with no pending punches has nothing to record.
   if (result.status === "absent" && !hasPending) return;
 
-  // Rollup source label (attendance_records.source CHECK allows web/device/auto_close/mobile).
-  // A biometric/ADMS punch on the day makes it a 'device' day; a pure-mobile day is 'mobile';
-  // otherwise (manual/web/legacy events) keep the historical 'device' default.
-  const hasDeviceOrAdms = rows.some((r) => r.source === "device" || r.source === "adms");
-  const hasMobile = rows.some((r) => r.source === "mobile");
-  const rollupSource: "device" | "mobile" =
-    hasDeviceOrAdms ? "device" : hasMobile ? "mobile" : "device";
+  // Rollup source label — precedence device/adms > mobile > web > device-fallback
+  // (see resolveRollupSource). Uses the same `rows` set as the original stamping
+  // logic so device/mobile detection stays byte-identical; only the new 'web'
+  // tier is added (a pure-web day now stamps 'web' instead of the 'device' fallback).
+  const rollupSource = resolveRollupSource(rows.map((r) => (r as any).source));
 
   const { error } = await supabase.from("attendance_records").upsert(
     {
@@ -397,7 +419,7 @@ export async function recomputeAttendanceDay(
       break_minutes: result.breakMinutes,
       needs_review: result.needsReview || hasPending,
       has_pending_punches: hasPending,
-      source: rollupSource, // 'device' if any device/adms punch that day, else 'mobile' (migration 102)
+      source: rollupSource, // device/adms > mobile > web precedence (resolveRollupSource; migration 102)
       // Phase 2 multi-location rollup fields (derived from the event stream).
       first_in_location_id: result.firstInLocationId,
       last_out_location_id: result.lastOutLocationId,

@@ -1,9 +1,10 @@
-import { createContext, useContext, useEffect, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, type ReactNode } from "react";
 import { useAuth } from "@clerk/clerk-expo";
 import { useQueryClient } from "@tanstack/react-query";
 import type { MobileMeResponse } from "@jambahr/shared/auth/types";
 import { ApiError } from "@/lib/api";
 import { useMobileQuery, useQueryIdentity } from "@/lib/query";
+import { registerForPush, unregisterPush } from "@/lib/push";
 
 type SessionState = {
   me: MobileMeResponse | null;
@@ -42,6 +43,21 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     if (meQuery.data) noteActiveOrg(meQuery.data.orgId);
   }, [meQuery.data, noteActiveOrg]);
 
+  // Push registration (D3 Stage D). Guarded by orgId rather than firing on
+  // every `meQuery.data` reference change (react-query structurally shares
+  // unchanged data, but a background refetch can still hand back a fresh
+  // object) — only (re-)registers when the resolved org actually changes,
+  // which also naturally re-registers on an org switch. `registerForPush`
+  // itself is a no-op when the device has the push toggle off or permission
+  // was denied, so this is safe to call eagerly.
+  const registeredOrgRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (meQuery.data && registeredOrgRef.current !== meQuery.data.orgId) {
+      registeredOrgRef.current = meQuery.data.orgId;
+      void registerForPush(meQuery.data.orgId);
+    }
+  }, [meQuery.data]);
+
   // Sign-out: drop the cached /me result immediately instead of waiting for
   // `enabled` to flip false. This also structurally removes the Phase C
   // sign-out-mid-fetch race (an in-flight fetch resolving into local state
@@ -50,7 +66,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   // a stale in-flight response to land in.
   useEffect(() => {
     if (isSignedIn === false) {
+      // Capture the org the token was registered under before the cache is
+      // cleared — the BFF needs X-Org-Id to unregister the right row for
+      // multi-org users (mirrors registerForPush's org-scoping).
+      const orgId = meQuery.data?.orgId ?? null;
       queryClient.removeQueries({ queryKey: ME_QUERY_KEY });
+      registeredOrgRef.current = null;
+      void unregisterPush(orgId);
     }
   }, [isSignedIn, queryClient]);
 

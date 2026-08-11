@@ -35,7 +35,11 @@ export async function notify(supabase: any, args: NotifyArgs): Promise<void> {
   }
 
   try {
-    await sendPush(supabase, [employeeId], { title, body, data });
+    // The DB row above stores `type` in its own column; the Expo push
+    // payload also needs it inline so a TAPPED notification can deep-link
+    // (mobile's `_layout` tap listener reads
+    // `response.notification.request.content.data.type`).
+    await sendPush(supabase, [employeeId], { title, body, data: { ...(data ?? {}), type } });
   } catch {
     // sendPush already swallows internally; this is defense-in-depth so notify() can never throw.
   }

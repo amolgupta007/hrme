@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { FlashList } from "@shopify/flash-list";
 import { useLocalSearchParams } from "expo-router";
 import { hasPermission } from "@jambahr/shared";
 import { istToday } from "@jambahr/shared/attendance/ist";
@@ -189,20 +190,58 @@ function MineView({ orgId }: { orgId: string | null }) {
     });
   };
 
+  // The very first load has no data yet — the skeleton is a fixed stack of
+  // placeholder boxes (not the data-driven request list), so it stays a
+  // plain ScrollView per the FlashList sweep rule.
+  if (!data && leave.isLoading) {
+    return (
+      <>
+        <ScrollView
+          className="flex-1"
+          contentContainerClassName="px-4 pb-10 pt-1"
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={leave.isRefetching} onRefresh={() => leave.refetch()} />
+          }
+        >
+          <MineSkeleton />
+        </ScrollView>
+        <RequestLeaveSheet
+          visible={sheetOpen}
+          balances={balances}
+          orgId={orgId}
+          onClose={() => setSheetOpen(false)}
+        />
+      </>
+    );
+  }
+
+  // The requests list (grouped into UPCOMING / EARLIER) is the genuinely
+  // unbounded part of this screen — everything above it (balances, CTA,
+  // error banner, filter pills) is fixed-size chrome and becomes the
+  // FlashList's ListHeaderComponent so FlashList owns the one scroll.
+  const rows: MineRow[] = [];
+  if (upcoming.length > 0) {
+    rows.push({ type: "section", key: "section-upcoming", title: "UPCOMING" });
+    for (const r of upcoming) rows.push({ type: "request", key: r.id, request: r });
+  }
+  if (earlier.length > 0) {
+    rows.push({ type: "section", key: "section-earlier", title: "EARLIER" });
+    for (const r of earlier) rows.push({ type: "request", key: r.id, request: r });
+  }
+
   return (
     <>
-      <ScrollView
-        className="flex-1"
-        contentContainerClassName="px-4 pb-10 pt-1 gap-4"
+      <FlashList
+        data={rows}
+        keyExtractor={(row) => row.key}
+        getItemType={(row) => row.type}
         showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={leave.isRefetching} onRefresh={() => leave.refetch()} />
-        }
-      >
-        {!data && leave.isLoading ? (
-          <MineSkeleton />
-        ) : (
-          <>
+        refreshing={leave.isRefetching}
+        onRefresh={() => leave.refetch()}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 40 }}
+        ListHeaderComponent={
+          <View style={{ gap: 16, marginBottom: 16 }}>
             {/* Balances */}
             {balances.length > 0 ? (
               <View className="gap-2">
@@ -260,41 +299,25 @@ function MineView({ orgId }: { orgId: string | null }) {
                 );
               })}
             </View>
-
-            {/* Requests */}
-            {filtered.length === 0 ? (
-              <EmptyRequests filter={filter} />
-            ) : (
-              <>
-                {upcoming.length > 0 ? (
-                  <RequestGroup title="UPCOMING">
-                    {upcoming.map((r) => (
-                      <LeaveRequestCard
-                        key={r.id}
-                        request={r}
-                        onCancel={onCancel}
-                        cancelling={cancellingId === r.id}
-                      />
-                    ))}
-                  </RequestGroup>
-                ) : null}
-                {earlier.length > 0 ? (
-                  <RequestGroup title="EARLIER">
-                    {earlier.map((r) => (
-                      <LeaveRequestCard
-                        key={r.id}
-                        request={r}
-                        onCancel={onCancel}
-                        cancelling={cancellingId === r.id}
-                      />
-                    ))}
-                  </RequestGroup>
-                ) : null}
-              </>
-            )}
-          </>
-        )}
-      </ScrollView>
+          </View>
+        }
+        ListEmptyComponent={<EmptyRequests filter={filter} />}
+        renderItem={({ item }: { item: MineRow }) =>
+          item.type === "section" ? (
+            <Text className="pb-2 pt-3 text-[11px] font-semibold uppercase tracking-wider text-ink-400">
+              {item.title}
+            </Text>
+          ) : (
+            <View className="pb-3">
+              <LeaveRequestCard
+                request={item.request}
+                onCancel={onCancel}
+                cancelling={cancellingId === item.request.id}
+              />
+            </View>
+          )
+        }
+      />
 
       <RequestLeaveSheet
         visible={sheetOpen}
@@ -306,16 +329,9 @@ function MineView({ orgId }: { orgId: string | null }) {
   );
 }
 
-function RequestGroup({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <View className="gap-3">
-      <Text className="text-[11px] font-semibold uppercase tracking-wider text-ink-400">
-        {title}
-      </Text>
-      {children}
-    </View>
-  );
-}
+type MineRow =
+  | { type: "section"; key: string; title: string }
+  | { type: "request"; key: string; request: MobileLeaveRequestItem };
 
 function EmptyRequests({ filter }: { filter: Filter }) {
   return (
@@ -378,22 +394,36 @@ function ApprovalsView({
     );
   };
 
-  return (
-    <ScrollView
-      className="flex-1"
-      contentContainerClassName="px-4 pb-10 pt-1 gap-4"
-      showsVerticalScrollIndicator={false}
-      refreshControl={
-        <RefreshControl refreshing={query.isRefetching} onRefresh={() => query.refetch()} />
-      }
-    >
-      {!data && query.isLoading ? (
+  // First-load skeleton is fixed-size chrome, not the data-driven list —
+  // stays a plain ScrollView per the FlashList sweep rule.
+  if (!data && query.isLoading) {
+    return (
+      <ScrollView
+        className="flex-1"
+        contentContainerClassName="px-4 pb-10 pt-1"
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={query.isRefetching} onRefresh={() => query.refetch()} />
+        }
+      >
         <View className="gap-4">
           <View className="h-40 rounded-2xl bg-[#EFF1F3]" />
           <View className="h-40 rounded-2xl bg-[#EFF1F3]" />
         </View>
-      ) : (
-        <>
+      </ScrollView>
+    );
+  }
+
+  return (
+    <FlashList
+      data={requests}
+      keyExtractor={(item) => item.requestId}
+      showsVerticalScrollIndicator={false}
+      refreshing={query.isRefetching}
+      onRefresh={() => query.refetch()}
+      contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 40 }}
+      ListHeaderComponent={
+        <View style={{ gap: 16, marginBottom: 16 }}>
           <Text className="text-[11px] font-semibold uppercase tracking-wider text-ink-400">
             Pending your decision
           </Text>
@@ -404,37 +434,37 @@ function ApprovalsView({
               <Text className="ml-2 flex-1 text-[13px] text-danger-ontint">{actionError}</Text>
             </View>
           ) : null}
-
-          {requests.length === 0 ? (
-            <View className="items-center rounded-2xl border border-line bg-surface px-6 py-10">
-              <View className="h-12 w-12 items-center justify-center rounded-full bg-success-tint">
-                <Ionicons name="checkmark-done-outline" size={24} color="#177245" />
-              </View>
-              <Text className="mt-3 text-[15px] font-semibold text-ink-900">All caught up</Text>
-              <Text className="mt-1 text-center text-[13px] leading-5 text-ink-600">
-                No leave requests are waiting on your decision right now.
-              </Text>
-            </View>
-          ) : (
-            requests.map((item) => (
-              <ApprovalCard
-                key={item.requestId}
-                item={item}
-                busy={decidingId === item.requestId}
-                onApprove={(id) => runDecide(id, "approve")}
-                onReject={(id, comment) => runDecide(id, "reject", comment)}
-              />
-            ))
-          )}
-
-          {/* Decision history — count only in v1 (full history list deferred). */}
-          {data && data.historyCount > 0 ? (
-            <Text className="px-1 pt-1 text-[13px] text-ink-400">
-              Decision history ({data.historyCount})
-            </Text>
-          ) : null}
-        </>
+        </View>
+      }
+      ListEmptyComponent={
+        <View className="items-center rounded-2xl border border-line bg-surface px-6 py-10">
+          <View className="h-12 w-12 items-center justify-center rounded-full bg-success-tint">
+            <Ionicons name="checkmark-done-outline" size={24} color="#177245" />
+          </View>
+          <Text className="mt-3 text-[15px] font-semibold text-ink-900">All caught up</Text>
+          <Text className="mt-1 text-center text-[13px] leading-5 text-ink-600">
+            No leave requests are waiting on your decision right now.
+          </Text>
+        </View>
+      }
+      ListFooterComponent={
+        // Decision history — count only in v1 (full history list deferred).
+        data && data.historyCount > 0 ? (
+          <Text className="px-1 pt-4 text-[13px] text-ink-400">
+            Decision history ({data.historyCount})
+          </Text>
+        ) : null
+      }
+      renderItem={({ item }) => (
+        <View className="pb-4">
+          <ApprovalCard
+            item={item}
+            busy={decidingId === item.requestId}
+            onApprove={(id) => runDecide(id, "approve")}
+            onReject={(id, comment) => runDecide(id, "reject", comment)}
+          />
+        </View>
       )}
-    </ScrollView>
+    />
   );
 }

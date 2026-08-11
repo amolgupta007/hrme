@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
+import { Pressable, RefreshControl, ScrollView, Switch, Text, View } from "react-native";
 import { Image } from "expo-image";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import type { MobileProfile, MobileProfileAddress } from "@jambahr/shared";
@@ -8,6 +8,7 @@ import { useMobileQuery } from "@/lib/query";
 import { profileQueryKey } from "@/lib/profile";
 import { roleBadge } from "@/lib/directory";
 import { ProfileEditSheet } from "@/components/profile-edit-sheet";
+import { isPushEnabledPref, registerForPush, setPushEnabledPref, unregisterPush } from "@/lib/push";
 
 function initials(first: string, last: string): string {
   return ((first.charAt(0) ?? "") + (last.charAt(0) ?? "")).toUpperCase() || "?";
@@ -161,6 +162,17 @@ export function ProfileScreen() {
             <Text className="px-1 text-[12px] leading-4 text-ink-400">
               PAN and Aadhaar are shown masked and can only be changed by your admin.
             </Text>
+
+            {/* Preferences (D3 Stage D). Not wrapped in <Section> — that
+                component's border+padding is tuned for stacked InfoRows;
+                this is a single self-contained card (same shape as the
+                WhatsApp opt-in row in profile-edit-sheet.tsx). */}
+            <View className="gap-2">
+              <Text className="px-1 text-[11px] font-semibold uppercase tracking-wider text-ink-400">
+                PREFERENCES
+              </Text>
+              <PushNotificationsRow orgId={orgId} />
+            </View>
           </>
         )}
       </ScrollView>
@@ -210,6 +222,43 @@ function InfoRow({
           {value ?? "—"}
         </Text>
       </View>
+    </View>
+  );
+}
+
+/**
+ * Push notifications master toggle (D3 Stage D). v1 has no BFF field for
+ * this — it's a device-local gate (`push.ts`'s MMKV `push-prefs` store) on
+ * top of the same register/unregister calls `session.tsx` fires
+ * automatically on sign-in/out. Turning it off here calls `unregisterPush`
+ * immediately (not just "stop re-registering next time"); turning it on
+ * re-requests permission if needed and registers right away.
+ */
+function PushNotificationsRow({ orgId }: { orgId: string | null }) {
+  const [enabled, setEnabled] = useState(isPushEnabledPref);
+  const [busy, setBusy] = useState(false);
+
+  const onValueChange = (next: boolean) => {
+    setEnabled(next);
+    setPushEnabledPref(next);
+    setBusy(true);
+    void (next ? registerForPush(orgId) : unregisterPush(orgId)).finally(() => setBusy(false));
+  };
+
+  return (
+    <View className="flex-row items-center justify-between rounded-2xl border border-line bg-surface px-4 py-3.5">
+      <View className="flex-1 pr-3">
+        <Text className="text-[15px] font-medium text-ink-900">Push notifications</Text>
+        <Text className="mt-0.5 text-[12px] text-ink-600">
+          Get notified about leave decisions, payslips, and documents.
+        </Text>
+      </View>
+      <Switch
+        value={enabled}
+        onValueChange={onValueChange}
+        disabled={busy}
+        trackColor={{ true: "#17806D", false: "#E7E9EC" }}
+      />
     </View>
   );
 }

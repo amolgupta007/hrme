@@ -70,8 +70,8 @@ export function HomeScreen({ isAdmin = false }: { isAdmin?: boolean }) {
           <RefreshControl refreshing={home.isRefetching} onRefresh={() => home.refetch()} />
         }
       >
-        {/* Greeting (2a: "Hi, {name}" + "{weekday, date} · {org}" — no
-            notification bell yet, that's D3 push; see mobile-design-spec.md) */}
+        {/* Greeting (2a: "Hi, {name}" + "{weekday, date} · {org}") + the D3
+            push notification bell */}
         <View className="flex-row items-center justify-between pt-2">
           <View className="flex-1">
             <Text className="text-[28px] font-bold leading-8 text-ink-900" numberOfLines={1}>
@@ -83,10 +83,16 @@ export function HomeScreen({ isAdmin = false }: { isAdmin?: boolean }) {
               {isAdmin ? " · Admin" : ""}
             </Text>
           </View>
-          <View className="ml-3 h-10 w-10 items-center justify-center rounded-full bg-brand">
-            <Text className="text-[15px] font-bold text-white">
-              {firstName.charAt(0).toUpperCase()}
-            </Text>
+          <View className="ml-3 flex-row items-center">
+            <NotificationBell
+              count={data?.unreadNotifications ?? 0}
+              onPress={() => router.push("/notifications")}
+            />
+            <View className="ml-2 h-10 w-10 items-center justify-center rounded-full bg-brand">
+              <Text className="text-[15px] font-bold text-white">
+                {firstName.charAt(0).toUpperCase()}
+              </Text>
+            </View>
           </View>
         </View>
 
@@ -204,6 +210,28 @@ function StatTile({ label, value, color }: { label: string; value: number; color
         {label}
       </Text>
     </View>
+  );
+}
+
+/** Home header bell (D3 Stage D) — unread count from the home payload, capped at "9+". */
+function NotificationBell({ count, onPress }: { count: number; onPress: () => void }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={count > 0 ? `Notifications, ${count} unread` : "Notifications"}
+      onPress={onPress}
+      hitSlop={8}
+      className="h-10 w-10 items-center justify-center rounded-full active:bg-brand-tint"
+    >
+      <Ionicons name="notifications-outline" size={22} color="#0B1220" />
+      {count > 0 ? (
+        <View className="absolute right-1 top-1 h-4 min-w-[16px] items-center justify-center rounded-full bg-danger px-1">
+          <Text className="text-[10px] font-bold leading-3 text-white">
+            {count > 9 ? "9+" : count}
+          </Text>
+        </View>
+      ) : null}
+    </Pressable>
   );
 }
 

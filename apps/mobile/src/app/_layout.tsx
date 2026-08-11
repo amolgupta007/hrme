@@ -19,24 +19,21 @@ import { routeForNotificationType } from "@/lib/notifications";
 function RootLayout() {
   const router = useRouter();
 
-  // Push-tap routing (D3 Stage D). The response listener fires both for a
-  // cold-start tap (app was killed) and a tap while backgrounded/foregrounded
-  // — expo-notifications replays the launching response through this same
-  // listener rather than requiring a separate cold-start check.
-  //
-  // Caveat: today's server-side trigger points (`notifyLeaveDecision` /
-  // `notifyPayslipPaid` / `notifyDocAck` in apps/web/src/lib/mobile/notify.ts)
-  // never populate the push message's `data` field, so
-  // `content.data?.type` is currently always empty on a real device — this
-  // falls back to the notifications list, which is always a correct
-  // destination. Wiring `data: { type }` through those three call sites
-  // would make the fallback the exception rather than the rule.
+  // Push-tap routing (D3 Stage D). Reads the notification's `data.type`
+  // (set by notify() in apps/web/src/lib/mobile/notify.ts) and deep-links.
+  // Handles both a tap while running (response listener) and a cold-start
+  // tap from a killed app (getLastNotificationResponseAsync). Unknown/absent
+  // type falls back to the notifications list — always a valid destination.
   useEffect(() => {
-    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+    const routeFromResponse = (response: Notifications.NotificationResponse | null) => {
+      if (!response) return;
       const type = response.notification.request.content.data?.type;
       const route = routeForNotificationType(typeof type === "string" ? type : undefined);
       router.push(route ?? "/notifications");
-    });
+    };
+    // Cold-start: replay the tap that launched the app from a killed state.
+    Notifications.getLastNotificationResponseAsync().then(routeFromResponse).catch(() => {});
+    const sub = Notifications.addNotificationResponseReceivedListener(routeFromResponse);
     return () => sub.remove();
   }, [router]);
 

@@ -59,14 +59,19 @@ export async function GET(request: NextRequest) {
   let pendingQ = supabase
     .from("leave_requests")
     .select(
-      "id, employee_id, policy_id, start_date, end_date, days, reason, start_half_day, end_half_day, leave_policies(name, type, days_per_year), employees!employee_id(first_name, last_name, departments(name))",
+      "id, employee_id, policy_id, start_date, end_date, days, reason, start_half_day, end_half_day, leave_policies(name, type, days_per_year), employees!employee_id(first_name, last_name, departments!department_id(name))",
     )
     .eq("org_id", user.orgId)
     .eq("status", "pending")
     .order("start_date", { ascending: true });
   if (scopeIds) pendingQ = pendingQ.in("employee_id", scopeIds);
   else if (me) pendingQ = pendingQ.neq("employee_id", me);
-  const { data: pendingRows } = await pendingQ;
+  const { data: pendingRows, error: pendingErr } = await pendingQ;
+  if (pendingErr) {
+    // Don't silently return an empty list — a broken embed/query must be loud.
+    console.error("[mobile/leave/approvals] pending query failed:", pendingErr.message);
+    return NextResponse.json({ error: "query_failed" }, { status: 500 });
+  }
 
   // Approved leaves in scope: fuels BOTH the this-year balance aggregation and
   // the cross-employee team-overlap advisory (names carried for surfacing).

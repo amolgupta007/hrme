@@ -13,7 +13,7 @@ import type {
 import { useSession } from "@/lib/session";
 import { useMobileQuery } from "@/lib/query";
 import {
-  financialYearLabel,
+  calendarYearLabel,
   leaveApprovalsQueryKey,
   leaveErrorCopy,
   leaveQueryKey,
@@ -47,13 +47,27 @@ export function LeavesScreen() {
   const isManager = !!me && hasPermission(me.role, "manager");
 
   // Home's "N leave requests waiting on you" row deep-links here with
-  // ?segment=approvals (2a Needs-attention row). Read once as the initial
-  // segment — a plain default, not synced on every param change, so the
-  // user can freely switch segments afterward without the link fighting them.
+  // ?segment=approvals (2a Needs-attention row). Default to "mine" so a
+  // plain tab visit never lands on Approvals. React to the param on every
+  // CHANGE (not just the initial mount) so a warm/already-visited Leaves tab
+  // also honors the deep-link — expo-router reuses the mounted screen, so a
+  // useState initializer alone only fires on a cold mount. This follows
+  // React's "adjusting state when a prop changes" pattern (set state during
+  // render, guarded by comparing against the last-seen param, rather than in
+  // a useEffect) — see react.dev/learn/you-might-not-need-an-effect. Only the
+  // param TRANSITION drives the segment; the user is free to switch away
+  // afterward without the link fighting them back.
   const params = useLocalSearchParams<{ segment?: string }>();
   const [segment, setSegment] = useState<Segment>(
     params.segment === "approvals" ? "approvals" : "mine"
   );
+  const [lastParamSegment, setLastParamSegment] = useState(params.segment);
+  if (params.segment !== lastParamSegment) {
+    setLastParamSegment(params.segment);
+    if (params.segment === "approvals" && isManager) {
+      setSegment("approvals");
+    }
+  }
 
   // Approvals payload is fetched for managers regardless of the active segment
   // so the segment's pending-count badge is accurate the moment the tab opens.
@@ -66,10 +80,10 @@ export function LeavesScreen() {
 
   return (
     <SafeAreaView edges={["top"]} className="flex-1 bg-canvas">
-      {/* Title + FY footnote */}
+      {/* Title + calendar-year footnote (balances aggregate Jan–Dec) */}
       <View className="flex-row items-baseline justify-between px-4 pb-2 pt-2">
         <Text className="text-[22px] font-bold text-ink-900">Leaves</Text>
-        <Text className="text-[13px] text-ink-600">{financialYearLabel()}</Text>
+        <Text className="text-[13px] text-ink-600">{calendarYearLabel()}</Text>
       </View>
 
       {/* Mine / Approvals segment — managers only */}

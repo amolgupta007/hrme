@@ -87,6 +87,7 @@ export function buildApprovalsPayload(input: {
       startHalfDay: p.startHalfDay,
       endHalfDay: p.endHalfDay,
       balanceAfter,
+      policyTotalDays: p.daysPerYear,
       reason: p.reason,
       teamOverlap: hit ? { name: hit.name } : null,
     };

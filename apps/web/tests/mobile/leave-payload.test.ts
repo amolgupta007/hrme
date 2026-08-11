@@ -128,6 +128,7 @@ describe("buildApprovalsPayload — balanceAfter", () => {
     });
     // remaining = 21 − 5 = 16; balanceAfter = 16 − 3 = 13
     expect(out.requests[0].balanceAfter).toBe(13);
+    expect(out.requests[0].policyTotalDays).toBe(21);
     expect(out.requests[0].requesterInitials).toBe("RK");
     expect(out.requests[0].department).toBe("Sales");
     expect(out.historyCount).toBe(0);
@@ -141,6 +142,7 @@ describe("buildApprovalsPayload — balanceAfter", () => {
     });
     // remaining = max(0, 21 − 20) = 1; balanceAfter = 1 − 3 = −2
     expect(out.requests[0].balanceAfter).toBe(-2);
+    expect(out.requests[0].policyTotalDays).toBe(21);
   });
 });
 

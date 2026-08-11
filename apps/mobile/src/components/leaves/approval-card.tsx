@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import type { MobileLeaveApprovalItem } from "@jambahr/shared/mobile/leave";
-import { dateRangeLabel, daysLabel } from "@/lib/leave";
+import { dateRangeLabel, daysLabel, daysValue } from "@/lib/leave";
 
 /**
  * One pending-decision card (hi-fi 2c): requester avatar + name + `{dept} ·
@@ -63,7 +63,7 @@ export function ApprovalCard({
         />
         <LabeledRow
           label="BALANCE AFTER"
-          value={daysLabel(item.balanceAfter)}
+          value={`${daysValue(item.balanceAfter)} / ${item.policyTotalDays} days`}
           danger={overdraw}
         />
       </View>

@@ -77,7 +77,7 @@ export function TodayCard({
     <Pressable
       accessibilityRole={onPress ? "button" : undefined}
       accessibilityLabel={onPress ? "View attendance" : undefined}
-      onPress={onPress}
+      onPress={isPunching ? undefined : onPress}
       className="rounded-2xl border border-line bg-surface p-4 active:bg-brand-tint"
     >
       <View className="flex-row items-center justify-between">

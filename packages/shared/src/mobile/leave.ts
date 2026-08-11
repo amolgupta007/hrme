@@ -68,6 +68,8 @@ export type MobileLeaveApprovalItem = {
   endHalfDay: boolean;
   /** Requester's remaining for this policy MINUS this request's days (may be negative → overdraw). */
   balanceAfter: number;
+  /** The policy's annual entitlement (days_per_year) — the denominator for `balanceAfter`. */
+  policyTotalDays: number;
   reason: string | null;
   /** First already-approved-leave collision among the manager's OTHER scoped employees, else null. */
   teamOverlap: { name: string } | null;
@@ -80,4 +82,30 @@ export type MobileLeaveApprovalItem = {
 export type MobileLeaveApprovalsResponse = {
   requests: MobileLeaveApprovalItem[];
   historyCount: number;
+};
+
+/**
+ * POST /api/mobile/leave/apply request body. `days` is deliberately absent —
+ * the BFF derives it server-side from the date range + half-day flags (never
+ * trusts a client-sent total). The web route validates this shape with
+ * `ApplyLeaveBodySchema` (`apps/web/src/lib/mobile/leave-payload.ts`); this
+ * type is the wire-contract source of truth both sides import.
+ */
+export type ApplyLeaveBody = {
+  policyId: string;
+  startDate: string; // YYYY-MM-DD
+  endDate: string; // YYYY-MM-DD
+  startHalfDay: boolean;
+  endHalfDay: boolean;
+  reason?: string;
+};
+
+/**
+ * POST /api/mobile/leave/decide request body (manager+). Validated web-side
+ * by `DecideLeaveBodySchema`.
+ */
+export type DecideLeaveBody = {
+  requestId: string;
+  decision: "approve" | "reject";
+  comment?: string;
 };

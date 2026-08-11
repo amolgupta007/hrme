@@ -69,6 +69,8 @@ export type MobileHomeResponse = {
   trainingsOverdue: number;
   /** Latest ≤3 org announcements, pinned first then newest. */
   announcements: MobileAnnouncementLite[];
+  /** Caller's total unread `notifications` count, for the Home bell badge. */
+  unreadNotifications: number;
 };
 
 /** Per-day punch detail for the calendar tap-through. */

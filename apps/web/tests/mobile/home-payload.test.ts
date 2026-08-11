@@ -111,6 +111,7 @@ describe("buildHomePayload", () => {
       pendingApprovals: null,
       trainingsOverdue: 0,
       announcements: [],
+      unreadNotifications: 0,
     });
 
     expect(payload.today.isClockedIn).toBe(true);
@@ -137,11 +138,13 @@ describe("buildHomePayload", () => {
       announcements: [
         { id: "a1", title: "Diwali holidays", body: "Office closed 20–22 Oct.", category: "policy", created_at: "2026-08-01T10:00:00Z" },
       ],
+      unreadNotifications: 5,
     });
 
     expect(payload.pendingApprovals).toBe(3);
     expect(payload.trainingsOverdue).toBe(2);
     expect(payload.announcements).toHaveLength(1);
     expect(payload.announcements[0].title).toBe("Diwali holidays");
+    expect(payload.unreadNotifications).toBe(5);
   });
 });

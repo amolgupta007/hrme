@@ -57,6 +57,7 @@ function makeChain(table: string) {
     lt: () => chain,
     in: () => chain,
     or: () => chain,
+    is: () => chain,
     order: () => chain,
     limit: () => Promise.resolve(awaitResult),
     maybeSingle: () => Promise.resolve({ data: cfg.single ?? null, error: null }),
@@ -195,6 +196,7 @@ describe("GET /api/mobile/home (200)", () => {
     expect(json.pendingApprovals).toBeNull();
     expect(json.trainingsOverdue).toBe(0);
     expect(Array.isArray(json.announcements)).toBe(true);
+    expect(json.unreadNotifications).toBe(0);
   });
 
   it("surfaces a manager's pending-approvals count instead of null", async () => {

@@ -108,6 +108,7 @@ export function buildHomePayload(input: {
   pendingApprovals: number | null;
   trainingsOverdue: number;
   announcements: AnnouncementRow[];
+  unreadNotifications: number;
 }): MobileHomeResponse {
   return {
     today: buildTodayStatus(input.record, input.shift),
@@ -120,5 +121,6 @@ export function buildHomePayload(input: {
     pendingApprovals: input.pendingApprovals,
     trainingsOverdue: input.trainingsOverdue,
     announcements: buildAnnouncements(input.announcements),
+    unreadNotifications: input.unreadNotifications,
   };
 }

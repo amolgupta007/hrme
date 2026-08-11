@@ -25,4 +25,5 @@ export * from "./mobile/leave";
 export * from "./mobile/payslips";
 export * from "./mobile/profile";
 export * from "./mobile/directory";
+export * from "./mobile/notifications";
 export * from "./leaves/compute-days";

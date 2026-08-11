@@ -1,4 +1,4 @@
-import { ScrollView, Text, View, Pressable } from "react-native";
+import { ScrollView, Text, View, Pressable, RefreshControl } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useRouter } from "expo-router";
 import { FlashList } from "@shopify/flash-list";
@@ -44,6 +44,9 @@ export function PayslipsScreen() {
         className="flex-1 bg-canvas"
         contentContainerClassName="px-4 pb-10 pt-3 gap-3"
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={query.isRefetching} onRefresh={() => query.refetch()} />
+        }
       >
         <View className="gap-3">
           <View className="h-[68px] rounded-2xl bg-[#EFF1F3]" />

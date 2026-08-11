@@ -2,7 +2,8 @@ import { useCallback } from "react";
 import { useAuth } from "@clerk/clerk-expo";
 import type { MobileApiError } from "@jambahr/shared/auth/types";
 
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? "";
+/** Exported so `lib/push.ts` (a plain module, outside the hook tree) can build the same absolute URLs. */
+export const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? "";
 
 export class ApiError extends Error {
   constructor(

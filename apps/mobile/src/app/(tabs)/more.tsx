@@ -81,10 +81,7 @@ export default function More() {
           <MoreRow
             icon="notifications-outline"
             label="Notifications"
-            onPress={() =>
-              Alert.alert("Notifications", "Push notifications are coming to mobile in an upcoming release.")
-            }
-            soon
+            onPress={() => router.push("/notifications")}
             isLast
           />
         </View>

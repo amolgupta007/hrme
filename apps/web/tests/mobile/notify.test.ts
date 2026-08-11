@@ -53,7 +53,25 @@ describe("notify", () => {
     expect(sendPushMock).toHaveBeenCalledWith(supabase, ["emp-1"], {
       title: "Leave approved",
       body: "Your leave request has been approved.",
-      data: { requestId: "req-1" },
+      data: { requestId: "req-1", type: "leave_decision" },
+    });
+  });
+
+  it("includes `type` in the push data even when no extra data is passed", async () => {
+    const { supabase } = makeSupabase();
+
+    await notify(supabase, {
+      orgId: "org-1",
+      employeeId: "emp-1",
+      type: "announcement",
+      title: "t",
+      body: "b",
+    });
+
+    expect(sendPushMock).toHaveBeenCalledWith(supabase, ["emp-1"], {
+      title: "t",
+      body: "b",
+      data: { type: "announcement" },
     });
   });
 
@@ -81,7 +99,7 @@ describe("notify wrapper copy (verbatim from the plan)", () => {
     expect(sendPushMock).toHaveBeenCalledWith(supabase, ["emp-1"], {
       title: "Leave approved",
       body: "Your leave request has been approved.",
-      data: undefined,
+      data: { type: "leave_decision" },
     });
   });
 
@@ -91,7 +109,7 @@ describe("notify wrapper copy (verbatim from the plan)", () => {
     expect(sendPushMock).toHaveBeenCalledWith(supabase, ["emp-1"], {
       title: "Leave update",
       body: "Your leave request was not approved.",
-      data: undefined,
+      data: { type: "leave_decision" },
     });
   });
 
@@ -101,7 +119,7 @@ describe("notify wrapper copy (verbatim from the plan)", () => {
     expect(sendPushMock).toHaveBeenCalledWith(supabase, ["emp-1"], {
       title: "Payslip ready",
       body: "Your payslip for August 2026 is ready to view.",
-      data: undefined,
+      data: { type: "payslip_paid" },
     });
   });
 
@@ -111,7 +129,7 @@ describe("notify wrapper copy (verbatim from the plan)", () => {
     expect(sendPushMock).toHaveBeenCalledWith(supabase, ["emp-1"], {
       title: "Action needed",
       body: "Code of Conduct needs your acknowledgment.",
-      data: undefined,
+      data: { type: "doc_ack" },
     });
   });
 });

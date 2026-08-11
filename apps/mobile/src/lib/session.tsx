@@ -66,9 +66,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   // a stale in-flight response to land in.
   useEffect(() => {
     if (isSignedIn === false) {
+      // Capture the org the token was registered under before the cache is
+      // cleared — the BFF needs X-Org-Id to unregister the right row for
+      // multi-org users (mirrors registerForPush's org-scoping).
+      const orgId = meQuery.data?.orgId ?? null;
       queryClient.removeQueries({ queryKey: ME_QUERY_KEY });
       registeredOrgRef.current = null;
-      void unregisterPush();
+      void unregisterPush(orgId);
     }
   }, [isSignedIn, queryClient]);
 

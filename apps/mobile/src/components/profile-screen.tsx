@@ -242,7 +242,7 @@ function PushNotificationsRow({ orgId }: { orgId: string | null }) {
     setEnabled(next);
     setPushEnabledPref(next);
     setBusy(true);
-    void (next ? registerForPush(orgId) : unregisterPush()).finally(() => setBusy(false));
+    void (next ? registerForPush(orgId) : unregisterPush(orgId)).finally(() => setBusy(false));
   };
 
   return (

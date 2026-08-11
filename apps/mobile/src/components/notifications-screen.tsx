@@ -55,6 +55,22 @@ export function NotificationsScreen() {
           <View className="h-[72px] rounded-2xl bg-[#EFF1F3]" />
           <View className="h-[72px] rounded-2xl bg-[#EFF1F3]" />
         </View>
+      ) : query.isError && !query.data ? (
+        <View className="mx-4 mt-6 items-center rounded-2xl border border-line bg-surface px-6 py-8">
+          <Text className="text-[15px] font-semibold text-ink-900">
+            Couldn&apos;t load notifications
+          </Text>
+          <Text className="mt-1 text-center text-[13px] leading-5 text-ink-600">
+            Check your connection and try again.
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => query.refetch()}
+            className="mt-3 rounded-full bg-brand px-4 py-2 active:bg-brand-pressed"
+          >
+            <Text className="text-[13px] font-semibold text-white">Try again</Text>
+          </Pressable>
+        </View>
       ) : items.length === 0 ? (
         <View className="mx-4 mt-6 items-center rounded-2xl border border-line bg-surface px-6 py-10">
           <View className="h-12 w-12 items-center justify-center rounded-full bg-brand-tint">
@@ -106,17 +122,6 @@ export function NotificationsScreen() {
           )}
         />
       )}
-
-      {query.isError && !query.data ? (
-        <View className="mx-4 mt-6 items-center rounded-2xl border border-line bg-surface px-6 py-8">
-          <Text className="text-[15px] font-semibold text-ink-900">
-            Couldn&apos;t load notifications
-          </Text>
-          <Text className="mt-1 text-center text-[13px] leading-5 text-ink-600">
-            Pull to refresh once you&apos;re back online.
-          </Text>
-        </View>
-      ) : null}
     </SafeAreaView>
   );
 }

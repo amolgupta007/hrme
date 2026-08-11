@@ -102,6 +102,11 @@ export async function registerForPush(orgId?: string | null): Promise<void> {
  * cheap, and avoids a second piece of state to keep in sync. If permission
  * was never granted there's no token to unregister, so this is a no-op.
  *
+ * `orgId` is the caller's active org, sent as `X-Org-Id` — same rule as
+ * `registerForPush`. Without it the BFF falls back to the user's
+ * first-created membership, which deletes zero rows (silent no-op) for any
+ * multi-org user whose active org isn't their earliest one.
+ *
  * Note: called from `session.tsx`'s `isSignedIn === false` effect, which by
  * definition runs after Clerk has already torn down the session — so
  * `getAuthToken()` may legitimately return `null` there and this becomes a
@@ -109,7 +114,7 @@ export async function registerForPush(orgId?: string | null): Promise<void> {
  * writes are best-effort); the stale token row self-heals on the next
  * sign-in because `/api/mobile/push/register` upserts on the token value.
  */
-export async function unregisterPush(): Promise<void> {
+export async function unregisterPush(orgId?: string | null): Promise<void> {
   try {
     if (!Device.isDevice) return;
     const perms = await Notifications.getPermissionsAsync();
@@ -118,7 +123,7 @@ export async function unregisterPush(): Promise<void> {
     const token = await currentExpoPushToken();
     if (!token) return;
 
-    await postToBff("/api/mobile/push/unregister", { expoPushToken: token });
+    await postToBff("/api/mobile/push/unregister", { expoPushToken: token }, orgId);
   } catch (error) {
     log("unregisterPush failed", error);
   }

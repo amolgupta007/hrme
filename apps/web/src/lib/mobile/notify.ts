@@ -34,7 +34,11 @@ export async function notify(supabase: any, args: NotifyArgs): Promise<void> {
     // Row write failure must not block the push attempt or the caller.
   }
 
-  await sendPush(supabase, [employeeId], { title, body, data });
+  try {
+    await sendPush(supabase, [employeeId], { title, body, data });
+  } catch {
+    // sendPush already swallows internally; this is defense-in-depth so notify() can never throw.
+  }
 }
 
 export async function notifyLeaveDecision(

@@ -83,6 +83,18 @@ export async function GET(req: Request) {
     for (const { employee, docs: pending } of Object.values(pendingByEmployee)) {
       if (pending.length === 0) continue;
       // Phase 1: skip phone-only employees (no email). Phase 2 will route to WhatsApp.
+      // Notify mobile for every reminded employee — incl. phone-only (best-effort, never blocks the cron)
+      try {
+        const docTitle = pending.length === 1 ? pending[0].name : `${pending.length} documents`;
+        await notifyDocAck(supabase, {
+          orgId: employee.org_id,
+          employeeId: employee.id,
+          docTitle,
+        });
+      } catch {
+        // Push/notification failure must not break the cron
+      }
+
       const to = employee.email?.trim();
       if (!to) continue;
       try {
@@ -101,18 +113,6 @@ export async function GET(req: Request) {
           html,
         });
         sent++;
-
-        // Notify mobile (best-effort, never blocks the reminder cron)
-        try {
-          const docTitle = pending.length === 1 ? pending[0].name : `${pending.length} documents`;
-          await notifyDocAck(supabase, {
-            orgId: employee.org_id,
-            employeeId: employee.id,
-            docTitle,
-          });
-        } catch {
-          // Push/notification failure must not break the cron
-        }
       } catch (err) {
         console.error(`Failed to send doc reminder to ${employee.email}:`, err);
       }

@@ -318,7 +318,7 @@ export function AttendanceClient({ today, history, team, employees, isManager, i
                 value={filterEmployee}
                 onChange={(e) => handleFilterEmployee(e.target.value)}
               >
-                <option value="">My records</option>
+                <option value="">{isAdmin ? "All employees" : "My team"}</option>
                 {employees.map((emp: any) => (
                   <option key={emp.id} value={emp.id}>
                     {emp.first_name} {emp.last_name}

@@ -3,6 +3,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useAuth } from "@clerk/clerk-expo";
 import { useRouter } from "expo-router";
+import { hasPermission } from "@jambahr/shared";
 import type { MobileHomeResponse } from "@jambahr/shared/mobile/types";
 import { useSession } from "@/lib/session";
 import { useMobileQuery } from "@/lib/query";
@@ -13,6 +14,7 @@ import { QuickActions } from "@/components/quick-actions";
 import { PendingCard } from "@/components/pending-card";
 import { HolidayCard } from "@/components/holiday-card";
 import { AnnouncementsCard } from "@/components/announcements-card";
+import { AdminHomeCards } from "@/components/admin/admin-home-cards";
 
 const STUB_TITLE = "Coming soon";
 const STUB_BODY = "This is coming in the next update.";
@@ -120,6 +122,10 @@ export function HomeScreen({ isAdmin = false }: { isAdmin?: boolean }) {
           <HomeSkeleton />
         ) : data ? (
           <>
+            {data.adminHome && me && hasPermission(me.role, "manager") ? (
+              <AdminHomeCards data={data.adminHome} />
+            ) : null}
+
             <StatStrip
               leaveLeft={data.leave.balances.reduce((s, b) => s + (b.remaining ?? 0), 0)}
               pendingApprovals={data.pendingApprovals}

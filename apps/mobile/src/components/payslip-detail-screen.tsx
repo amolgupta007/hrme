@@ -124,9 +124,31 @@ export function PayslipDetailScreen({ entryId }: { entryId: string }) {
               emphasis
             />
           </Section>
+
+          {/* PDF export — the server route (/api/mobile/payslips/[id]/pdf) is
+              live, but downloading/sharing it needs expo-file-system +
+              expo-sharing (new native deps → a rebuild), so the action lands
+              with the next app update (Phase D Slice 3, Stage B). */}
+          <SharePdfButton />
         </>
       )}
     </ScrollView>
+  );
+}
+
+/**
+ * Disabled placeholder for the payslip PDF export. The backend route already
+ * renders the PDF; wiring the tap requires native file/share modules that ship
+ * in the next build, so this reads as "coming soon" today.
+ */
+function SharePdfButton() {
+  return (
+    <View className="mt-1 flex-row items-center justify-center gap-2 rounded-2xl border border-line bg-surface px-4 py-3 opacity-50">
+      <Ionicons name="download-outline" size={18} color="#5B6472" />
+      <Text className="text-[14px] font-medium text-ink-600">
+        Download PDF - coming with the next app update
+      </Text>
+    </View>
   );
 }
 

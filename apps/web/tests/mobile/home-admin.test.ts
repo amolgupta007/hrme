@@ -123,14 +123,18 @@ describe("GET /api/mobile/home — adminHome block (Mobile D4 Task 5)", () => {
     tableConfig.payroll_runs = { single: { month: "2026-08", status: "processed" } };
     fetchLeaveApprovals.mockResolvedValue([{ id: "l1" }, { id: "l2" }]);
     fetchRegularizationApprovals.mockResolvedValue([{ id: "r1" }]);
-    fetchOtApprovals.mockResolvedValue([]);
+    // A manager must never see OT here even if the fetcher WOULD return
+    // items — the route must gate the call itself, not rely on empty data.
+    fetchOtApprovals.mockResolvedValue([{ id: "ot1" }]);
 
     const res = await GET(req());
     expect(res.status).toBe(200);
     const json = await res.json();
 
-    // Payroll approvals are admin-only — a manager must never trigger it, so
-    // its byType count is 0 regardless of what the fetcher would return.
+    // OT and payroll approvals are admin-only — a manager must never trigger
+    // either fetch, so their byType counts are 0 regardless of what the
+    // fetchers would return.
+    expect(fetchOtApprovals).not.toHaveBeenCalled();
     expect(fetchPayrollApprovals).not.toHaveBeenCalled();
 
     expect(json.adminHome).toBeDefined();
@@ -158,6 +162,17 @@ describe("GET /api/mobile/home — adminHome block (Mobile D4 Task 5)", () => {
     expect(fetchPayrollApprovals).toHaveBeenCalled();
     expect(json.adminHome.pendingApprovals.byType.payroll).toBe(1);
     expect(json.adminHome.payroll).toEqual({ status: "awaiting_approval", month: "2026-08" });
+  });
+
+  it("fetches and counts OT for an admin (OT is admin-gated, mirrors payroll)", async () => {
+    currentUser = { ...ADMIN };
+    fetchOtApprovals.mockResolvedValue([{ id: "ot1" }, { id: "ot2" }]);
+
+    const res = await GET(req());
+    const json = await res.json();
+
+    expect(fetchOtApprovals).toHaveBeenCalled();
+    expect(json.adminHome.pendingApprovals.byType.ot).toBe(2);
   });
 
   it("reports payroll as null when the org's plan doesn't include the payroll feature", async () => {

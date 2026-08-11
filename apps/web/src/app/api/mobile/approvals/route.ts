@@ -18,8 +18,11 @@ export const dynamic = "force-dynamic";
  * newest-first feed. Each source is best-effort (never throws — see
  * `approvals-sources.ts`), so one broken source can't blank the inbox.
  * Employees (non-manager) always get an empty inbox — every source
- * short-circuits to `[]` for that role. Payroll is fetched only for admins
- * (and further gated inside the fetcher on RazorpayX being configured).
+ * short-circuits to `[]` for that role. OT and payroll are fetched only for
+ * admins — `approveOvertime`/`rejectOvertime` are admin-only actions, so a
+ * plain manager must never see OT items they'd get a 400 trying to action
+ * (payroll is further gated inside the fetcher on RazorpayX being
+ * configured).
  */
 export async function GET(request: NextRequest) {
   const { userId } = auth();
@@ -37,7 +40,7 @@ export async function GET(request: NextRequest) {
   const [leave, regularization, ot, payroll] = await Promise.all([
     fetchLeaveApprovals(supabase, user),
     fetchRegularizationApprovals(supabase, user),
-    fetchOtApprovals(supabase, user),
+    isAdmin(user.role) ? fetchOtApprovals(supabase, user) : Promise.resolve([]),
     isAdmin(user.role) ? fetchPayrollApprovals(supabase, user) : Promise.resolve([]),
   ]);
 

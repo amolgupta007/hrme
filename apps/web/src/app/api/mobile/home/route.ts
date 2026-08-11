@@ -228,7 +228,7 @@ export async function GET(request: NextRequest) {
           .eq("date", today),
         fetchLeaveApprovals(supabase, user),
         fetchRegularizationApprovals(supabase, user),
-        fetchOtApprovals(supabase, user),
+        isAdmin(user.role) ? fetchOtApprovals(supabase, user) : Promise.resolve([]),
         isAdmin(user.role) ? fetchPayrollApprovals(supabase, user) : Promise.resolve([]),
         payrollFeatureEnabled
           ? supabase

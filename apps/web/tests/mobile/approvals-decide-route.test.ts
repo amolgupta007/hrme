@@ -11,6 +11,25 @@ const rejectPunchMock = vi.hoisted(() => vi.fn());
 const approveOvertimeMock = vi.hoisted(() => vi.fn());
 const rejectOvertimeMock = vi.hoisted(() => vi.fn());
 const approveDisbursementMock = vi.hoisted(() => vi.fn());
+const scopeMock = vi.hoisted(() => vi.fn(async () => ["emp-2"]));
+
+// Per-table canned result for the leave-scope-guard's `leave_requests` lookup
+// (mirrors the `makeChain` idiom in leave-routes.test.ts). Only `single`
+// (maybeSingle()) is exercised by this route.
+type TableCfg = { single?: any };
+const tableConfig: Record<string, TableCfg> = {};
+function resetTableConfig() {
+  tableConfig.leave_requests = { single: { id: "lr-1", employee_id: "emp-2" } };
+}
+function makeChain(table: string) {
+  const cfg = tableConfig[table] ?? {};
+  const chain: any = {
+    select: () => chain,
+    eq: () => chain,
+    maybeSingle: () => Promise.resolve({ data: cfg.single ?? null, error: null }),
+  };
+  return chain;
+}
 
 vi.mock("@clerk/nextjs/server", () => ({ auth: () => ({ userId: clerkUserId }) }));
 vi.mock("@/lib/current-user", () => ({
@@ -18,6 +37,10 @@ vi.mock("@/lib/current-user", () => ({
   isAdmin: (r: string) => r === "owner" || r === "admin",
   isManagerOrAbove: (r: string) => r === "owner" || r === "admin" || r === "manager",
 }));
+vi.mock("@/lib/supabase/server", () => ({
+  createAdminSupabase: () => ({ from: (t: string) => makeChain(t) }),
+}));
+vi.mock("@/lib/attendance/manager-scope", () => ({ getManagerScopedEmployeeIds: scopeMock }));
 vi.mock("@/actions/leaves", () => ({
   approveLeave: approveLeaveMock,
   rejectLeave: rejectLeaveMock,
@@ -52,6 +75,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   clerkUserId = "clerk_1";
   currentUser = { ...MANAGER };
+  resetTableConfig();
+  scopeMock.mockResolvedValue(["emp-2"]);
   approveLeaveMock.mockResolvedValue({ success: true, data: undefined });
   rejectLeaveMock.mockResolvedValue({ success: true, data: undefined });
   approvePunchMock.mockResolvedValue({ success: true, data: undefined });
@@ -202,6 +227,56 @@ describe("POST /api/mobile/approvals/decide — dispatch", () => {
     const res = await POST(req({ type: "leave", id: "lr-1", action: "approve" }));
     expect(res.status).toBe(200);
     expect(approveLeaveMock).toHaveBeenCalledWith("lr-1", undefined, null);
+  });
+});
+
+describe("POST /api/mobile/approvals/decide — leave manager-team scope (CRITICAL)", () => {
+  it("403 forbidden when the leave request's employee is OUTSIDE the manager's scope", async () => {
+    currentUser = { ...MANAGER };
+    tableConfig.leave_requests = { single: { id: "lr-9", employee_id: "emp-9" } };
+    scopeMock.mockResolvedValue(["emp-2"]); // emp-9 not in scope
+    const res = await POST(req({ type: "leave", id: "lr-9", action: "approve" }));
+    expect(res.status).toBe(403);
+    expect((await res.json()).error).toBe("forbidden");
+    expect(approveLeaveMock).not.toHaveBeenCalled();
+  });
+
+  it("dispatches for a leave request IN the manager's scope", async () => {
+    currentUser = { ...MANAGER };
+    tableConfig.leave_requests = { single: { id: "lr-2", employee_id: "emp-2" } };
+    scopeMock.mockResolvedValue(["emp-2"]);
+    const res = await POST(
+      req({ type: "leave", id: "lr-2", action: "approve" }, { "x-org-id": "org-9" }),
+    );
+    expect(res.status).toBe(200);
+    expect(scopeMock).toHaveBeenCalledWith("org-1", "emp-1");
+    expect(approveLeaveMock).toHaveBeenCalledWith("lr-2", undefined, "org-9");
+  });
+
+  it("admin bypasses the scope check for leave", async () => {
+    currentUser = { ...ADMIN };
+    tableConfig.leave_requests = { single: { id: "lr-3", employee_id: "emp-77" } };
+    const res = await POST(req({ type: "leave", id: "lr-3", action: "approve" }));
+    expect(res.status).toBe(200);
+    expect(scopeMock).not.toHaveBeenCalled();
+    expect(approveLeaveMock).toHaveBeenCalled();
+  });
+
+  it("404 not_found when the leave request isn't in the caller's org", async () => {
+    currentUser = { ...MANAGER };
+    tableConfig.leave_requests = { single: null };
+    const res = await POST(req({ type: "leave", id: "lr-missing", action: "approve" }));
+    expect(res.status).toBe(404);
+    expect((await res.json()).error).toBe("not_found");
+    expect(approveLeaveMock).not.toHaveBeenCalled();
+  });
+
+  it("regularization/ot/payroll types are unaffected by the leave scope guard", async () => {
+    currentUser = { ...ADMIN };
+    tableConfig.leave_requests = { single: null }; // would 404 if the leave path ran
+    const res = await POST(req({ type: "ot", id: "ot-1", action: "approve" }));
+    expect(res.status).toBe(200);
+    expect(approveOvertimeMock).toHaveBeenCalledWith("ot-1", null);
   });
 });
 

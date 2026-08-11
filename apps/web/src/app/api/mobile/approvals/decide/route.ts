@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@clerk/nextjs/server";
 import { getCurrentUser, isAdmin, isManagerOrAbove } from "@/lib/current-user";
+import { createAdminSupabase } from "@/lib/supabase/server";
+import { getManagerScopedEmployeeIds } from "@/lib/attendance/manager-scope";
 import { approveLeave, rejectLeave } from "@/actions/leaves";
 import { approvePunch, rejectPunch } from "@/actions/attendance-punches";
 import { approveOvertime, rejectOvertime } from "@/actions/overtime";
@@ -24,10 +26,18 @@ const DecideApprovalBodySchema = z.object({
  * the action targets the same org the mobile caller is scoped to.
  *
  * Each downstream action enforces its own role/scope guard (manager-scope
- * for leave/regularization, admin-only for OT/payroll) — this route only
- * blocks employees outright and additionally requires admin for the
- * payroll type specifically. Payroll has no mobile reject path (RazorpayX
- * disbursement rejection isn't modeled) — reject always 400s for it.
+ * for regularization, admin-only for OT/payroll) — this route only blocks
+ * employees outright and additionally requires admin for the payroll type
+ * specifically. Payroll has no mobile reject path (RazorpayX disbursement
+ * rejection isn't modeled) — reject always 400s for it.
+ *
+ * CRITICAL scope guard for `leave`: `approveLeave`/`rejectLeave` only check
+ * `isManagerOrAbove` + org — NOT that the request belongs to the caller's
+ * team (a plain manager could otherwise approve/reject any org leave
+ * request). Mirrors `/api/mobile/leave/decide`: loads the request org-scoped
+ * and verifies its `employee_id` is in the caller's scope
+ * (`getManagerScopedEmployeeIds` for non-admins; admins bypass) before
+ * dispatching.
  */
 export async function POST(request: NextRequest) {
   const { userId } = auth();
@@ -64,6 +74,29 @@ export async function POST(request: NextRequest) {
   }
 
   const orgIdHint = request.headers.get("x-org-id");
+
+  if (type === "leave") {
+    const supabase = createAdminSupabase();
+    const { data: reqRow } = await supabase
+      .from("leave_requests")
+      .select("id, employee_id")
+      .eq("id", id)
+      .eq("org_id", user.orgId)
+      .maybeSingle();
+    if (!reqRow) {
+      return NextResponse.json({ error: "not_found" }, { status: 404 });
+    }
+    if (!isAdmin(user.role)) {
+      const me = user.employeeId;
+      if (!me) {
+        return NextResponse.json({ error: "forbidden" }, { status: 403 });
+      }
+      const scope = await getManagerScopedEmployeeIds(user.orgId, me);
+      if (!scope.includes((reqRow as { employee_id: string }).employee_id)) {
+        return NextResponse.json({ error: "forbidden" }, { status: 403 });
+      }
+    }
+  }
 
   let result: ActionResult<unknown>;
   switch (type) {

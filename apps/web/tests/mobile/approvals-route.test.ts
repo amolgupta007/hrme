@@ -112,7 +112,7 @@ describe("GET /api/mobile/approvals", () => {
     });
   });
 
-  it("a manager sees leave/reg/ot in scope (self-scoped, org-scoped for OT toggle)", async () => {
+  it("a manager sees leave/reg in scope (self-scoped); OT is admin-gated and never fetched", async () => {
     currentUser = { ...MANAGER };
     tableConfig.leave_requests = {
       sequence: [
@@ -173,7 +173,11 @@ describe("GET /api/mobile/approvals", () => {
     const res = await GET(req());
     expect(res.status).toBe(200);
     const json = await res.json();
-    expect(json.counts).toEqual({ leave: 1, regularization: 1, ot: 1, payroll: 0, total: 3 });
+    // OT is admin-gated (Finding 2): the manager's inbox never fetches it,
+    // even though `ot_records` has a pending row above — proves it's the GET
+    // route's admin check, not an empty-data coincidence.
+    expect(json.counts).toEqual({ leave: 1, regularization: 1, ot: 0, payroll: 0, total: 2 });
+    expect(json.items.some((i: any) => i.type === "ot")).toBe(false);
 
     const leaveItem = json.items.find((i: any) => i.type === "leave");
     expect(leaveItem).toMatchObject({
@@ -193,6 +197,35 @@ describe("GET /api/mobile/approvals", () => {
       meta: { punchAt: "2026-08-10T04:00:00Z" },
     });
 
+    expect(scopeMock).toHaveBeenCalledWith("org-1", "emp-1");
+    expect(inCalls).toContainEqual(["employee_id", ["emp-2"]]);
+  });
+
+  it("an admin sees OT in the inbox, estimated from salary + payroll run inputs", async () => {
+    currentUser = { ...ADMIN };
+    tableConfig.ot_records = {
+      rows: [
+        {
+          id: "ot-1",
+          employee_id: "emp-2",
+          ot_minutes: 90,
+          amount: null,
+          multiplier: 1.5,
+          date: "2026-08-09",
+          created_at: "2026-08-09T12:00:00Z",
+          employees: { first_name: "Ravi", last_name: "Kumar" },
+          shifts: { total_hours: 8 },
+        },
+      ],
+    };
+    tableConfig.salary_structures = { rows: [{ employee_id: "emp-2", gross_monthly: 60000 }] };
+    tableConfig.payroll_runs = { rows: [{ month: "2026-08", working_days: 26 }] };
+
+    const res = await GET(req());
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.counts.ot).toBe(1);
+
     // Estimate is computed, not read off a mocked `amount` column: hourly
     // rate = computeHourlyRate(60000, 26, 8) = round(6000000/208) = 28846
     // paise; amount = round(1.5h × 28846 × 1.5x) = 64904 paise = Rs 649.
@@ -205,13 +238,10 @@ describe("GET /api/mobile/approvals", () => {
       meta: { minutes: 90 },
     });
     expect(otItem.impact).not.toBe("1.5h · Rs 0");
-
-    expect(scopeMock).toHaveBeenCalledWith("org-1", "emp-1");
-    expect(inCalls).toContainEqual(["employee_id", ["emp-2"]]);
   });
 
   it("OT estimate falls back to 'Rs --' (never throws) when the salary structure is missing", async () => {
-    currentUser = { ...MANAGER };
+    currentUser = { ...ADMIN };
     tableConfig.ot_records = {
       rows: [
         {

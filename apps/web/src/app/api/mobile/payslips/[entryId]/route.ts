@@ -16,7 +16,8 @@ export const dynamic = "force-dynamic";
  * IDOR guard: the entry must belong to BOTH the caller's org AND the caller's
  * employee id, else 404 — enforced in app code (service-role bypasses RLS,
  * gotcha #5). Another employee's or another org's entryId is indistinguishable
- * from a missing one.
+ * from a missing one. A draft run's entry also 404s (mirrors the list
+ * endpoint's draft exclusion — an admin still editing must not be viewable).
  */
 export async function GET(request: NextRequest, ctx: { params: { entryId: string } }) {
   const { userId } = auth();
@@ -41,7 +42,13 @@ export async function GET(request: NextRequest, ctx: { params: { entryId: string
     .maybeSingle();
 
   const e = entry as any;
-  if (!e || e.org_id !== user.orgId || !user.employeeId || e.employee_id !== user.employeeId) {
+  if (
+    !e ||
+    e.org_id !== user.orgId ||
+    !user.employeeId ||
+    e.employee_id !== user.employeeId ||
+    e.run?.status === "draft"
+  ) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
 

@@ -243,6 +243,7 @@ describe("GET /api/mobile/leave/approvals", () => {
       department: "Sales",
       isDirectReport: true,
       balanceAfter: 17, // remaining 21−2=19, minus this 2-day request
+      policyTotalDays: 21,
       teamOverlap: null, // requester's own approved leave is not a peer collision
     });
     expect(json.historyCount).toBe(3);

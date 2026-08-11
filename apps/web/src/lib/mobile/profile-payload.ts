@@ -101,8 +101,9 @@ const emergencyContactSchema = z.object({
 
 /**
  * The ONLY fields mobile may edit: phone, personal email, emergency contact,
- * WhatsApp opt-in. Unknown keys (pan/aadhaar/firstName/dob/…) are stripped by
- * Zod — they can never reach the DB update.
+ * WhatsApp opt-in. Unknown keys (pan/aadhaar/firstName/dob/…) are REJECTED by
+ * Zod (`.strict()`) — the request fails validation, so they can never reach
+ * the DB update.
  */
 export const MobileProfileUpdateSchema = z
   .object({

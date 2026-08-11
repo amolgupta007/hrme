@@ -1,6 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   computeLeaveDays,
+  type ApplyLeaveBody,
+  type DecideLeaveBody,
   type MobileApplyLeaveResponse,
   type MobileLeaveApprovalsResponse,
   type MobileLeaveOkResponse,
@@ -10,30 +12,7 @@ import {
 import { ApiError, useApi } from "@/lib/api";
 import { homeQueryKey } from "@/lib/home";
 
-/**
- * Request body for `POST /api/mobile/leave/apply`. The BFF derives `days`
- * server-side from the date range + half-day flags (never trusts a client
- * `days`), so the client sends none — see the apply route + `computeLeaveDays`.
- *
- * NOTE (DTO gap): `@jambahr/shared/mobile/leave` exports only the RESPONSE
- * types; the request bodies live as Zod schemas web-side (`leave-payload.ts`).
- * These local mirrors are the wire contract until/unless request DTOs are
- * promoted to shared.
- */
-export type ApplyLeaveBody = {
-  policyId: string;
-  startDate: string; // YYYY-MM-DD
-  endDate: string; // YYYY-MM-DD
-  startHalfDay: boolean;
-  endHalfDay: boolean;
-  reason?: string;
-};
-
-export type DecideLeaveBody = {
-  requestId: string;
-  decision: "approve" | "reject";
-  comment?: string;
-};
+export type { ApplyLeaveBody, DecideLeaveBody };
 
 const APPLY_PATH = "/api/mobile/leave/apply";
 const CANCEL_PATH = "/api/mobile/leave/cancel";
@@ -81,12 +60,27 @@ export function leaveErrorCopy(error: unknown): string {
   }
 }
 
-/** India financial-year label for the given date, e.g. "FY 2026–27". */
+/**
+ * India financial-year label for the given date, e.g. "FY 2026–27". NOT used
+ * for the Leaves header footnote — balances aggregate by CALENDAR year (see
+ * `calendarYearLabel`), not FY. Kept for callers that need an actual FY label.
+ */
 export function financialYearLabel(now: Date = new Date()): string {
   // FY runs 1 Apr – 31 Mar. Before April, we're still in the prior FY.
   const startYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
   const end = String((startYear + 1) % 100).padStart(2, "0");
   return `FY ${startYear}–${end}`;
+}
+
+/**
+ * Calendar-year label for the given date, e.g. "2026". The Leaves header
+ * footnote uses this (not `financialYearLabel`) because balance aggregation
+ * is Jan–Dec calendar year, mirroring web's `listLeavePolicies`
+ * (`apps/web/src/actions/leaves.ts`) — a "FY" label would mislead about the
+ * window the numbers are drawn from.
+ */
+export function calendarYearLabel(now: Date = new Date()): string {
+  return String(now.getFullYear());
 }
 
 /**
@@ -277,8 +271,12 @@ export function decidedAtLabel(iso: string): string {
   return d.toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" });
 }
 
+/** Number → "1" / "1.5" (trims trailing ".0"). */
+export function daysValue(days: number): string {
+  return Number.isInteger(days) ? String(days) : days.toFixed(1);
+}
+
 /** Number → "1 day" / "1.5 days" (trims trailing ".0"). */
 export function daysLabel(days: number): string {
-  const n = Number.isInteger(days) ? String(days) : days.toFixed(1);
-  return `${n} ${days === 1 ? "day" : "days"}`;
+  return `${daysValue(days)} ${days === 1 ? "day" : "days"}`;
 }

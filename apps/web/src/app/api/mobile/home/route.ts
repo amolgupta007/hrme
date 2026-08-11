@@ -3,15 +3,23 @@ import { auth } from "@clerk/nextjs/server";
 import { getCurrentUser, isAdmin, isManagerOrAbove } from "@/lib/current-user";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { getManagerScopedEmployeeIds } from "@/lib/attendance/manager-scope";
+import { hasFeature } from "@/config/plans";
 import { istToday, type MobileHolidayLite } from "@jambahr/shared";
 import {
   buildHomePayload,
+  buildAdminHomeBlock,
   resolvePendingApprovals,
   type AnnouncementRow,
   type LeavePolicyUsage,
   type TodayRecordLite,
 } from "@/lib/mobile/home-payload";
 import { resolveActiveShift } from "@/lib/mobile/attendance-queries";
+import {
+  fetchLeaveApprovals,
+  fetchRegularizationApprovals,
+  fetchOtApprovals,
+  fetchPayrollApprovals,
+} from "@/lib/mobile/approvals-sources";
 
 export const dynamic = "force-dynamic";
 
@@ -189,6 +197,68 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // ── Admin/manager Home block — org situational awareness (Mobile D4 Task
+  // 5): today's present/absent/late mix, the unified pending-approvals badge
+  // (reuses the exact Task-3 fetchers so it matches the Approvals inbox),
+  // and the current-cycle payroll status. Best-effort: ANY sub-computation
+  // throwing drops the WHOLE block — the rest of Home must never break.
+  let adminHome: ReturnType<typeof buildAdminHomeBlock> | undefined;
+  if (isManagerOrAbove(user.role)) {
+    try {
+      const currentMonth = today.slice(0, 7);
+      const payrollFeatureEnabled = hasFeature(user.plan, "payroll", user.customFeatures);
+      const [
+        { count: activeCount },
+        { data: todayRows },
+        leaveItems,
+        regularizationItems,
+        otItems,
+        payrollItems,
+        payrollRunResult,
+      ] = await Promise.all([
+        supabase
+          .from("employees")
+          .select("id", { count: "exact", head: true })
+          .eq("org_id", user.orgId)
+          .eq("status", "active"),
+        supabase
+          .from("attendance_records")
+          .select("clock_in_at, is_late")
+          .eq("org_id", user.orgId)
+          .eq("date", today),
+        fetchLeaveApprovals(supabase, user),
+        fetchRegularizationApprovals(supabase, user),
+        isAdmin(user.role) ? fetchOtApprovals(supabase, user) : Promise.resolve([]),
+        isAdmin(user.role) ? fetchPayrollApprovals(supabase, user) : Promise.resolve([]),
+        payrollFeatureEnabled
+          ? supabase
+              .from("payroll_runs")
+              .select("month, status")
+              .eq("org_id", user.orgId)
+              .eq("month", currentMonth)
+              .maybeSingle()
+          : Promise.resolve({ data: null }),
+      ]);
+
+      adminHome = buildAdminHomeBlock({
+        totalActive: activeCount ?? 0,
+        todayRecords:
+          (todayRows as { clock_in_at: string | null; is_late: boolean | null }[] | null) ?? [],
+        pendingByType: {
+          leave: leaveItems.length,
+          regularization: regularizationItems.length,
+          ot: otItems.length,
+          payroll: payrollItems.length,
+        },
+        payrollFeatureEnabled,
+        payrollRun: (payrollRunResult as { data: { month: string; status: string } | null }).data,
+      });
+    } catch {
+      // Home payload must never fail because of the admin block.
+      adminHome = undefined;
+    }
+  }
+
   const payload = buildHomePayload({
     record: (todayRecord as TodayRecordLite) ?? null,
     shift,
@@ -200,6 +270,7 @@ export async function GET(request: NextRequest) {
     trainingsOverdue: trainingsOverdueCount ?? 0,
     announcements: ((announcementRows as any[] | null) ?? []) as AnnouncementRow[],
     unreadNotifications,
+    adminHome,
   });
 
   return NextResponse.json(payload);

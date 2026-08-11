@@ -71,6 +71,29 @@ export type MobileHomeResponse = {
   announcements: MobileAnnouncementLite[];
   /** Caller's total unread `notifications` count, for the Home bell badge. */
   unreadNotifications: number;
+  /**
+   * Org situational awareness for managers/admins (Mobile D4 Task 5): today's
+   * attendance mix, the unified pending-approvals badge (mirrors
+   * `GET /api/mobile/approvals` exactly — same fetchers), and the current
+   * payroll cycle's status. `undefined` for employees AND whenever any
+   * sub-computation throws — best-effort, the rest of Home stays intact.
+   */
+  adminHome?: {
+    today: { present: number; absent: number; late: number };
+    pendingApprovals: {
+      total: number;
+      byType: { leave: number; regularization: number; ot: number; payroll: number };
+    };
+    /**
+     * The org's current-cycle (this IST calendar month) payroll run status.
+     * `null` when the org's plan doesn't include payroll (module unavailable,
+     * distinct from `{status:'none'}` = payroll available but no run yet).
+     */
+    payroll: {
+      status: "none" | "draft" | "processing" | "awaiting_approval" | "paid";
+      month?: string;
+    } | null;
+  };
 };
 
 /** Per-day punch detail for the calendar tap-through. */

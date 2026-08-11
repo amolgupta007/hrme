@@ -13,7 +13,7 @@ import { managerIdsOf, isManagerOfEmployee } from "@/lib/managers";
 import { findOverlap, computeRemainingDays, type LeaveInterval } from "@/lib/leaves/validation";
 import { LeaveRequestEmail } from "@/components/emails/leave-request";
 import { LeaveStatusEmail } from "@/components/emails/leave-status";
-import { notifyLeaveDecision } from "@/lib/mobile/notify";
+import { notifyLeaveDecision, notifyApprovalPending } from "@/lib/mobile/notify";
 import type { ActionResult, LeavePolicy, LeaveRequest } from "@/types";
 
 // ---- Context helper ----
@@ -332,40 +332,55 @@ export async function requestLeave(
 
   if (error) return { success: false, error: error.message };
 
-  // Send email notification to managers/admins (non-blocking)
+  // Fetch data needed for both the email and push notifications below. This
+  // fetch is shared, but the email and push sends themselves run in their
+  // OWN sibling try/catch blocks (not nested) — an email failure (e.g. Resend
+  // throwing) must never suppress the push, and vice versa.
+  let notifyEmployee: { first_name: string; last_name: string; reporting_manager_id: string | null; reporting_manager_2_id: string | null } | null = null;
+  let notifyPolicy: { name: string } | null = null;
+  let notifyManagers: LeaveNotifiable[] = [];
+  const notifySupabase = createAdminSupabase();
   try {
-    const supabase = createAdminSupabase();
     const [{ data: employee }, { data: policy }, { data: managers }] = await Promise.all([
-      supabase
+      notifySupabase
         .from("employees")
         .select("first_name, last_name, reporting_manager_id, reporting_manager_2_id")
         .eq("id", validated.data.employeeId)
         .eq("org_id", ctx.orgId)
         .single(),
-      supabase
+      notifySupabase
         .from("leave_policies")
         .select("name")
         .eq("id", validated.data.policyId)
         .single(),
-      supabase
+      notifySupabase
         .from("employees")
         .select("id, role, email")
         .eq("org_id", ctx.orgId)
         .in("role", ["owner", "admin", "manager"])
         .eq("status", "active"),
     ]);
+    notifyEmployee = employee as any;
+    notifyPolicy = policy as any;
+    notifyManagers = (managers ?? []) as LeaveNotifiable[];
+  } catch {
+    // Data fetch failure must not break the core action; email/push below
+    // will just no-op since notifyEmployee/notifyPolicy/notifyManagers stay empty.
+  }
 
+  // Send email notification to managers/admins (non-blocking, independent of push)
+  try {
     // Phase 1: filter out managers/admins with no email (phone-only staff). Phase 2 will route to WhatsApp.
     const managerEmails = resolveLeaveRecipients(
-      managerIdsOf(employee as any),
-      (managers ?? []) as LeaveNotifiable[]
+      managerIdsOf(notifyEmployee as any),
+      notifyManagers
     );
-    if (managerEmails.length > 0 && employee && policy) {
-      const employeeName = `${(employee as any).first_name} ${(employee as any).last_name}`.trim();
+    if (managerEmails.length > 0 && notifyEmployee && notifyPolicy) {
+      const employeeName = `${notifyEmployee.first_name} ${notifyEmployee.last_name}`.trim();
       const html = await render(
         LeaveRequestEmail({
           employeeName,
-          leaveType: (policy as any).name,
+          leaveType: notifyPolicy.name,
           startDate: validated.data.startDate,
           endDate: validated.data.endDate,
           days: validated.data.days,
@@ -376,12 +391,43 @@ export async function requestLeave(
       await resend.emails.send({
         from: FROM_EMAIL,
         to: managerEmails,
-        subject: `Leave Request: ${employeeName} — ${(policy as any).name}`,
+        subject: `Leave Request: ${employeeName} — ${notifyPolicy.name}`,
         html,
       });
     }
   } catch {
     // Email failure must not break the core action
+  }
+
+  // Notify mobile approvers (best-effort, own try/catch — independent of the
+  // email block above; must fire even if the email send throws). Reuses the
+  // SAME recipient selection the email above uses (`resolveLeaveRecipients`'s
+  // rule: managers-of-record + admins, falling back to every manager+ when
+  // the employee has no manager set) — just projected to ids instead of
+  // emails, since push doesn't need one.
+  try {
+    const managerIdsOfEmployee = managerIdsOf(notifyEmployee as any);
+    const allManagerPlus = notifyManagers as { id: string; role: string }[];
+    const admins = allManagerPlus.filter((p) => p.role === "owner" || p.role === "admin");
+    const managersOfRecord = allManagerPlus.filter((p) => managerIdsOfEmployee.includes(p.id));
+    const chosen =
+      managerIdsOfEmployee.length > 0 ? [...managersOfRecord, ...admins] : allManagerPlus;
+    const pushRecipientIds = [...new Set(chosen.map((p) => p.id))];
+
+    if (pushRecipientIds.length > 0 && notifyEmployee) {
+      const employeeName = `${notifyEmployee.first_name} ${notifyEmployee.last_name}`.trim();
+      for (const recipientId of pushRecipientIds) {
+        await notifyApprovalPending(notifySupabase, {
+          orgId: ctx.orgId,
+          employeeId: recipientId,
+          approvalType: "leave",
+          title: "New leave request",
+          body: `${employeeName || "An employee"} requested leave`,
+        });
+      }
+    }
+  } catch {
+    // Push failure must not break the core action
   }
 
   revalidatePath("/dashboard/leaves");

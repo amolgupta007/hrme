@@ -109,6 +109,7 @@ export function buildHomePayload(input: {
   trainingsOverdue: number;
   announcements: AnnouncementRow[];
   unreadNotifications: number;
+  adminHome?: MobileHomeResponse["adminHome"];
 }): MobileHomeResponse {
   return {
     today: buildTodayStatus(input.record, input.shift),
@@ -122,5 +123,76 @@ export function buildHomePayload(input: {
     trainingsOverdue: input.trainingsOverdue,
     announcements: buildAnnouncements(input.announcements),
     unreadNotifications: input.unreadNotifications,
+    adminHome: input.adminHome,
+  };
+}
+
+// ─────────────────────────── Admin Home block (Task 5) ────────────────────────
+
+/** The subset of a today `attendance_records` row the admin block's counts need. */
+export type AdminHomeTodayRecord = {
+  clock_in_at: string | null;
+  is_late: boolean | null;
+};
+
+/**
+ * Present = has a clock-in today; absent = active headcount minus present
+ * (never negative — a stale/over-counted `totalActive` can't go below 0);
+ * late = rows flagged `is_late` (0 for orgs with the late-policy module off,
+ * since the column is never written — not an error, just an honest 0).
+ */
+export function computeAdminHomeToday(
+  totalActive: number,
+  records: AdminHomeTodayRecord[],
+): { present: number; absent: number; late: number } {
+  const present = records.filter((r) => !!r.clock_in_at).length;
+  const late = records.filter((r) => !!r.is_late).length;
+  return { present, absent: Math.max(0, totalActive - present), late };
+}
+
+export type AdminHomePayrollRun = { month: string; status: string } | null;
+
+/**
+ * Maps the org's current-cycle `payroll_runs` row to the Home payroll
+ * status. `hasPendingApproval` (Task-3 payroll-approvals count > 0, admin
+ * only) wins over the run's own `status` column — a `processed` run sitting
+ * in a disbursement batch `awaiting_approval` should read as
+ * "awaiting_approval" on Home, not "processing". No run this month → `none`.
+ */
+export function resolveAdminHomePayrollStatus(
+  run: AdminHomePayrollRun,
+  hasPendingApproval: boolean,
+): NonNullable<MobileHomeResponse["adminHome"]>["payroll"] {
+  if (!run) return { status: "none" };
+  if (hasPendingApproval) return { status: "awaiting_approval", month: run.month };
+  const status = run.status === "draft" ? "draft" : run.status === "paid" ? "paid" : "processing";
+  return { status, month: run.month };
+}
+
+/**
+ * Pure assembler for the `adminHome` block — mirrors `buildHomePayload`'s
+ * data-in/DTO-out shape so it's covered without hitting Supabase. The route
+ * fetches the raw inputs (org-wide today rows, active headcount, the 4
+ * Task-3 approval counts, the current-month payroll run) and wraps THIS call
+ * in a try/catch: any upstream throw never reaches here, so the whole
+ * `adminHome` block is dropped by the caller instead of partially built.
+ */
+export function buildAdminHomeBlock(input: {
+  totalActive: number;
+  todayRecords: AdminHomeTodayRecord[];
+  pendingByType: { leave: number; regularization: number; ot: number; payroll: number };
+  payrollFeatureEnabled: boolean;
+  payrollRun: AdminHomePayrollRun;
+}): NonNullable<MobileHomeResponse["adminHome"]> {
+  const { leave, regularization, ot, payroll } = input.pendingByType;
+  return {
+    today: computeAdminHomeToday(input.totalActive, input.todayRecords),
+    pendingApprovals: {
+      total: leave + regularization + ot + payroll,
+      byType: input.pendingByType,
+    },
+    payroll: input.payrollFeatureEnabled
+      ? resolveAdminHomePayrollStatus(input.payrollRun, payroll > 0)
+      : null,
   };
 }

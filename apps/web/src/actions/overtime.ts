@@ -15,6 +15,46 @@ import {
   DEFAULT_OT_SETTINGS,
 } from "@/lib/attendance/overtime-types";
 import type { OvertimeSettings } from "@/lib/attendance/overtime-types";
+import { notifyApprovalPending } from "@/lib/mobile/notify";
+
+/**
+ * Best-effort: page org admins that new OT records are waiting on them.
+ * Own try/catch — must never affect the compute call that already committed.
+ * Skipped by callers when `approval_required` is off (nothing to review).
+ */
+async function notifyAdminsOvertimePending(
+  sb: any,
+  orgId: string,
+  count: number,
+  callerEmployeeId?: string | null,
+): Promise<void> {
+  try {
+    const { data: admins } = await sb
+      .from("employees")
+      .select("id")
+      .eq("org_id", orgId)
+      .in("role", ["owner", "admin"])
+      .eq("status", "active");
+    const body =
+      count === 1 ? "1 overtime record is awaiting approval" : `${count} overtime records are awaiting approval`;
+    // Exclude the admin who ran compute — they don't need to be told about
+    // their own action (mirrors the maker-exclusion in disbursement.ts).
+    const recipientIds = ((admins ?? []) as { id: string }[])
+      .map((a) => a.id)
+      .filter((id) => id !== callerEmployeeId);
+    for (const recipientId of recipientIds) {
+      await notifyApprovalPending(sb, {
+        orgId,
+        employeeId: recipientId,
+        approvalType: "ot",
+        title: "Overtime to review",
+        body,
+      });
+    }
+  } catch {
+    // Push failure must not break the core action
+  }
+}
 
 
 export type OvertimeRecord = {
@@ -241,6 +281,9 @@ export async function computeAndRecordOvertime(
       if (!insErr) inserted++;
       else skipped++;
     }
+    if (settings.approval_required && inserted > 0) {
+      await notifyAdminsOvertimePending(sb, user.orgId, inserted, user.employeeId);
+    }
     revalidatePath("/dashboard/attendance");
     return { success: true, data: { inserted, skipped } };
   } else {
@@ -294,6 +337,9 @@ export async function computeAndRecordOvertime(
       if (!insErr) inserted++;
       else skipped++;
     }
+    if (settings.approval_required && inserted > 0) {
+      await notifyAdminsOvertimePending(sb, user.orgId, inserted, user.employeeId);
+    }
     revalidatePath("/dashboard/attendance");
     return { success: true, data: { inserted, skipped } };
   }
@@ -302,8 +348,11 @@ export async function computeAndRecordOvertime(
 // ---- Approve / Reject / Bulk approve ----
 // No `enabled` gate here — admins must be able to drain the queue after disabling.
 
-export async function approveOvertime(recordId: string): Promise<ActionResult<void>> {
-  const user = await getCurrentUser();
+export async function approveOvertime(
+  recordId: string,
+  orgIdHint?: string | null // mobile BFF passes X-Org-Id; web omits → cookie path (byte-identical)
+): Promise<ActionResult<void>> {
+  const user = await getCurrentUser({ orgIdHint });
   if (!user) return { success: false, error: "Not authenticated" };
   if (!isAdmin(user.role)) return { success: false, error: "Only admins can approve overtime" };
   const sb = createAdminSupabase();
@@ -326,8 +375,9 @@ export async function approveOvertime(recordId: string): Promise<ActionResult<vo
 export async function rejectOvertime(
   recordId: string,
   reason: string,
+  orgIdHint?: string | null // mobile BFF passes X-Org-Id; web omits → cookie path (byte-identical)
 ): Promise<ActionResult<void>> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ orgIdHint });
   if (!user) return { success: false, error: "Not authenticated" };
   if (!isAdmin(user.role)) return { success: false, error: "Only admins can reject overtime" };
   if (!reason.trim()) return { success: false, error: "Provide a reason" };

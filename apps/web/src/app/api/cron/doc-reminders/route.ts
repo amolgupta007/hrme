@@ -3,6 +3,7 @@ import { createAdminSupabase } from "@/lib/supabase/server";
 import { render } from "@react-email/render";
 import { resend, FROM_EMAIL } from "@/lib/resend";
 import { DocReminderEmail } from "@/components/emails/doc-reminder";
+import { notifyDocAck } from "@/lib/mobile/notify";
 
 export async function GET(req: Request) {
   // Verify Vercel Cron secret
@@ -82,6 +83,18 @@ export async function GET(req: Request) {
     for (const { employee, docs: pending } of Object.values(pendingByEmployee)) {
       if (pending.length === 0) continue;
       // Phase 1: skip phone-only employees (no email). Phase 2 will route to WhatsApp.
+      // Notify mobile for every reminded employee — incl. phone-only (best-effort, never blocks the cron)
+      try {
+        const docTitle = pending.length === 1 ? pending[0].name : `${pending.length} documents`;
+        await notifyDocAck(supabase, {
+          orgId: employee.org_id,
+          employeeId: employee.id,
+          docTitle,
+        });
+      } catch {
+        // Push/notification failure must not break the cron
+      }
+
       const to = employee.email?.trim();
       if (!to) continue;
       try {

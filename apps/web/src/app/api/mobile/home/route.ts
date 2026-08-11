@@ -172,6 +172,23 @@ export async function GET(request: NextRequest) {
     .order("created_at", { ascending: false })
     .limit(3);
 
+  // ── Unread notifications (bell badge) — best-effort, never breaks Home. ───
+  let unreadNotifications = 0;
+  if (employeeId) {
+    try {
+      const { count } = await supabase
+        .from("notifications")
+        .select("id", { count: "exact", head: true })
+        .eq("org_id", user.orgId)
+        .eq("employee_id", employeeId)
+        .is("read_at", null);
+      unreadNotifications = count ?? 0;
+    } catch {
+      // Home payload must never fail because of the notifications count.
+      unreadNotifications = 0;
+    }
+  }
+
   const payload = buildHomePayload({
     record: (todayRecord as TodayRecordLite) ?? null,
     shift,
@@ -182,6 +199,7 @@ export async function GET(request: NextRequest) {
     pendingApprovals: resolvePendingApprovals(isManagerOrAbove(user.role), pendingApprovalsRaw),
     trainingsOverdue: trainingsOverdueCount ?? 0,
     announcements: ((announcementRows as any[] | null) ?? []) as AnnouncementRow[],
+    unreadNotifications,
   });
 
   return NextResponse.json(payload);

@@ -14,6 +14,7 @@ import type { PenaltyBand } from "@/lib/attendance/late-penalty-bands";
 import { resolveCoveredEmployeeIds } from "@/lib/attendance/late-policy-targets";
 import { resend, FROM_EMAIL } from "@/lib/resend";
 import { PayslipEmail } from "@/components/emails/payslip";
+import { notifyPayslipPaid } from "@/lib/mobile/notify";
 import type { ActionResult } from "@/types";
 
 // ---- Types ----
@@ -852,6 +853,15 @@ export async function sendPayslipEmail(runId: string): Promise<ActionResult<{ se
 
   const { data: org } = await sb.from("organizations").select("name").eq("id", user.orgId).single();
   const orgName = (org as any)?.name ?? "Your employer";
+  // Mirrors the monthLabel formatting already used by the payslip email template
+  // (src/components/emails/payslip.tsx) — kept as a local copy since that helper
+  // isn't exported.
+  const monthLabel = (() => {
+    const m = (run as any).month as string;
+    const [y, mm] = m.split("-");
+    const d = new Date(Number(y), Number(mm) - 1, 1);
+    return isNaN(d.getTime()) ? m : d.toLocaleString("en-IN", { month: "long", year: "numeric" });
+  })();
 
   const { data: entries } = await sb
     .from("payroll_entries")
@@ -914,6 +924,17 @@ export async function sendPayslipEmail(runId: string): Promise<ActionResult<{ se
         resend_message_id: sendResult.data?.id ?? null,
       } as any, { onConflict: "payroll_entry_id,channel" });
       if (sendResult.error) failed++; else sent++;
+
+      // Notify mobile (best-effort, never blocks payslip delivery bookkeeping)
+      try {
+        await notifyPayslipPaid(sb, {
+          orgId: user.orgId,
+          employeeId: ent.employee_id,
+          monthLabel,
+        });
+      } catch {
+        // Push/notification failure must not break the core action
+      }
     } catch (err: any) {
       await sb.from("payslip_deliveries").upsert({
         org_id: user.orgId,

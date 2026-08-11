@@ -32,10 +32,11 @@ export function AnnouncementsCard({
   announcements,
   onSeeAll,
 }: {
-  announcements: MobileAnnouncementLite[];
+  announcements?: MobileAnnouncementLite[];
   onSeeAll?: () => void;
 }) {
-  if (announcements.length === 0) return null;
+  // Tolerate a missing field (e.g. an older BFF payload) — never crash Home.
+  if (!announcements || announcements.length === 0) return null;
 
   return (
     <View>

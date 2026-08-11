@@ -44,6 +44,12 @@
       "expo-web-browser",
       "expo-notifications",
       [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Confirm it's you to approve payroll."
+        }
+      ],
+      [
         "@sentry/react-native/expo",
         {
           "organization": "jambahr",

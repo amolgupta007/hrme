@@ -225,7 +225,11 @@ See `PAYROLL_AUDIT.md` for the per-finding closure log and `docs/payroll-overhau
   - `apps/mobile/metro.config.js` has a **load-bearing** `resolveRequest` pinning
     `react-native-css-interop` to a single instance (npm can't hoist it past the web app's
     React 18; two copies silently no-op NativeWind styles on device). **Do not modify this
-    file** without understanding why it's there.
+    file** without understanding why it's there. It also carries a `resolver.blockList` (added
+    2026-08-12, commit `dfbf180`) that excludes `apps/web/**` + web-only root packages
+    (`@dnd-kit`, `recharts`, `next`, `@react-pdf`, mapbox) from Metro's crawl/watch — Windows has
+    no Watchman, so Metro's Node `fs.watch` fallback crashes (`UNKNOWN`, errno `-4094`) trying to
+    watch those deep web-only trees. Add new web-only deps to that array if the crash recurs.
   - `apps/mobile/eslint.config.js` is a **manual port** of `eslint-config-expo/flat/default.js`
     (the stock config's `require('eslint/config')` resolves the monorepo root's ESLint 8 and
     crashes). Re-sync it by hand if upstream `eslint-config-expo` changes.

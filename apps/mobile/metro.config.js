@@ -25,4 +25,22 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
   return context.resolveRequest(context, moduleName, platform);
 };
 
+// Windows has no Watchman, so Metro falls back to Node fs.watch and recursively
+// watches the WHOLE monorepo node_modules — including the web app's heavy deps
+// (@dnd-kit, recharts, next, @react-pdf, mapbox). On Windows fs.watch throws
+// `UNKNOWN: watch` (errno -4094) crawling those deep trees. The mobile app never
+// imports any of them, so exclude the web workspace + web-only packages from
+// Metro's crawl/watch. Purely a watch-scope reduction — does not affect the
+// css-interop resolution pin above.
+config.resolver.blockList = [
+  /[/\\]apps[/\\]web[/\\].*/,
+  /[/\\]node_modules[/\\]@dnd-kit[/\\].*/,
+  /[/\\]node_modules[/\\]recharts[/\\].*/,
+  /[/\\]node_modules[/\\]@react-pdf[/\\].*/,
+  /[/\\]node_modules[/\\]next[/\\].*/,
+  /[/\\]node_modules[/\\]mapbox-gl[/\\].*/,
+  /[/\\]node_modules[/\\]react-map-gl[/\\].*/,
+  /[/\\]node_modules[/\\]@mapbox[/\\].*/,
+];
+
 module.exports = withNativeWind(config, { input: "./global.css" });

@@ -27,7 +27,7 @@ export default function Index() {
         <Text className="mt-2 text-center text-sm text-muted-foreground">
           Ask your admin to add you in JambaHR, then sign in again.
         </Text>
-        <Pressable className="mt-6" onPress={() => void signOut()}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Sign out" className="mt-6" onPress={() => void signOut()}>
           <Text className="font-semibold text-primary">Sign out</Text>
         </Pressable>
       </View>
@@ -46,7 +46,7 @@ export default function Index() {
         <Text className="mt-2 text-center text-sm text-muted-foreground">
           Sign out and sign back in to continue.
         </Text>
-        <Pressable className="mt-6" onPress={() => void signOut()}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Sign out" className="mt-6" onPress={() => void signOut()}>
           <Text className="font-semibold text-primary">Sign out</Text>
         </Pressable>
       </View>
@@ -59,7 +59,7 @@ export default function Index() {
         <Text className="text-center text-sm text-muted-foreground">
           Couldn&apos;t reach JambaHR. Check your connection.
         </Text>
-        <Pressable className="mt-6" onPress={() => void refresh()}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Retry" className="mt-6" onPress={() => void refresh()}>
           <Text className="font-semibold text-primary">Retry</Text>
         </Pressable>
       </View>

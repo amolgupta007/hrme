@@ -1,6 +1,7 @@
 import { Modal, Pressable, ScrollView, Text, View } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { selectionFeedback } from "@/lib/haptics";
+import { useStrings } from "@/lib/i18n";
 
 /**
  * DPDP notice shown once, before the OS location prompt (Mobile D5).
@@ -30,6 +31,8 @@ export function LocationConsentSheet({
   onContinue: () => void;
   onClose: () => void;
 }) {
+  const t = useStrings();
+  const copy = t.location.consent;
   const org = orgName?.trim() || "your organisation";
 
   return (
@@ -44,29 +47,27 @@ export function LocationConsentSheet({
             </View>
 
             <Text className="text-[22px] font-bold leading-7 text-ink-900">
-              Location at clock-in
+              {copy.title}
             </Text>
             <Text className="mt-2 text-[15px] leading-6 text-ink-600">
-              {org} has turned on location-verified clock-in. When you punch in or out,
-              JambaHR reads your location once and records whether you were at one of{" "}
-              {org}&apos;s offices.
+              {copy.intro(org)}
             </Text>
 
             <View className="mt-4 gap-3 rounded-2xl bg-canvas p-4">
               <Point
                 icon="time-outline"
-                title="Only at the moment you punch"
-                body="Nothing is read while the app is in the background or closed. There is no continuous trail."
+                title={copy.points.whenTitle}
+                body={copy.points.whenBody}
               />
               <Point
                 icon="business-outline"
-                title="What your employer sees"
-                body="Either the office you punched from, or that you were remote and the general area — for example “Andheri East, Mumbai”. Never your exact address."
+                title={copy.points.employerTitle}
+                body={copy.points.employerBody}
               />
               <Point
                 icon="lock-closed-outline"
-                title="You stay in control"
-                body="You can turn location off for JambaHR at any time in your device Settings."
+                title={copy.points.controlTitle}
+                body={copy.points.controlBody}
               />
             </View>
 
@@ -74,14 +75,12 @@ export function LocationConsentSheet({
               <View className="mt-4 flex-row items-start rounded-2xl bg-warning-tint p-3">
                 <Ionicons name="alert-circle-outline" size={18} color="#92400E" />
                 <Text className="ml-2 flex-1 text-[13px] leading-5 text-warning-ontint">
-                  {org} requires a location to clock in. Without it, your punch won&apos;t be
-                  recorded — speak to your admin if you can&apos;t share it.
+                  {copy.requiredWarning(org)}
                 </Text>
               </View>
             ) : (
               <Text className="mt-4 text-[13px] leading-5 text-ink-600">
-                If you decline, your punches are still recorded — they just won&apos;t carry a
-                location.
+                {copy.optionalNote}
               </Text>
             )}
           </ScrollView>
@@ -89,22 +88,22 @@ export function LocationConsentSheet({
           <View className="mt-4 gap-2 px-5">
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Continue and choose location permission"
+              accessibilityLabel={copy.continueA11y}
               onPress={() => {
                 selectionFeedback();
                 onContinue();
               }}
               className="h-12 flex-row items-center justify-center rounded-xl bg-brand active:bg-brand-pressed"
             >
-              <Text className="text-[15px] font-semibold text-white">Continue</Text>
+              <Text className="text-[15px] font-semibold text-white">{t.common.continue}</Text>
             </Pressable>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Not now"
+              accessibilityLabel={t.common.notNow}
               onPress={onClose}
               className="h-12 items-center justify-center rounded-xl active:bg-canvas"
             >
-              <Text className="text-[15px] font-medium text-ink-600">Not now</Text>
+              <Text className="text-[15px] font-medium text-ink-600">{t.common.notNow}</Text>
             </Pressable>
           </View>
         </View>

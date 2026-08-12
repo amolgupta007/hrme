@@ -6,6 +6,7 @@ import type { MobileAttendanceDayDetail } from "@jambahr/shared/mobile/types";
 import { istToday } from "@jambahr/shared/attendance/ist";
 import { STATE_META } from "@/components/attendance/state-legend";
 import { RegularizeForm } from "@/components/attendance/regularize-form";
+import { strings } from "@/lib/i18n";
 
 /** Reliable monospace family for the hours readout (design: money/duration mono). */
 const MONO = Platform.select({ ios: "Menlo", default: "monospace" });
@@ -118,10 +119,16 @@ export function DayDetailSheet({
         className="flex-1"
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-      <Pressable className="flex-1 justify-end bg-black/40" onPress={close}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Close"
+        className="flex-1 justify-end bg-black/40"
+        onPress={close}
+      >
         {/* Stop propagation so taps inside the card don't dismiss. */}
         <Pressable
           onPress={() => {}}
+          accessible={false}
           className="rounded-t-2xl border border-line bg-surface px-4 pb-8 pt-2"
         >
           {/* Grabber */}
@@ -235,10 +242,10 @@ export function DayDetailSheet({
                       />
                       <Text className="ml-1.5 flex-1 text-[13px] text-ink-600" numberOfLines={1}>
                         {g.status === "office"
-                          ? (g.siteName ?? "At office")
+                          ? (g.siteName ?? strings.location.chip.atOffice)
                           : g.label
-                            ? `Remote · ${g.label}`
-                            : "Remote"}
+                            ? strings.location.chip.remoteAt(g.label)
+                            : strings.location.chip.remote}
                       </Text>
                     </View>
                   ))}

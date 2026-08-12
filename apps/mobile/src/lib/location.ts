@@ -1,4 +1,5 @@
 import { createAppStorage } from "@/lib/storage";
+import { strings } from "@/lib/i18n";
 
 /**
  * Location capture for Location-verified clock-in (Mobile D5).
@@ -187,20 +188,21 @@ export function markLocationNoticeSeen(namespace: string): void {
 
 /** User-facing copy for each non-`ok` outcome. */
 export function locationOutcomeMessage(outcome: LocationOutcome, blocking: boolean): string {
+  const copy = strings.location;
   const suffix = blocking
-    ? " Your organisation requires location to clock in."
-    : " Your punch was recorded without a location.";
+    ? copy.outcomeSuffix.blocking
+    : copy.outcomeSuffix.nonBlocking;
 
   switch (outcome) {
     case "denied":
-      return `Location permission is off. Turn it on for JambaHR in your device Settings.${suffix}`;
+      return `${copy.outcome.denied}${suffix}`;
     case "services_off":
-      return `Location services are switched off on this device.${suffix}`;
+      return `${copy.outcome.servicesOff}${suffix}`;
     case "timeout":
-      return `Couldn't get a location fix — try moving near a window.${suffix}`;
+      return `${copy.outcome.timeout}${suffix}`;
     case "unavailable":
-      return `This app version can't read location. Ask your admin for an updated build.${suffix}`;
+      return `${copy.outcome.unavailable}${suffix}`;
     default:
-      return `Couldn't read your location.${suffix}`;
+      return `${copy.outcome.error}${suffix}`;
   }
 }

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import type { MobilePunchGeo, MobileTodayStatus } from "@jambahr/shared/mobile/types";
+import { strings } from "@/lib/i18n";
 
 /**
  * Where the last punch was resolved to (Mobile D5). Rendered only when the
@@ -12,15 +13,16 @@ import type { MobilePunchGeo, MobileTodayStatus } from "@jambahr/shared/mobile/t
  * about the employee. Amber/red here would read as an accusation.
  */
 function GeoChip({ geo }: { geo: MobilePunchGeo }) {
+  const copy = strings.location.chip;
   const atOffice = geo.status === "office";
   const label = atOffice
-    ? (geo.siteName ?? "At office")
+    ? (geo.siteName ?? copy.atOffice)
     : geo.label
-      ? `Remote · ${geo.label}`
-      : "Remote";
+      ? copy.remoteAt(geo.label)
+      : copy.remote;
 
   return (
-    <View className="mt-2 flex-row items-center" accessibilityLabel={`Last punch: ${label}`}>
+    <View className="mt-2 flex-row items-center" accessibilityLabel={copy.lastPunchA11y(label)}>
       <Ionicons
         name={atOffice ? "business-outline" : "location-outline"}
         size={13}
@@ -158,7 +160,10 @@ export function TodayCard({
           deeper in the tree — standard RN nested-touchable behavior. */}
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={today.isClockedIn ? "Punch out" : "Punch in"}
+        accessibilityLabel={today.isClockedIn ? strings.punch.out : strings.punch.in}
+        // Announces "busy" instead of leaving a screen-reader user tapping a
+        // button that silently does nothing while the punch is in flight.
+        accessibilityState={{ disabled: isPunching, busy: isPunching }}
         disabled={isPunching}
         onPress={onPunch}
         className={`mt-3 h-11 flex-row items-center justify-center rounded-xl active:bg-brand-pressed ${
@@ -175,7 +180,7 @@ export function TodayCard({
               color="#FFFFFF"
             />
             <Text className="ml-2 text-[15px] font-semibold text-white">
-              {today.isClockedIn ? "Punch out" : "Punch in"}
+              {today.isClockedIn ? strings.punch.out : strings.punch.in}
             </Text>
           </>
         )}

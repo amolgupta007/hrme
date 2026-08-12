@@ -8,6 +8,9 @@ import * as Notifications from "expo-notifications";
 import { QueryProvider } from "@/lib/query";
 import { SessionProvider } from "@/lib/session";
 import { routeForNotificationType } from "@/lib/notifications";
+import { useAppConfig } from "@/lib/app-config";
+import { UpdateRequiredScreen } from "@/components/update-required-screen";
+import { markColdStartInteractive } from "@/lib/startup";
 
 /**
  * Root Stack (Slice 2 Task 5). Previously a bare `<Slot />` — promoted to a
@@ -18,6 +21,13 @@ import { routeForNotificationType } from "@/lib/notifications";
  */
 function RootLayout() {
   const router = useRouter();
+  const { blocked, config, version } = useAppConfig();
+
+  // Cold-start budget instrumentation (PRD-04 §4: interactive Home < 2s).
+  // Fires once, on the first committed render of the root navigator.
+  useEffect(() => {
+    markColdStartInteractive();
+  }, []);
 
   // Push-tap routing (D3 Stage D). Reads the notification's `data.type`
   // (set by notify() in apps/web/src/lib/mobile/notify.ts) and deep-links.
@@ -36,6 +46,12 @@ function RootLayout() {
     const sub = Notifications.addNotificationResponseReceivedListener(routeFromResponse);
     return () => sub.remove();
   }, [router]);
+
+  // Rendered OUTSIDE the providers: a build this old may not be able to talk to
+  // the BFF at all, so there is no point mounting auth/query/session behind it.
+  if (blocked) {
+    return <UpdateRequiredScreen config={config} version={version} />;
+  }
 
   return (
     <ClerkProvider

@@ -174,6 +174,11 @@ function SubmitButton({
 }) {
   return (
     <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      // Announces "dimmed"/"busy" rather than leaving a screen-reader user
+      // tapping a button that silently does nothing mid-request.
+      accessibilityState={{ disabled: disabled === true || busy, busy }}
       className={`mt-4 items-center rounded-lg bg-primary py-3 ${disabled === true || busy ? "opacity-50" : ""}`}
       disabled={disabled === true || busy}
       onPress={onPress}

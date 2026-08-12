@@ -14,6 +14,7 @@ import { attendanceMonthQueryKey, currentIstMonth } from "@/lib/attendance";
 import { createOfflineQueue, type QueuedPunch } from "@/lib/offline-queue";
 import { acquireLocation, locationOutcomeMessage } from "@/lib/location";
 import { punchFeedback } from "@/lib/haptics";
+import { strings } from "@/lib/i18n";
 
 const PUNCH_PATH = "/api/mobile/attendance/punch";
 
@@ -22,7 +23,7 @@ const DRAIN_FAILURE_BANNER_THRESHOLD = 3;
 
 /**
  * A 4xx from the BFF is *usually* a deterministic rejection (bad body, clock
- * skew, attendance disabled, inactive employee) — replaying the same punch
+ * skew, attendance disabled, inactive employee) â€” replaying the same punch
  * will always fail, so `onError` surfaces it immediately. A network error or
  * a 5xx is transient: the punch is queued (idempotent on `clientEventId`)
  * and replayed on reconnect/foreground.
@@ -32,11 +33,11 @@ function is4xx(error: unknown): error is ApiError {
 }
 
 /**
- * Whether a 4xx should be treated as *permanent* — dropped from the offline
+ * Whether a 4xx should be treated as *permanent* â€” dropped from the offline
  * queue and never retried. Excludes 401: an expired/refreshing Clerk token
  * is a transient condition (a fresh token on the next attempt can succeed),
  * not a rejection of the punch itself, so a 401'd punch must stay queued and
- * be retried exactly like a network error or a 5xx — same as `is4xx` in
+ * be retried exactly like a network error or a 5xx â€” same as `is4xx` in
  * every other case, just carved out for 401.
  */
 function isPermanentRejection(error: unknown): boolean {
@@ -48,18 +49,18 @@ function punchErrorCopy(error: unknown): string {
   const code = error instanceof ApiError ? error.code : "network_error";
   switch (code) {
     case "clock_skew":
-      return "Your device clock looks off. Fix the time and try again.";
+      return strings.punch.errors.clockSkew;
     case "attendance_disabled":
-      return "Attendance isn't enabled for your organization.";
+      return strings.punch.errors.attendanceDisabled;
     case "inactive_employee":
     case "no_employee":
-      return "Your employee record isn't active. Contact your admin.";
+      return strings.punch.errors.inactiveEmployee;
     case "no_membership":
-      return "You're not a member of this organization.";
+      return strings.punch.errors.noMembership;
     case "location_required":
-      return "Your organisation requires a location to clock in. Turn on location for JambaHR in Settings and try again.";
+      return strings.punch.errors.locationRequired;
     default:
-      return "Couldn't record your punch. Please try again.";
+      return strings.punch.errors.generic;
   }
 }
 
@@ -81,8 +82,8 @@ type PunchContext = { previous: MobileHomeResponse | undefined };
  * Optimistic flow: `onMutate` cancels the Home query, snapshots it, and flips
  * `today` locally. On success the server's fresh `today` overwrites the cache.
  * On a 4xx it rolls back + surfaces `punchError`. On a network/5xx error it
- * enqueues `{clientEventId, punchedAt, …}` (frozen at tap time) and keeps the
- * optimistic state — the drain replays exactly those bytes.
+ * enqueues `{clientEventId, punchedAt, â€¦}` (frozen at tap time) and keeps the
+ * optimistic state â€” the drain replays exactly those bytes.
  */
 export function usePunch({
   namespace,
@@ -107,7 +108,7 @@ export function usePunch({
   const draining = useRef(false);
   /**
    * clientEventIds whose FIRST (immediate, at-tap) POST is still in flight.
-   * A punch is enqueued BEFORE its POST (durability — see `punch()`), so the
+   * A punch is enqueued BEFORE its POST (durability â€” see `punch()`), so the
    * entry exists in the queue during its own request; the drain filters these
    * out so a reconnect/foreground trigger can never double-send an in-flight
    * punch, and the Syncing badge doesn't flicker on every successful online
@@ -125,7 +126,7 @@ export function usePunch({
 
   // Re-sync the badge to the NEW queue when the identity changes (queue is
   // memoized on `namespace`). React's sanctioned "adjust state during render on
-  // a changed dependency" pattern — avoids a setState-in-effect and applies the
+  // a changed dependency" pattern â€” avoids a setState-in-effect and applies the
   // reset before paint.
   const [trackedQueue, setTrackedQueue] = useState(queue);
   if (trackedQueue !== queue) {
@@ -137,7 +138,7 @@ export function usePunch({
   const key = homeQueryKey(orgId);
 
   /**
-   * A recorded punch changes today's attendance day — nudge the current IST
+   * A recorded punch changes today's attendance day â€” nudge the current IST
    * month's calendar query so a mounted Attendance screen reflects it. Cheap
    * and guarded to exactly one key (the live month); no-op when that query
    * isn't cached/mounted. Past months never change from a punch, so they're
@@ -159,7 +160,7 @@ export function usePunch({
     onMutate: async (vars) => {
       // NOTE: deliberately does NOT clear `punchError` here. `punch()` clears it
       // at the top and may then set a *location* warning ("recorded without a
-      // location") that must survive into the mutation — clearing here would
+      // location") that must survive into the mutation â€” clearing here would
       // wipe the very message we just raised.
       await queryClient.cancelQueries({ queryKey: key });
       const previous = queryClient.getQueryData<MobileHomeResponse>(key);
@@ -194,7 +195,7 @@ export function usePunch({
   /**
    * Drain the queue oldest-first. Guarded so a NetInfo-reconnect and an
    * AppState-foreground firing together can't run two drains concurrently
-   * (which would double-POST — harmless on the server thanks to idempotency,
+   * (which would double-POST â€” harmless on the server thanks to idempotency,
    * but wasteful and could double-remove). Stops at the first transient
    * failure (network, 5xx, or 401) and retries on the next trigger; drops
    * only permanently-rejected (non-401) 4xx items.
@@ -203,7 +204,7 @@ export function usePunch({
     if (draining.current) return;
     draining.current = true;
     try {
-      // Skip entries whose first (at-tap) POST is still in flight — replaying
+      // Skip entries whose first (at-tap) POST is still in flight â€” replaying
       // one now would double-send it (harmless server-side via clientEventId
       // dedupe, but wasteful and it could race the immediate handler's
       // remove-on-success).
@@ -222,7 +223,7 @@ export function usePunch({
             PUNCH_PATH,
             {
               method: "POST",
-              // Replays the frozen bytes verbatim, coordinates included — the
+              // Replays the frozen bytes verbatim, coordinates included â€” the
               // location where the punch happened, not where the phone is now.
               body: JSON.stringify({
                 clientEventId: item.clientEventId,
@@ -241,12 +242,12 @@ export function usePunch({
           invalidateCurrentMonth();
         } catch (error) {
           if (isPermanentRejection(error)) {
-            // Deterministic rejection (e.g. a punch queued > 24h → clock_skew):
+            // Deterministic rejection (e.g. a punch queued > 24h â†’ clock_skew):
             // drop it, surface, and keep draining the rest.
             queue.remove(item.clientEventId);
             setPunchError(punchErrorCopy(error));
           } else {
-            // Still offline / server transient / 401 token blip — stop;
+            // Still offline / server transient / 401 token blip â€” stop;
             // retry on next trigger. The entry stays queued.
             transientFailure = true;
             break;
@@ -276,9 +277,9 @@ export function usePunch({
   }, [drain]);
 
   // Kick a drain pass on mount and whenever the active org changes. The org
-  // switch case (same identity → same queue instance, so the render-adjust
+  // switch case (same identity â†’ same queue instance, so the render-adjust
   // above doesn't fire) matters because `query.tsx` wipes this identity's
-  // queue store in ITS effect — the setTimeout defers past that wipe, and the
+  // queue store in ITS effect â€” the setTimeout defers past that wipe, and the
   // drain's empty-queue branch then resets queueCount + drainFailures, so no
   // stale "Syncing" badge survives an org switch. On mount it also replays any
   // punches left over from a previous app run without waiting for a
@@ -290,13 +291,13 @@ export function usePunch({
 
   /**
    * Tap handler. Mints the clientEventId + punchedAt ONCE, here, freezes them,
-   * and enqueues BEFORE attempting the POST — so a process kill mid-request
+   * and enqueues BEFORE attempting the POST â€” so a process kill mid-request
    * can never lose the punch (on relaunch the entry is still in MMKV and the
    * mount/reconnect drain replays it; if the killed request had actually
-   * reached the server, the replay is deduped on clientEventId → idempotent
+   * reached the server, the replay is deduped on clientEventId â†’ idempotent
    * SUCCESS). The entry is removed on success or on a permanent (non-401)
    * 4xx rejection; it stays queued for network/5xx failures and for a 401
-   * (transient token blip — never permanently rejected).
+   * (transient token blip â€” never permanently rejected).
    */
   const punch = useCallback(async () => {
     setPunchError(null);
@@ -315,7 +316,7 @@ export function usePunch({
         const blocking = locationPunch.mode === "required";
         setPunchError(locationOutcomeMessage(fix.outcome, blocking));
         // `required` mode: stop here rather than enqueueing a punch the server
-        // is certain to reject — a queued 400 would just churn the drain loop.
+        // is certain to reject â€” a queued 400 would just churn the drain loop.
         if (blocking) return;
       }
     }
@@ -338,11 +339,11 @@ export function usePunch({
     } catch (error) {
       if (isPermanentRejection(error)) {
         // Deterministic rejection (already rolled back + surfaced in onError)
-        // — must never be retried, so drop it from the queue.
+        // â€” must never be retried, so drop it from the queue.
         queue.remove(vars.clientEventId);
       }
       // Network / 5xx / 401: leave the frozen entry queued for the drain.
-      // (A 401 is still surfaced to the user via `onError` above — that's
+      // (A 401 is still surfaced to the user via `onError` above â€” that's
       // just user feedback; the underlying token blip is transient, so the
       // punch itself must stay queued and retried, same reasoning as the
       // drain loop.)

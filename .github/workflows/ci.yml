@@ -17,3 +17,54 @@ jobs:
       - run: npm ci
       - run: npx turbo lint test
       - run: npx turbo typecheck --filter=@jambahr/shared --filter=@jambahr/supabase --filter=mobile
+
+  # Validates the Expo config actually resolves (PRD-05 §1) — every config
+  # plugin loads, required-reason API declarations parse, and the Info.plist
+  # permission strings are present. Cheap, and it catches an app.json mistake
+  # at PR time instead of 20 minutes into an EAS build.
+  mobile-config:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: changes
+        name: Detect apps/mobile changes
+        run: |
+          BASE="${{ github.event.pull_request.base.sha }}"
+          if git diff --name-only "$BASE"...HEAD | grep -qE '^(apps/mobile/|packages/)'; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-node@v4
+        if: steps.changes.outputs.run == 'true'
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+        if: steps.changes.outputs.run == 'true'
+      - name: Introspect Expo config
+        if: steps.changes.outputs.run == 'true'
+        working-directory: apps/mobile
+        run: npx expo config --type introspect > /dev/null
+
+      # The Maestro smoke flow needs a booted simulator/emulator with an
+      # installed build, which GitHub-hosted runners can't provide without a
+      # long Android emulator boot on every PR. Lint the flow syntax here so a
+      # malformed YAML is caught, and run the flow itself against a real
+      # device/emulator before each release (see docs/mobile-release/).
+      # Maestro flows are multi-document YAML (config, then `---`, then steps),
+      # so this must use safe_load_ALL — a single-document parser reports a
+      # valid flow as broken.
+      - name: Validate Maestro flow syntax
+        if: steps.changes.outputs.run == 'true'
+        run: |
+          python3 - <<'PY'
+          import glob, sys, yaml
+          for path in sorted(glob.glob("apps/mobile/.maestro/*.yaml")):
+              with open(path) as handle:
+                  list(yaml.safe_load_all(handle))
+              print(f"ok {path}")
+          PY

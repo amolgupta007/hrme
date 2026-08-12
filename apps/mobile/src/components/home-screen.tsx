@@ -150,7 +150,7 @@ export function HomeScreen({ isAdmin = false }: { isAdmin?: boolean }) {
               trainingsOverdue={data.trainingsOverdue}
               leaveRequests={data.pending.leaveRequests}
               regularizations={data.pending.regularizations}
-              onApprovalsPress={() => router.push("/(tabs)/leaves?segment=approvals")}
+              onApprovalsPress={() => router.push("/approvals")}
             />
 
             <AnnouncementsCard announcements={data.announcements} onSeeAll={stub} />

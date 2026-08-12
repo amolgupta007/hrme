@@ -30,4 +30,5 @@ export * from "./mobile/notifications";
 export * from "./mobile/approvals";
 export * from "./mobile/reports";
 export * from "./mobile/app-config";
+export * from "./mobile/push-channels";
 export * from "./leaves/compute-days";

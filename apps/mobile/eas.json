@@ -16,6 +16,9 @@
       "distribution": "internal",
       "environment": "preview",
       "channel": "preview",
+      "android": {
+        "buildType": "apk"
+      },
       "env": {
         "SENTRY_DISABLE_AUTO_UPLOAD": "true"
       }
@@ -24,6 +27,9 @@
       "environment": "production",
       "channel": "production",
       "autoIncrement": true,
+      "android": {
+        "buildType": "app-bundle"
+      },
       "env": {
         "SENTRY_DISABLE_AUTO_UPLOAD": "true"
       }

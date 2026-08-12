@@ -267,11 +267,32 @@ See `PAYROLL_AUDIT.md` for the per-finding closure log and `docs/payroll-overhau
     `MOBILE_MIN_VERSION`. It **fails open** everywhere; leave `MOBILE_MIN_VERSION` unset unless
     you genuinely need to block a build, because setting it wrongly locks people out of
     clocking in.
+  - **Android push needs a notification channel or it is silently degraded.** Channel ids +
+    importances live in `@jambahr/shared/mobile/push-channels` because BOTH sides name them:
+    the client creates them (`push.ts`, at module load — a notification can arrive before any
+    screen mounts) and the server sends a matching `channelId` + FCM `priority`. A drift
+    delivers on Android's default-importance fallback — no banner, no sound, nothing in the
+    logs. Channel settings are **immutable on-device once created**, so changing an importance
+    means shipping a new id (hence the `_v1` suffixes), never editing the existing one.
+  - **Android FCM is wired conditionally** via `apps/mobile/app.config.js`:
+    `android.googleServicesFile` is only set when `google-services.json` exists (locally, or
+    materialised by the EAS `GOOGLE_SERVICES_JSON` file secret). Declaring it statically in
+    `app.json` would break `expo start`, `prebuild` and the CI config-introspection job for
+    anyone without the credential. Missing file ⇒ Android build succeeds with no remote push.
+  - **Location is declared PRECISE on both stores**, not coarse. A 200m office geofence can't
+    be resolved from Android's `ACCESS_COARSE_LOCATION` (~1–3 km), and Apple counts ≥3 decimal
+    places as precise. Only a coarse derivative (office name / locality) is *retained* — say
+    that in listings, but never downgrade the declaration. Android 12+ users who pick
+    "Approximate only" resolve to **remote**, never a false "at office" (fail-safe).
+  - `android.edgeToEdgeEnabled` is **not configurable** in SDK 57 (Android 16 makes it
+    mandatory; Expo warns if you set it). Content draws under the system bars, so the root
+    layout pins `<StatusBar style="dark" />` — without it the icons vanish on light surfaces.
   - **Release runbook**: `docs/mobile-release/` — `00-release-runbook.md` (the sequence),
     `01-app-review-notes.md` (paste into App Store Connect; read its sign-in warning — a fixed
     Clerk test code does NOT work against production), `02-privacy-labels.md` (both stores'
     privacy forms + the required-reason API table), `03-dpdp-and-privacy-copy.md` (policy text
-    and the claims it commits the product to).
+    and the claims it commits the product to), `04-play-console.md` (the whole Android path —
+    FCM, tracks, Data Safety, and the device checks CI can't do).
 
 ### Mobile Phase D — Slice 2 (Leave + Payslips + Profile + 5-tab IA) — feat/mobile-d2 (2026-08-11, awaiting device pass)
 - Plan: `docs/superpowers/plans/2026-08-10-mobile-phase-d-slice2.md`. Design (hi-fi 2a/2b/2c): `docs/design/mobile/mobile-design-spec.md`.

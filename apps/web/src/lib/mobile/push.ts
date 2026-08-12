@@ -1,3 +1,8 @@
+import {
+  channelForNotificationType,
+  pushPriorityForChannel,
+} from "@jambahr/shared/mobile/push-channels";
+
 // Plain module — NOT "use server". Touches a secret-free but PII-adjacent
 // endpoint (Expo push tokens) and must never become a browser-callable RPC
 // (mirrors gotcha #85: secret/PII helpers stay out of "use server" files).
@@ -13,6 +18,25 @@ export interface PushMessage {
   title: string;
   body: string;
   data?: Record<string, unknown>;
+}
+
+/**
+ * Build the Android routing fields for one message.
+ *
+ * `channelId` MUST match a channel the app created on the device (see
+ * `@jambahr/shared/mobile/push-channels`) — a mismatch is delivered silently on
+ * a default-importance fallback channel with no banner and no sound, and
+ * nothing in our logs would show it. `priority: 'high'` is what wakes a dozing
+ * device; without it an approval can sit until the next maintenance window.
+ *
+ * iOS ignores both fields, so this is safe to send unconditionally rather than
+ * branching on the token's platform.
+ */
+function androidRouting(data: Record<string, unknown> | undefined) {
+  const channelId = channelForNotificationType(
+    typeof data?.type === "string" ? data.type : undefined,
+  );
+  return { channelId, priority: pushPriorityForChannel(channelId) };
 }
 
 function chunk<T>(items: T[], size: number): T[][] {
@@ -63,6 +87,7 @@ export async function sendPush(
               body: msg.body,
               data: msg.data ?? {},
               sound: "default",
+              ...androidRouting(msg.data),
             }))
           ),
         });

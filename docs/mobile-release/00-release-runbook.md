@@ -144,15 +144,13 @@ Notes:
 > `npx expo install expo-updates && eas update:configure` when you want OTA;
 > it changes native code, so it needs a fresh build either way.
 
-## 7. Android track (start the clock early)
+## 7. Android track
 
-- [ ] Register on Play Console and complete identity verification — this has a
-      lead time and gates everything else.
-- [ ] Start the closed test (12 testers / 14 days for new personal accounts) the
-      same week iOS goes to TestFlight, so the two run concurrently.
-- [ ] Complete the Data Safety form from `02-...`.
-- [ ] Provide the public account-deletion URL — Play requires one even though
-      the app has an in-app path.
-- [ ] Configure FCM in Expo for Android push (iOS APNs is already done).
-- [ ] Test on a low-RAM device: that is the real Indian SMB workforce handset,
-      and it is where the performance budget actually bites.
+**See `04-play-console.md`** — the full path from nothing to a Play listing.
+
+Two things there are worth starting today, because they wait in the background
+while you do everything else: the Play Console account (identity verification has
+a lead time) and the closed test, if your account type requires one.
+
+The public account-deletion URL Play requires is live at
+`https://jambahr.com/account-deletion`.

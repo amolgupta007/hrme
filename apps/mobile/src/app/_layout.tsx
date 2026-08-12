@@ -4,6 +4,7 @@ import { Sentry } from "@/lib/sentry";
 import { ClerkProvider } from "@clerk/clerk-expo";
 import { tokenCache } from "@clerk/clerk-expo/token-cache";
 import { Stack, useRouter } from "expo-router";
+import { StatusBar } from "expo-status-bar";
 import * as Notifications from "expo-notifications";
 import { QueryProvider } from "@/lib/query";
 import { SessionProvider } from "@/lib/session";
@@ -50,7 +51,12 @@ function RootLayout() {
   // Rendered OUTSIDE the providers: a build this old may not be able to talk to
   // the BFF at all, so there is no point mounting auth/query/session behind it.
   if (blocked) {
-    return <UpdateRequiredScreen config={config} version={version} />;
+    return (
+      <>
+        <StatusBar style="dark" />
+        <UpdateRequiredScreen config={config} version={version} />
+      </>
+    );
   }
 
   return (
@@ -58,6 +64,11 @@ function RootLayout() {
       publishableKey={process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY!}
       tokenCache={tokenCache}
     >
+      {/* Explicit, not `auto`: Android edge-to-edge is mandatory from Android 16
+          (Expo removed the opt-out), so content draws under the status bar. The
+          app is pinned to a light appearance, so the icons must be dark or they
+          vanish against our light surfaces. Revisit when dark mode ships. */}
+      <StatusBar style="dark" />
       <QueryProvider>
         <SessionProvider>
           <Stack

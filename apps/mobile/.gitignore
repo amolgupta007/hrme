@@ -34,6 +34,11 @@ yarn-error.*
 .env*
 .env*.local
 
+# FCM credentials for Android push — downloaded from the Firebase console and
+# supplied to EAS as a file secret. Never commit it; app.config.js only wires it
+# up when it happens to be present, so its absence is harmless locally.
+google-services.json
+
 # typescript
 *.tsbuildinfo
 

@@ -18,13 +18,38 @@ three: this file, the manifest, and both store forms.
 | Email address | Sign-in identifier; notifications | Yes | No |
 | Phone number | Alternative sign-in identifier (OTP); optional contact | Yes | No |
 | User ID (employee + Clerk id) | Ties the session to an employee record | Yes | No |
-| Coarse location | **Only** at the moment of a punch, and **only** if the employer enabled location-verified clock-in | Yes | No |
+| Precise location | **Only** at the moment of a punch, and **only** if the employer enabled location-verified clock-in | Yes | No |
 | Crash data (Sentry) | Diagnosing crashes | No | No |
 | Performance data (Sentry) | Cold-start and error-rate monitoring | No | No |
 
 **Not collected:** contacts, photos, browsing history, search history, purchases,
 financial account details entered in the app, advertising identifiers,
-biometric identifiers, precise/background location, health data, audio, video.
+biometric identifiers, background location, health data, audio, video.
+
+### Why location is declared **Precise**, not Approximate
+
+This is the answer most likely to be got wrong, so the reasoning is recorded here.
+
+The instinct is to declare Approximate, because the app only ever *stores* an
+office name or a locality ("Andheri East, Mumbai") and never a street address.
+But both stores' definitions are about what is **collected**, not what survives:
+
+- Apple counts anything at three or more decimal places of latitude/longitude
+  (~110 m) as Precise Location. The app transmits full-precision doubles.
+- Google counts Approximate as an area of 3 km² or more. Android's
+  `ACCESS_COARSE_LOCATION` gives roughly that — and it is useless here, because a
+  200 m office geofence cannot be resolved from a 1–3 km fix. The app must hold
+  `ACCESS_FINE_LOCATION` for the feature to work at all.
+
+So: **Precise on both stores, and `NSPrivacyCollectedDataTypePreciseLocation` in
+the iOS manifest.** Say plainly in the store listing and privacy policy that only
+a coarse derivative is retained — that is a genuine and reassuring fact, and it
+belongs in the description rather than in a declaration that would be untrue.
+
+Note that from Android 12 a user can downgrade the request to "Approximate only"
+at the OS prompt. The resulting fix falls far outside any office fence and the
+accuracy allowance is capped at 100 m, so it resolves to **remote** — never a
+false "at office".
 
 **A note on biometrics.** Face ID / Touch ID is used only as a local device
 check before a payroll approval; iOS never hands the app the biometric itself.
@@ -54,7 +79,7 @@ none used for tracking:
 - Contact Info → Email Address
 - Contact Info → Phone Number
 - Identifiers → User ID
-- Location → Coarse Location
+- Location → Precise Location (see the reasoning above — do not downgrade this)
 
 Declare these **not linked to the user**, App Functionality, not tracking:
 
@@ -86,11 +111,14 @@ Per data type, Play wants *collected* vs *shared*. Everything above is
 Sentry and Clerk are processors acting on our instructions, which Play does not
 count as sharing.
 
-**Location, specifically.** Declare **Approximate location**, collected,
-optional, App functionality. Do **not** declare Precise location and do **not**
-declare background location — the app requests when-in-use only and the config
-explicitly sets `isIosBackgroundLocationEnabled: false` /
-`isAndroidBackgroundLocationEnabled: false`.
+**Location, specifically.** Declare **Precise location**, collected, optional,
+App functionality — the app holds `ACCESS_FINE_LOCATION` because a 200 m office
+geofence cannot be resolved from a coarse fix. Do **not** declare background
+location: the app requests when-in-use only, and the config explicitly sets
+`isIosBackgroundLocationEnabled: false` /
+`isAndroidBackgroundLocationEnabled: false`. Play cross-checks declarations
+against the manifest, so declaring background location you don't request is as
+much of a problem as omitting one you do.
 
 ---
 

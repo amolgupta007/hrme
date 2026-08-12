@@ -62,7 +62,7 @@ Grievance Officer details are at the end of this section.
 - *Attendance*: the date and time you clock in and out, and the device or
   channel used.
 - *Location at clock-in* — only if your employer has enabled location-verified
-  clock-in. In that case the app reads your device's approximate location at the
+  clock-in. In that case the app reads your device's location at the
   moment you clock in or out, and stores either the office site you were within,
   or an indication that you were remote together with the locality and city (for
   example "Andheri East, Mumbai"). We do not store a street address. Location is
@@ -124,7 +124,11 @@ verify them rather than assuming:
 
 - [ ] **"Never your exact address."** True today: `reverseGeocode` requests only
       `neighborhood,locality,place` types, so no street-level result is stored.
-      Do not widen those types without revisiting this sentence.
+      Do not widen those types without revisiting this sentence. Note the
+      distinction the policy relies on: the app *reads* a precise fix (a 200 m
+      geofence needs one, and both stores are told so) but *retains* only the
+      office name or the locality. The copy must keep describing retention, not
+      imply the reading is coarse.
 - [ ] **"Never read in the background."** True today: the app requests
       when-in-use only, and `app.json` sets both background-location flags to
       `false`. Adding any background location capability breaks this claim and

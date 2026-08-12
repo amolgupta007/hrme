@@ -83,6 +83,10 @@ function RootLayout() {
               name="approvals"
               options={{ headerShown: true, title: "Approvals" }}
             />
+            <Stack.Screen
+              name="reports"
+              options={{ headerShown: true, title: "Reports" }}
+            />
           </Stack>
         </SessionProvider>
       </QueryProvider>

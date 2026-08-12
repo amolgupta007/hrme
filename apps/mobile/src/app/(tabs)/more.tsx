@@ -4,6 +4,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useAuth } from "@clerk/clerk-expo";
+import { hasPermission } from "@jambahr/shared";
 import { useSession } from "@/lib/session";
 import { useDeletionRequest } from "@/lib/account";
 import { AccountDeletionSheet } from "@/components/account-deletion-sheet";
@@ -18,6 +19,7 @@ export default function More() {
   const { signOut } = useAuth();
   const { me } = useSession();
   const orgId = me?.orgId ?? null;
+  const isAdmin = !!me && hasPermission(me.role, "admin");
 
   const [deleteVisible, setDeleteVisible] = useState(false);
   const deletionQuery = useDeletionRequest(orgId);
@@ -62,6 +64,19 @@ export default function More() {
           </View>
           <Ionicons name="chevron-forward" size={18} color="#9AA1AB" />
         </Pressable>
+
+        {/* Owner/Admin: lightweight reports (D4 Task 13). Deep analysis stays
+            web-only — this is present %/late count + leave-days summaries. */}
+        {isAdmin ? (
+          <View className="rounded-2xl border border-line bg-surface">
+            <MoreRow
+              icon="bar-chart-outline"
+              label="Reports"
+              onPress={() => router.push("/reports")}
+              isLast
+            />
+          </View>
+        ) : null}
 
         {/* Nav rows */}
         <View className="rounded-2xl border border-line bg-surface">

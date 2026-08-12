@@ -54,7 +54,7 @@ export function useMarkRead(orgId: string | null | undefined) {
  */
 export type NotificationRoute =
   | "/(tabs)/leaves"
-  | "/(tabs)/leaves?segment=approvals"
+  | "/approvals"
   | "/payslips"
   | "/(tabs)/home";
 
@@ -78,10 +78,12 @@ export function routeForNotificationType(type: string | null | undefined): Notif
       return "/(tabs)/home";
     case "approval_pending":
       // D4 — pending leave/regularization/OT/payroll approvals all surface in
-      // the Leaves tab's manager "Approvals" segment (mobile has no separate
-      // approvals route; see `leaves-screen.tsx` Segment type + `?segment=`
-      // param already used by the Home "Needs attention" card).
-      return "/(tabs)/leaves?segment=approvals";
+      // the unified Approvals inbox (Task 11). Note the Home "Needs
+      // attention" leave-only card still deep-links to the Leaves tab's
+      // `?segment=approvals` directly (`home-screen.tsx`) — that's a
+      // separate, earlier (D2) staff-manager affordance, unrelated to this
+      // push type.
+      return "/approvals";
     default:
       return null;
   }

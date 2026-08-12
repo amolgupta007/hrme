@@ -3,6 +3,10 @@ import type {
   MobileMeResponse,
   MobileOrgMembership,
 } from "@jambahr/shared/auth/types";
+import {
+  DEFAULT_LOCATION_PUNCH_SETTINGS,
+  type LocationPunchSettings,
+} from "@jambahr/shared/attendance/geo-punch";
 import type { UserRole } from "@/types";
 
 export type MeUserContext = {
@@ -10,6 +14,7 @@ export type MeUserContext = {
   orgName: string;
   role: UserRole;
   plan: string;
+  attendanceEnabled?: boolean;
 };
 
 export type MeEmployeeRow = {
@@ -30,7 +35,8 @@ export type MeMembershipRow = {
 export function buildMePayload(
   user: MeUserContext,
   employeeRow: MeEmployeeRow,
-  membershipRows: MeMembershipRow[]
+  membershipRows: MeMembershipRow[],
+  locationPunch: LocationPunchSettings = DEFAULT_LOCATION_PUNCH_SETTINGS
 ): MobileMeResponse {
   const employee: MobileEmployee | null = employeeRow
     ? {
@@ -58,5 +64,14 @@ export function buildMePayload(
     plan: user.plan,
     employee,
     memberships,
+    attendance: {
+      enabled: user.attendanceEnabled === true,
+      locationPunch: {
+        // Only surfaced as "on" when attendance itself is on — otherwise the
+        // client would ask for location permission for a module it can't use.
+        enabled: user.attendanceEnabled === true && locationPunch.enabled,
+        mode: locationPunch.mode,
+      },
+    },
   };
 }

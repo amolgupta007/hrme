@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React from "react";
 import {
@@ -24,6 +24,8 @@ import { AttendanceZonesCard } from "@/components/settings/attendance-zones-card
 import { PerformanceSection } from "@/components/settings/performance-section";
 import { AssistantSettingsSection } from "@/components/settings/assistant-settings-section";
 import { AttendanceSection } from "@/components/settings/attendance-section";
+import type { GeofencedLocationRow } from "@/actions/location-punch";
+import type { LocationPunchSettings } from "@jambahr/shared/attendance/geo-punch";
 import { PayrollSection } from "@/components/settings/payroll-section";
 import { JambaGeoSection } from "@/components/settings/jambageo-section";
 import { TransferOwnershipSection } from "@/components/settings/transfer-ownership-section";
@@ -83,6 +85,8 @@ type SettingsContentProps = {
   whatsappCreds: WhatsAppCredsView | null;
   lateDepartments: Array<{ id: string; name: string }>;
   lateEmployees: Array<{ id: string; name: string; department_id: string | null }>;
+  locationPunchSettings: LocationPunchSettings;
+  geofencedLocations: GeofencedLocationRow[];
   payrollActiveConfig: RatioConfig | null;
   payrollConfigHistory: SalaryStructureConfig[];
   payrollEnabled: boolean;
@@ -128,6 +132,8 @@ export function SettingsContent({
   whatsappCreds,
   lateDepartments,
   lateEmployees,
+  locationPunchSettings,
+  geofencedLocations,
   payrollActiveConfig,
   payrollConfigHistory,
   payrollEnabled,
@@ -237,7 +243,7 @@ export function SettingsContent({
         <CollapsibleSection
           title="Attendance"
           icon={<ClockIcon className="h-5 w-5 text-muted-foreground" />}
-          summary={`${shifts.length} ${pluralise(shifts.length, "shift", "shifts")} · week-off ${weekOffPolicy ? "configured" : "not set"}`}
+          summary={`${shifts.length} ${pluralise(shifts.length, "shift", "shifts")} Â· week-off ${weekOffPolicy ? "configured" : "not set"}`}
           isOpen={openSection === "attendance"}
           onToggle={() => toggle("attendance")}
         >
@@ -257,6 +263,8 @@ export function SettingsContent({
             whatsappCreds={whatsappCreds}
             lateDepartments={lateDepartments}
             lateEmployees={lateEmployees}
+            locationPunchSettings={locationPunchSettings}
+            geofencedLocations={geofencedLocations}
           />
         </CollapsibleSection>
       )}
@@ -297,7 +305,7 @@ export function SettingsContent({
         <CollapsibleSection
           title="Performance & Reviews"
           icon={<BarChart3 className="h-5 w-5 text-muted-foreground" />}
-          summary={`${performanceSettings.competencies.length} competencies · ${performanceSettings.rating_labels.join(", ")}`}
+          summary={`${performanceSettings.competencies.length} competencies Â· ${performanceSettings.rating_labels.join(", ")}`}
           isOpen={openSection === "performance"}
           onToggle={() => toggle("performance")}
         >
@@ -309,7 +317,7 @@ export function SettingsContent({
         <CollapsibleSection
           title="Payroll"
           icon={<WalletIcon className="h-5 w-5 text-muted-foreground" />}
-          summary={`Basic ${payrollActiveConfig.basic_pct}% · HRA ${payrollActiveConfig.hra_pct_metro}/${payrollActiveConfig.hra_pct_non_metro} · ${payrollConfigHistory.length} history`}
+          summary={`Basic ${payrollActiveConfig.basic_pct}% Â· HRA ${payrollActiveConfig.hra_pct_metro}/${payrollActiveConfig.hra_pct_non_metro} Â· ${payrollConfigHistory.length} history`}
           isOpen={openSection === "payroll"}
           onToggle={() => toggle("payroll")}
         >

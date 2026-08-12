@@ -221,6 +221,30 @@ export function DayDetailSheet({
                 </View>
               ) : null}
 
+              {/* Where the day's punches were resolved to (Mobile D5). A list
+                  because clocking in at the office and out from home is normal
+                  — and pairing is derived, so it can't be shown per-pair. */}
+              {detail && detail.geo.length > 0 ? (
+                <View className="mt-3 gap-1.5">
+                  {detail.geo.map((g, i) => (
+                    <View key={`${g.status}-${g.label ?? ""}-${i}`} className="flex-row items-center">
+                      <Ionicons
+                        name={g.status === "office" ? "business-outline" : "location-outline"}
+                        size={14}
+                        color="#5B6472"
+                      />
+                      <Text className="ml-1.5 flex-1 text-[13px] text-ink-600" numberOfLines={1}>
+                        {g.status === "office"
+                          ? (g.siteName ?? "At office")
+                          : g.label
+                            ? `Remote · ${g.label}`
+                            : "Remote"}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+
               {detail && detail.outOfZoneCount > 0 ? (
                 <View className="mt-3 flex-row items-center rounded-xl bg-warning-tint px-3 py-2.5">
                   <Ionicons name="location-outline" size={16} color="#8A5A06" />

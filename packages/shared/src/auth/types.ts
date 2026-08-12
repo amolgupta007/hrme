@@ -30,6 +30,26 @@ export type MobileMeResponse = {
   employee: MobileEmployee | null;
   /** All non-terminated org memberships, oldest first (org switcher, later). */
   memberships: MobileOrgMembership[];
+  /**
+   * Org attendance capabilities the client must know BEFORE the user acts —
+   * chiefly whether to ask for location permission ahead of the first punch
+   * rather than in the middle of one.
+   */
+  attendance: MobileAttendanceCapabilities;
+};
+
+export type MobileAttendanceCapabilities = {
+  /** Mirrors `getCurrentUser().attendanceEnabled` (the org feature flag). */
+  enabled: boolean;
+  /**
+   * Location-verified clock-in. `enabled: false` ⇒ the app never asks for
+   * location at all and the whole feature stays dark.
+   */
+  locationPunch: {
+    enabled: boolean;
+    /** `required` ⇒ a punch without coordinates is rejected server-side. */
+    mode: "optional" | "required";
+  };
 };
 
 export type MobileApiError = { error: string };

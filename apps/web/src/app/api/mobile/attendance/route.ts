@@ -108,7 +108,9 @@ export async function GET(request: NextRequest) {
     employeeId
       ? supabase
           .from("attendance_punch_events")
-          .select("punched_at, status")
+          // geo_status/geo_label (migration 107) drive the day-detail location
+          // chips; null on every punch predating the feature.
+          .select("punched_at, status, geo_status, geo_label")
           .eq("org_id", user.orgId)
           .eq("employee_id", employeeId)
           .gte("punched_at", startUtc)

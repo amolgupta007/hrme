@@ -19,6 +19,20 @@ describe("buildTodayStatus", () => {
       clockOutAt: null,
       minutesToday: null,
       shift: { name: "General", start: "09:30", end: "18:30" },
+      lastPunchGeo: null,
+    });
+  });
+
+  it("carries the resolved location verdict through when one is supplied", () => {
+    const s = buildTodayStatus(
+      { clock_in_at: "2026-07-17T04:00:00Z", clock_out_at: null, total_minutes: null },
+      null,
+      { status: "remote", label: "Andheri East, Mumbai", siteName: null },
+    );
+    expect(s.lastPunchGeo).toEqual({
+      status: "remote",
+      label: "Andheri East, Mumbai",
+      siteName: null,
     });
   });
 
@@ -40,6 +54,8 @@ describe("buildTodayStatus", () => {
       clockOutAt: null,
       minutesToday: null,
       shift: null,
+      // Defaults to "not evaluated" so every pre-D5 caller is unchanged.
+      lastPunchGeo: null,
     });
   });
 });

@@ -1,5 +1,6 @@
 import type { createAdminSupabase } from "@/lib/supabase/server";
-import type { MobileTodayStatus } from "@jambahr/shared";
+import type { MobileTodayStatus, MobilePunchGeo } from "@jambahr/shared";
+import { toPunchGeoDto } from "@/lib/attendance/location-punch";
 import { buildTodayStatus, type ShiftLite } from "./home-payload";
 
 type Supabase = ReturnType<typeof createAdminSupabase>;
@@ -41,7 +42,7 @@ export async function loadTodayStatus(
   employeeId: string,
   date: string,
 ): Promise<MobileTodayStatus> {
-  const [{ data: record }, shift] = await Promise.all([
+  const [{ data: record }, shift, lastPunchGeo] = await Promise.all([
     supabase
       .from("attendance_records")
       .select("clock_in_at, clock_out_at, total_minutes")
@@ -50,7 +51,51 @@ export async function loadTodayStatus(
       .eq("date", date)
       .maybeSingle(),
     resolveActiveShift(supabase, orgId, employeeId, date),
+    loadLastPunchGeo(supabase, orgId, employeeId, date),
   ]);
 
-  return buildTodayStatus((record as any) ?? null, shift);
+  return buildTodayStatus((record as any) ?? null, shift, lastPunchGeo);
+}
+
+/**
+ * The location verdict on the employee's most recent evaluated punch for `date`.
+ *
+ * Read from `attendance_punch_events` rather than the daily rollup: the rollup
+ * carries no geo columns (deliberately — see migration 107's note), and the
+ * verdict is per-punch anyway (clock in at the office, clock out from home).
+ *
+ * Best-effort: any failure returns null ("not evaluated"), which the client
+ * renders as no chip. A missing tag must never break the Home screen.
+ */
+async function loadLastPunchGeo(
+  supabase: Supabase,
+  orgId: string,
+  employeeId: string,
+  date: string,
+): Promise<MobilePunchGeo | null> {
+  try {
+    // The IST day bounds: punch events are timestamptz, the rollup is by IST date.
+    const from = `${date}T00:00:00+05:30`;
+    const to = `${date}T23:59:59.999+05:30`;
+
+    const { data, error } = await supabase
+      .from("attendance_punch_events")
+      .select("geo_status, geo_label, matched_location_id")
+      .eq("org_id", orgId)
+      .eq("employee_id", employeeId)
+      .eq("status", "approved")
+      .gte("punched_at", from)
+      .lte("punched_at", to)
+      .not("geo_status", "is", null)
+      .order("punched_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error || !data) return null;
+    // Cast: generated Supabase types predate migration 107 (geo_status/geo_label/
+    // matched_location_id) → the select infers an error type (gotcha #3).
+    return toPunchGeoDto(data as unknown as Record<string, string | null>);
+  } catch {
+    return null;
+  }
 }

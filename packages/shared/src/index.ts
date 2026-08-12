@@ -15,6 +15,7 @@ export * from "./attendance/ist";
 export * from "./attendance/ot";
 export * from "./attendance/overtime-types";
 export * from "./attendance/late-penalty-bands";
+export * from "./attendance/geo-punch";
 export * from "./payroll/ctc";
 export * from "./payroll/line-items";
 export * from "./payroll/late-penalty";

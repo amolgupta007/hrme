@@ -1,7 +1,37 @@
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
-import type { MobileTodayStatus } from "@jambahr/shared/mobile/types";
+import type { MobilePunchGeo, MobileTodayStatus } from "@jambahr/shared/mobile/types";
+
+/**
+ * Where the last punch was resolved to (Mobile D5). Rendered only when the
+ * server actually reached a verdict — an absent `lastPunchGeo` means "not
+ * evaluated" and shows nothing at all, never a "remote" fallback.
+ *
+ * Neutral colours on purpose: remote is a fact about the punch, not a warning
+ * about the employee. Amber/red here would read as an accusation.
+ */
+function GeoChip({ geo }: { geo: MobilePunchGeo }) {
+  const atOffice = geo.status === "office";
+  const label = atOffice
+    ? (geo.siteName ?? "At office")
+    : geo.label
+      ? `Remote · ${geo.label}`
+      : "Remote";
+
+  return (
+    <View className="mt-2 flex-row items-center" accessibilityLabel={`Last punch: ${label}`}>
+      <Ionicons
+        name={atOffice ? "business-outline" : "location-outline"}
+        size={13}
+        color="#5B6472"
+      />
+      <Text className="ml-1.5 flex-1 text-[13px] text-ink-600" numberOfLines={1}>
+        {label}
+      </Text>
+    </View>
+  );
+}
 
 /** "2026-07-17T09:31:00Z" → "9:31 AM" (device-local). */
 function formatTime(iso: string | null): string {
@@ -105,6 +135,8 @@ export function TodayCard({
         <Text className="text-[28px] font-extrabold leading-9 text-ink-900">{m}</Text>
         <Text className="ml-0.5 text-[15px] font-normal text-ink-600">m</Text>
       </View>
+
+      {today.lastPunchGeo ? <GeoChip geo={today.lastPunchGeo} /> : null}
 
       <View className="mt-3 flex-row items-center justify-between">
         <View className={`self-start rounded-full px-3 py-1 ${chip.bg}`}>

@@ -12,6 +12,8 @@ import { ApiError, useApi } from "@/lib/api";
 import { homeQueryKey, optimisticToday } from "@/lib/home";
 import { attendanceMonthQueryKey, currentIstMonth } from "@/lib/attendance";
 import { createOfflineQueue, type QueuedPunch } from "@/lib/offline-queue";
+import { acquireLocation, locationOutcomeMessage } from "@/lib/location";
+import { punchFeedback } from "@/lib/haptics";
 
 const PUNCH_PATH = "/api/mobile/attendance/punch";
 
@@ -54,10 +56,17 @@ function punchErrorCopy(error: unknown): string {
       return "Your employee record isn't active. Contact your admin.";
     case "no_membership":
       return "You're not a member of this organization.";
+    case "location_required":
+      return "Your organisation requires a location to clock in. Turn on location for JambaHR in Settings and try again.";
     default:
       return "Couldn't record your punch. Please try again.";
   }
 }
+
+/** The org's Location-verified clock-in configuration, as served by `/me`. */
+export type LocationPunchConfig = { enabled: boolean; mode: "optional" | "required" };
+
+const LOCATION_OFF: LocationPunchConfig = { enabled: false, mode: "optional" };
 
 type PunchVars = MobilePunchRequest;
 type PunchContext = { previous: MobileHomeResponse | undefined };
@@ -78,9 +87,15 @@ type PunchContext = { previous: MobileHomeResponse | undefined };
 export function usePunch({
   namespace,
   orgId,
+  locationPunch = LOCATION_OFF,
 }: {
   namespace: string;
   orgId: string | null | undefined;
+  /**
+   * From `/api/mobile/me`. Defaults to off so a stale persisted `me` payload
+   * (pre-D5, with no `attendance` key) can never make the app ask for location.
+   */
+  locationPunch?: LocationPunchConfig;
 }) {
   const apiFetch = useApi();
   const queryClient = useQueryClient();
@@ -142,7 +157,10 @@ export function usePunch({
         orgId
       ),
     onMutate: async (vars) => {
-      setPunchError(null);
+      // NOTE: deliberately does NOT clear `punchError` here. `punch()` clears it
+      // at the top and may then set a *location* warning ("recorded without a
+      // location") that must survive into the mutation — clearing here would
+      // wipe the very message we just raised.
       await queryClient.cancelQueries({ queryKey: key });
       const previous = queryClient.getQueryData<MobileHomeResponse>(key);
       if (previous) {
@@ -204,11 +222,14 @@ export function usePunch({
             PUNCH_PATH,
             {
               method: "POST",
+              // Replays the frozen bytes verbatim, coordinates included — the
+              // location where the punch happened, not where the phone is now.
               body: JSON.stringify({
                 clientEventId: item.clientEventId,
                 punchedAt: item.punchedAt,
                 lat: item.lat ?? null,
                 lng: item.lng ?? null,
+                accuracyM: item.accuracyM ?? null,
               } satisfies MobilePunchRequest),
             },
             orgId
@@ -278,10 +299,33 @@ export function usePunch({
    * (transient token blip — never permanently rejected).
    */
   const punch = useCallback(async () => {
+    setPunchError(null);
+
+    // Location is acquired BEFORE the timestamp is minted and frozen into the
+    // queued entry alongside it. That ordering is the whole correctness story
+    // for offline punches: a replay days later must carry the coordinates of
+    // where the punch actually happened, not wherever the phone was when it
+    // finally reconnected.
+    let coords: { lat?: number | null; lng?: number | null; accuracyM?: number | null } = {};
+    if (locationPunch.enabled) {
+      const fix = await acquireLocation();
+      if (fix.outcome === "ok") {
+        coords = { lat: fix.lat, lng: fix.lng, accuracyM: fix.accuracyM };
+      } else {
+        const blocking = locationPunch.mode === "required";
+        setPunchError(locationOutcomeMessage(fix.outcome, blocking));
+        // `required` mode: stop here rather than enqueueing a punch the server
+        // is certain to reject — a queued 400 would just churn the drain loop.
+        if (blocking) return;
+      }
+    }
+
     const vars: PunchVars = {
       clientEventId: Crypto.randomUUID(),
       punchedAt: new Date().toISOString(),
+      ...coords,
     };
+    punchFeedback();
     // Durability first: persist, then send. Marked in-flight so the drain
     // won't replay it while this immediate POST is still pending (and so the
     // Syncing badge doesn't count it).
@@ -306,7 +350,7 @@ export function usePunch({
       inFlight.current.delete(vars.clientEventId);
       setQueueCount(pendingCount());
     }
-  }, [mutation, queue, pendingCount]);
+  }, [mutation, queue, pendingCount, locationPunch.enabled, locationPunch.mode]);
 
   return {
     punch,

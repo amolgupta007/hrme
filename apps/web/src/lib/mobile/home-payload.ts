@@ -4,6 +4,7 @@ import type {
   MobileLeaveBalance,
   MobileTodayStatus,
   MobileAnnouncementLite,
+  MobilePunchGeo,
 } from "@jambahr/shared";
 
 /** The subset of an `attendance_records` row the today card needs. */
@@ -24,7 +25,11 @@ export type ShiftLite = {
  * Derive the live today-status from the day's rollup record + the resolved
  * shift. Shared by the Home card and the punch response (identical shape).
  */
-export function buildTodayStatus(record: TodayRecordLite, shift: ShiftLite): MobileTodayStatus {
+export function buildTodayStatus(
+  record: TodayRecordLite,
+  shift: ShiftLite,
+  lastPunchGeo: MobilePunchGeo | null = null,
+): MobileTodayStatus {
   const clockInAt = record?.clock_in_at ?? null;
   const clockOutAt = record?.clock_out_at ?? null;
   return {
@@ -33,6 +38,9 @@ export function buildTodayStatus(record: TodayRecordLite, shift: ShiftLite): Mob
     clockOutAt,
     minutesToday: record?.total_minutes ?? null,
     shift: shift ? { name: shift.name, start: shift.start_time, end: shift.end_time } : null,
+    // Defaults to null so every existing caller keeps its previous behaviour:
+    // "not evaluated", which the client renders as no chip at all.
+    lastPunchGeo,
   };
 }
 

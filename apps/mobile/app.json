@@ -44,6 +44,14 @@
       "expo-web-browser",
       "expo-notifications",
       [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "JambaHR records your location only at the moment you clock in or out, so your employer can see whether you punched from an office. It never tracks you in the background.",
+          "isIosBackgroundLocationEnabled": false,
+          "isAndroidBackgroundLocationEnabled": false
+        }
+      ],
+      [
         "expo-local-authentication",
         {
           "faceIDPermission": "Confirm it's you to approve payroll."

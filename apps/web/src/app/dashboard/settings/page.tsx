@@ -1,4 +1,4 @@
-import { listDepartments } from "@/actions/departments";
+﻿import { listDepartments } from "@/actions/departments";
 import { getOrgProfile, listSettingsPolicies } from "@/actions/settings";
 import { OrgProfileSection } from "@/components/settings/org-profile-section";
 import { BillingSection } from "@/components/settings/billing-section";
@@ -24,6 +24,8 @@ import { getOvertimeSettings } from "@/actions/overtime";
 import { getRazorpayXCredentials } from "@/actions/razorpayx-credentials";
 import { getLatePolicy } from "@/actions/late-policy";
 import { getWhatsAppCredentials } from "@/actions/whatsapp-credentials";
+import { getLocationPunchConfig } from "@/actions/location-punch";
+import { DEFAULT_LOCATION_PUNCH_SETTINGS } from "@jambahr/shared/attendance/geo-punch";
 import type { OvertimeSettings } from "@/lib/attendance/overtime-types";
 
 const DEFAULT_OT_SETTINGS_FALLBACK: OvertimeSettings = {
@@ -59,6 +61,7 @@ export default async function SettingsPage() {
     razorpayxCredentialsResult,
     latePolicyResult,
     whatsappCredsResult,
+    locationPunchResult,
     locationsResult,
     devicesResult,
     zonesResult,
@@ -82,6 +85,7 @@ export default async function SettingsPage() {
     getRazorpayXCredentials(),
     getLatePolicy(),
     getWhatsAppCredentials(),
+    getLocationPunchConfig(),
     listLocations(),
     listDevices(),
     listZones(),
@@ -128,10 +132,18 @@ export default async function SettingsPage() {
   const latePolicyTargets = latePolicyResult.success ? latePolicyResult.data.targets : [];
   const latePolicyBands = latePolicyResult.success ? latePolicyResult.data.bands : [];
   const whatsappCreds = whatsappCredsResult.success ? whatsappCredsResult.data : null;
+  // Feature-off + no geofences is the correct fallback when the read fails: the
+  // settings card then shows the "no office pinned" warning rather than lying.
+  const locationPunchSettings = locationPunchResult.success
+    ? locationPunchResult.data.settings
+    : DEFAULT_LOCATION_PUNCH_SETTINGS;
+  const geofencedLocations = locationPunchResult.success ? locationPunchResult.data.locations : [];
   const lateDepartments = departments.map((d) => ({ id: d.id, name: d.name }));
   const lateEmployees = employees.map((e) => ({
     id: e.id,
-    name: `${e.first_name ?? ""} ${e.last_name ?? ""}`.trim() || e.email,
+    // `email` is nullable (phone-only staff), so it can't be the last resort on
+    // its own — a null here renders an empty row in the late-policy picker.
+    name: `${e.first_name ?? ""} ${e.last_name ?? ""}`.trim() || e.email || "Unnamed employee",
     department_id: e.department_id,
   }));
 
@@ -194,6 +206,8 @@ export default async function SettingsPage() {
         latePolicy={latePolicy}
         latePolicyTargets={latePolicyTargets}
         latePolicyBands={latePolicyBands}
+        locationPunchSettings={locationPunchSettings}
+        geofencedLocations={geofencedLocations}
         whatsappCreds={whatsappCreds}
         lateDepartments={lateDepartments}
         lateEmployees={lateEmployees}

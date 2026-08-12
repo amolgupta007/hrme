@@ -154,5 +154,9 @@ describe("reverseGeocode — request shape", () => {
     expect(url).toContain("/72.86790,19.06540.json");
     // Deliberately coarse: we tag a locality, never an employee's doorstep.
     expect(url).toContain("types=neighborhood%2Clocality%2Cplace");
+    // MUST NOT send `limit`: on a reverse geocode Mapbox only allows it with a
+    // single `types` value and 422s otherwise, which this function would
+    // swallow as "unavailable" — leaving every remote punch unlabelled.
+    expect(url).not.toContain("limit=");
   });
 });

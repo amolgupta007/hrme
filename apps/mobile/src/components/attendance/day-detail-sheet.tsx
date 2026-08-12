@@ -231,7 +231,11 @@ export function DayDetailSheet({
               {/* Where the day's punches were resolved to (Mobile D5). A list
                   because clocking in at the office and out from home is normal
                   — and pairing is derived, so it can't be shown per-pair. */}
-              {detail && detail.geo.length > 0 ? (
+              {/* Optional-chained like every sibling read above (`detail?.pairs`,
+                  `detail?.source`): `geo` is a required field on the DTO, but a
+                  cache persisted by a pre-D5 build rehydrates without it, and an
+                  unguarded `.length` there crashes the whole sheet. */}
+              {detail?.geo && detail.geo.length > 0 ? (
                 <View className="mt-3 gap-1.5">
                   {detail.geo.map((g, i) => (
                     <View key={`${g.status}-${g.label ?? ""}-${i}`} className="flex-row items-center">

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React from "react";
 import {
@@ -243,7 +243,7 @@ export function SettingsContent({
         <CollapsibleSection
           title="Attendance"
           icon={<ClockIcon className="h-5 w-5 text-muted-foreground" />}
-          summary={`${shifts.length} ${pluralise(shifts.length, "shift", "shifts")} Â· week-off ${weekOffPolicy ? "configured" : "not set"}`}
+          summary={`${shifts.length} ${pluralise(shifts.length, "shift", "shifts")} · week-off ${weekOffPolicy ? "configured" : "not set"}`}
           isOpen={openSection === "attendance"}
           onToggle={() => toggle("attendance")}
         >
@@ -305,7 +305,7 @@ export function SettingsContent({
         <CollapsibleSection
           title="Performance & Reviews"
           icon={<BarChart3 className="h-5 w-5 text-muted-foreground" />}
-          summary={`${performanceSettings.competencies.length} competencies Â· ${performanceSettings.rating_labels.join(", ")}`}
+          summary={`${performanceSettings.competencies.length} competencies · ${performanceSettings.rating_labels.join(", ")}`}
           isOpen={openSection === "performance"}
           onToggle={() => toggle("performance")}
         >
@@ -317,7 +317,7 @@ export function SettingsContent({
         <CollapsibleSection
           title="Payroll"
           icon={<WalletIcon className="h-5 w-5 text-muted-foreground" />}
-          summary={`Basic ${payrollActiveConfig.basic_pct}% Â· HRA ${payrollActiveConfig.hra_pct_metro}/${payrollActiveConfig.hra_pct_non_metro} Â· ${payrollConfigHistory.length} history`}
+          summary={`Basic ${payrollActiveConfig.basic_pct}% · HRA ${payrollActiveConfig.hra_pct_metro}/${payrollActiveConfig.hra_pct_non_metro} · ${payrollConfigHistory.length} history`}
           isOpen={openSection === "payroll"}
           onToggle={() => toggle("payroll")}
         >

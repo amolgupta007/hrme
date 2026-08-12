@@ -1,4 +1,4 @@
-﻿import { listDepartments } from "@/actions/departments";
+import { listDepartments } from "@/actions/departments";
 import { getOrgProfile, listSettingsPolicies } from "@/actions/settings";
 import { OrgProfileSection } from "@/components/settings/org-profile-section";
 import { BillingSection } from "@/components/settings/billing-section";

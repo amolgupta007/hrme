@@ -301,6 +301,21 @@ describe("punch route — offline replay", () => {
   });
 });
 
+describe("punch route — home payload parity", () => {
+  it("required mode rejects before any write, so a queued punch is never consumed", async () => {
+    // Pairs with the client-side rule that `location_required` is NOT a
+    // permanent rejection (use-punch.ts `isPermanentRejection`): the server
+    // must not have partially recorded anything the client will now retry.
+    enableFeature({ mode: "required" });
+    locationRows = [OFFICE_ROW];
+
+    const res = await POST(punchRequest({}));
+    expect(res.status).toBe(400);
+    expect(inserts).toHaveLength(0);
+    expect(recomputeCalls).toHaveLength(0);
+  });
+});
+
 describe("punch route — validation", () => {
   it("rejects an out-of-range accuracy", async () => {
     enableFeature();

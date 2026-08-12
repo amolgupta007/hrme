@@ -67,7 +67,7 @@ export async function loadTodayStatus(
  * Best-effort: any failure returns null ("not evaluated"), which the client
  * renders as no chip. A missing tag must never break the Home screen.
  */
-async function loadLastPunchGeo(
+export async function loadLastPunchGeo(
   supabase: Supabase,
   orgId: string,
   employeeId: string,

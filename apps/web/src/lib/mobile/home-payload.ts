@@ -118,9 +118,16 @@ export function buildHomePayload(input: {
   announcements: AnnouncementRow[];
   unreadNotifications: number;
   adminHome?: MobileHomeResponse["adminHome"];
+  /**
+   * Location verdict on today's most recent evaluated punch. Home MUST carry
+   * this: the punch response sets the TodayCard chip, and a Home refetch that
+   * omitted it would blank the chip a minute later, looking like the verified
+   * location had been lost.
+   */
+  lastPunchGeo?: MobilePunchGeo | null;
 }): MobileHomeResponse {
   return {
-    today: buildTodayStatus(input.record, input.shift),
+    today: buildTodayStatus(input.record, input.shift, input.lastPunchGeo ?? null),
     leave: { balances: buildLeaveBalances(input.policies) },
     nextHolidays: input.holidays.slice(0, 3),
     pending: {

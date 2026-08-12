@@ -49,7 +49,11 @@ export async function reverseGeocode(
     `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng.toFixed(5)},${lat.toFixed(5)}.json`,
   );
   url.searchParams.set("access_token", token);
-  url.searchParams.set("limit", "1");
+  // Deliberately NO `limit`: on a REVERSE geocode Mapbox only accepts `limit`
+  // alongside a single `types` value, and rejects the combination below with a
+  // 422 — which this function would swallow as "unavailable", silently leaving
+  // every remote punch with no place label at all. Reverse results are already
+  // ordered nearest-first, and we only read `features[0]`.
   url.searchParams.set("types", "neighborhood,locality,place");
 
   try {

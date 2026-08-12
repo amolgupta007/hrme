@@ -64,6 +64,8 @@ export function HomeScreen({ isAdmin = false }: { isAdmin?: boolean }) {
     showSyncFailedBanner,
     punchError,
     clearPunchError,
+    punchNotice,
+    clearPunchNotice,
   } = usePunch({ namespace, orgId, locationPunch });
 
   const [noticeOpen, setNoticeOpen] = useState(false);
@@ -145,6 +147,21 @@ export function HomeScreen({ isAdmin = false }: { isAdmin?: boolean }) {
             <Ionicons name="alert-circle-outline" size={18} color="#B91C1C" />
             <Text className="ml-2 flex-1 text-[13px] text-danger-ontint">{punchError}</Text>
             <Ionicons name="close" size={16} color="#B91C1C" />
+          </Pressable>
+        ) : null}
+        {/* Informational, NOT an error: the punch recorded, it just carries no
+            location. Neutral styling so nobody reads it as a failed clock-in
+            and taps again. */}
+        {punchNotice ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Dismiss notice"
+            onPress={clearPunchNotice}
+            className="flex-row items-center rounded-xl bg-[#EFF1F3] px-3 py-2.5"
+          >
+            <Ionicons name="information-circle-outline" size={18} color="#5B6472" />
+            <Text className="ml-2 flex-1 text-[13px] text-ink-600">{punchNotice}</Text>
+            <Ionicons name="close" size={16} color="#5B6472" />
           </Pressable>
         ) : null}
 

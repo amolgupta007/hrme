@@ -13,7 +13,7 @@ import {
   type LeavePolicyUsage,
   type TodayRecordLite,
 } from "@/lib/mobile/home-payload";
-import { resolveActiveShift } from "@/lib/mobile/attendance-queries";
+import { resolveActiveShift, loadLastPunchGeo } from "@/lib/mobile/attendance-queries";
 import {
   fetchLeaveApprovals,
   fetchRegularizationApprovals,
@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
   const employeeId = user.employeeId;
 
   // ── Today status (rollup record + active shift) ───────────────────────────
-  const [{ data: todayRecord }, shift] = await Promise.all([
+  const [{ data: todayRecord }, shift, lastPunchGeo] = await Promise.all([
     employeeId
       ? supabase
           .from("attendance_records")
@@ -57,6 +57,13 @@ export async function GET(request: NextRequest) {
       : Promise.resolve({ data: null }),
     employeeId
       ? resolveActiveShift(supabase, user.orgId, employeeId, today)
+      : Promise.resolve(null),
+    // Must be loaded here too, not just on the punch response: Home overwrites
+    // the cached `today` on every refetch, so omitting it would blank the
+    // location chip a minute after punching. Skipped entirely when attendance
+    // is off — there are no punches to describe.
+    employeeId && user.attendanceEnabled
+      ? loadLastPunchGeo(supabase, user.orgId, employeeId, today)
       : Promise.resolve(null),
   ]);
 
@@ -271,6 +278,7 @@ export async function GET(request: NextRequest) {
     announcements: ((announcementRows as any[] | null) ?? []) as AnnouncementRow[],
     unreadNotifications,
     adminHome,
+    lastPunchGeo,
   });
 
   return NextResponse.json(payload);

@@ -1,4 +1,4 @@
-﻿"use server";
+"use server";
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
@@ -14,7 +14,7 @@ import {
 import type { ActionResult } from "@/types";
 
 /**
- * Location-verified clock-in â€” admin configuration.
+ * Location-verified clock-in — admin configuration.
  *
  * Settings live at `organizations.settings.attendance.location_punch`; the
  * geofence itself lives on the existing `locations` rows (migration 107), so an
@@ -91,6 +91,30 @@ export async function updateLocationPunchSettings(
   const next = parsed.data;
 
   const supabase = createAdminSupabase();
+
+  // `required` mode with no pinned office is pure downside: every punch without
+  // coordinates is rejected, while `resolveGeoMatch` returns null for everyone
+  // (no sites to match against) so nothing is ever actually verified. An
+  // employee who declines the OS prompt — which iOS will not re-ask — would be
+  // permanently unable to clock in, for zero benefit.
+  if (next.enabled && next.mode === "required") {
+    const { count, error: siteErr } = await supabase
+      .from("locations")
+      .select("id", { count: "exact", head: true })
+      .eq("org_id", user.orgId)
+      .eq("is_active", true)
+      .not("lat", "is", null);
+
+    if (siteErr) return { success: false, error: siteErr.message };
+    if (!count) {
+      return {
+        success: false,
+        error:
+          "Pin at least one office location before requiring location to clock in — otherwise nobody can punch and no punch gets verified.",
+      };
+    }
+  }
+
   const { data: org, error: readErr } = await supabase
     .from("organizations")
     .select("settings")
@@ -99,7 +123,7 @@ export async function updateLocationPunchSettings(
   if (readErr) return { success: false, error: readErr.message };
 
   // Read-modify-write the nested JSONB by hand: settings.attendance carries
-  // unrelated keys (standard_workday_hours, overtime, â€¦) that a naive overwrite
+  // unrelated keys (standard_workday_hours, overtime, …) that a naive overwrite
   // would silently drop.
   const settings = ((org as { settings?: Record<string, unknown> | null })?.settings ??
     {}) as Record<string, unknown>;
@@ -144,7 +168,7 @@ const geofenceSchema = z.object({
 /**
  * Set (or clear) an office site's geofence.
  *
- * Passing `lat: null, lng: null` clears the pin â€” the site keeps existing for
+ * Passing `lat: null, lng: null` clears the pin — the site keeps existing for
  * biometric devices but stops participating in mobile verification.
  */
 export async function setLocationGeofence(
@@ -170,7 +194,7 @@ export async function setLocationGeofence(
   const { data, error } = await supabase
     .from("locations")
     .update({ lat, lng, geofence_radius_m: lat === null ? null : (radiusM ?? null) } as never)
-    // org_id in the filter is the tenant guard â€” a tampered locationId from
+    // org_id in the filter is the tenant guard — a tampered locationId from
     // another org matches nothing rather than updating it.
     .eq("id", locationId)
     .eq("org_id", user.orgId)

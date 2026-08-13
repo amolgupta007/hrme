@@ -5,6 +5,9 @@
     "scheme": "jambahr",
     "version": "0.1.0",
     "runtimeVersion": { "policy": "appVersion" },
+    "updates": {
+      "url": "https://u.expo.dev/1f8b51f9-6ac2-470b-8daa-dace5c50580e"
+    },
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "icon": "./assets/images/icon.png",

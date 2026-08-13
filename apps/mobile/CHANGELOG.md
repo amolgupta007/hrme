@@ -42,6 +42,9 @@ Release policy (PRD-05 §1):
 ### Changed
 - `runtimeVersion` now follows the `appVersion` policy, so an OTA update can
   only ever reach builds with matching native code.
+- `expo-updates` is installed and `updates.url` is set, so EAS Update (OTA) is
+  active from the next build. It was pulled in automatically by the first
+  Android build because the build profiles declare update channels.
 - Android: explicit permission allowlist plus a `blockedPermissions` list that
   strips background location and legacy storage permissions a dependency might
   otherwise pull in.

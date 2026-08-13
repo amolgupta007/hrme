@@ -7,6 +7,7 @@ import {
   type MeEmployeeRow,
   type MeMembershipRow,
 } from "@/lib/mobile/me-payload";
+import { loadLocationPunchSettings } from "@/lib/attendance/location-punch";
 
 export const dynamic = "force-dynamic";
 
@@ -43,13 +44,20 @@ export async function GET(request: NextRequest) {
     employeeRow = (data as MeEmployeeRow) ?? null;
   }
 
-  const { data: membershipData } = await supabase
-    .from("employees")
-    .select("org_id, role, organizations!inner(id, name)")
-    .eq("clerk_user_id", userId)
-    .neq("status", "terminated")
-    .order("created_at", { ascending: true });
+  const [{ data: membershipData }, locationPunch] = await Promise.all([
+    supabase
+      .from("employees")
+      .select("org_id, role, organizations!inner(id, name)")
+      .eq("clerk_user_id", userId)
+      .neq("status", "terminated")
+      .order("created_at", { ascending: true }),
+    // Surfaced here so the app can request location permission with context
+    // *before* the first punch, rather than interrupting one mid-tap.
+    loadLocationPunchSettings(supabase, user.orgId),
+  ]);
   const membershipRows = (membershipData ?? []) as unknown as MeMembershipRow[];
 
-  return NextResponse.json(buildMePayload(user, employeeRow, membershipRows));
+  return NextResponse.json(
+    buildMePayload(user, employeeRow, membershipRows, locationPunch),
+  );
 }

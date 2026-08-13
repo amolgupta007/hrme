@@ -31,6 +31,38 @@ beforeEach(() => {
   global.fetch = originalFetch;
 });
 
+describe("sendPush — Android routing", () => {
+  async function capture(data: Record<string, unknown> | undefined) {
+    const { supabase } = makeSupabase([{ id: "t1", expo_push_token: "ExponentPushToken[aaa]" }]);
+    const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => ({
+      json: async () => ({ data: [{ status: "ok" }] }),
+    }));
+    global.fetch = fetchMock as any;
+    await sendPush(supabase, ["emp-1"], { title: "t", body: "b", data });
+    return JSON.parse(fetchMock.mock.calls[0]![1].body as string)[0];
+  }
+
+  it("sends an approval on the high-importance channel at high priority", async () => {
+    // These two must move together: a high-importance channel delivered at
+    // normal FCM priority still waits for the next maintenance window.
+    expect(await capture({ type: "approval_pending" })).toMatchObject({
+      channelId: "approvals_v1",
+      priority: "high",
+    });
+  });
+
+  it("sends informational notifications on the updates channel", async () => {
+    expect(await capture({ type: "payslip_paid" })).toMatchObject({
+      channelId: "updates_v1",
+      priority: "normal",
+    });
+  });
+
+  it("falls back to updates when there is no type at all", async () => {
+    expect(await capture(undefined)).toMatchObject({ channelId: "updates_v1" });
+  });
+});
+
 describe("sendPush", () => {
   it("returns immediately for an empty employeeIds array (no fetch)", async () => {
     const fetchMock = vi.fn();
@@ -69,6 +101,10 @@ describe("sendPush", () => {
       title: "Leave approved",
       body: "Your leave request has been approved.",
       sound: "default",
+      // Android routing. Without a channelId the notification is delivered on a
+      // silent fallback channel — no banner, no sound, nothing in the logs.
+      channelId: "updates_v1",
+      priority: "normal",
     });
     expect(body[1].to).toBe("ExponentPushToken[bbb]");
   });

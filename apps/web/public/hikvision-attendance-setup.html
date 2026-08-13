@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="robots" content="noindex" />
+<title>Hikvision DS-K1T341AMF → JambaHR Attendance Integration Guide</title>
+<style>
+  :root {
+    --teal: hsl(172 50% 36%);
+    --teal-dark: hsl(172 55% 26%);
+    --teal-soft: hsl(172 45% 95%);
+    --orange: hsl(32 95% 52%);
+    --orange-soft: hsl(32 95% 95%);
+    --ink: hsl(215 25% 15%);
+    --muted: hsl(215 16% 47%);
+    --line: hsl(215 20% 90%);
+    --bg: hsl(210 30% 98%);
+    --card: #fff;
+    --green: hsl(142 55% 38%);
+    --red: hsl(0 72% 51%);
+    --amber: hsl(38 92% 45%);
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+    line-height: 1.6;
+    font-size: 16px;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 0 20px; }
+
+  /* Header */
+  header {
+    background: linear-gradient(135deg, var(--teal-dark), var(--teal));
+    color: #fff;
+    padding: 40px 0 48px;
+  }
+  header .wrap { display: flex; flex-direction: column; gap: 6px; }
+  .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
+  .brand img { height: 30px; width: auto; background: #fff; border-radius: 6px; padding: 3px 6px; }
+  .brand span { font-weight: 700; font-size: 18px; letter-spacing: -0.2px; }
+  header h1 { margin: 0; font-size: 30px; line-height: 1.2; letter-spacing: -0.5px; }
+  header p.sub { margin: 8px 0 0; opacity: 0.92; font-size: 17px; max-width: 640px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+  .pill {
+    background: rgba(255,255,255,0.16); border: 1px solid rgba(255,255,255,0.25);
+    padding: 4px 12px; border-radius: 999px; font-size: 13px; font-weight: 500;
+  }
+
+  /* Verdict banner */
+  .verdict {
+    margin: -24px auto 0; max-width: 900px; padding: 0 20px;
+  }
+  .verdict-card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+    padding: 22px 24px; box-shadow: 0 8px 30px rgba(15,40,50,0.08);
+    border-left: 5px solid var(--green);
+  }
+  .verdict-card h2 { margin: 0 0 6px; font-size: 19px; display: flex; align-items: center; gap: 8px; }
+  .verdict-card .tag { font-size: 12px; font-weight: 700; color: var(--green); background: hsl(142 55% 95%); padding: 3px 10px; border-radius: 6px; }
+  .verdict-card p { margin: 8px 0 0; color: var(--muted); }
+
+  main { padding: 36px 0 80px; }
+  section { margin-top: 40px; scroll-margin-top: 20px; }
+  h2.sec { font-size: 23px; letter-spacing: -0.3px; margin: 0 0 6px; padding-bottom: 8px; border-bottom: 2px solid var(--teal-soft); }
+  h3 { font-size: 18px; margin: 26px 0 8px; }
+  p { margin: 12px 0; }
+  a { color: var(--teal); }
+
+  .lead { color: var(--muted); font-size: 17px; }
+
+  /* TOC */
+  .toc { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px 22px; margin-top: 32px; }
+  .toc strong { display: block; font-size: 13px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); margin-bottom: 10px; }
+  .toc ol { margin: 0; padding-left: 20px; columns: 2; column-gap: 32px; }
+  .toc li { margin: 4px 0; }
+  @media (max-width: 600px) { .toc ol { columns: 1; } }
+
+  /* Callouts */
+  .callout { border-radius: 12px; padding: 16px 18px; margin: 18px 0; border: 1px solid; font-size: 15px; }
+  .callout p:first-child { margin-top: 0; }
+  .callout p:last-child { margin-bottom: 0; }
+  .callout .lbl { font-weight: 700; display: block; margin-bottom: 4px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .warn { background: var(--orange-soft); border-color: hsl(32 80% 80%); }
+  .warn .lbl { color: hsl(28 90% 38%); }
+  .danger { background: hsl(0 72% 97%); border-color: hsl(0 72% 85%); }
+  .danger .lbl { color: var(--red); }
+  .info { background: var(--teal-soft); border-color: hsl(172 40% 80%); }
+  .info .lbl { color: var(--teal-dark); }
+
+  /* Diagram */
+  .diagram {
+    background: hsl(215 28% 12%); color: hsl(210 20% 92%); border-radius: 12px;
+    padding: 22px; overflow-x: auto; font-family: "SF Mono", "Cascadia Code", Consolas, monospace;
+    font-size: 13.5px; line-height: 1.65; white-space: pre; margin: 18px 0;
+  }
+  .diagram .t { color: hsl(172 60% 60%); }
+  .diagram .o { color: hsl(32 90% 65%); }
+  .diagram .g { color: hsl(142 50% 65%); }
+  .diagram .d { color: hsl(215 14% 60%); }
+
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14.5px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { background: var(--teal-soft); font-weight: 600; color: var(--teal-dark); }
+  tr:last-child td { border-bottom: none; }
+  td code, p code, li code { background: hsl(215 25% 95%); padding: 1px 6px; border-radius: 5px; font-size: 13px; font-family: "SF Mono", Consolas, monospace; color: hsl(330 60% 40%); }
+
+  /* Code blocks */
+  pre {
+    background: hsl(215 28% 12%); color: hsl(210 20% 92%); border-radius: 10px;
+    padding: 16px 18px; overflow-x: auto; font-size: 13.5px; line-height: 1.55;
+    font-family: "SF Mono", "Cascadia Code", Consolas, monospace; margin: 14px 0;
+  }
+  pre .c { color: hsl(215 14% 55%); }
+  pre .k { color: hsl(280 60% 72%); }
+  pre .s { color: hsl(95 45% 65%); }
+  pre .n { color: hsl(32 90% 68%); }
+
+  /* Steps */
+  .step { display: flex; gap: 16px; margin: 22px 0; }
+  .step-num {
+    flex: 0 0 36px; height: 36px; border-radius: 50%; background: var(--teal); color: #fff;
+    display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px;
+  }
+  .step-body { flex: 1; }
+  .step-body h4 { margin: 6px 0 4px; font-size: 17px; }
+  .phase-label { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.7px; color: var(--orange); margin-top: 30px; }
+
+  ul, ol { margin: 12px 0; padding-left: 24px; }
+  li { margin: 6px 0; }
+
+  .checklist { list-style: none; padding-left: 0; }
+  .checklist li { padding-left: 30px; position: relative; }
+  .checklist li::before { content: "☐"; position: absolute; left: 0; font-size: 18px; color: var(--teal); }
+
+  footer { border-top: 1px solid var(--line); padding: 28px 0 50px; color: var(--muted); font-size: 14px; }
+  footer .wrap { display: flex; flex-direction: column; gap: 6px; }
+
+  .kbd { display: inline-block; background: #fff; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 6px; padding: 1px 7px; font-size: 13px; font-family: monospace; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <div class="brand">
+      <img src="/Jamba.png" alt="JambaHR" />
+      <span>JambaHR</span>
+    </div>
+    <h1>Hikvision DS-K1T341AMF → JambaHR Attendance</h1>
+    <p class="sub">How to connect a Hikvision face / fingerprint terminal at your office door to JambaHR so that every punch becomes an attendance record automatically.</p>
+    <div class="meta-row">
+      <span class="pill">Module: Attendance</span>
+      <span class="pill">Device: DS-K1T341AMF</span>
+      <span class="pill">Integration: ISAPI webhook bridge</span>
+      <span class="pill">Audience: Admin / IT</span>
+    </div>
+  </div>
+</header>
+
+<div class="verdict">
+  <div class="verdict-card">
+    <h2><span class="tag">FEASIBLE</span> Yes — with a small on-site bridge</h2>
+    <p>The DS-K1T341AMF can drive JambaHR attendance. JambaHR's receiving endpoint already exists. The one piece you must add is a lightweight <strong>bridge service on your office network</strong> that translates the device's events into JambaHR's format and forwards them securely. This guide covers exactly what to buy, build, and configure.</p>
+  </div>
+</div>
+
+<main>
+<div class="wrap">
+
+  <nav class="toc">
+    <strong>Contents</strong>
+    <ol>
+      <li><a href="#why">Why a bridge is needed</a></li>
+      <li><a href="#device">About the device</a></li>
+      <li><a href="#architecture">Architecture</a></li>
+      <li><a href="#need">What you need</a></li>
+      <li><a href="#mapping">Employee-number mapping</a></li>
+      <li><a href="#setup-jamba">Setup A — JambaHR side</a></li>
+      <li><a href="#setup-device">Setup B — The device</a></li>
+      <li><a href="#setup-bridge">Setup C — The bridge</a></li>
+      <li><a href="#inout">Clock-in vs clock-out</a></li>
+      <li><a href="#notes">Things to note</a></li>
+      <li><a href="#security">Security</a></li>
+      <li><a href="#troubleshoot">Troubleshooting</a></li>
+      <li><a href="#checklist">Go-live checklist</a></li>
+    </ol>
+  </nav>
+
+  <!-- WHY -->
+  <section id="why">
+    <h2 class="sec">1. Why a bridge is needed</h2>
+    <p class="lead">JambaHR already ships a device punch endpoint — <code>POST /api/attendance/punch</code> — that records attendance from any hardware. But the Hikvision terminal cannot call it directly, for two reasons:</p>
+    <table>
+      <tr><th>Obstacle</th><th>Detail</th></tr>
+      <tr>
+        <td><strong>Payload mismatch</strong></td>
+        <td>The terminal emits events in <em>Hikvision's own</em> format (fields like <code>employeeNoString</code>, <code>serialNo</code>, <code>time</code>, <code>currentVerifyMode</code>). JambaHR expects <code>{ employee_code, timestamp, event_type }</code>. Hikvision's HTTP-Host config has <strong>no field to add an <code>Authorization: Bearer</code> header</strong>, which the endpoint requires.</td>
+      </tr>
+      <tr>
+        <td><strong>Network reachability</strong></td>
+        <td>The terminal sits behind your office router (private IP). JambaHR runs in the cloud and cannot reach into your LAN. Exposing the Hikvision device to the public internet is a serious security risk and must never be done.</td>
+      </tr>
+    </table>
+    <p>The fix is a tiny always-on <strong>bridge (relay) service running on your office network</strong>. It sits between the device and JambaHR: it receives the device's raw event, translates it, attaches the secret token, and forwards a clean punch to JambaHR over HTTPS.</p>
+    <div class="callout info">
+      <span class="lbl">What already exists vs. what to build</span>
+      <p><strong>Already built in JambaHR:</strong> the <code>/api/attendance/punch</code> endpoint, the Settings → Fingerprint configuration screen (enable toggle, webhook URL, device token, per-employee device codes), the <code>source = 'device'</code> attendance tag.</p>
+      <p><strong>You build once:</strong> the bridge service (~150 lines of Node.js/Python, or an off-the-shelf middleware). It is the only new moving part.</p>
+    </div>
+  </section>
+
+  <!-- DEVICE -->
+  <section id="device">
+    <h2 class="sec">2. About the DS-K1T341AMF</h2>
+    <table>
+      <tr><th>Property</th><th>Value</th></tr>
+      <tr><td>Type</td><td>Face recognition terminal with fingerprint + Mifare card</td></tr>
+      <tr><td>Capacity</td><td>3,000 faces · 3,000 fingerprints · 3,000 cards</td></tr>
+      <tr><td>Auth modes</td><td>Face, fingerprint, card (and combinations)</td></tr>
+      <tr><td>Attendance statuses</td><td>6 built-in: check in, check out, break in, break out, overtime in, overtime out</td></tr>
+      <tr><td>Protocols</td><td>ISAPI &amp; ISUP 5.0 over TCP/IP</td></tr>
+      <tr><td>Power</td><td>12 VDC, 2 A (adapter sold separately)</td></tr>
+    </table>
+    <p>Two integration mechanisms matter here, both over ISAPI (Hikvision's HTTP/REST API):</p>
+    <ul>
+      <li><strong>Push (event listening):</strong> the device POSTs each event to an <em>HTTP Host</em> you configure (IP + port + JSON). Great for real-time; needs a listener always reachable on the LAN.</li>
+      <li><strong>Pull (polling):</strong> your service periodically queries <code>/ISAPI/AccessControl/AcsEvent</code> for new events using Digest auth. More resilient to brief downtime; you control the cadence.</li>
+    </ul>
+    <p>The bridge can use either. <strong>Push is recommended</strong> for simplicity and immediacy; pull is the robust fallback if your network drops pushes.</p>
+  </section>
+
+  <!-- ARCHITECTURE -->
+  <section id="architecture">
+    <h2 class="sec">3. Architecture</h2>
+    <div class="diagram"><span class="o">┌────────────────────────┐</span>     <span class="d">office LAN (private)</span>
+<span class="o">│  DS-K1T341AMF</span>          <span class="o">│</span>
+<span class="o">│  face / finger / card  │</span>
+<span class="o">└───────────┬────────────┘</span>
+            <span class="d">│</span>  1) employee punches; device emits an
+            <span class="d">│</span>     <span class="o">ISAPI access-granted event</span> (employeeNo, time)
+            <span class="d">▼</span>
+<span class="t">┌────────────────────────┐</span>     <span class="d">also on the office LAN — Raspberry Pi,</span>
+<span class="t">│   BRIDGE (you build)</span>   <span class="t">│</span>     <span class="d">mini-PC, or always-on machine</span>
+<span class="t">│ • receive Hik event    │</span>
+<span class="t">│ • map employeeNo →      │</span>     2) translate + dedupe + add Bearer token
+<span class="t">│   device_code          │</span>
+<span class="t">│ • add Bearer token     │</span>
+<span class="t">└───────────┬────────────┘</span>
+            <span class="d">│</span>  3) <span class="g">HTTPS POST</span> { employee_code, timestamp, event_type }
+            <span class="d">▼</span>            Authorization: Bearer dt_••••
+<span class="g">┌────────────────────────┐</span>     <span class="d">cloud (jambahr.com)</span>
+<span class="g">│  JambaHR API</span>           <span class="g">│</span>
+<span class="g">│  /api/attendance/punch │</span>     4) verify token → find employee →
+<span class="g">│  → attendance_records  │</span>        write attendance (source = 'device')
+<span class="g">└────────────────────────┘</span></div>
+    <div class="callout info">
+      <span class="lbl">Cloud-only alternative (enterprise)</span>
+      <p>If you run <strong>HikCentral Professional</strong> or use <strong>Hik-Connect</strong>, the device can register outbound over ISUP 5.0 and you can consume events via Hikvision's OpenAPI in the cloud — no on-site bridge. This adds platform licensing/complexity and is usually overkill for a single SMB office. The LAN-bridge approach above is the recommended path.</p>
+    </div>
+  </section>
+
+  <!-- NEED -->
+  <section id="need">
+    <h2 class="sec">4. What you need</h2>
+    <table>
+      <tr><th>Item</th><th>Why</th></tr>
+      <tr><td>DS-K1T341AMF + 12 V/2 A power + network cable</td><td>The terminal. Wire it to your LAN (PoE or DC + Ethernet).</td></tr>
+      <tr><td>A static/reserved IP for the device</td><td>So the bridge always knows where to reach it (DHCP reservation on the router).</td></tr>
+      <tr><td>An always-on machine on the same LAN</td><td>Hosts the bridge. A Raspberry Pi 4, a mini-PC, or any office PC that stays on works. Needs outbound HTTPS to jambahr.com.</td></tr>
+      <tr><td>iVMS-4200 client (free) or a browser</td><td>To configure the device — enroll people, set time/NTP, set the HTTP listening host. Download from Hikvision's site.</td></tr>
+      <tr><td>JambaHR admin access</td><td>Attendance must be enabled for your org; you enable Fingerprint and copy the device token.</td></tr>
+      <tr><td>The device admin password</td><td>Set on first boot. Required for ISAPI Digest auth from the bridge.</td></tr>
+    </table>
+    <div class="callout warn">
+      <span class="lbl">Plan / tier</span>
+      <p>The Attendance module must be enabled for your organization. Fingerprint/device integration is configured under <strong>Settings → Attendance → Fingerprint</strong> (admin only). If you don't see it, confirm <code>attendance_enabled</code> is on for your org.</p>
+    </div>
+  </section>
+
+  <!-- MAPPING -->
+  <section id="mapping">
+    <h2 class="sec">5. Employee-number mapping (the key concept)</h2>
+    <p class="lead">Every person enrolled on the Hikvision device has an <strong>Employee No.</strong> (Hikvision calls it <code>employeeNo</code> / <code>employeeNoString</code>). Every JambaHR employee has a <strong>Device Code</strong> (<code>employees.device_code</code>). <strong>These two must be identical for each person.</strong></p>
+    <table>
+      <tr><th>On the Hikvision device</th><th>In JambaHR</th><th>Result</th></tr>
+      <tr><td>Employee No. = <code>EMP001</code></td><td>Device Code = <code>EMP001</code></td><td>✅ Punch resolves to that employee</td></tr>
+      <tr><td>Employee No. = <code>1042</code></td><td>Device Code = <code>1042</code></td><td>✅ Works — any consistent scheme is fine</td></tr>
+      <tr><td>Employee No. = <code>EMP001</code></td><td>Device Code blank, email matches</td><td>⚠️ Falls back to email match if your bridge sends email instead</td></tr>
+      <tr><td>Employee No. = <code>99</code></td><td>No employee with Device Code <code>99</code></td><td>❌ Endpoint returns 404 "Employee not found"</td></tr>
+    </table>
+    <p><strong>Recommendation:</strong> pick one scheme up front (reusing each person's existing staff ID is cleanest) and use the same value in both systems. Set Device Codes in JambaHR under Settings → Attendance → Fingerprint → Employee codes table.</p>
+  </section>
+
+  <!-- SETUP A -->
+  <section id="setup-jamba">
+    <p class="phase-label">Part A · 10 minutes</p>
+    <h2 class="sec">6. Set up the JambaHR side</h2>
+
+    <div class="step"><div class="step-num">1</div><div class="step-body">
+      <h4>Enable Fingerprint integration</h4>
+      <p>Go to <strong>Settings → Attendance → Fingerprint</strong>. Toggle <em>Enable fingerprint punch-in</em> on.</p>
+    </div></div>
+    <div class="step"><div class="step-num">2</div><div class="step-body">
+      <h4>Copy the Webhook URL &amp; generate a Device Token</h4>
+      <p>The webhook URL is <code>https://jambahr.com/api/attendance/punch</code>. Click <em>Regenerate token</em> to create a secret like <code>dt_xxxxxxxx…</code> and copy it. The bridge will send this as <code>Authorization: Bearer dt_…</code>. Keep it secret; regenerating invalidates the old one immediately.</p>
+    </div></div>
+    <div class="step"><div class="step-num">3</div><div class="step-body">
+      <h4>Set each employee's Device Code</h4>
+      <p>In the Employee codes table, enter the same ID you'll use as the device's Employee No. for each person (see §5). Save each row.</p>
+    </div></div>
+  </section>
+
+  <!-- SETUP B -->
+  <section id="setup-device">
+    <p class="phase-label">Part B · 30–45 minutes</p>
+    <h2 class="sec">7. Set up the device</h2>
+
+    <div class="step"><div class="step-num">1</div><div class="step-body">
+      <h4>Power, network, first boot</h4>
+      <p>Mount and power the terminal, connect Ethernet, set the device <strong>admin password</strong> on first boot. Give it a reserved IP on your router.</p>
+    </div></div>
+    <div class="step"><div class="step-num">2</div><div class="step-body">
+      <h4>Set time zone &amp; NTP</h4>
+      <p>Set the device to <strong>IST (UTC+5:30)</strong> and enable NTP. Accurate time matters — JambaHR rejects punches whose timestamp is more than 24 hours off server time.</p>
+    </div></div>
+    <div class="step"><div class="step-num">3</div><div class="step-body">
+      <h4>Enroll people (with matching Employee No.)</h4>
+      <p>Add each person in iVMS-4200 (or on-device): capture face / fingerprint / card and set their <strong>Employee No.</strong> to exactly the Device Code you set in JambaHR. Enroll on-device for best face-template quality.</p>
+    </div></div>
+    <div class="step"><div class="step-num">4</div><div class="step-body">
+      <h4>(Optional) Enable Attendance Mode</h4>
+      <p>Turn on the terminal's attendance status feature so staff tap <em>Check In</em> / <em>Check Out</em>. The event then carries an explicit status, letting the bridge send <code>event_type: "clock_in"</code> / <code>"clock_out"</code> precisely. If you skip this, JambaHR auto-toggles (see §9).</p>
+    </div></div>
+    <div class="step"><div class="step-num">5</div><div class="step-body">
+      <h4>Point the device at the bridge (push mode)</h4>
+      <p>In the device's event/notification settings (via iVMS-4200 or the device web UI), configure the <strong>HTTP Listening / Notification Host</strong>:</p>
+      <ul>
+        <li><strong>IP / host:</strong> the LAN IP of your bridge machine</li>
+        <li><strong>Port:</strong> the port your bridge listens on (e.g. <code>8080</code>)</li>
+        <li><strong>Protocol:</strong> HTTP · <strong>Format:</strong> JSON</li>
+        <li><strong>URL/path:</strong> e.g. <code>/hik-events</code></li>
+      </ul>
+      <p>The device will now POST every access event to your bridge.</p>
+    </div></div>
+  </section>
+
+  <!-- SETUP C -->
+  <section id="setup-bridge">
+    <p class="phase-label">Part C · build once</p>
+    <h2 class="sec">8. Build the bridge</h2>
+    <p class="lead">A minimal Node.js receiver that accepts Hikvision events and forwards JambaHR punches. Host it on the always-on LAN machine (run under <code>pm2</code> / a systemd service / Docker so it restarts on boot).</p>
+    <pre><span class="c">// bridge.js  —  Hikvision → JambaHR relay (push mode)</span>
+<span class="k">import</span> express <span class="k">from</span> <span class="s">"express"</span>;
+
+<span class="k">const</span> JAMBA_URL   = <span class="s">"https://jambahr.com/api/attendance/punch"</span>;
+<span class="k">const</span> DEVICE_TOKEN = process.env.<span class="n">JAMBA_DEVICE_TOKEN</span>; <span class="c">// the dt_… from Settings</span>
+<span class="k">const</span> seen = <span class="k">new</span> <span class="n">Map</span>(); <span class="c">// debounce: employeeNo → last punch ms</span>
+
+<span class="k">const</span> app = <span class="n">express</span>();
+app.<span class="n">use</span>(express.<span class="n">json</span>({ limit: <span class="s">"5mb"</span> }));
+app.<span class="n">use</span>(express.<span class="n">text</span>({ type: <span class="s">"*/*"</span>, limit: <span class="s">"5mb"</span> })); <span class="c">// some firmware sends multipart/text</span>
+
+app.<span class="n">post</span>(<span class="s">"/hik-events"</span>, <span class="k">async</span> (req, res) => {
+  res.<span class="n">sendStatus</span>(<span class="n">200</span>); <span class="c">// ACK fast — device retries on timeout</span>
+
+  <span class="k">const</span> body = <span class="k">typeof</span> req.body === <span class="s">"string"</span> ? <span class="n">safeParse</span>(req.body) : req.body;
+  <span class="k">const</span> ev = body?.<span class="n">AccessControllerEvent</span> ?? body?.<span class="n">access_controller_event</span> ?? {};
+
+  <span class="c">// only successful authentications (ignore denied / door / tamper)</span>
+  <span class="k">const</span> employeeNo = ev.<span class="n">employeeNoString</span> ?? ev.<span class="n">employeeNo</span>;
+  <span class="k">if</span> (!employeeNo) <span class="k">return</span>;                 <span class="c">// not a person event</span>
+  <span class="k">if</span> (ev.<span class="n">subEventType</span> &amp;&amp; <span class="n">isDenied</span>(ev)) <span class="k">return</span>; <span class="c">// skip failures</span>
+
+  <span class="c">// debounce repeat scans within 90s</span>
+  <span class="k">const</span> now = <span class="n">Date</span>.<span class="n">now</span>(), last = seen.<span class="n">get</span>(employeeNo) ?? <span class="n">0</span>;
+  <span class="k">if</span> (now - last &lt; <span class="n">90_000</span>) <span class="k">return</span>;
+  seen.<span class="n">set</span>(employeeNo, now);
+
+  <span class="k">await</span> <span class="n">fetch</span>(JAMBA_URL, {
+    method: <span class="s">"POST"</span>,
+    headers: {
+      <span class="s">"Content-Type"</span>: <span class="s">"application/json"</span>,
+      <span class="s">"Authorization"</span>: <span class="s">`Bearer ${DEVICE_TOKEN}`</span>,
+    },
+    body: <span class="n">JSON</span>.<span class="n">stringify</span>({
+      employee_code: <span class="n">String</span>(employeeNo),    <span class="c">// === employees.device_code</span>
+      timestamp: ev.<span class="n">time</span> ?? <span class="k">new</span> <span class="n">Date</span>().<span class="n">toISOString</span>(),
+      event_type: <span class="n">mapStatus</span>(ev),            <span class="c">// "auto" | "clock_in" | "clock_out"</span>
+      device_id: <span class="s">"front-door"</span>,
+    }),
+  }).<span class="n">catch</span>(console.<span class="n">error</span>);
+});
+
+<span class="c">// If using Attendance Mode, map the device's status; else "auto"</span>
+<span class="k">function</span> <span class="n">mapStatus</span>(ev) {
+  <span class="k">switch</span> (ev.<span class="n">attendanceStatus</span>) {
+    <span class="k">case</span> <span class="s">"checkIn"</span>:  <span class="k">return</span> <span class="s">"clock_in"</span>;
+    <span class="k">case</span> <span class="s">"checkOut"</span>: <span class="k">return</span> <span class="s">"clock_out"</span>;
+    <span class="k">default</span>:         <span class="k">return</span> <span class="s">"auto"</span>;
+  }
+}
+
+app.<span class="n">listen</span>(<span class="n">8080</span>, () => console.<span class="n">log</span>(<span class="s">"bridge on :8080"</span>));</pre>
+    <div class="callout info">
+      <span class="lbl">Pull-mode variant</span>
+      <p>If you prefer polling, the bridge instead calls <code>POST http://&lt;device-ip&gt;/ISAPI/AccessControl/AcsEvent?format=json</code> with HTTP Digest auth (device admin user/password) on a timer, requesting events since the last seen time. Dedupe on <code>(deviceId, serialNo)</code>, then forward each new granted event exactly as above. Use this when pushes are unreliable.</p>
+    </div>
+    <div class="callout warn">
+      <span class="lbl">Verify against your firmware</span>
+      <p>Exact event field names and the menu path for HTTP Listening vary by firmware version. Confirm the real payload by logging the first few requests your bridge receives, then adjust the field extraction (<code>employeeNoString</code>, <code>time</code>, <code>attendanceStatus</code>) accordingly before go-live.</p>
+    </div>
+  </section>
+
+  <!-- IN OUT -->
+  <section id="inout">
+    <h2 class="sec">9. Clock-in vs clock-out</h2>
+    <p>By itself a punch is just "access granted." Two ways to decide in vs out:</p>
+    <table>
+      <tr><th>Approach</th><th>How it works</th><th>Trade-off</th></tr>
+      <tr>
+        <td><strong>Attendance Mode (recommended)</strong></td>
+        <td>Staff tap Check In / Check Out on the terminal. Bridge sends explicit <code>event_type</code>. Supports breaks &amp; OT statuses too.</td>
+        <td>Requires staff to pick the right button.</td>
+      </tr>
+      <tr>
+        <td><strong>Auto toggle</strong></td>
+        <td>Bridge sends <code>event_type: "auto"</code>. JambaHR clocks <em>in</em> if there's no open record today, else clocks <em>out</em>.</td>
+        <td>First punch = in, second = out. A 3rd punch the same day flips back to "in" — fine for simple single-shift offices, less so for multiple in/out per day.</td>
+      </tr>
+    </table>
+  </section>
+
+  <!-- NOTES -->
+  <section id="notes">
+    <h2 class="sec">10. Things to note</h2>
+    <ul>
+      <li><strong>Cloud can't reach your device.</strong> That's by design — the bridge is the only thing that talks to both sides. Never port-forward the Hikvision device to the internet.</li>
+      <li><strong>Timestamps are validated.</strong> Punches more than 24 h from server time are rejected (422). Keep device NTP + timezone correct.</li>
+      <li><strong>Filter to successful authentications only.</strong> Devices emit many event types (denied, door open, tamper, card-reader status). Forward only access-granted person events, or you'll create phantom records.</li>
+      <li><strong>Debounce repeat scans.</strong> Face re-detection can fire several events seconds apart. The bridge debounces per person (90 s example) so one approach = one punch.</li>
+      <li><strong>One token per org.</strong> The current design uses a single device token for the whole organization. Multiple doors share it; use the <code>device_id</code> field to tell them apart in records.</li>
+      <li><strong>Unknown person → 404.</strong> If someone is enrolled on the device but has no matching Device Code in JambaHR, the punch is rejected. Keep the two enrollment lists in sync.</li>
+      <li><strong>Capacity is ample.</strong> 3,000 of each credential type comfortably covers a 10–500 employee office.</li>
+      <li><strong>Overnight shifts.</strong> JambaHR's attendance treats a record per calendar day; overnight handling has known limits. If you run night shifts, validate the day boundary behaviour before relying on device punches for payroll.</li>
+    </ul>
+  </section>
+
+  <!-- SECURITY -->
+  <section id="security">
+    <h2 class="sec">11. Security</h2>
+    <div class="callout danger">
+      <span class="lbl">Never expose the device to the public internet</span>
+      <p>Hikvision access terminals are a frequent target of disclosed vulnerabilities. Keep the device on the LAN (ideally a separate VLAN), behind your firewall, never port-forwarded.</p>
+    </div>
+    <ul>
+      <li><strong>Change the default admin password</strong> to a strong, unique value on first boot.</li>
+      <li><strong>Keep firmware updated</strong> — apply Hikvision security updates promptly.</li>
+      <li><strong>Protect the device token.</strong> Store <code>dt_…</code> in the bridge's environment, not in code or logs. Regenerate it in JambaHR if leaked (old token dies instantly).</li>
+      <li><strong>Lock the bridge's listener</strong> to accept connections only from the device's IP; the bridge's only outbound destination is <code>jambahr.com</code> over HTTPS.</li>
+      <li><strong>Disable Hik-Connect cloud</strong> on the device if you're not using it.</li>
+      <li><strong>Biometric data stays on the device.</strong> JambaHR only ever receives the Employee No. + timestamp — never face/fingerprint templates. Make sure your staff consent + data-retention policy covers the on-device biometrics.</li>
+    </ul>
+  </section>
+
+  <!-- TROUBLESHOOT -->
+  <section id="troubleshoot">
+    <h2 class="sec">12. Troubleshooting</h2>
+    <table>
+      <tr><th>Symptom</th><th>Likely cause &amp; fix</th></tr>
+      <tr><td>Bridge receives nothing</td><td>HTTP Host misconfigured on device; wrong bridge IP/port; firewall blocking. Test by tailing the bridge log while punching.</td></tr>
+      <tr><td><code>401 Unauthorized</code> from JambaHR</td><td>Wrong/old device token, or Fingerprint not enabled. Re-copy the token from Settings; confirm the toggle is on.</td></tr>
+      <tr><td><code>403 not enabled</code></td><td><code>fingerprint_enabled</code> is off for the org. Turn it on in Settings.</td></tr>
+      <tr><td><code>404 Employee not found</code></td><td>The device's Employee No. has no matching Device Code in JambaHR. Add/fix it in the Employee codes table.</td></tr>
+      <tr><td><code>422 timestamp</code></td><td>Device clock wrong. Fix timezone (IST) + NTP on the device.</td></tr>
+      <tr><td>Duplicate records / instant in-then-out</td><td>No debounce, or multiple events per scan. Add/raise the bridge debounce window.</td></tr>
+      <tr><td>Punches missing intermittently</td><td>Push delivery dropped. Switch the bridge to (or add) pull-mode polling of <code>AcsEvent</code> as a safety net.</td></tr>
+    </table>
+  </section>
+
+  <!-- CHECKLIST -->
+  <section id="checklist">
+    <h2 class="sec">13. Go-live checklist</h2>
+    <ul class="checklist">
+      <li>Attendance module enabled for the org</li>
+      <li>Fingerprint integration toggled on; device token generated &amp; copied</li>
+      <li>Device Codes set for every employee in JambaHR</li>
+      <li>Device powered, on LAN, reserved IP, admin password changed</li>
+      <li>Device timezone = IST, NTP enabled</li>
+      <li>People enrolled with Employee No. = their JambaHR Device Code</li>
+      <li>(Optional) Attendance Mode enabled for explicit in/out</li>
+      <li>Bridge deployed on always-on LAN machine, auto-restarts on boot</li>
+      <li>Device HTTP Host points at the bridge</li>
+      <li>Test punch by 2–3 staff → records appear in JambaHR with the "via device" tag</li>
+      <li>Confirmed denied/duplicate events are filtered and debounced</li>
+      <li>Bridge listener firewalled to the device IP only</li>
+    </ul>
+    <div class="callout info">
+      <span class="lbl">Need the bridge built?</span>
+      <p>The bridge service is the one component not shipped with JambaHR. The sample in §8 is a working starting point; tailor the field mapping to your firmware's actual payload (log the first events to confirm names). Reach out to JambaHR support if you'd like help packaging it for your office hardware.</p>
+    </div>
+  </section>
+
+</div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div>JambaHR · Hikvision DS-K1T341AMF attendance integration guide</div>
+    <div>Endpoint: <code>POST /api/attendance/punch</code> · Configure under Settings → Attendance → Fingerprint</div>
+  </div>
+</footer>
+
+</body>
+</html>

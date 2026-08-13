@@ -1,0 +1,31 @@
+# Maestro smoke: cold start → sign-in screen renders (PRD-05 §1).
+#
+# Scope is deliberately narrow. This targets the regression that has actually
+# bitten us twice: the app boots to a WHITE SCREEN when Clerk never finishes
+# init (prod Clerk "Native API" disabled → `isLoaded` stuck false → both
+# index.tsx and sign-in.tsx return null) or when EXPO_PUBLIC_* vars are missing
+# from a standalone build (ClerkProvider throws). Both are invisible to
+# typecheck, lint and unit tests — and both shipped. A flow that merely asserts
+# "real content rendered" would have caught them.
+#
+# Run against a dev/preview build:
+#   maestro test apps/mobile/.maestro/smoke-sign-in.yaml
+appId: com.jambahr.mobile
+---
+- launchApp:
+    clearState: true
+
+# Generous timeout: a cold start on a CI emulator is far slower than the 2s
+# device budget from PRD-04. This is a liveness check, not a perf test.
+- extendedWaitUntil:
+    visible: "JambaHR"
+    timeout: 30000
+
+# The brand heading proves the JS bundle evaluated and a screen committed.
+- assertVisible: "JambaHR"
+
+# The sign-in field proves Clerk finished initialising — the white-screen cause
+# leaves the heading's parent unrendered entirely, so this is the real signal.
+- assertVisible: "Email or phone number"
+
+- takeScreenshot: smoke-sign-in

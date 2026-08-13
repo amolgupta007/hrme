@@ -1,3 +1,4 @@
+import { useCallback, useState } from "react";
 import { Alert, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -15,6 +16,8 @@ import { PendingCard } from "@/components/pending-card";
 import { HolidayCard } from "@/components/holiday-card";
 import { AnnouncementsCard } from "@/components/announcements-card";
 import { AdminHomeCards } from "@/components/admin/admin-home-cards";
+import { LocationConsentSheet } from "@/components/location-consent-sheet";
+import { hasSeenLocationNotice, markLocationNoticeSeen } from "@/lib/location";
 
 const STUB_TITLE = "Coming soon";
 const STUB_BODY = "This is coming in the next update.";
@@ -48,6 +51,12 @@ export function HomeScreen({ isAdmin = false }: { isAdmin?: boolean }) {
     { orgId, staleTime: 60_000, enabled: !!orgId }
   );
 
+  // Defaults to off when `attendance` is absent — a `me` payload persisted
+  // before D5 shipped has no such key, and a stale cache must never make the
+  // app ask for location.
+  const locationPunch = me?.attendance?.locationPunch ?? { enabled: false, mode: "optional" as const };
+  const namespace = userId ?? "signed-out";
+
   const {
     punch,
     isPunching,
@@ -55,7 +64,30 @@ export function HomeScreen({ isAdmin = false }: { isAdmin?: boolean }) {
     showSyncFailedBanner,
     punchError,
     clearPunchError,
-  } = usePunch({ namespace: userId ?? "signed-out", orgId });
+    punchNotice,
+    clearPunchNotice,
+  } = usePunch({ namespace, orgId, locationPunch });
+
+  const [noticeOpen, setNoticeOpen] = useState(false);
+
+  /**
+   * Gate the very first punch behind the DPDP notice so the OS prompt never
+   * arrives cold (iOS won't re-ask after a decline — a context-free prompt that
+   * gets declined kills the feature permanently for that user).
+   */
+  const onPunch = useCallback(() => {
+    if (locationPunch.enabled && !hasSeenLocationNotice(namespace)) {
+      setNoticeOpen(true);
+      return;
+    }
+    void punch();
+  }, [locationPunch.enabled, namespace, punch]);
+
+  const onNoticeContinue = useCallback(() => {
+    markLocationNoticeSeen(namespace);
+    setNoticeOpen(false);
+    void punch();
+  }, [namespace, punch]);
 
   const firstName = me?.employee?.firstName ?? "there";
   const stub = () => Alert.alert(STUB_TITLE, STUB_BODY);
@@ -117,6 +149,21 @@ export function HomeScreen({ isAdmin = false }: { isAdmin?: boolean }) {
             <Ionicons name="close" size={16} color="#B91C1C" />
           </Pressable>
         ) : null}
+        {/* Informational, NOT an error: the punch recorded, it just carries no
+            location. Neutral styling so nobody reads it as a failed clock-in
+            and taps again. */}
+        {punchNotice ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Dismiss notice"
+            onPress={clearPunchNotice}
+            className="flex-row items-center rounded-xl bg-[#EFF1F3] px-3 py-2.5"
+          >
+            <Ionicons name="information-circle-outline" size={18} color="#5B6472" />
+            <Text className="ml-2 flex-1 text-[13px] text-ink-600">{punchNotice}</Text>
+            <Ionicons name="close" size={16} color="#5B6472" />
+          </Pressable>
+        ) : null}
 
         {!data && (home.isLoading || !orgId) ? (
           <HomeSkeleton />
@@ -141,7 +188,7 @@ export function HomeScreen({ isAdmin = false }: { isAdmin?: boolean }) {
               today={data.today}
               syncing={queueCount > 0}
               isPunching={isPunching}
-              onPunch={punch}
+              onPunch={onPunch}
               onPress={() => router.push("/attendance")}
             />
 
@@ -172,6 +219,14 @@ export function HomeScreen({ isAdmin = false }: { isAdmin?: boolean }) {
           </Text>
         ) : null}
       </ScrollView>
+
+      <LocationConsentSheet
+        visible={noticeOpen}
+        orgName={me?.orgName}
+        required={locationPunch.mode === "required"}
+        onContinue={onNoticeContinue}
+        onClose={() => setNoticeOpen(false)}
+      />
     </SafeAreaView>
   );
 }

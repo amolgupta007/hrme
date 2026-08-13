@@ -44,6 +44,13 @@ export type MobilePalette = {
 };
 export declare const mobilePalette: MobilePalette;
 
+/**
+ * Dark counterpart of mobilePalette. Same shape by construction, so a
+ * component can swap the whole palette by reference rather than key by key.
+ * Not yet wired up — see the doc comment in tokens.js.
+ */
+export declare const mobilePaletteDark: MobilePalette;
+
 declare const tokens: {
   palette: { light: TokenPalette; dark: TokenPalette };
   radius: { sm: number; md: number; lg: number };
@@ -53,5 +60,6 @@ declare const tokens: {
   };
   nativewindTheme: Record<string, unknown>;
   mobilePalette: MobilePalette;
+  mobilePaletteDark: MobilePalette;
 };
 export default tokens;

@@ -109,4 +109,41 @@ const mobilePalette = {
   info: { DEFAULT: "#3B63D8", tint: "#E8EEFC", ontint: "#2A4BB5" },
 };
 
-module.exports = { palette, radius, fontSize, nativewindTheme, mobilePalette };
+/**
+ * Dark counterpart of `mobilePalette` (Mobile PRD-04 §1: "dark mode support
+ * from day one (tokens, not hardcoded colors)").
+ *
+ * Role-preserving rather than a naive inversion: `canvas` stays the recessive
+ * surface and `surface` the raised one, so a card still reads as sitting above
+ * the page. Brand lightens (a 36%-lightness teal on near-black fails contrast);
+ * tints become low-lightness washes of their hue instead of pale pastels, which
+ * would glow. Ink ramps invert so ink-900 remains "most prominent text".
+ *
+ * ⚠️ NOT YET ACTIVE. `apps/mobile/app.json` still pins
+ * `userInterfaceStyle: "light"`, and the components still carry light-mode
+ * classes with some literal hex values (icon `color=` props in particular).
+ * Turning dark mode on is a mechanical sweep — `dark:` variants plus replacing
+ * literal hex `color` props with token lookups — that needs a device or
+ * simulator to verify. Flipping the switch before that sweep would ship a
+ * half-dark app, which is worse than a consistently light one.
+ */
+const mobilePaletteDark = {
+  brand: { DEFAULT: "#2FA98F", pressed: "#26907A", tint: "#12312B" },
+  ink: { 900: "#F2F4F7", 600: "#A3ACB9", 400: "#6B7480" },
+  canvas: "#0C0F14",
+  surface: "#161A21",
+  line: "#252A33",
+  success: { DEFAULT: "#37B87A", tint: "#10281C", ontint: "#5FD69B" },
+  warning: { DEFAULT: "#D98324", tint: "#2C1F0C", ontint: "#EBA84E" },
+  danger: { DEFAULT: "#EF4444", tint: "#2E1213", ontint: "#F98080" },
+  info: { DEFAULT: "#6D8DEB", tint: "#141B2E", ontint: "#93AAF2" },
+};
+
+module.exports = {
+  palette,
+  radius,
+  fontSize,
+  nativewindTheme,
+  mobilePalette,
+  mobilePaletteDark,
+};

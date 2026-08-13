@@ -247,6 +247,52 @@ See `PAYROLL_AUDIT.md` for the per-finding closure log and `docs/payroll-overhau
     `eas build` writes `extra.eas.projectId` into app.json — commit that change.
   - Windows Firewall must allow Node.js on private networks or a phone can't reach Metro (8081)
     or the BFF (3000). `npx expo start --tunnel` is the fallback.
+  - **Native modules are feature-detected, never platform-detected.** `storage.ts` (MMKV),
+    `location.ts` (expo-location) and `haptics.ts` (expo-haptics) all `require()` inside a
+    try/catch and degrade, because a dev build made before the install simply lacks the module
+    and a static import would crash the bundle at eval time. Never replace these with
+    `Platform.OS` checks — Expo Go runs on real devices, so the OS tells you nothing.
+    `expo-location` + `expo-haptics` (added D5, 2026-08-12) need **one EAS rebuild** before they
+    work on a phone; until then they self-report unavailable and punches record untagged.
+  - **Strings**: new user-facing copy goes in `src/locales/en.ts` and is read via
+    `strings` / `useStrings()` from `@/lib/i18n` (typed nested object, not a `t("a.b.c")` API,
+    so a bad key is a compile error). Older screens still hold copy inline and are migrated as
+    they're touched — put NEW copy in the locale file.
+  - **Dark mode is NOT active.** `mobilePaletteDark` exists in `@jambahr/config/tokens` and
+    `app.json` still pins `userInterfaceStyle: "light"`. Turning it on is a mechanical sweep
+    (`dark:` variants + replacing literal hex `color=` props with token lookups) that needs a
+    device to verify. Flipping the switch without the sweep ships a half-dark app.
+  - **Version gate**: `GET /api/mobile/config` (unauthenticated by design — a client too old to
+    authenticate is exactly the one that must be told to upgrade) drives a hard block screen via
+    `MOBILE_MIN_VERSION`. It **fails open** everywhere; leave `MOBILE_MIN_VERSION` unset unless
+    you genuinely need to block a build, because setting it wrongly locks people out of
+    clocking in.
+  - **Android push needs a notification channel or it is silently degraded.** Channel ids +
+    importances live in `@jambahr/shared/mobile/push-channels` because BOTH sides name them:
+    the client creates them (`push.ts`, at module load — a notification can arrive before any
+    screen mounts) and the server sends a matching `channelId` + FCM `priority`. A drift
+    delivers on Android's default-importance fallback — no banner, no sound, nothing in the
+    logs. Channel settings are **immutable on-device once created**, so changing an importance
+    means shipping a new id (hence the `_v1` suffixes), never editing the existing one.
+  - **Android FCM is wired conditionally** via `apps/mobile/app.config.js`:
+    `android.googleServicesFile` is only set when `google-services.json` exists (locally, or
+    materialised by the EAS `GOOGLE_SERVICES_JSON` file secret). Declaring it statically in
+    `app.json` would break `expo start`, `prebuild` and the CI config-introspection job for
+    anyone without the credential. Missing file ⇒ Android build succeeds with no remote push.
+  - **Location is declared PRECISE on both stores**, not coarse. A 200m office geofence can't
+    be resolved from Android's `ACCESS_COARSE_LOCATION` (~1–3 km), and Apple counts ≥3 decimal
+    places as precise. Only a coarse derivative (office name / locality) is *retained* — say
+    that in listings, but never downgrade the declaration. Android 12+ users who pick
+    "Approximate only" resolve to **remote**, never a false "at office" (fail-safe).
+  - `android.edgeToEdgeEnabled` is **not configurable** in SDK 57 (Android 16 makes it
+    mandatory; Expo warns if you set it). Content draws under the system bars, so the root
+    layout pins `<StatusBar style="dark" />` — without it the icons vanish on light surfaces.
+  - **Release runbook**: `docs/mobile-release/` — `00-release-runbook.md` (the sequence),
+    `01-app-review-notes.md` (paste into App Store Connect; read its sign-in warning — a fixed
+    Clerk test code does NOT work against production), `02-privacy-labels.md` (both stores'
+    privacy forms + the required-reason API table), `03-dpdp-and-privacy-copy.md` (policy text
+    and the claims it commits the product to), `04-play-console.md` (the whole Android path —
+    FCM, tracks, Data Safety, and the device checks CI can't do).
 
 ### Mobile Phase D — Slice 2 (Leave + Payslips + Profile + 5-tab IA) — feat/mobile-d2 (2026-08-11, awaiting device pass)
 - Plan: `docs/superpowers/plans/2026-08-10-mobile-phase-d-slice2.md`. Design (hi-fi 2a/2b/2c): `docs/design/mobile/mobile-design-spec.md`.
@@ -643,6 +689,25 @@ Optional, per-org rule: employees who clock in late more than N days in an IST c
 
 **v1 limitations**: overnight shifts not evaluated; calendar-month period only; bonus-block consequence only (no penalty deductions); single org-wide rule (targeting selects who it covers); Omni WhatsApp adapter pending.
 
+## Location-verified clock-in (Settings → Attendance) — shipped 2026-08-12 (D5)
+
+Optional per-org: a **mobile** punch carries a coarse GPS fix, and the server decides — against the org's office geofences — whether it happened at an office or remote, reverse-geocoding remote punches to a locality ("Andheri East, Mumbai"). Off by default; the whole feature is dark until an admin enables it. Plan: `docs/superpowers/plans/2026-08-12-mobile-d5-geo-punch-and-prd-04-05.md`.
+
+**Naming**: user-facing name is *Location-verified clock-in*. Never call it "tracking" in copy — it captures ONE fix at the moment of a punch, not a trail (that's JambaGeo, and a different DPDP posture).
+
+**Settings**: `organizations.settings.attendance.location_punch = { enabled, mode: 'optional'|'required', default_radius_m }`. `required` blocks a punch without coordinates (400 `location_required`) and is a deliberate admin choice — any GPS failure then becomes a can't-clock-in incident.
+
+**Migration 107**: `locations` gains `lat`/`lng`/`geofence_radius_m` (a location with coordinates IS the office geofence — one row serves biometric devices AND mobile); `attendance_punch_events` gains `accuracy_m`, `geo_status` ('office'|'remote'|NULL), `matched_location_id`, `geo_label`.
+
+**Code**: pure resolution in `@jambahr/shared/attendance/geo-punch` (`haversineMeters`, `resolveGeoMatch`, `normalizeLocationPunchSettings`); server orchestration in `src/lib/attendance/location-punch.ts` (plain module, NOT `"use server"` — gotcha #85); `src/lib/geo/reverse-geocode.ts` (Mapbox v5 reverse, `types=neighborhood,locality,place` only — deliberately coarse); admin actions in `src/actions/location-punch.ts`; UI card `settings/location-punch-card.tsx`. Mobile: `src/lib/location.ts` + `components/location-consent-sheet.tsx`.
+
+**Invariants (do NOT relax these):**
+- The verdict is **server-resolved**. The client sends coordinates, never a claim.
+- **A punch is never lost to location.** Settings unreadable, Mapbox down, permission denied → punch records, label missing. Only `required`-mode-with-no-coords rejects, and it does so before any write.
+- **No geofences configured → `geo_status` NULL ("not evaluated"), never 'remote'.** An admin who hasn't pinned an office must not have every employee labelled off-site.
+- Offline punches **freeze coordinates at tap time** into the queue entry, so a replay carries where the punch happened, not where the phone reconnected. A 23505 replay does NOT overwrite the stored verdict.
+- Accuracy widens the fence by `min(accuracyM, 100)` m — capped so a garbage fix can't fake an office match.
+
 ## Multi-Location Attendance (Biometric Zones) — shipped 2026-06-25
 
 Biometric devices across multiple sites push fingerprint punches to JambaHR; punches pool into one daily attendance record scoped to the employee's **zone**. Operator/dev doc: `docs/multi-location-attendance.md`. Spec: `docs/prds/multi-location-attendance.md`.
@@ -938,6 +1003,7 @@ Primary: teal `172 50% 36%`. Accent: warm orange `32 95% 52%`. Use CSS variables
 | `/api/cron/jambageo-retention-sweep` | `0 19 * * *` | 12:30am | Delete `location_pings` older than per-employee retention (Phase 1 no-op; ready for Phase 2 mobile pings) |
 | `/api/cron/late-policy-reconcile` | `0 20 * * *` | 1:30am | Recompute current-IST-month late-day counts for enabled late policies; upsert missed `late_policy_flags` (never re-flags `overridden`). Safety net for the inline clock-in flagging. |
 | `/api/cron/ownership-transfer-expiry` | `30 4 * * *` | 10:00am | Flip `ownership_transfers` rows past `expires_at` from `pending` to `expired`; clean up unlinked placeholder employees (clerk_user_id null + role 'admin'). |
+| `/api/cron/device-health-check` | `0 5 * * *` | 10:30am | **Internal/founder-only** alert when a registered biometric device has been silent ≥12h (or never connected, after a 24h install grace). **Customers are deliberately NOT emailed** — an automated "your attendance is broken" message is alarming and pre-empts a direct conversation; adding org admins is an explicit product decision, not a config tweak. Re-alerts daily until it reconnects; `devices.silence_alerted_at` de-dupes and is cleared on recovery. Pure logic in `@jambahr/shared/attendance/device-health`. |
 
 All cron routes require `Authorization: Bearer CRON_SECRET` header. `CRON_SECRET` env var must be set in Vercel.
 

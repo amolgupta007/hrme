@@ -54,7 +54,10 @@ AppState.addEventListener("change", onAppStateChange);
  * Bump whenever a cached query's shape changes incompatibly — the persister
  * discards anything restored under a different buster.
  */
-const CACHE_BUSTER = "mobile-v1";
+// v2 (D5): MobileTodayStatus gained `lastPunchGeo` and MobileAttendanceDayDetail
+// gained a required `geo` array. A v1 cache rehydrates those responses without
+// the new fields, so it must be discarded rather than restored.
+const CACHE_BUSTER = "mobile-v2";
 
 const PERSIST_STORAGE_KEY = "rq-cache";
 const ACTIVE_ORG_STORAGE_KEY = "rq-active-org";

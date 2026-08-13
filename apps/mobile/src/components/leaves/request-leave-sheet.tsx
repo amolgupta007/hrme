@@ -107,9 +107,15 @@ export function RequestLeaveSheet({
         className="flex-1"
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <Pressable className="flex-1 justify-end bg-black/40" onPress={onClose}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Close"
+          className="flex-1 justify-end bg-black/40"
+          onPress={onClose}
+        >
           <Pressable
             onPress={() => {}}
+            accessible={false}
             className="max-h-[88%] rounded-t-2xl border border-line bg-surface pb-8 pt-2"
           >
             {/* Grabber */}

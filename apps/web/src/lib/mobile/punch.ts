@@ -11,6 +11,10 @@ export const PunchBodySchema = z.object({
   punchedAt: z.string().datetime({ offset: true }),
   lat: z.number().min(-90).max(90).optional().nullable(),
   lng: z.number().min(-180).max(180).optional().nullable(),
+  // GPS accuracy radius in metres. Upper-bounded so a nonsense value can't be
+  // used to widen a geofence — the resolver caps the slack it grants anyway,
+  // this just keeps obvious garbage out of the column.
+  accuracyM: z.number().min(0).max(100_000).optional().nullable(),
 });
 
 export type PunchBody = z.infer<typeof PunchBodySchema>;

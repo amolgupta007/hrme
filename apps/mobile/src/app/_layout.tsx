@@ -4,10 +4,14 @@ import { Sentry } from "@/lib/sentry";
 import { ClerkProvider } from "@clerk/clerk-expo";
 import { tokenCache } from "@clerk/clerk-expo/token-cache";
 import { Stack, useRouter } from "expo-router";
+import { StatusBar } from "expo-status-bar";
 import * as Notifications from "expo-notifications";
 import { QueryProvider } from "@/lib/query";
 import { SessionProvider } from "@/lib/session";
 import { routeForNotificationType } from "@/lib/notifications";
+import { useAppConfig } from "@/lib/app-config";
+import { UpdateRequiredScreen } from "@/components/update-required-screen";
+import { markColdStartInteractive } from "@/lib/startup";
 
 /**
  * Root Stack (Slice 2 Task 5). Previously a bare `<Slot />` — promoted to a
@@ -18,6 +22,13 @@ import { routeForNotificationType } from "@/lib/notifications";
  */
 function RootLayout() {
   const router = useRouter();
+  const { blocked, config, version } = useAppConfig();
+
+  // Cold-start budget instrumentation (PRD-04 §4: interactive Home < 2s).
+  // Fires once, on the first committed render of the root navigator.
+  useEffect(() => {
+    markColdStartInteractive();
+  }, []);
 
   // Push-tap routing (D3 Stage D). Reads the notification's `data.type`
   // (set by notify() in apps/web/src/lib/mobile/notify.ts) and deep-links.
@@ -37,11 +48,27 @@ function RootLayout() {
     return () => sub.remove();
   }, [router]);
 
+  // Rendered OUTSIDE the providers: a build this old may not be able to talk to
+  // the BFF at all, so there is no point mounting auth/query/session behind it.
+  if (blocked) {
+    return (
+      <>
+        <StatusBar style="dark" />
+        <UpdateRequiredScreen config={config} version={version} />
+      </>
+    );
+  }
+
   return (
     <ClerkProvider
       publishableKey={process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY!}
       tokenCache={tokenCache}
     >
+      {/* Explicit, not `auto`: Android edge-to-edge is mandatory from Android 16
+          (Expo removed the opt-out), so content draws under the status bar. The
+          app is pinned to a light appearance, so the icons must be dark or they
+          vanish against our light surfaces. Revisit when dark mode ships. */}
+      <StatusBar style="dark" />
       <QueryProvider>
         <SessionProvider>
           <Stack

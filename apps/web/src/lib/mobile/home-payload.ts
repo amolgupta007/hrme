@@ -4,6 +4,7 @@ import type {
   MobileLeaveBalance,
   MobileTodayStatus,
   MobileAnnouncementLite,
+  MobilePunchGeo,
 } from "@jambahr/shared";
 
 /** The subset of an `attendance_records` row the today card needs. */
@@ -24,7 +25,11 @@ export type ShiftLite = {
  * Derive the live today-status from the day's rollup record + the resolved
  * shift. Shared by the Home card and the punch response (identical shape).
  */
-export function buildTodayStatus(record: TodayRecordLite, shift: ShiftLite): MobileTodayStatus {
+export function buildTodayStatus(
+  record: TodayRecordLite,
+  shift: ShiftLite,
+  lastPunchGeo: MobilePunchGeo | null = null,
+): MobileTodayStatus {
   const clockInAt = record?.clock_in_at ?? null;
   const clockOutAt = record?.clock_out_at ?? null;
   return {
@@ -33,6 +38,9 @@ export function buildTodayStatus(record: TodayRecordLite, shift: ShiftLite): Mob
     clockOutAt,
     minutesToday: record?.total_minutes ?? null,
     shift: shift ? { name: shift.name, start: shift.start_time, end: shift.end_time } : null,
+    // Defaults to null so every existing caller keeps its previous behaviour:
+    // "not evaluated", which the client renders as no chip at all.
+    lastPunchGeo,
   };
 }
 
@@ -110,9 +118,16 @@ export function buildHomePayload(input: {
   announcements: AnnouncementRow[];
   unreadNotifications: number;
   adminHome?: MobileHomeResponse["adminHome"];
+  /**
+   * Location verdict on today's most recent evaluated punch. Home MUST carry
+   * this: the punch response sets the TodayCard chip, and a Home refetch that
+   * omitted it would blank the chip a minute later, looking like the verified
+   * location had been lost.
+   */
+  lastPunchGeo?: MobilePunchGeo | null;
 }): MobileHomeResponse {
   return {
-    today: buildTodayStatus(input.record, input.shift),
+    today: buildTodayStatus(input.record, input.shift, input.lastPunchGeo ?? null),
     leave: { balances: buildLeaveBalances(input.policies) },
     nextHolidays: input.holidays.slice(0, 3),
     pending: {

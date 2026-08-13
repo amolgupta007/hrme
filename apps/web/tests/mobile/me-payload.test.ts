@@ -42,6 +42,41 @@ describe("buildMePayload", () => {
         { orgId: "org-1", orgName: "Acme", role: "employee" },
         { orgId: "org-2", orgName: "your organisation", role: "owner" },
       ],
+      attendance: {
+        enabled: false,
+        locationPunch: { enabled: false, mode: "optional" },
+      },
+    });
+  });
+
+  describe("attendance capabilities", () => {
+    it("advertises location punch only when attendance itself is on", () => {
+      // Guards the client against prompting for location permission for a
+      // module the org can't even use.
+      const on = buildMePayload({ ...user, attendanceEnabled: true }, null, [], {
+        enabled: true,
+        mode: "required",
+        defaultRadiusM: 200,
+      });
+      expect(on.attendance).toEqual({
+        enabled: true,
+        locationPunch: { enabled: true, mode: "required" },
+      });
+
+      const attendanceOff = buildMePayload({ ...user, attendanceEnabled: false }, null, [], {
+        enabled: true,
+        mode: "required",
+        defaultRadiusM: 200,
+      });
+      expect(attendanceOff.attendance.locationPunch.enabled).toBe(false);
+    });
+
+    it("defaults to the feature being off when no settings are supplied", () => {
+      const payload = buildMePayload({ ...user, attendanceEnabled: true }, null, []);
+      expect(payload.attendance).toEqual({
+        enabled: true,
+        locationPunch: { enabled: false, mode: "optional" },
+      });
     });
   });
 

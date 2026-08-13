@@ -1,7 +1,39 @@
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
-import type { MobileTodayStatus } from "@jambahr/shared/mobile/types";
+import type { MobilePunchGeo, MobileTodayStatus } from "@jambahr/shared/mobile/types";
+import { strings } from "@/lib/i18n";
+
+/**
+ * Where the last punch was resolved to (Mobile D5). Rendered only when the
+ * server actually reached a verdict — an absent `lastPunchGeo` means "not
+ * evaluated" and shows nothing at all, never a "remote" fallback.
+ *
+ * Neutral colours on purpose: remote is a fact about the punch, not a warning
+ * about the employee. Amber/red here would read as an accusation.
+ */
+function GeoChip({ geo }: { geo: MobilePunchGeo }) {
+  const copy = strings.location.chip;
+  const atOffice = geo.status === "office";
+  const label = atOffice
+    ? (geo.siteName ?? copy.atOffice)
+    : geo.label
+      ? copy.remoteAt(geo.label)
+      : copy.remote;
+
+  return (
+    <View className="mt-2 flex-row items-center" accessibilityLabel={copy.lastPunchA11y(label)}>
+      <Ionicons
+        name={atOffice ? "business-outline" : "location-outline"}
+        size={13}
+        color="#5B6472"
+      />
+      <Text className="ml-1.5 flex-1 text-[13px] text-ink-600" numberOfLines={1}>
+        {label}
+      </Text>
+    </View>
+  );
+}
 
 /** "2026-07-17T09:31:00Z" → "9:31 AM" (device-local). */
 function formatTime(iso: string | null): string {
@@ -106,6 +138,8 @@ export function TodayCard({
         <Text className="ml-0.5 text-[15px] font-normal text-ink-600">m</Text>
       </View>
 
+      {today.lastPunchGeo ? <GeoChip geo={today.lastPunchGeo} /> : null}
+
       <View className="mt-3 flex-row items-center justify-between">
         <View className={`self-start rounded-full px-3 py-1 ${chip.bg}`}>
           <Text className={`text-[13px] font-medium ${chip.fg}`}>{chip.label}</Text>
@@ -126,7 +160,10 @@ export function TodayCard({
           deeper in the tree — standard RN nested-touchable behavior. */}
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={today.isClockedIn ? "Punch out" : "Punch in"}
+        accessibilityLabel={today.isClockedIn ? strings.punch.out : strings.punch.in}
+        // Announces "busy" instead of leaving a screen-reader user tapping a
+        // button that silently does nothing while the punch is in flight.
+        accessibilityState={{ disabled: isPunching, busy: isPunching }}
         disabled={isPunching}
         onPress={onPunch}
         className={`mt-3 h-11 flex-row items-center justify-center rounded-xl active:bg-brand-pressed ${
@@ -143,7 +180,7 @@ export function TodayCard({
               color="#FFFFFF"
             />
             <Text className="ml-2 text-[15px] font-semibold text-white">
-              {today.isClockedIn ? "Punch out" : "Punch in"}
+              {today.isClockedIn ? strings.punch.out : strings.punch.in}
             </Text>
           </>
         )}

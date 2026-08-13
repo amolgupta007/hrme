@@ -7,7 +7,10 @@ import { WeekOffCard } from "./week-off-card";
 import { WeekOffOverrideList } from "./week-off-override-list";
 import { OvertimeCard } from "./overtime-card";
 import { LatePolicyCard } from "./late-policy-card";
+import { LocationPunchCard } from "./location-punch-card";
 import { WhatsAppProviderCard } from "./whatsapp-provider-card";
+import type { GeofencedLocationRow } from "@/actions/location-punch";
+import type { LocationPunchSettings } from "@jambahr/shared/attendance/geo-punch";
 import type { TargetRow } from "./late-policy-targets-select";
 import type { AttendanceSettings } from "@/actions/attendance";
 import type { Shift, ShiftAssignment } from "@/actions/shifts";
@@ -35,9 +38,11 @@ interface Props {
   whatsappCreds: WhatsAppCredsView | null;
   lateDepartments: Array<{ id: string; name: string }>;
   lateEmployees: Array<{ id: string; name: string; department_id: string | null }>;
+  locationPunchSettings: LocationPunchSettings;
+  geofencedLocations: GeofencedLocationRow[];
 }
 
-export function AttendanceSection({ attendanceSettings, shifts, assignments, weekOffPolicy, weekOffOverrides, departmentWeekOffOverrides, employees, departments, overtimeSettings, latePolicy, latePolicyTargets, latePolicyBands, whatsappCreds, lateDepartments, lateEmployees }: Props) {
+export function AttendanceSection({ attendanceSettings, shifts, assignments, weekOffPolicy, weekOffOverrides, departmentWeekOffOverrides, employees, departments, overtimeSettings, latePolicy, latePolicyTargets, latePolicyBands, whatsappCreds, lateDepartments, lateEmployees, locationPunchSettings, geofencedLocations }: Props) {
   return (
     <div className="space-y-4 p-6">
       <h2 className="text-lg font-semibold">Attendance</h2>
@@ -51,6 +56,7 @@ export function AttendanceSection({ attendanceSettings, shifts, assignments, wee
       <WeekOffCard initial={weekOffPolicy} />
       <WeekOffOverrideList overrides={weekOffOverrides} departmentOverrides={departmentWeekOffOverrides} employees={employees} departments={departments} />
       <OvertimeCard settings={overtimeSettings} />
+      <LocationPunchCard settings={locationPunchSettings} locations={geofencedLocations} />
       <LatePolicyCard initialPolicy={latePolicy} initialTargets={latePolicyTargets} initialBands={latePolicyBands} departments={lateDepartments} employees={lateEmployees} />
       <WhatsAppProviderCard initial={whatsappCreds} />
     </div>

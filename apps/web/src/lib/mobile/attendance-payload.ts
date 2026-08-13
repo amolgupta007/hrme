@@ -6,6 +6,7 @@ import {
   type HolidayLite,
   type MobileAttendanceDayDetail,
   type MobileAttendanceMonthResponse,
+  type MobilePunchGeo,
   type WeekOffPolicy,
 } from "@jambahr/shared";
 
@@ -27,6 +28,9 @@ export type AttendanceRecordRow = {
 export type PunchEventRow = {
   punched_at: string; // ISO 8601 (UTC)
   status: string | null;
+  /** Migration 107 — server-resolved location verdict; null = not evaluated. */
+  geo_status?: string | null;
+  geo_label?: string | null;
 };
 
 function pad2(n: number): string {
@@ -61,7 +65,27 @@ function buildDayDetail(
     source: record.source ?? null,
     autoClosed: !!record.auto_closed,
     outOfZoneCount: record.out_of_zone_count ?? 0,
+    geo: distinctGeo(approved),
   };
+}
+
+/**
+ * The day's location verdicts, in punch order, collapsed to distinct
+ * status+label combinations — six punches from one office is one chip, not six.
+ */
+function distinctGeo(events: PunchEventRow[]): MobilePunchGeo[] {
+  const out: MobilePunchGeo[] = [];
+  const seen = new Set<string>();
+  for (const e of events) {
+    const status = e.geo_status;
+    if (status !== "office" && status !== "remote") continue;
+    const label = e.geo_label ?? null;
+    const key = `${status}|${label ?? ""}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ status, label, siteName: status === "office" ? label : null });
+  }
+  return out;
 }
 
 /**

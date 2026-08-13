@@ -3,6 +3,7 @@ import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
 import Constants from "expo-constants";
 import { getClerkInstance } from "@clerk/clerk-expo";
+import { ANDROID_CHANNELS } from "@jambahr/shared/mobile/push-channels";
 import { BASE_URL } from "@/lib/api";
 import { createAppStorage } from "@/lib/storage";
 
@@ -21,6 +22,51 @@ Notifications.setNotificationHandler({
     shouldSetBadge: true,
   }),
 });
+
+/**
+ * Android notification channels.
+ *
+ * Registered at module load, for the same reason as the handler above: a
+ * notification can arrive before any screen mounts, and on Android 8+ one that
+ * names a channel which doesn't exist yet is delivered on an auto-created
+ * default-importance fallback — no heads-up banner, no sound, and nothing in
+ * any log to say so.
+ *
+ * Ids and importances come from `@jambahr/shared` because the server names the
+ * same channel in its push payload; a drift between the two is silent.
+ *
+ * Idempotent — `setNotificationChannelAsync` upserts. Note that Android treats
+ * channel settings as immutable once the user has seen them, so changing an
+ * importance means shipping a new channel id (hence the `_v1` suffixes), not
+ * editing this call.
+ */
+async function ensureAndroidChannels(): Promise<void> {
+  if (Platform.OS !== "android") return;
+  try {
+    await Promise.all(
+      ANDROID_CHANNELS.map((channel) =>
+        Notifications.setNotificationChannelAsync(channel.id, {
+          name: channel.name,
+          description: channel.description,
+          importance:
+            channel.importance === "high"
+              ? Notifications.AndroidImportance.HIGH
+              : Notifications.AndroidImportance.DEFAULT,
+          // Only the high-importance channel vibrates: an approval is worth a
+          // buzz in a meeting, a payslip notification is not.
+          vibrationPattern: channel.importance === "high" ? [0, 250, 250, 250] : undefined,
+          lockscreenVisibility: Notifications.AndroidNotificationVisibility.PRIVATE,
+        }),
+      ),
+    );
+  } catch (error) {
+    log("ensureAndroidChannels failed", error);
+  }
+}
+
+// Fire-and-forget at module load. Failure only costs channel metadata; it must
+// never block the module from being imported.
+void ensureAndroidChannels();
 
 function log(context: string, error: unknown): void {
   if (__DEV__) {

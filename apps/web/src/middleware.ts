@@ -26,6 +26,10 @@ const isPublicRoute = createRouteMatcher([
   "/robots.txt",
   "/privacy",
   "/terms",
+  // Google Play requires a publicly reachable account-deletion URL — reachable
+  // without installing the app or signing in — even though the app has an
+  // in-app path.
+  "/account-deletion",
 ]);
 
 const isSuperadminPublic = createRouteMatcher([

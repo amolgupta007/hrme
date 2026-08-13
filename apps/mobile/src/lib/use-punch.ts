@@ -12,6 +12,9 @@ import { ApiError, useApi } from "@/lib/api";
 import { homeQueryKey, optimisticToday } from "@/lib/home";
 import { attendanceMonthQueryKey, currentIstMonth } from "@/lib/attendance";
 import { createOfflineQueue, type QueuedPunch } from "@/lib/offline-queue";
+import { acquireLocation, locationOutcomeMessage } from "@/lib/location";
+import { punchFeedback } from "@/lib/haptics";
+import { strings } from "@/lib/i18n";
 
 const PUNCH_PATH = "/api/mobile/attendance/punch";
 
@@ -38,7 +41,18 @@ function is4xx(error: unknown): error is ApiError {
  * every other case, just carved out for 401.
  */
 function isPermanentRejection(error: unknown): boolean {
-  return is4xx(error) && error.status !== 401;
+  if (!is4xx(error)) return false;
+  // 401: an expired/refreshing Clerk token is transient — a fresh token on the
+  // next attempt can succeed.
+  if (error.status === 401) return false;
+  // `location_required`: the org flipped to required mode AFTER this punch was
+  // queued (a fresh punch in required mode never enqueues without coordinates —
+  // `punch()` returns before enqueueing). Dropping it would DESTROY a real
+  // clock-in that already happened, and a lost attendance record feeds the
+  // rollup and payroll LOP. A stuck queue entry is recoverable; a deleted punch
+  // is not — so it stays queued, and drains if the admin relaxes the policy.
+  if (error.code === "location_required") return false;
+  return true;
 }
 
 /** Human copy for the BFF error codes a punch can return (4xx surface path). */
@@ -46,18 +60,25 @@ function punchErrorCopy(error: unknown): string {
   const code = error instanceof ApiError ? error.code : "network_error";
   switch (code) {
     case "clock_skew":
-      return "Your device clock looks off. Fix the time and try again.";
+      return strings.punch.errors.clockSkew;
     case "attendance_disabled":
-      return "Attendance isn't enabled for your organization.";
+      return strings.punch.errors.attendanceDisabled;
     case "inactive_employee":
     case "no_employee":
-      return "Your employee record isn't active. Contact your admin.";
+      return strings.punch.errors.inactiveEmployee;
     case "no_membership":
-      return "You're not a member of this organization.";
+      return strings.punch.errors.noMembership;
+    case "location_required":
+      return strings.punch.errors.locationRequired;
     default:
-      return "Couldn't record your punch. Please try again.";
+      return strings.punch.errors.generic;
   }
 }
+
+/** The org's Location-verified clock-in configuration, as served by `/me`. */
+export type LocationPunchConfig = { enabled: boolean; mode: "optional" | "required" };
+
+const LOCATION_OFF: LocationPunchConfig = { enabled: false, mode: "optional" };
 
 type PunchVars = MobilePunchRequest;
 type PunchContext = { previous: MobileHomeResponse | undefined };
@@ -78,9 +99,15 @@ type PunchContext = { previous: MobileHomeResponse | undefined };
 export function usePunch({
   namespace,
   orgId,
+  locationPunch = LOCATION_OFF,
 }: {
   namespace: string;
   orgId: string | null | undefined;
+  /**
+   * From `/api/mobile/me`. Defaults to off so a stale persisted `me` payload
+   * (pre-D5, with no `attendance` key) can never make the app ask for location.
+   */
+  locationPunch?: LocationPunchConfig;
 }) {
   const apiFetch = useApi();
   const queryClient = useQueryClient();
@@ -89,6 +116,22 @@ export function usePunch({
   const [queueCount, setQueueCount] = useState(() => queue.peekAll().length);
   const [drainFailures, setDrainFailures] = useState(0);
   const [punchError, setPunchError] = useState<string | null>(null);
+  /**
+   * A punch that DID record but is worth mentioning — e.g. location permission
+   * was denied in `optional` mode, so it went in untagged. Deliberately a
+   * separate channel from `punchError`: rendering a successful clock-in through
+   * the red failure banner tells someone their punch didn't work when it did,
+   * and the employee's likely reaction (tap again) makes it worse.
+   */
+  const [punchNotice, setPunchNotice] = useState<string | null>(null);
+  /** True while a GPS fix is being acquired, before the mutation starts. */
+  const [acquiring, setAcquiring] = useState(false);
+  /**
+   * Re-entry guard spanning the whole punch operation (acquire + send).
+   * A ref, not the `acquiring` state, because taps land faster than React
+   * re-renders and the second tap must be rejected synchronously.
+   */
+  const busy = useRef(false);
   const draining = useRef(false);
   /**
    * clientEventIds whose FIRST (immediate, at-tap) POST is still in flight.
@@ -142,6 +185,10 @@ export function usePunch({
         orgId
       ),
     onMutate: async (vars) => {
+      // Safe to clear again: a location warning in `optional` mode now lands on
+      // the separate `punchNotice` channel, so there is nothing here that this
+      // reset could wipe. (An earlier revision had to skip this, which let a
+      // stale error from one action bleed into an unrelated mutation.)
       setPunchError(null);
       await queryClient.cancelQueries({ queryKey: key });
       const previous = queryClient.getQueryData<MobileHomeResponse>(key);
@@ -204,11 +251,14 @@ export function usePunch({
             PUNCH_PATH,
             {
               method: "POST",
+              // Replays the frozen bytes verbatim, coordinates included — the
+              // location where the punch happened, not where the phone is now.
               body: JSON.stringify({
                 clientEventId: item.clientEventId,
                 punchedAt: item.punchedAt,
                 lat: item.lat ?? null,
                 lng: item.lng ?? null,
+                accuracyM: item.accuracyM ?? null,
               } satisfies MobilePunchRequest),
             },
             orgId
@@ -277,44 +327,110 @@ export function usePunch({
    * 4xx rejection; it stays queued for network/5xx failures and for a 401
    * (transient token blip — never permanently rejected).
    */
-  const punch = useCallback(async () => {
-    const vars: PunchVars = {
-      clientEventId: Crypto.randomUUID(),
-      punchedAt: new Date().toISOString(),
-    };
-    // Durability first: persist, then send. Marked in-flight so the drain
-    // won't replay it while this immediate POST is still pending (and so the
-    // Syncing badge doesn't count it).
-    const queued: QueuedPunch = { ...vars, queuedAt: Date.now() };
-    queue.enqueue(queued);
-    inFlight.current.add(vars.clientEventId);
-    try {
-      await mutation.mutateAsync(vars);
-      queue.remove(vars.clientEventId);
-    } catch (error) {
-      if (isPermanentRejection(error)) {
-        // Deterministic rejection (already rolled back + surfaced in onError)
-        // — must never be retried, so drop it from the queue.
+  /**
+   * Mint, persist, then send one punch.
+   *
+   * The clientEventId and punchedAt are minted ONCE here and frozen, and the
+   * entry is enqueued BEFORE the POST — so a process kill mid-request can never
+   * lose the punch (on relaunch it is still in MMKV and the mount/reconnect
+   * drain replays it; if the killed request had actually reached the server the
+   * replay is deduped on clientEventId → idempotent success).
+   *
+   * Removed on success or on a permanent rejection; it stays queued for
+   * network/5xx failures, for a 401 token blip, and for `location_required`
+   * (see `isPermanentRejection`).
+   */
+  const sendPunch = useCallback(
+    async (coords: { lat?: number | null; lng?: number | null; accuracyM?: number | null }) => {
+      const vars: PunchVars = {
+        clientEventId: Crypto.randomUUID(),
+        punchedAt: new Date().toISOString(),
+        ...coords,
+      };
+      const queued: QueuedPunch = { ...vars, queuedAt: Date.now() };
+      queue.enqueue(queued);
+      // Marked in-flight so the drain won't replay it while this immediate POST
+      // is still pending (and so the Syncing badge doesn't count it).
+      inFlight.current.add(vars.clientEventId);
+      try {
+        await mutation.mutateAsync(vars);
         queue.remove(vars.clientEventId);
+      } catch (error) {
+        if (isPermanentRejection(error)) {
+          // Deterministic rejection (already rolled back + surfaced in onError)
+          // — must never be retried, so drop it from the queue.
+          queue.remove(vars.clientEventId);
+        }
+        // Everything else: leave the frozen entry queued for the drain.
+      } finally {
+        inFlight.current.delete(vars.clientEventId);
+        setQueueCount(pendingCount());
       }
-      // Network / 5xx / 401: leave the frozen entry queued for the drain.
-      // (A 401 is still surfaced to the user via `onError` above — that's
-      // just user feedback; the underlying token blip is transient, so the
-      // punch itself must stay queued and retried, same reasoning as the
-      // drain loop.)
+    },
+    [mutation, queue, pendingCount],
+  );
+
+  const punch = useCallback(async () => {
+    // Guard re-entry for the WHOLE operation, not just the mutation. Acquiring a
+    // GPS fix can take up to ACQUIRE_TIMEOUT_MS, during which `mutation.isPending`
+    // is still false — without this, a second tap during the wait mints a second
+    // clientEventId and writes a duplicate punch event for one clock-in.
+    if (busy.current) return;
+    busy.current = true;
+    setAcquiring(true);
+    setPunchError(null);
+    setPunchNotice(null);
+    // Fire at TAP time, not after the fix: haptics acknowledge the press, and a
+    // buzz arriving ten seconds later reads as a second, phantom action.
+    punchFeedback();
+
+    try {
+      // Location is acquired BEFORE the timestamp is minted and frozen into the
+      // queued entry alongside it. That ordering is the whole correctness story
+      // for offline punches: a replay days later must carry the coordinates of
+      // where the punch actually happened, not wherever the phone was when it
+      // finally reconnected.
+      let coords: { lat?: number | null; lng?: number | null; accuracyM?: number | null } = {};
+      if (locationPunch.enabled) {
+        const fix = await acquireLocation();
+        if (fix.outcome === "ok") {
+          coords = { lat: fix.lat, lng: fix.lng, accuracyM: fix.accuracyM };
+        } else {
+          const blocking = locationPunch.mode === "required";
+          const message = locationOutcomeMessage(fix.outcome, blocking);
+          // In `required` mode this really is a failure; in `optional` mode the
+          // punch still succeeds, so it goes to the neutral notice channel —
+          // reporting a recorded punch through the red error banner tells the
+          // employee their clock-in failed when it did not.
+          if (blocking) {
+            setPunchError(message);
+            // Stop before enqueueing: the server is certain to reject this, and
+            // a queued 400 would just churn the drain loop.
+            return;
+          }
+          setPunchNotice(message);
+        }
+      }
+
+      await sendPunch(coords);
     } finally {
-      inFlight.current.delete(vars.clientEventId);
-      setQueueCount(pendingCount());
+      busy.current = false;
+      setAcquiring(false);
     }
-  }, [mutation, queue, pendingCount]);
+  }, [sendPunch, locationPunch.enabled, locationPunch.mode]);
 
   return {
     punch,
-    isPunching: mutation.isPending,
+    // Covers the GPS acquisition window as well as the request, so the button
+    // is disabled and spinning for the entire operation.
+    isPunching: acquiring || mutation.isPending,
     queueCount,
     /** True once transient drains have failed enough to warrant a banner. */
     showSyncFailedBanner: drainFailures >= DRAIN_FAILURE_BANNER_THRESHOLD,
     punchError,
     clearPunchError: useCallback(() => setPunchError(null), []),
+    /** Non-failure information about a punch that DID record (e.g. untagged). */
+    punchNotice,
+    clearPunchNotice: useCallback(() => setPunchNotice(null), []),
   };
 }

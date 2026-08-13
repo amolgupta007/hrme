@@ -6,6 +6,7 @@ import type { MobileAttendanceDayDetail } from "@jambahr/shared/mobile/types";
 import { istToday } from "@jambahr/shared/attendance/ist";
 import { STATE_META } from "@/components/attendance/state-legend";
 import { RegularizeForm } from "@/components/attendance/regularize-form";
+import { strings } from "@/lib/i18n";
 
 /** Reliable monospace family for the hours readout (design: money/duration mono). */
 const MONO = Platform.select({ ios: "Menlo", default: "monospace" });
@@ -118,10 +119,16 @@ export function DayDetailSheet({
         className="flex-1"
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-      <Pressable className="flex-1 justify-end bg-black/40" onPress={close}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Close"
+        className="flex-1 justify-end bg-black/40"
+        onPress={close}
+      >
         {/* Stop propagation so taps inside the card don't dismiss. */}
         <Pressable
           onPress={() => {}}
+          accessible={false}
           className="rounded-t-2xl border border-line bg-surface px-4 pb-8 pt-2"
         >
           {/* Grabber */}
@@ -216,6 +223,34 @@ export function DayDetailSheet({
                   {sourceChips.map((label) => (
                     <View key={label} className="rounded-full bg-brand-tint px-2.5 py-1">
                       <Text className="text-[11px] font-medium text-brand-pressed">{label}</Text>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+
+              {/* Where the day's punches were resolved to (Mobile D5). A list
+                  because clocking in at the office and out from home is normal
+                  — and pairing is derived, so it can't be shown per-pair. */}
+              {/* Optional-chained like every sibling read above (`detail?.pairs`,
+                  `detail?.source`): `geo` is a required field on the DTO, but a
+                  cache persisted by a pre-D5 build rehydrates without it, and an
+                  unguarded `.length` there crashes the whole sheet. */}
+              {detail?.geo && detail.geo.length > 0 ? (
+                <View className="mt-3 gap-1.5">
+                  {detail.geo.map((g, i) => (
+                    <View key={`${g.status}-${g.label ?? ""}-${i}`} className="flex-row items-center">
+                      <Ionicons
+                        name={g.status === "office" ? "business-outline" : "location-outline"}
+                        size={14}
+                        color="#5B6472"
+                      />
+                      <Text className="ml-1.5 flex-1 text-[13px] text-ink-600" numberOfLines={1}>
+                        {g.status === "office"
+                          ? (g.siteName ?? strings.location.chip.atOffice)
+                          : g.label
+                            ? strings.location.chip.remoteAt(g.label)
+                            : strings.location.chip.remote}
+                      </Text>
                     </View>
                   ))}
                 </View>

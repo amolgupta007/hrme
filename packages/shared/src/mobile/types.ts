@@ -19,6 +19,26 @@ export type MobileTodayStatus = {
   clockOutAt: string | null;
   minutesToday: number | null;
   shift: { name: string; start: string; end: string } | null;
+  /**
+   * Location verdict for the employee's most recent punch today, when the org
+   * has Location-verified clock-in on and coordinates were resolved. `null`
+   * means "not evaluated" (feature off, permission denied, no geofences set up,
+   * or resolution failed) — never render it as "remote".
+   */
+  lastPunchGeo: MobilePunchGeo | null;
+};
+
+/**
+ * The SERVER-resolved location verdict for one punch. The client sends only
+ * raw coordinates; office-vs-remote is decided server-side against the org's
+ * geofences, so a client can never claim it was at the office.
+ */
+export type MobilePunchGeo = {
+  status: "office" | "remote";
+  /** "Head Office" when at an office; "Andheri East, Mumbai" when remote. */
+  label: string | null;
+  /** Set only when `status === 'office'`. */
+  siteName: string | null;
 };
 
 export type MobileLeaveBalance = {
@@ -103,6 +123,15 @@ export type MobileAttendanceDayDetail = {
   source: string | null;
   autoClosed: boolean;
   outOfZoneCount: number;
+  /**
+   * Distinct location verdicts across the day's punches, in punch order.
+   *
+   * A list rather than one value per pair, because clocking in at the office
+   * and out from home is normal and both facts are worth showing — while
+   * pairing (`pairs`) is derived first-in/last-out and doesn't map 1:1 onto
+   * individual punch events. Empty when nothing was evaluated.
+   */
+  geo: MobilePunchGeo[];
 };
 
 export type MobileAttendanceMonthResponse = {
@@ -124,6 +153,12 @@ export type MobilePunchRequest = {
   punchedAt: string; // ISO 8601 (UTC or with offset)
   lat?: number | null;
   lng?: number | null;
+  /**
+   * GPS accuracy radius in metres, as reported by the device. Lets the server
+   * give a low-confidence fix the benefit of the doubt at a geofence edge
+   * (capped server-side so a garbage fix can't fake an office match).
+   */
+  accuracyM?: number | null;
 };
 
 export type MobilePunchResponse = {

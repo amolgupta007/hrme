@@ -170,7 +170,7 @@ function MoreRow({
         isLast ? "" : "border-b border-line"
       }`}
     >
-      <Ionicons name={icon} size={18} color={destructive ? "#B91C1C" : "#5B6472"} />
+      <Ionicons name={icon} size={18} color={destructive ? "#B91C1C" : "#3F4757"} />
       <Text
         className={`ml-3 flex-1 text-[17px] ${
           destructive ? "font-medium text-danger" : "text-ink-900"

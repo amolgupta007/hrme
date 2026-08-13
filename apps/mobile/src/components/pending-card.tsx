@@ -71,7 +71,7 @@ export function PendingCard({
       key: "own-leave",
       icon: "calendar-outline",
       iconBg: "bg-[#EFF1F3]",
-      iconFg: "#5B6472",
+      iconFg: "#3F4757",
       title: "Your leave requests pending",
       trailing: { kind: "count", value: leaveRequests },
     });
@@ -81,7 +81,7 @@ export function PendingCard({
       key: "own-regularizations",
       icon: "time-outline",
       iconBg: "bg-[#EFF1F3]",
-      iconFg: "#5B6472",
+      iconFg: "#3F4757",
       title: "Your regularizations pending",
       trailing: { kind: "count", value: regularizations },
     });

@@ -89,7 +89,7 @@ export function DateRangePicker({
           onPress={goPrev}
           className="h-11 w-11 items-center justify-center rounded-xl active:bg-brand-tint"
         >
-          <Ionicons name="chevron-back" size={20} color="#5B6472" />
+          <Ionicons name="chevron-back" size={20} color="#3F4757" />
         </Pressable>
         <Text className="text-[15px] font-semibold text-ink-900">
           {MONTHS[viewMonth]} {viewYear}
@@ -100,7 +100,7 @@ export function DateRangePicker({
           onPress={goNext}
           className="h-11 w-11 items-center justify-center rounded-xl active:bg-brand-tint"
         >
-          <Ionicons name="chevron-forward" size={20} color="#5B6472" />
+          <Ionicons name="chevron-forward" size={20} color="#3F4757" />
         </Pressable>
       </View>
 

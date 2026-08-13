@@ -242,7 +242,7 @@ export function DayDetailSheet({
                       <Ionicons
                         name={g.status === "office" ? "business-outline" : "location-outline"}
                         size={14}
-                        color="#5B6472"
+                        color="#3F4757"
                       />
                       <Text className="ml-1.5 flex-1 text-[13px] text-ink-600" numberOfLines={1}>
                         {g.status === "office"

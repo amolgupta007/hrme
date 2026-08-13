@@ -26,7 +26,7 @@ function GeoChip({ geo }: { geo: MobilePunchGeo }) {
       <Ionicons
         name={atOffice ? "business-outline" : "location-outline"}
         size={13}
-        color="#5B6472"
+        color="#3F4757"
       />
       <Text className="ml-1.5 flex-1 text-[13px] text-ink-600" numberOfLines={1}>
         {label}

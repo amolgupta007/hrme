@@ -7,8 +7,8 @@ version: "2026-08-13"
 
 # JambaHR Privacy Policy
 
-**Effective Date:** 2026-05-01  
-**Last Updated:** 2026-05-01
+**Effective Date:** 2026-08-13  
+**Last Updated:** 2026-08-13
 
 Welcome to JambaHR \("__JambaHR__," "__we__," "our," or "us"\)\.
 

@@ -26,11 +26,10 @@ interface DeviceOfflineAlertEmailProps {
 /**
  * Sent when a registered biometric device stops reaching JambaHR.
  *
- * The tone is deliberately urgent and concrete: the recipient's attendance data
- * is being lost *right now*, and every hour they don't act is another day of
- * punches nobody can reconstruct. It leads with the consequence rather than the
- * symptom, because "device offline" alone reads as an IT nuisance rather than
- * missing payroll input.
+ * **Internal — goes to the founder, not to the customer.** It leads with the
+ * consequence rather than the symptom because "device offline" reads as an IT
+ * nuisance rather than missing payroll input, and the point of the alert is to
+ * prompt a call to the customer, not to replace one.
  */
 export function DeviceOfflineAlertEmail({
   orgName = "Your organisation",
@@ -45,15 +44,16 @@ export function DeviceOfflineAlertEmail({
       <Body style={{ backgroundColor: "#f6f6f4", fontFamily: "Arial, sans-serif", margin: 0 }}>
         <Container style={{ backgroundColor: "#ffffff", padding: "32px", maxWidth: "560px" }}>
           <Text style={{ fontSize: "20px", fontWeight: "bold", color: "#B91C1C", margin: "0 0 8px" }}>
-            Attendance is not being recorded
+            {orgName}: attendance is not being recorded
           </Text>
 
           <Text style={{ fontSize: "15px", color: "#333", lineHeight: "24px", margin: "0 0 16px" }}>
             {multiple
               ? `${devices.length} attendance devices at ${orgName} have stopped sending punches to JambaHR.`
               : `An attendance device at ${orgName} has stopped sending punches to JambaHR.`}{" "}
-            Any fingerprint punches made since then are sitting on the device and are
-            <strong> not in your attendance records</strong>.
+            Fingerprint punches made since then are sitting on the device and are
+            <strong> not in their attendance records</strong>. The customer has not been
+            emailed — reach out to them directly.
           </Text>
 
           <Section
@@ -79,22 +79,21 @@ export function DeviceOfflineAlertEmail({
           </Section>
 
           <Text style={{ fontSize: "15px", color: "#333", lineHeight: "24px", margin: "0 0 8px" }}>
-            <strong>What to check, in order:</strong>
+            <strong>What to check with them, in order:</strong>
           </Text>
           <Text style={{ fontSize: "14px", color: "#444", lineHeight: "22px", margin: "0 0 16px" }}>
-            1. Is the device powered on and showing its normal home screen?
+            1. Is the relay PC on, awake, and running Caddy? A sleeping or restarted PC is the
+            most common cause by far.
             <br />
-            2. If your site uses a relay PC, is that computer switched on, awake, and running
-            the relay? A sleeping or restarted PC is the most common cause.
+            2. Is the device powered on, cable connected, gateway not <code>0.0.0.0</code>?
             <br />
-            3. Is the network cable connected, and does the device still show the right server
-            address?
+            3. Has the relay PC&apos;s LAN IP changed from what the device has configured?
           </Text>
 
           <Text style={{ fontSize: "14px", color: "#444", lineHeight: "22px", margin: "0 0 20px" }}>
-            Good news: once the device reconnects it sends everything it stored while it was
-            offline, and JambaHR removes any duplicates. Nothing needs to be typed in by hand —
-            but the punches only arrive once the connection is restored.
+            The backlog recovers itself: on reconnect the device replays everything it stored
+            and the server dedupes, so nothing needs re-keying — but only once the connection
+            is restored.
           </Text>
 
           <Button
@@ -109,14 +108,13 @@ export function DeviceOfflineAlertEmail({
               textDecoration: "none",
             }}
           >
-            Check device status
+            Open device settings
           </Button>
 
           <Hr style={{ borderColor: "#e7e9ec", margin: "28px 0 16px" }} />
           <Text style={{ fontSize: "12px", color: "#888", lineHeight: "18px", margin: 0 }}>
-            You are receiving this because you administer {orgName} on JambaHR. We check device
-            connectivity once a day and will remind you daily until it reconnects. Reply to this
-            email if you need help.
+            Internal JambaHR ops alert — not sent to the customer. Device connectivity is
+            checked once a day; this repeats daily until the device reconnects.
           </Text>
         </Container>
       </Body>

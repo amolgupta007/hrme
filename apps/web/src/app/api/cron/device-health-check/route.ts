@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminSupabase } from "@/lib/supabase/server";
-import { resend, FROM_EMAIL } from "@/lib/resend";
+import { resend, FROM_EMAIL, FOUNDER_EMAIL_FROM as FOUNDER_EMAIL } from "@/lib/resend";
 import {
   findSilentDevices,
   describeSilence,
@@ -22,9 +22,15 @@ export const dynamic = "force-dynamic";
  * pushing looks exactly like a device where nobody punched, so without this nothing
  * in the product would ever say otherwise.
  *
- * Emails the org's owners/admins (and the founder) once per day per silent device
- * until it reconnects. Decision logic is pure and unit-tested in
- * `@jambahr/shared/attendance/device-health`; this route is I/O only.
+ * **Internal alert — the founder only.** Customers are deliberately not emailed:
+ * an automated "your attendance is broken" message is alarming, lands without
+ * context, and pre-empts the conversation we would rather have with them
+ * ourselves. Notifying org admins is a product decision to make explicitly, not
+ * a default to drift into.
+ *
+ * Fires once per day per silent device until it reconnects. Decision logic is
+ * pure and unit-tested in `@jambahr/shared/attendance/device-health`; this route
+ * is I/O only.
  */
 export async function GET(req: Request) {
   if (req.headers.get("authorization") !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -92,24 +98,20 @@ export async function GET(req: Request) {
 
   for (const [orgId, orgAlerts] of byOrg) {
     try {
-      const [{ data: org }, { data: admins }] = await Promise.all([
-        sb.from("organizations").select("name").eq("id", orgId).maybeSingle(),
-        sb
-          .from("employees")
-          .select("email")
-          .eq("org_id", orgId)
-          .in("role", ["owner", "admin"])
-          .neq("status", "terminated"),
-      ]);
+      const { data: org } = await sb
+        .from("organizations")
+        .select("name")
+        .eq("id", orgId)
+        .maybeSingle();
 
-      const orgName = (org as { name?: string } | null)?.name ?? "your organisation";
-      const recipients = ((admins ?? []) as Array<{ email: string | null }>)
-        .map((a) => a.email)
-        .filter((e): e is string => !!e);
+      const orgName = (org as { name?: string } | null)?.name ?? "an organisation";
 
-      // Always copy the founder: this is a data-loss condition, and at current
-      // scale a customer missing it is worse than an extra email.
-      const to = Array.from(new Set([...recipients, "amol@jambahr.com"]));
+      // INTERNAL alert — founder only. Customers are deliberately NOT emailed:
+      // an automated "your attendance is broken" message is alarming, arrives
+      // without context, and pre-empts the conversation we would rather have
+      // with them directly. Adding org admins here is a product decision, not a
+      // config tweak.
+      const to = [FOUNDER_EMAIL];
 
       const lines: OfflineDeviceLine[] = orgAlerts.map((a) => ({
         serial: a.device.serial,
@@ -123,8 +125,8 @@ export async function GET(req: Request) {
         to,
         subject:
           orgAlerts.length > 1
-            ? `Action needed: ${orgAlerts.length} attendance devices offline at ${orgName}`
-            : `Action needed: attendance device offline at ${orgName}`,
+            ? `[JambaHR ops] ${orgAlerts.length} devices offline at ${orgName}`
+            : `[JambaHR ops] Device offline at ${orgName}`,
         react: DeviceOfflineAlertEmail({
           orgName,
           devices: lines,

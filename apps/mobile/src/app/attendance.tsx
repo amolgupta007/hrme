@@ -120,7 +120,7 @@ export default function Attendance() {
               isCurrentMonth ? "" : "active:bg-brand-tint"
             }`}
           >
-            <Ionicons name="chevron-forward" size={22} color={isCurrentMonth ? "#9AA1AB" : "#0B1220"} />
+            <Ionicons name="chevron-forward" size={22} color={isCurrentMonth ? "#6A727E" : "#0B1220"} />
           </Pressable>
         </View>
 

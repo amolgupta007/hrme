@@ -123,7 +123,7 @@ function Point({
 }) {
   return (
     <View className="flex-row items-start">
-      <Ionicons name={icon} size={18} color="#5B6472" style={{ marginTop: 2 }} />
+      <Ionicons name={icon} size={18} color="#3F4757" style={{ marginTop: 2 }} />
       <View className="ml-3 flex-1">
         <Text className="text-[14px] font-semibold text-ink-900">{title}</Text>
         <Text className="mt-0.5 text-[13px] leading-5 text-ink-600">{body}</Text>

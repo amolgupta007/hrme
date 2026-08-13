@@ -52,19 +52,19 @@ export function PeopleScreen() {
         <Text className="pb-3 pt-2 text-[22px] font-bold text-ink-900">People</Text>
         {/* Search */}
         <View className="flex-row items-center rounded-xl border border-line bg-surface px-3">
-          <Ionicons name="search" size={16} color="#9AA1AB" />
+          <Ionicons name="search" size={16} color="#6A727E" />
           <TextInput
             className="ml-2 h-11 flex-1 text-[15px] text-ink-900"
             value={search}
             onChangeText={setSearch}
             placeholder="Search by name or department"
-            placeholderTextColor="#9AA1AB"
+            placeholderTextColor="#6A727E"
             autoCapitalize="none"
             returnKeyType="search"
           />
           {search.length > 0 ? (
             <Pressable accessibilityRole="button" onPress={() => setSearch("")} hitSlop={8}>
-              <Ionicons name="close-circle" size={16} color="#9AA1AB" />
+              <Ionicons name="close-circle" size={16} color="#6A727E" />
             </Pressable>
           ) : null}
         </View>

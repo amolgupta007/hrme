@@ -26,7 +26,7 @@ function GeoChip({ geo }: { geo: MobilePunchGeo }) {
       <Ionicons
         name={atOffice ? "business-outline" : "location-outline"}
         size={13}
-        color="#5B6472"
+        color="#3F4757"
       />
       <Text className="ml-1.5 flex-1 text-[13px] text-ink-600" numberOfLines={1}>
         {label}
@@ -126,7 +126,7 @@ export function TodayCard({
             </View>
           ) : null}
           {onPress ? (
-            <Ionicons name="chevron-forward" size={16} color="#9AA1AB" />
+            <Ionicons name="chevron-forward" size={16} color="#6A727E" />
           ) : null}
         </View>
       </View>

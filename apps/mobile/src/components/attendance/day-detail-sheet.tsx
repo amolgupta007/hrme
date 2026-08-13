@@ -189,7 +189,7 @@ export function DayDetailSheet({
                     >
                       <Ionicons name="log-in-outline" size={16} color="#177245" />
                       <Text className="ml-1.5 text-[15px] text-ink-900">{formatTime(p.in)}</Text>
-                      <Ionicons name="arrow-forward" size={14} color="#9AA1AB" style={{ marginHorizontal: 8 }} />
+                      <Ionicons name="arrow-forward" size={14} color="#6A727E" style={{ marginHorizontal: 8 }} />
                       <Ionicons name="log-out-outline" size={16} color="#B45309" />
                       <Text className="ml-1.5 text-[15px] text-ink-900">{formatTime(p.out)}</Text>
                       <Text
@@ -242,7 +242,7 @@ export function DayDetailSheet({
                       <Ionicons
                         name={g.status === "office" ? "business-outline" : "location-outline"}
                         size={14}
-                        color="#5B6472"
+                        color="#3F4757"
                       />
                       <Text className="ml-1.5 flex-1 text-[13px] text-ink-600" numberOfLines={1}>
                         {g.status === "office"

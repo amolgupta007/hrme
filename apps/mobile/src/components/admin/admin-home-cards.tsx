@@ -72,7 +72,7 @@ export function AdminHomeCards({ data }: { data: AdminHome }) {
             {totalApprovals > 0 ? breakdown : "You're all caught up"}
           </Text>
         </View>
-        <Ionicons name="chevron-forward" size={18} color="#9AA1AB" />
+        <Ionicons name="chevron-forward" size={18} color="#6A727E" />
       </Pressable>
 
       {showPayroll && data.payroll ? (

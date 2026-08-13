@@ -99,7 +99,7 @@ const nativewindTheme = {
  */
 const mobilePalette = {
   brand: { DEFAULT: "#17806D", pressed: "#0E5E4F", tint: "#E7F3F0" },
-  ink: { 900: "#0B1220", 600: "#5B6472", 400: "#9AA1AB" },
+  ink: { 900: "#0B1220", 600: "#3F4757", 400: "#6A727E" },
   canvas: "#F7F7F4",
   surface: "#FFFFFF",
   line: "#E7E9EC",

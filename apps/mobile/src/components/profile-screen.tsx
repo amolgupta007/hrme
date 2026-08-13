@@ -216,7 +216,7 @@ function InfoRow({
       <Text className="shrink-0 text-[15px] text-ink-600">{label}</Text>
       <View className="min-w-0 flex-1 flex-row items-center justify-end">
         {masked && value ? (
-          <Ionicons name="lock-closed" size={12} color="#9AA1AB" style={{ marginRight: 4 }} />
+          <Ionicons name="lock-closed" size={12} color="#6A727E" style={{ marginRight: 4 }} />
         ) : null}
         <Text className="text-right text-[15px] font-medium text-ink-900" numberOfLines={2}>
           {value ?? "—"}

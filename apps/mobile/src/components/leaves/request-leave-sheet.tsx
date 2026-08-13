@@ -245,7 +245,7 @@ export function RequestLeaveSheet({
                 onFocus={() => setReasonFocused(true)}
                 onBlur={() => setReasonFocused(false)}
                 placeholder="e.g. Family function out of town"
-                placeholderTextColor="#9AA1AB"
+                placeholderTextColor="#6A727E"
                 multiline
                 maxLength={2000}
                 textAlignVertical="top"
@@ -303,7 +303,7 @@ function HalfDayChip({
       <Ionicons
         name={active ? "checkmark-circle" : "ellipse-outline"}
         size={15}
-        color={active ? "#FFFFFF" : "#9AA1AB"}
+        color={active ? "#FFFFFF" : "#6A727E"}
       />
       <Text className={`ml-1.5 text-[13px] font-medium ${active ? "text-white" : "text-ink-900"}`}>
         {label}

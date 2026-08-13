@@ -62,7 +62,7 @@ export default function More() {
               {me?.orgName ?? ""}
             </Text>
           </View>
-          <Ionicons name="chevron-forward" size={18} color="#9AA1AB" />
+          <Ionicons name="chevron-forward" size={18} color="#6A727E" />
         </Pressable>
 
         {/* Owner/Admin: lightweight reports (D4 Task 13). Deep analysis stays
@@ -170,7 +170,7 @@ function MoreRow({
         isLast ? "" : "border-b border-line"
       }`}
     >
-      <Ionicons name={icon} size={18} color={destructive ? "#B91C1C" : "#5B6472"} />
+      <Ionicons name={icon} size={18} color={destructive ? "#B91C1C" : "#3F4757"} />
       <Text
         className={`ml-3 flex-1 text-[17px] ${
           destructive ? "font-medium text-danger" : "text-ink-900"
@@ -183,7 +183,7 @@ function MoreRow({
           <Text className="text-[11px] font-semibold text-brand-pressed">Soon</Text>
         </View>
       ) : !destructive ? (
-        <Ionicons name="chevron-forward" size={18} color="#9AA1AB" />
+        <Ionicons name="chevron-forward" size={18} color="#6A727E" />
       ) : null}
     </Pressable>
   );

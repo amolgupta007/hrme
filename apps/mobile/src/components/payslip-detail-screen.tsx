@@ -144,7 +144,7 @@ export function PayslipDetailScreen({ entryId }: { entryId: string }) {
 function SharePdfButton() {
   return (
     <View className="mt-1 flex-row items-center justify-center gap-2 rounded-2xl border border-line bg-surface px-4 py-3 opacity-50">
-      <Ionicons name="download-outline" size={18} color="#5B6472" />
+      <Ionicons name="download-outline" size={18} color="#3F4757" />
       <Text className="text-[14px] font-medium text-ink-600">
         Download PDF - coming with the next app update
       </Text>

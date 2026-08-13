@@ -69,7 +69,7 @@ function ComingRow({
   return (
     <View className={`flex-row items-center px-4 py-3.5 ${isLast ? "" : "border-b border-line"}`}>
       <View className="h-9 w-9 items-center justify-center rounded-full bg-[#EFF1F3]">
-        <Ionicons name={icon} size={17} color="#5B6472" />
+        <Ionicons name={icon} size={17} color="#3F4757" />
       </View>
       <View className="ml-3 flex-1">
         <Text className="text-[15px] font-semibold text-ink-900">{title}</Text>

@@ -97,7 +97,7 @@ export function RegularizeForm({
             onFocus={() => setFocused("in")}
             onBlur={() => setFocused(null)}
             placeholder="09:30"
-            placeholderTextColor="#9AA1AB"
+            placeholderTextColor="#6A727E"
             keyboardType="numbers-and-punctuation"
             maxLength={5}
             autoCapitalize="none"
@@ -113,7 +113,7 @@ export function RegularizeForm({
             onFocus={() => setFocused("out")}
             onBlur={() => setFocused(null)}
             placeholder="18:00"
-            placeholderTextColor="#9AA1AB"
+            placeholderTextColor="#6A727E"
             keyboardType="numbers-and-punctuation"
             maxLength={5}
             autoCapitalize="none"
@@ -131,7 +131,7 @@ export function RegularizeForm({
         onFocus={() => setFocused("reason")}
         onBlur={() => setFocused(null)}
         placeholder="e.g. Forgot to punch — was at a client site"
-        placeholderTextColor="#9AA1AB"
+        placeholderTextColor="#6A727E"
         multiline
         maxLength={500}
         textAlignVertical="top"

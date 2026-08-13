@@ -56,7 +56,7 @@ export function HolidayCard({ holiday }: { holiday: MobileHolidayLite }) {
             <Text className="text-[11px] font-medium text-ink-600">Optional</Text>
           </View>
         ) : (
-          <Ionicons name="sunny-outline" size={20} color="#9AA1AB" />
+          <Ionicons name="sunny-outline" size={20} color="#6A727E" />
         )}
       </View>
     </View>

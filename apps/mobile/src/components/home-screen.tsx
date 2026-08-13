@@ -159,9 +159,9 @@ export function HomeScreen({ isAdmin = false }: { isAdmin?: boolean }) {
             onPress={clearPunchNotice}
             className="flex-row items-center rounded-xl bg-[#EFF1F3] px-3 py-2.5"
           >
-            <Ionicons name="information-circle-outline" size={18} color="#5B6472" />
+            <Ionicons name="information-circle-outline" size={18} color="#3F4757" />
             <Text className="ml-2 flex-1 text-[13px] text-ink-600">{punchNotice}</Text>
-            <Ionicons name="close" size={16} color="#5B6472" />
+            <Ionicons name="close" size={16} color="#3F4757" />
           </Pressable>
         ) : null}
 

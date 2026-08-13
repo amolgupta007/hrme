@@ -21,6 +21,13 @@ const path = require("path");
  * EAS builds get the file from the `GOOGLE_SERVICES_JSON` environment variable
  * (an EAS "file"-type secret); EAS materialises it on disk and sets the variable
  * to its path, which is why that is checked first.
+ *
+ * ⚠️ Do NOT let a `googleServicesFile` key sit in `app.json`. The EAS build's
+ * auto-configuration will happily write one there as an ABSOLUTE path from
+ * whichever machine ran the build (`D:\dev\hr-portal\...`), which then breaks on
+ * every other machine and on EAS's Linux builders. Resolving it here means the
+ * path is computed per-machine instead of committed. If it reappears in
+ * `app.json` after a build, delete it — this file is the only place it belongs.
  */
 module.exports = ({ config }) => {
   const googleServicesFile = resolveGoogleServicesFile();

@@ -1,8 +1,8 @@
 ---
 title: Privacy Policy
 slug: privacy
-effective: "2026-05-01"
-version: "2026-05-01"
+effective: "2026-08-13"
+version: "2026-08-13"
 ---
 
 # JambaHR Privacy Policy
@@ -276,3 +276,36 @@ For privacy\-related concerns, contact:
 **JambaHR Privacy Team**  
 Email: support@jambahr\.com  
 Website: jambahr\.com
+
+## 16. Mobile Application
+
+This section describes how the JambaHR mobile application for Android and iOS handles personal data, in addition to everything stated elsewhere in this policy.
+
+**Who is responsible.** Your employer is the Data Fiduciary for your employment data. JambaHR operates as a Data Processor on your employer's instructions. Requests about your data should normally go to your employer first; our grievance contact is at the end of this section.
+
+**What the app processes**
+
+- *Identity and contact*: your name, work email address, phone number, employee identifier, and profile photo if you upload one — so you can sign in and so colleagues and administrators can identify you.
+- *Attendance*: the date and time you clock in and out, and the device or channel used.
+- *Location at clock-in* — only if your employer has enabled location-verified clock-in. In that case the app reads your device's location at the moment you clock in or out, and stores either the office site you were within, or an indication that you were remote together with the locality and city (for example "Andheri East, Mumbai"). We do not store a street address. Location is never read in the background or between punches. You may decline or later withdraw this permission in your device settings; if your employer has made location mandatory for clock-in, declining will prevent you clocking in through the app and you should contact your administrator.
+- *Leave, payroll and documents*: shown to you in the app; created by your employer, not collected by the app.
+- *Notifications*: a push notification token for your device, so we can tell you about approvals, payslips and decisions. Removed when you sign out.
+- *Diagnostics*: crash and performance data, which does not include the contents of your records.
+
+**Biometric data.** The app does not collect or store biometric data. Face ID, Touch ID or an Android biometric check, where used, is verified by your device and never shared with us. Where your employer uses fingerprint attendance devices, the fingerprint template remains on that physical device; our systems receive only an employee number and a timestamp.
+
+**Purpose limitation.** Data is processed only to operate the HR services your employer has subscribed to. We do not sell personal data, do not use it for advertising, and do not track you across other apps or websites.
+
+**Retention.** Attendance, leave and payroll records are retained by your employer for as long as their policy and Indian statutory obligations require. Push tokens are removed on sign-out. Diagnostic data is retained for a limited period for reliability purposes.
+
+**Deleting your account.** You can submit a deletion request from the app under More → Delete my account, or by writing to us at the email below. Because your employment records are jointly governed by your employer's statutory obligations, the request is routed to your employer's administrators, who complete offboarding; records they are legally required to keep are retained for the required period and are not used for any other purpose.
+
+**Your rights.** Subject to the Digital Personal Data Protection Act, you may seek access to, and correction of, your personal data, seek erasure where the law permits, nominate another person to exercise your rights, and raise a grievance.
+
+**Grievance Officer**
+
+- JambaHR Privacy Team
+- Email: support@jambahr.com
+- We aim to respond within 30 days.
+
+**Processors we use.** Clerk (authentication), Supabase (database and file storage), Vercel (application hosting), Sentry (crash reporting), Expo (push notification delivery), Mapbox (converting a coordinate to a locality name), Resend (email). Application hosting is in Vercel's Mumbai (bom1) region.

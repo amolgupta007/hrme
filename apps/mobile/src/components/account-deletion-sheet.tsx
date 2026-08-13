@@ -108,7 +108,7 @@ export function AccountDeletionSheet({
                 value={reason}
                 onChangeText={setReason}
                 placeholder="Let your admin know why (optional)"
-                placeholderTextColor="#9AA1AB"
+                placeholderTextColor="#6A727E"
                 multiline
                 maxLength={500}
                 className="min-h-[80px] rounded-xl border border-line bg-surface px-3 py-2.5 text-[15px] text-ink-900"

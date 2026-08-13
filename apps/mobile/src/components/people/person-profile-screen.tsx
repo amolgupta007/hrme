@@ -155,7 +155,7 @@ function ProfileContent({ profile: p }: { profile: MobilePersonProfile }) {
                 <Ionicons name="logo-whatsapp" size={16} color="#0E5E4F" />
                 <Text className="text-[15px] text-ink-600">WhatsApp</Text>
               </View>
-              <Ionicons name="chevron-forward" size={16} color="#9AA1AB" />
+              <Ionicons name="chevron-forward" size={16} color="#6A727E" />
             </Pressable>
           ) : null}
           <InfoRow label="Personal email" value={p.personalEmail} last />
@@ -236,7 +236,7 @@ function ProfileContent({ profile: p }: { profile: MobilePersonProfile }) {
 
       {/* View-only screen — no edit controls. Edits happen on the web dashboard. */}
       <View className="flex-row items-center gap-2 rounded-2xl border border-line bg-surface px-4 py-3">
-        <Ionicons name="desktop-outline" size={16} color="#9AA1AB" />
+        <Ionicons name="desktop-outline" size={16} color="#6A727E" />
         <Text className="flex-1 text-[12px] leading-4 text-ink-400">
           To edit {p.name.split(" ")[0]}&apos;s details, use the People page on the web dashboard.
         </Text>

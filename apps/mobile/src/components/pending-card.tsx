@@ -137,7 +137,7 @@ function NeedsAttentionRow({ row, withDivider }: { row: Row; withDivider: boolea
           ) : null}
         </View>
         {row.trailing.kind === "chevron" ? (
-          <Ionicons name="chevron-forward" size={18} color="#9AA1AB" />
+          <Ionicons name="chevron-forward" size={18} color="#6A727E" />
         ) : row.trailing.kind === "chip" ? (
           <View className={`rounded-full px-2.5 py-1 ${row.trailing.bg}`}>
             <Text className={`text-[12px] font-medium ${row.trailing.fg}`}>

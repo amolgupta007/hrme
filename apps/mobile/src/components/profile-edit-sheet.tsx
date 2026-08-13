@@ -215,7 +215,7 @@ function Field(props: React.ComponentProps<typeof TextInput>) {
         setFocused(false);
         props.onBlur?.(e);
       }}
-      placeholderTextColor="#9AA1AB"
+      placeholderTextColor="#6A727E"
       className={`h-11 rounded-xl bg-surface px-3 text-[15px] text-ink-900 ${
         focused ? "border-[1.5px] border-brand" : "border border-line"
       }`}

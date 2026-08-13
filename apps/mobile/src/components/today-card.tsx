@@ -126,7 +126,7 @@ export function TodayCard({
             </View>
           ) : null}
           {onPress ? (
-            <Ionicons name="chevron-forward" size={16} color="#9AA1AB" />
+            <Ionicons name="chevron-forward" size={16} color="#6A727E" />
           ) : null}
         </View>
       </View>

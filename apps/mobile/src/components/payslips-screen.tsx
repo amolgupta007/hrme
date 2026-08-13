@@ -111,7 +111,7 @@ export function PayslipsScreen() {
               >
                 {formatINR(item.netPay)}
               </Text>
-              <Ionicons name="chevron-forward" size={18} color="#9AA1AB" style={{ marginLeft: 8 }} />
+              <Ionicons name="chevron-forward" size={18} color="#6A727E" style={{ marginLeft: 8 }} />
             </Pressable>
           );
         }}

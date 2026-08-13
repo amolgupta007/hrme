@@ -108,7 +108,7 @@ export function ApprovalCard({
           onFocus={() => setCommentFocused(true)}
           onBlur={() => setCommentFocused(false)}
           placeholder="Reason for rejecting (optional)"
-          placeholderTextColor="#9AA1AB"
+          placeholderTextColor="#6A727E"
           multiline
           maxLength={2000}
           textAlignVertical="top"

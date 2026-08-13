@@ -1003,6 +1003,7 @@ Primary: teal `172 50% 36%`. Accent: warm orange `32 95% 52%`. Use CSS variables
 | `/api/cron/jambageo-retention-sweep` | `0 19 * * *` | 12:30am | Delete `location_pings` older than per-employee retention (Phase 1 no-op; ready for Phase 2 mobile pings) |
 | `/api/cron/late-policy-reconcile` | `0 20 * * *` | 1:30am | Recompute current-IST-month late-day counts for enabled late policies; upsert missed `late_policy_flags` (never re-flags `overridden`). Safety net for the inline clock-in flagging. |
 | `/api/cron/ownership-transfer-expiry` | `30 4 * * *` | 10:00am | Flip `ownership_transfers` rows past `expires_at` from `pending` to `expired`; clean up unlinked placeholder employees (clerk_user_id null + role 'admin'). |
+| `/api/cron/device-health-check` | `0 5 * * *` | 10:30am | Email org admins + founder when a registered biometric device has been silent ≥12h (or never connected, after a 24h install grace). Re-alerts daily until it reconnects; `devices.silence_alerted_at` de-dupes and is cleared on recovery. Pure logic in `@jambahr/shared/attendance/device-health`. Added after Medialoop lost 6 days of attendance unnoticed (2026-08-07→13). |
 
 All cron routes require `Authorization: Bearer CRON_SECRET` header. `CRON_SECRET` env var must be set in Vercel.
 

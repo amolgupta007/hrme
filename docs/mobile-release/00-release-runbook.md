@@ -139,10 +139,15 @@ Notes:
       store release. Note OTA pushes in `CHANGELOG.md` under the version they
       patch.
 
-> **EAS Update is not installed yet.** The channels are configured and
-> `runtimeVersion` is set, but `expo-updates` is not a dependency. Run
-> `npx expo install expo-updates && eas update:configure` when you want OTA;
-> it changes native code, so it needs a fresh build either way.
+> **EAS Update is now installed.** `expo-updates` landed automatically during the
+> first Android build — EAS installs it when a build profile declares a
+> `channel`, which ours do. `app.json` carries the resulting `updates.url` and
+> `runtimeVersion: appVersion`, so OTA is live from the next build onward.
+>
+> Be aware of what that means: any build from this point can receive a JS-only
+> update pushed with `eas update`. Keep the OTA-vs-store-release policy above in
+> mind — anything native still needs a store release, and `runtimeVersion`
+> enforces it (an update can only reach builds with matching native code).
 
 ## 7. Android track
 

@@ -20,13 +20,18 @@ export async function sendAccountSetupInvite(
     firstName: string | null;
   }
 ): Promise<SendAccountSetupResult> {
-  const signInUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? "https://jambahr.com"}/sign-in`;
+  const base = process.env.NEXT_PUBLIC_APP_URL ?? "https://jambahr.com";
+  // Point at sign-UP, not sign-in: the invitee has an employees row but no Clerk
+  // account yet, so /sign-in rejects them with "email not found". Clerk's sign-up
+  // card carries a "Sign in instead" link, so this is safe for someone who does
+  // already have an account. Prefilled so the address matches the row exactly.
+  const setupUrl = `${base}/sign-up?email=${encodeURIComponent(input.email)}`;
   try {
     const html = await render(
       AccountSetupEmail({
         orgName: input.orgName,
         firstName: input.firstName ?? "there",
-        signInUrl,
+        setupUrl,
       })
     );
     await resend.emails.send({

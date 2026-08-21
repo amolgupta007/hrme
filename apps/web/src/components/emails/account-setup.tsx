@@ -12,13 +12,13 @@ import {
 interface AccountSetupEmailProps {
   orgName: string;
   firstName: string;
-  signInUrl: string;
+  setupUrl: string;
 }
 
 export function AccountSetupEmail({
   orgName = "your team",
   firstName = "there",
-  signInUrl = "https://jambahr.com/sign-in",
+  setupUrl = "https://jambahr.com/sign-up",
 }: AccountSetupEmailProps) {
   return (
     <Html>
@@ -31,8 +31,8 @@ export function AccountSetupEmail({
           <Text style={headingStyle}>You&apos;ve been added to {orgName} 👋</Text>
           <Text style={textStyle}>
             Hi {firstName}, your HR admin has added you to <strong>{orgName}</strong> on
-            JambaHR. Set up your account to sign in — use the email address this
-            invite was sent to.
+            JambaHR. Create your password below to finish setting up your account —
+            the email address is already filled in, so leave it exactly as-is.
           </Text>
 
           <Section style={cardStyle}>
@@ -42,14 +42,14 @@ export function AccountSetupEmail({
             <Text style={cardItemStyle}>✓ Access your documents, payslips, and profile</Text>
           </Section>
 
-          <Button style={buttonStyle} href={signInUrl}>
+          <Button style={buttonStyle} href={setupUrl}>
             Set up my account →
           </Button>
 
           <Text style={textStyle}>
             If the button doesn&apos;t work, copy and paste this link into your browser:
             <br />
-            {signInUrl}
+            {setupUrl}
           </Text>
 
           <Hr style={hrStyle} />

@@ -297,7 +297,7 @@ See `PAYROLL_AUDIT.md` for the per-finding closure log and `docs/payroll-overhau
 ### Mobile Phase D — Slice 2 (Leave + Payslips + Profile + 5-tab IA) — feat/mobile-d2 (2026-08-11, awaiting device pass)
 - Plan: `docs/superpowers/plans/2026-08-10-mobile-phase-d-slice2.md`. Design (hi-fi 2a/2b/2c): `docs/design/mobile/mobile-design-spec.md`.
 - **5-tab IA**: the `(staff)`/`(admin)` route groups converged into ONE `(tabs)` group — Home · Leaves · People · Grow · More. Attendance/Payslips/Profile are **stacked routes** (not tabs); Attendance opens from the Home TodayCard. `index.tsx` routes every role to `/(tabs)/home`.
-- **Half-day leave** (mobile-first, no web UI): migration `103` adds `leave_requests.start_half_day`/`end_half_day` (booleans). Shared pure `computeLeaveDays(start,end,startHalf,endHalf)` (`@jambahr/shared/leaves`) is the SINGLE source used by the web action (persist), the BFF (validate), the mobile sheet (preview), and the optimistic insert. Web `requestLeave` only re-derives days when a half-day flag is set — web path byte-identical otherwise.
+- **Half-day leave** (mobile-first; **web UI shipped 2026-09-03**, PR #40 `e5fa4e2` — see "Half-day leave on web" below): migration `103` adds `leave_requests.start_half_day`/`end_half_day` (booleans). Shared pure `computeLeaveDays(start,end,startHalf,endHalf)` (`@jambahr/shared/leaves`) is the SINGLE source used by the web action (persist), the BFF (validate), the mobile sheet (preview), and the optimistic insert. Web `requestLeave` re-derives days when a half-day flag is set; the web dialog now sends flags of its own.
 - **New BFF** (`/api/mobile/leave`{,/apply,/cancel,/approvals,/decide}, `/api/mobile/payslips`{,/[entryId]}, `/api/mobile/profile`{,/avatar}, `/api/mobile/directory`): all built DIRECT (not composing cookie-bound web actions) so they're header-org-correct. **Multi-org rule (load from Task-3 bug):** any mobile MUTATION that composes a web action must thread `orgIdHint` through it — the leave actions gained an optional trailing `orgIdHint?` param; passing `undefined` (web) falls through to cookie unchanged. Composing a cookie-bound action from mobile silently writes the FIRST-membership org for multi-org users (fail-safe but a silent no-op on `decide`).
 - **Payslips**: native render (no PDF). Detail is IDOR-guarded (entry must match caller's org+employee → 404). List excludes draft runs. **Profile**: view-broad, edit-narrow (only phone/personal_email/emergency-contact/whatsapp_opt_in writable; POST schema is `.strict()` so PAN/Aadhaar/names/dob are rejected, not stripped); PAN/Aadhaar rendered masked (last-4); salary NEVER in the profile/directory payload. Avatar EDIT deferred (no `expo-image-picker` dep) — read-only for now; the BFF avatar route exists.
 - **Approvals** (Leaves tab manager segment) is gated at three layers — segment control render, `useMobileQuery enabled: isManager`, and server (empty for non-managers; `decide` has a manager-scope guard closing a latent web gap where any manager+ could approve any org request).
@@ -308,7 +308,7 @@ See `PAYROLL_AUDIT.md` for the per-finding closure log and `docs/payroll-overhau
   any Phase D work) · Slice-1 task plan: `docs/superpowers/plans/2026-07-06-mobile-phase-d-slice1-attendance-home.md`
   · Specs: `docs/prds/mobile/02-PRD-Staff-MVP.md` + `PRD-addendum-mobile-data-layer.md` (binding).
 - Slices: **D1** attendance + home (punch, offline queue, month calendar, EAS Android dev
-  build) → **D2** leave (incl. half-day — mobile-first, no web UI for it) + payslips (native
+  build) → **D2** leave (incl. half-day — mobile-first; web UI followed 2026-09-03) + payslips (native
   render, no PDF) + profile → **D3** push (new PRD), FlashList sweep, payslip PDF.
 - Locked decisions (detail in 02A): mobile punches go through **`attendance_punch_events`
   (`source:'mobile'`) + `recomputeAttendanceDay`**, never web's direct `attendance_records`
@@ -664,6 +664,31 @@ Feature-flagged via `organizations.settings.attendance_enabled`. Optional payrol
 - `OvertimeSettings` and `DEFAULT_OT_SETTINGS` live in `src/lib/attendance/overtime-types.ts`, not in `src/actions/overtime.ts`. Import accordingly from client components.
 
 ---
+
+## Half-day leave on web (shipped 2026-09-03, PR #40)
+
+Half-day leave was mobile-only from Phase D Slice 2 until PR #40 brought it to
+the web (`e5fa4e2`). The DB columns, the shared math and the server path were
+already there — only the web UI was missing.
+
+- **Request dialog** (`src/components/leaves/leave-request-form.tsx`) no longer
+  has its own `calcDays`; the duration preview, the exceeds-balance check and
+  the submitted `days` all come from the shared `computeLeaveDays`, so the
+  number shown can't drift from the number `requestLeave` persists.
+- **Two chips**, mirroring the mobile sheet's model — no AM/PM (that would need
+  a new column and a different `computeLeaveDays` contract).
+- **A single-day request shows ONE chip.** Both flags on one date derive
+  `1 - 0.5 - 0.5 = 0`, which `computeLeaveDays` rejects; `resolveHalfDayState`
+  (`src/lib/leaves/half-day.ts`) makes that state unreachable rather than
+  surfacing the error. The same file's `describeHalfDay` drives the `½` marker
+  on the leaves table.
+- `src/lib/leaves/half-day.ts` is a **plain module**, not `"use client"`
+  (gotcha #78) — the dialog and the table both import it.
+- **Balance is consumed fractionally**, so policy cards can read "7.5 of 8 days
+  remaining". Payroll needed no change: LOP sums `leave_requests.days` and
+  `lop_days` is numeric.
+- Scoped to the dialog + table. Approval emails, the dashboard leave widget and
+  the attendance report still show numeric days, which is already correct.
 
 ## Late-Punch Policy Module (Settings → Attendance) — shipped 2026-06-16
 

@@ -3981,6 +3981,7 @@ export type Database = {
           days: number
           employee_id: string
           end_date: string
+          end_half_day: boolean
           exceeds_balance: boolean
           id: string
           org_id: string
@@ -3990,6 +3991,7 @@ export type Database = {
           reviewed_at: string | null
           reviewed_by: string | null
           start_date: string
+          start_half_day: boolean
           status: string
           ticket_number: string | null
           updated_at: string
@@ -3999,6 +4001,7 @@ export type Database = {
           days: number
           employee_id: string
           end_date: string
+          end_half_day?: boolean
           exceeds_balance?: boolean
           id?: string
           org_id: string
@@ -4008,6 +4011,7 @@ export type Database = {
           reviewed_at?: string | null
           reviewed_by?: string | null
           start_date: string
+          start_half_day?: boolean
           status?: string
           ticket_number?: string | null
           updated_at?: string
@@ -4017,6 +4021,7 @@ export type Database = {
           days?: number
           employee_id?: string
           end_date?: string
+          end_half_day?: boolean
           exceeds_balance?: boolean
           id?: string
           org_id?: string
@@ -4026,6 +4031,7 @@ export type Database = {
           reviewed_at?: string | null
           reviewed_by?: string | null
           start_date?: string
+          start_half_day?: boolean
           status?: string
           ticket_number?: string | null
           updated_at?: string

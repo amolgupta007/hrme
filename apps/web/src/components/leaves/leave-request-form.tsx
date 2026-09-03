@@ -8,7 +8,9 @@ import { ChevronDown, X, AlertTriangle, Ticket } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { computeLeaveDays } from "@jambahr/shared";
 import { requestLeave } from "@/actions/leaves";
+import { resolveHalfDayState } from "@/lib/leaves/half-day";
 import type { Employee } from "@/types";
 import type { PolicyWithUsage, EmployeeBalance } from "@/actions/leaves";
 
@@ -25,13 +27,28 @@ const NONE = "__none__";
 const inputCn =
   "flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:opacity-50";
 
-function calcDays(start: string, end: string): number {
-  if (!start || !end) return 0;
-  const s = new Date(start);
-  const e = new Date(end);
-  if (e < s) return 0;
-  return Math.floor((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-}
+type FormState = {
+  employeeId: string;
+  policyId: string;
+  startDate: string;
+  endDate: string;
+  reason: string;
+  ticketNumber: string;
+  startHalfDay: boolean;
+  endHalfDay: boolean;
+};
+
+type StringField = Exclude<keyof FormState, "startHalfDay" | "endHalfDay">;
+
+const EMPTY_FORM: Omit<FormState, "employeeId"> = {
+  policyId: "",
+  startDate: "",
+  endDate: "",
+  reason: "",
+  ticketNumber: "",
+  startHalfDay: false,
+  endHalfDay: false,
+};
 
 export function LeaveRequestForm({
   open, onOpenChange, employees, policies, balances, currentEmployeeId,
@@ -47,24 +64,39 @@ export function LeaveRequestForm({
         ? currentEmployeeId!
         : "";
 
-  const [form, setForm] = React.useState({
+  const [form, setForm] = React.useState<FormState>({
     employeeId: defaultEmployeeId,
-    policyId: "",
-    startDate: "",
-    endDate: "",
-    reason: "",
-    ticketNumber: "",
+    ...EMPTY_FORM,
   });
 
   React.useEffect(() => {
-    if (!open) setForm({ employeeId: defaultEmployeeId, policyId: "", startDate: "", endDate: "", reason: "", ticketNumber: "" });
+    if (!open) setForm({ employeeId: defaultEmployeeId, ...EMPTY_FORM });
   }, [open, defaultEmployeeId]);
 
-  function set(field: keyof typeof form, value: string) {
+  function set(field: StringField, value: string) {
     setForm((f) => ({ ...f, [field]: value }));
   }
 
-  const days = calcDays(form.startDate, form.endDate);
+  function toggleHalfDay(field: "startHalfDay" | "endHalfDay") {
+    setForm((f) => ({ ...f, [field]: !f[field] }));
+  }
+
+  // Half-day chips and the duration preview both run through the shared pure
+  // helpers, so the number shown here is the number `requestLeave` derives and
+  // persists. `resolveHalfDayState` clamps the flags to what the current dates
+  // can express (a single-day request can only carry the start flag).
+  const halfDay = resolveHalfDayState(
+    form.startDate,
+    form.endDate,
+    form.startHalfDay,
+    form.endHalfDay
+  );
+  const computed =
+    form.startDate && form.endDate
+      ? computeLeaveDays(form.startDate, form.endDate, halfDay.startHalfDay, halfDay.endHalfDay)
+      : null;
+  const days = computed?.ok ? computed.days : 0;
+  const rangeError = computed && !computed.ok ? computed.error : null;
 
   // Compute remaining days for selected employee + policy
   const remainingDays = React.useMemo(() => {
@@ -85,8 +117,8 @@ export function LeaveRequestForm({
       toast.error("Please select an employee and leave type");
       return;
     }
-    if (days <= 0) {
-      toast.error("End date must be on or after start date");
+    if (rangeError || days <= 0) {
+      toast.error(rangeError ?? "End date must be on or after start date");
       return;
     }
     if (exceedsBalance && !form.ticketNumber.trim()) {
@@ -104,6 +136,8 @@ export function LeaveRequestForm({
       reason: form.reason,
       ticketNumber: form.ticketNumber || undefined,
       exceedsBalance,
+      startHalfDay: halfDay.startHalfDay,
+      endHalfDay: halfDay.endHalfDay,
     });
     setLoading(false);
 
@@ -178,6 +212,40 @@ export function LeaveRequestForm({
               </Field>
             </div>
 
+            {rangeError && (
+              <p className="text-sm text-destructive">{rangeError}</p>
+            )}
+
+            {/* Half-day chips. A single-day request gets one chip, because a
+                half day on both ends of one date is zero days. */}
+            {halfDay.mode !== "none" && (
+              <div className="space-y-1.5">
+                <Label.Root className="text-sm font-medium">Half day</Label.Root>
+                <div className="flex flex-wrap gap-2">
+                  {halfDay.mode === "single" ? (
+                    <HalfDayChip
+                      label="Half day"
+                      active={halfDay.startHalfDay}
+                      onToggle={() => toggleHalfDay("startHalfDay")}
+                    />
+                  ) : (
+                    <>
+                      <HalfDayChip
+                        label="Half-day start"
+                        active={halfDay.startHalfDay}
+                        onToggle={() => toggleHalfDay("startHalfDay")}
+                      />
+                      <HalfDayChip
+                        label="Half-day end"
+                        active={halfDay.endHalfDay}
+                        onToggle={() => toggleHalfDay("endHalfDay")}
+                      />
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Duration + balance status */}
             {days > 0 && (
               <div className={cn(
@@ -240,7 +308,7 @@ export function LeaveRequestForm({
               <Dialog.Close asChild>
                 <Button type="button" variant="outline">Cancel</Button>
               </Dialog.Close>
-              <Button type="submit" disabled={loading} variant={exceedsBalance ? "destructive" : "default"}>
+              <Button type="submit" disabled={loading || !!rangeError} variant={exceedsBalance ? "destructive" : "default"}>
                 {loading ? "Submitting..." : exceedsBalance ? "Submit for Manual Review" : "Submit Request"}
               </Button>
             </div>
@@ -248,6 +316,27 @@ export function LeaveRequestForm({
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
+  );
+}
+
+function HalfDayChip({
+  label, active, onToggle,
+}: { label: string; active: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={active}
+      onClick={onToggle}
+      className={cn(
+        "rounded-full border px-3 py-1.5 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+        active
+          ? "border-primary bg-primary/10 font-medium text-primary"
+          : "border-input bg-background text-muted-foreground hover:bg-muted/60"
+      )}
+    >
+      {label}
+    </button>
   );
 }
 

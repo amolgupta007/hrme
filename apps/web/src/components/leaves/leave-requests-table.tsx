@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { approveLeave, rejectLeave, cancelLeave } from "@/actions/leaves";
 import type { LeaveRequestWithDetails } from "@/actions/leaves";
+import { describeHalfDay } from "@/lib/leaves/half-day";
 
 const TYPE_LABELS: Record<string, string> = {
   paid: "Paid", unpaid: "Unpaid", sick: "Sick",
@@ -125,6 +126,10 @@ export function LeaveRequestsTable({ requests, activeFilter, onFilterChange, can
                   </td>
                   <td className="px-4 py-3 hidden md:table-cell text-muted-foreground">
                     {formatDate(req.start_date)} → {formatDate(req.end_date)}
+                    <HalfDayMarker
+                      startHalfDay={req.start_half_day}
+                      endHalfDay={req.end_half_day}
+                    />
                   </td>
                   <td className="px-4 py-3 hidden md:table-cell font-medium">
                     {Number(req.days)}d
@@ -187,6 +192,27 @@ export function LeaveRequestsTable({ requests, activeFilter, onFilterChange, can
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Marks which end(s) of a request are half days. The days column already reads
+ * "2.5d"; this says whether the half sits at the start, the end, or both.
+ */
+function HalfDayMarker({
+  startHalfDay, endHalfDay,
+}: { startHalfDay: boolean | null; endHalfDay: boolean | null }) {
+  const half = describeHalfDay(startHalfDay, endHalfDay);
+  if (!half) return null;
+
+  return (
+    <span
+      className="ml-1.5 inline-flex items-center rounded bg-muted px-1 text-xs font-medium text-foreground"
+      title={half.label}
+    >
+      <span aria-hidden="true">{half.marker}</span>
+      <span className="sr-only">{half.label}</span>
+    </span>
   );
 }
 

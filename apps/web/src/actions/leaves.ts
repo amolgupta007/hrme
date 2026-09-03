@@ -56,6 +56,12 @@ export type LeaveRequestWithDetails = LeaveRequest & {
   employee_name: string;
   policy_name: string;
   policy_type: string;
+  // Migration 103 (half-day leave) is not yet reflected in the generated
+  // database types, so the two flags are declared here. They already reach
+  // callers at runtime -- the query is select("*") and the mapper spreads the
+  // row. Nullable because rows can predate the column default.
+  start_half_day: boolean | null;
+  end_half_day: boolean | null;
 };
 
 export type EmployeeBalance = {

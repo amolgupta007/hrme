@@ -13,12 +13,20 @@ const tableConfig: Record<string, { rows?: any[]; count?: number }> = {};
 
 function resetTableConfig() {
   for (const k of Object.keys(tableConfig)) delete tableConfig[k];
+  selects.length = 0;
 }
+
+// Every (table, columns) pair the code under test asked for. The mock cannot
+// reject a bad column the way PostgREST does, so tests assert on this instead.
+const selects: Array<{ table: string; columns: string }> = [];
 
 function makeChain(table: string) {
   const cfg = tableConfig[table] ?? {};
   const chain: any = {
-    select: () => chain,
+    select: (columns = "") => {
+      selects.push({ table, columns });
+      return chain;
+    },
     eq: () => chain,
     neq: () => chain,
     gte: () => chain,
@@ -185,9 +193,9 @@ describe("GET /api/mobile/reports/leave — happy path shape", () => {
   it("sums approved leave days grouped by type", async () => {
     tableConfig.leave_requests = {
       rows: [
-        { leave_type: "casual", days: 2 },
-        { leave_type: "sick", days: 1 },
-        { leave_type: "casual", days: 3 },
+        { days: 2, leave_policies: { type: "casual" } },
+        { days: 1, leave_policies: { type: "sick" } },
+        { days: 3, leave_policies: { type: "casual" } },
       ],
     };
 
@@ -203,6 +211,26 @@ describe("GET /api/mobile/reports/leave — happy path shape", () => {
         { type: "sick", days: 1 },
       ]),
     );
+  });
+
+  it("takes the type from an embedded leave_policies, not a leave_type column", async () => {
+    // Regression: the route shipped selecting `leave_type` from leave_requests,
+    // a column that does not exist. PostgREST answered 42703 and fetchAllRows
+    // turned that into a 500, so the endpoint failed on every call.
+    tableConfig.leave_requests = { rows: [] };
+    await callLeave({ from: "2026-08-01", to: "2026-08-31" });
+
+    const leaveSelect = selects.find((s) => s.table === "leave_requests");
+    expect(leaveSelect).toBeDefined();
+    expect(leaveSelect!.columns).toContain("leave_policies");
+    expect(leaveSelect!.columns).not.toMatch(/leave_type/);
+  });
+
+  it("buckets leave whose policy is missing under 'other'", async () => {
+    tableConfig.leave_requests = { rows: [{ days: 2, leave_policies: null }] };
+    const res = await callLeave({ from: "2026-08-01", to: "2026-08-31" });
+    const json = await res.json();
+    expect(json.byType).toEqual([{ type: "other", days: 2 }]);
   });
 
   it("totalDays is 0 with an empty byType when there's no approved leave", async () => {

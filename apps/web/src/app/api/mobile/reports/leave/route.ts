@@ -4,7 +4,11 @@ import { getCurrentUser, isAdmin } from "@/lib/current-user";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { validateRange } from "@/lib/reports/fetch-report-data";
 import { fetchAllRows } from "@/lib/mobile/report-fetch";
-import { buildLeaveReport, type ReportLeaveRow } from "@/lib/mobile/reports-payload";
+import {
+  buildLeaveReport,
+  toReportLeaveRows,
+  type RawLeaveReportRow,
+} from "@/lib/mobile/reports-payload";
 
 export const dynamic = "force-dynamic";
 
@@ -43,10 +47,14 @@ export async function GET(request: NextRequest) {
   // Approved leave overlapping the range (same overlap filter as the web
   // Reports fetch: start_date <= to AND end_date >= from). Paginated in case
   // a large org has a heavy request history within the window.
-  const approvedLeaves = await fetchAllRows<ReportLeaveRow>((a, b) =>
+  //
+  // The type is EMBEDDED from leave_policies -- leave_requests has no
+  // `leave_type` column, and selecting one makes PostgREST reject the whole
+  // query with 42703 (which fetchAllRows turns into a 500).
+  const rawLeaves = await fetchAllRows<RawLeaveReportRow>((a, b) =>
     supabase
       .from("leave_requests")
-      .select("leave_type, days")
+      .select("days, leave_policies(type)")
       .eq("org_id", user.orgId)
       .eq("status", "approved")
       .lte("start_date", to)
@@ -55,6 +63,10 @@ export async function GET(request: NextRequest) {
       .range(a, b),
   );
 
-  const payload = buildLeaveReport({ from, to, approvedLeaves });
+  const payload = buildLeaveReport({
+    from,
+    to,
+    approvedLeaves: toReportLeaveRows(rawLeaves),
+  });
   return NextResponse.json(payload);
 }

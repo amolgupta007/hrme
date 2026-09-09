@@ -76,6 +76,31 @@ export type ReportLeaveRow = {
 };
 
 /**
+ * A row as PostgREST returns it for the leave-report query.
+ *
+ * `leave_requests` has NO `leave_type` column — a request's type lives on
+ * `leave_policies.type`, reached through `policy_id` — so the query embeds
+ * the policy and this shape carries the embed. The relation is many-to-one, so
+ * PostgREST sends an object; the array form is accepted because the generated
+ * client types can model the same relation either way.
+ */
+export type RawLeaveReportRow = {
+  days: number | string | null;
+  leave_policies?: { type: string | null } | { type: string | null }[] | null;
+};
+
+/** Flattens the embedded policy into the shape `buildLeaveReport` aggregates. */
+export function toReportLeaveRows(rows: RawLeaveReportRow[]): ReportLeaveRow[] {
+  return rows.map((r) => {
+    const policy = Array.isArray(r.leave_policies) ? r.leave_policies[0] : r.leave_policies;
+    return {
+      leave_type: policy?.type ?? null,
+      days: Number(r.days) || 0,
+    };
+  });
+}
+
+/**
  * Sums approved `leave_requests.days` by `leave_type` for whatever rows the
  * caller passes in (org-scoped, `status='approved'`, overlapping the range —
  * filtering happens server-side in the route). Not clipped to the exact

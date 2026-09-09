@@ -1059,8 +1059,10 @@ npm run dev                                   # turbo dev (web on :3000)
 npm run build / test / lint / typecheck
 npx turbo build --filter=web                  # scope to one workspace
 npx turbo typecheck --filter=@jambahr/shared  # packages are strictly typechecked
-                                              # (apps/web typecheck is advisory — ~454 known
-                                              #  Supabase never-type errors, gotcha #3)
+                                              # (apps/web typecheck is advisory — ~129 known
+                                              #  errors, gotcha #3. Was ~454; a types regen on
+                                              #  2026-09-09 cleared most of the never-errors,
+                                              #  which were stale generated types, not code.)
 npx turbo dev|typecheck|lint --filter=mobile  # mobile (Expo) — strictly typechecked, CI-gated
 
 # From apps/web (app-specific scripts):

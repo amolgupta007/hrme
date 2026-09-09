@@ -10,10 +10,90 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.4"
+    PostgrestVersion: "14.5"
+  }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
   public: {
     Tables: {
+      account_deletion_requests: {
+        Row: {
+          employee_id: string
+          handled_at: string | null
+          handled_by: string | null
+          id: string
+          note: string | null
+          org_id: string
+          requested_at: string
+          status: string
+        }
+        Insert: {
+          employee_id: string
+          handled_at?: string | null
+          handled_by?: string | null
+          id?: string
+          note?: string | null
+          org_id: string
+          requested_at?: string
+          status?: string
+        }
+        Update: {
+          employee_id?: string
+          handled_at?: string | null
+          handled_by?: string | null
+          id?: string
+          note?: string | null
+          org_id?: string
+          requested_at?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "account_deletion_requests_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "account_deletion_requests_handled_by_fkey"
+            columns: ["handled_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "account_deletion_requests_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       announcements: {
         Row: {
           body: string
@@ -528,14 +608,21 @@ export type Database = {
       }
       attendance_punch_events: {
         Row: {
+          accuracy_m: number | null
           approved_at: string | null
           approved_by: string | null
+          client_event_id: string | null
           created_at: string
           created_by: string | null
           device_id: string | null
           employee_id: string
+          geo_label: string | null
+          geo_status: string | null
           id: string
+          lat: number | null
+          lng: number | null
           location_id: string | null
+          matched_location_id: string | null
           note: string | null
           org_id: string
           punch_type: string | null
@@ -552,14 +639,21 @@ export type Database = {
           voided_by: string | null
         }
         Insert: {
+          accuracy_m?: number | null
           approved_at?: string | null
           approved_by?: string | null
+          client_event_id?: string | null
           created_at?: string
           created_by?: string | null
           device_id?: string | null
           employee_id: string
+          geo_label?: string | null
+          geo_status?: string | null
           id?: string
+          lat?: number | null
+          lng?: number | null
           location_id?: string | null
+          matched_location_id?: string | null
           note?: string | null
           org_id: string
           punch_type?: string | null
@@ -576,14 +670,21 @@ export type Database = {
           voided_by?: string | null
         }
         Update: {
+          accuracy_m?: number | null
           approved_at?: string | null
           approved_by?: string | null
+          client_event_id?: string | null
           created_at?: string
           created_by?: string | null
           device_id?: string | null
           employee_id?: string
+          geo_label?: string | null
+          geo_status?: string | null
           id?: string
+          lat?: number | null
+          lng?: number | null
           location_id?: string | null
+          matched_location_id?: string | null
           note?: string | null
           org_id?: string
           punch_type?: string | null
@@ -631,6 +732,13 @@ export type Database = {
           {
             foreignKeyName: "attendance_punch_events_location_id_fkey"
             columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "attendance_punch_events_matched_location_id_fkey"
+            columns: ["matched_location_id"]
             isOneToOne: false
             referencedRelation: "locations"
             referencedColumns: ["id"]
@@ -1598,6 +1706,7 @@ export type Database = {
           last_seen_at: string | null
           location_id: string | null
           org_id: string
+          silence_alerted_at: string | null
         }
         Insert: {
           created_at?: string
@@ -1609,6 +1718,7 @@ export type Database = {
           last_seen_at?: string | null
           location_id?: string | null
           org_id: string
+          silence_alerted_at?: string | null
         }
         Update: {
           created_at?: string
@@ -1620,6 +1730,7 @@ export type Database = {
           last_seen_at?: string | null
           location_id?: string | null
           org_id?: string
+          silence_alerted_at?: string | null
         }
         Relationships: [
           {
@@ -3981,6 +4092,7 @@ export type Database = {
           days: number
           employee_id: string
           end_date: string
+          end_half_day: boolean
           exceeds_balance: boolean
           id: string
           org_id: string
@@ -3990,6 +4102,7 @@ export type Database = {
           reviewed_at: string | null
           reviewed_by: string | null
           start_date: string
+          start_half_day: boolean
           status: string
           ticket_number: string | null
           updated_at: string
@@ -3999,6 +4112,7 @@ export type Database = {
           days: number
           employee_id: string
           end_date: string
+          end_half_day?: boolean
           exceeds_balance?: boolean
           id?: string
           org_id: string
@@ -4008,6 +4122,7 @@ export type Database = {
           reviewed_at?: string | null
           reviewed_by?: string | null
           start_date: string
+          start_half_day?: boolean
           status?: string
           ticket_number?: string | null
           updated_at?: string
@@ -4017,6 +4132,7 @@ export type Database = {
           days?: number
           employee_id?: string
           end_date?: string
+          end_half_day?: boolean
           exceeds_balance?: boolean
           id?: string
           org_id?: string
@@ -4026,6 +4142,7 @@ export type Database = {
           reviewed_at?: string | null
           reviewed_by?: string | null
           start_date?: string
+          start_half_day?: boolean
           status?: string
           ticket_number?: string | null
           updated_at?: string
@@ -4116,30 +4233,90 @@ export type Database = {
         Row: {
           address: string | null
           created_at: string
+          geofence_radius_m: number | null
           id: string
           is_active: boolean
+          lat: number | null
+          lng: number | null
           name: string
           org_id: string
         }
         Insert: {
           address?: string | null
           created_at?: string
+          geofence_radius_m?: number | null
           id?: string
           is_active?: boolean
+          lat?: number | null
+          lng?: number | null
           name: string
           org_id: string
         }
         Update: {
           address?: string | null
           created_at?: string
+          geofence_radius_m?: number | null
           id?: string
           is_active?: boolean
+          lat?: number | null
+          lng?: number | null
           name?: string
           org_id?: string
         }
         Relationships: [
           {
             foreignKeyName: "locations_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notifications: {
+        Row: {
+          body: string
+          created_at: string
+          data: Json
+          employee_id: string
+          id: string
+          org_id: string
+          read_at: string | null
+          title: string
+          type: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          data?: Json
+          employee_id: string
+          id?: string
+          org_id: string
+          read_at?: string | null
+          title: string
+          type: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          data?: Json
+          employee_id?: string
+          id?: string
+          org_id?: string
+          read_at?: string | null
+          title?: string
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
@@ -4984,6 +5161,54 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "penny_drop_results_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      push_tokens: {
+        Row: {
+          clerk_user_id: string
+          created_at: string
+          employee_id: string
+          expo_push_token: string
+          id: string
+          last_seen_at: string
+          org_id: string
+          platform: string
+        }
+        Insert: {
+          clerk_user_id: string
+          created_at?: string
+          employee_id: string
+          expo_push_token: string
+          id?: string
+          last_seen_at?: string
+          org_id: string
+          platform: string
+        }
+        Update: {
+          clerk_user_id?: string
+          created_at?: string
+          employee_id?: string
+          expo_push_token?: string
+          id?: string
+          last_seen_at?: string
+          org_id?: string
+          platform?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "push_tokens_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "push_tokens_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
@@ -6153,12 +6378,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -6182,11 +6407,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -6207,11 +6432,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -6232,11 +6457,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -6249,11 +6474,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -6263,6 +6488,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {},
   },

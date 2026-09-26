@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { currentUser } from "@clerk/nextjs/server";
-import { getCurrentUser } from "@/lib/current-user";
+import { getCurrentUser, isMembershipLookupError } from "@/lib/current-user";
 import { OnboardingClient } from "./onboarding-client";
+import { WorkspaceUnavailable } from "@/components/layout/workspace-unavailable";
 
 /**
  * Server gate for /onboarding.
@@ -16,7 +17,17 @@ import { OnboardingClient } from "./onboarding-client";
  * Running it here means the link happens no matter which route auth lands on.
  */
 export default async function OnboardingPage() {
-  const userCtx = await getCurrentUser();
+  // The wall below claims nobody has invited this address. That claim is only
+  // honest when the lookup actually RAN — if the database is unreachable we
+  // know nothing about their memberships, so say that instead of accusing the
+  // app of having no workspace for them.
+  let userCtx;
+  try {
+    userCtx = await getCurrentUser();
+  } catch (err) {
+    if (isMembershipLookupError(err)) return <WorkspaceUnavailable />;
+    throw err;
+  }
 
   // Already a member (or just linked by the call above) → straight to the app.
   if (userCtx) {

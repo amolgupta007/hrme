@@ -26,9 +26,46 @@ export type UserContext = {
 };
 
 /**
+ * Thrown when the membership lookup itself FAILS (database unreachable, query
+ * rejected) — as opposed to succeeding and finding no rows.
+ *
+ * The distinction matters enormously. A `null` UserContext means "this account
+ * belongs to no org", which the app renders as "No workspace found for this
+ * account" plus a prompt to go ask an admin for an invite. Reporting that when
+ * the database merely timed out tells an owner their entire company is gone.
+ * So a failed lookup fails LOUDLY and the caller decides how to surface it;
+ * only a genuinely empty result returns null.
+ */
+export class MembershipLookupError extends Error {
+  constructor(message: string, cause?: unknown) {
+    super(message);
+    this.name = "MembershipLookupError";
+    this.cause = cause;
+  }
+}
+
+/** Narrow an unknown caught value to a membership-lookup failure. */
+export function isMembershipLookupError(
+  err: unknown
+): err is MembershipLookupError {
+  if (err instanceof MembershipLookupError) return true;
+  // Name check as a backstop: class identity can be lost across bundle
+  // boundaries, and mistaking this for a real "no membership" is the exact
+  // failure being fixed here.
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    (err as { name?: unknown }).name === "MembershipLookupError"
+  );
+}
+
+/**
  * Returns the current user's org context including their role and plan.
  * Org is resolved from the caller's employees rows + active-org cookie.
  * Clerk is used only for userId (no sessionOrgId / Clerk org membership).
+ *
+ * Returns null when the caller is signed in but belongs to no org.
+ * Throws {@link MembershipLookupError} when membership could not be read at all.
  */
 export async function getCurrentUser(
   opts?: { orgIdHint?: string | null }
@@ -39,7 +76,7 @@ export async function getCurrentUser(
   const supabase = createAdminSupabase();
 
   async function loadMemberships() {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("employees")
       .select(
         "id, role, first_name, employment_type, org_id, organizations!inner(id, name, plan, settings, custom_features)"
@@ -47,6 +84,15 @@ export async function getCurrentUser(
       .eq("clerk_user_id", userId as string)
       .neq("status", "terminated")
       .order("created_at", { ascending: true });
+    // Do NOT fall through to `data ?? []` on error — an unreachable database
+    // would read as "this user has no orgs" and strand every signed-in user,
+    // owners included, on the /onboarding "no workspace found" wall.
+    if (error) {
+      throw new MembershipLookupError(
+        "Could not read org memberships from the database",
+        error
+      );
+    }
     return (data ?? []) as any[];
   }
 
@@ -186,6 +232,7 @@ export function isManagerOrAbove(role: UserRole): boolean {
 
 /**
  * Lightweight org context — orgId + clerkUserId.
+ * Throws {@link MembershipLookupError} when membership could not be read.
  * Resolves via the employees-table membership + active-org cookie.
  * Use getCurrentUser() when you also need role/plan/employeeId.
  */
@@ -194,12 +241,20 @@ export async function getOrgContext(): Promise<{ orgId: string; clerkUserId: str
   if (!userId) return null;
 
   const supabase = createAdminSupabase();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("employees")
     .select("org_id")
     .eq("clerk_user_id", userId)
     .neq("status", "terminated")
     .order("created_at", { ascending: true });
+
+  // Same contract as getCurrentUser: a failed read is not an empty read.
+  if (error) {
+    throw new MembershipLookupError(
+      "Could not read org memberships from the database",
+      error
+    );
+  }
 
   const rows = (data ?? []) as { org_id: string }[];
   if (rows.length === 0) return null;

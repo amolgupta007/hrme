@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { render } from "@react-email/render";
-import { getCurrentUser } from "@/lib/current-user";
+import { resolveMobileUser } from "@/lib/mobile/auth";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { resend, FROM_EMAIL } from "@/lib/resend";
 import { AccountDeletionRequestEmail } from "@/components/emails/account-deletion-request";
@@ -31,10 +31,11 @@ async function requireCaller(request: NextRequest) {
   if (!userId) {
     return { error: NextResponse.json({ error: "unauthenticated" }, { status: 401 }) } as const;
   }
-  const user = await getCurrentUser({ orgIdHint: request.headers.get("x-org-id") });
-  if (!user) {
-    return { error: NextResponse.json({ error: "no_membership" }, { status: 403 }) } as const;
+  const resolved = await resolveMobileUser(request);
+  if (!resolved.ok) {
+    return { error: resolved.response } as const;
   }
+  const user = resolved.user;
   if (!user.employeeId) {
     return { error: NextResponse.json({ error: "no_employee" }, { status: 403 }) } as const;
   }

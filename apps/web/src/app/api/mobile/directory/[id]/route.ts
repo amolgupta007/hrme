@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { getCurrentUser, isManagerOrAbove } from "@/lib/current-user";
+import { isManagerOrAbove } from "@/lib/current-user";
+import { resolveMobileUser } from "@/lib/mobile/auth";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { istToday } from "@jambahr/shared";
 import {
@@ -32,10 +33,9 @@ export async function GET(request: NextRequest, ctx: { params: { id: string } })
     return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
   }
 
-  const user = await getCurrentUser({ orgIdHint: request.headers.get("x-org-id") });
-  if (!user) {
-    return NextResponse.json({ error: "no_membership" }, { status: 403 });
-  }
+  const resolved = await resolveMobileUser(request);
+  if (!resolved.ok) return resolved.response;
+  const user = resolved.user;
   if (!isManagerOrAbove(user.role)) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }

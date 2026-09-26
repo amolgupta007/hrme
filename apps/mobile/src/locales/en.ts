@@ -100,6 +100,18 @@ export const en = {
     unknownVersion: "Unknown version",
     required: (minVersion: string) => ` · ${minVersion} required`,
   },
+  /**
+   * Shown when the BFF answers 503 `service_unavailable` — the server reached
+   * us but could not read the database. Deliberately NOT "check your
+   * connection" (the phone is fine) and NOT "you have no organisation" (we
+   * never got far enough to know). See the 2026-09-26 outage.
+   */
+  serviceUnavailable: {
+    title: "Can't reach JambaHR right now",
+    body: "We're having trouble reaching our servers. Your data is safe and nothing has been lost.",
+    hint: "Give it a moment, then try again.",
+    retry: "Try again",
+  },
 } as const;
 
 /** The shape every locale must satisfy. */

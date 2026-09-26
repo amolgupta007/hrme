@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { getCurrentUser } from "@/lib/current-user";
+import { resolveMobileUser } from "@/lib/mobile/auth";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import {
   buildPayslipDetail,
@@ -26,10 +26,9 @@ export async function GET(request: NextRequest, ctx: { params: { entryId: string
     return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
   }
 
-  const user = await getCurrentUser({ orgIdHint: request.headers.get("x-org-id") });
-  if (!user) {
-    return NextResponse.json({ error: "no_membership" }, { status: 403 });
-  }
+  const resolved = await resolveMobileUser(request);
+  if (!resolved.ok) return resolved.response;
+  const user = resolved.user;
 
   const entryId = ctx.params.entryId;
   const supabase = createAdminSupabase();

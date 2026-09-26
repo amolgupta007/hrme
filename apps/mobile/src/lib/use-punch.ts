@@ -68,6 +68,10 @@ function punchErrorCopy(error: unknown): string {
       return strings.punch.errors.inactiveEmployee;
     case "no_membership":
       return strings.punch.errors.noMembership;
+    // 503: the server could not read the database. NOT noMembership — we never
+    // learned whether they're a member (2026-09-26 outage).
+    case "service_unavailable":
+      return strings.serviceUnavailable.body;
     case "location_required":
       return strings.punch.errors.locationRequired;
     default:

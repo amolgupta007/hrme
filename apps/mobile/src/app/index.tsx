@@ -2,6 +2,7 @@ import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { Redirect } from "expo-router";
 import { useAuth } from "@clerk/clerk-expo";
 import { useSession } from "@/lib/session";
+import { strings } from "@/lib/i18n";
 
 export default function Index() {
   const { isLoaded, isSignedIn, signOut } = useAuth();
@@ -29,6 +30,35 @@ export default function Index() {
         </Text>
         <Pressable accessibilityRole="button" accessibilityLabel="Sign out" className="mt-6" onPress={() => void signOut()}>
           <Text className="font-semibold text-primary">Sign out</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  if (error === "service_unavailable") {
+    // The lookup FAILED — we know nothing about their memberships, so showing
+    // the "not linked to an organisation" screen above would be a guess
+    // dressed up as a fact. Retry is the only honest CTA (2026-09-26 outage).
+    return (
+      <View className="flex-1 items-center justify-center bg-background px-8">
+        <Text className="text-center text-base font-semibold text-foreground">
+          {strings.serviceUnavailable.title}
+        </Text>
+        <Text className="mt-2 text-center text-sm text-muted-foreground">
+          {strings.serviceUnavailable.body}
+        </Text>
+        <Text className="mt-2 text-center text-sm text-muted-foreground">
+          {strings.serviceUnavailable.hint}
+        </Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={strings.serviceUnavailable.retry}
+          className="mt-6"
+          onPress={() => void refresh()}
+        >
+          <Text className="font-semibold text-primary">
+            {strings.serviceUnavailable.retry}
+          </Text>
         </Pressable>
       </View>
     );

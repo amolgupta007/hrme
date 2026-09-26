@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { getCurrentUser } from "@/lib/current-user";
+import { resolveMobileUser } from "@/lib/mobile/auth";
 import { cancelLeave } from "@/actions/leaves";
 import { CancelLeaveBodySchema } from "@/lib/mobile/leave-payload";
 import type { MobileLeaveOkResponse } from "@jambahr/shared";
@@ -19,10 +19,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
   }
 
-  const user = await getCurrentUser({ orgIdHint: request.headers.get("x-org-id") });
-  if (!user) {
-    return NextResponse.json({ error: "no_membership" }, { status: 403 });
-  }
+  const resolved = await resolveMobileUser(request);
+  if (!resolved.ok) return resolved.response;
+  const user = resolved.user;
 
   const body = await request.json().catch(() => null);
   const parsed = CancelLeaveBodySchema.safeParse(body);

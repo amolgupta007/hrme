@@ -74,6 +74,8 @@ export function approvalErrorCopy(error: unknown): string {
       return "You're offline. Try again once you're connected.";
     case "unauthenticated":
       return "Your session expired. Sign in again.";
+    case "service_unavailable":
+      return "Can't reach JambaHR right now. Your data is safe — try again shortly.";
     case "no_membership":
       return "Your employee record isn't active. Contact your admin.";
     case "forbidden":

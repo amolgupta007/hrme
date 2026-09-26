@@ -2,19 +2,30 @@ import { redirect } from "next/navigation";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
 import { getPendingCounts } from "@/actions/notifications";
-import { getCurrentUser } from "@/lib/current-user";
+import { getCurrentUser, isMembershipLookupError } from "@/lib/current-user";
 import { getMyOrgs } from "@/actions/active-org";
 import { ReportFeedbackTriggerRoot } from "@/components/feedback/report-feedback-trigger";
 import { AssistantLauncher } from "@/components/assistant/assistant-launcher";
 import { canUseAssistant } from "@/lib/assistant/permissions";
 import { hasFeature } from "@/config/plans";
+import { WorkspaceUnavailable } from "@/components/layout/workspace-unavailable";
 
 export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const userCtx = await getCurrentUser();
+  // A membership read that FAILED is not a membership read that found nothing.
+  // Redirecting on an outage lands the user on /onboarding's "No workspace
+  // found" wall, which reads as "your company is gone" (2026-09-26 outage).
+  let userCtx;
+  try {
+    userCtx = await getCurrentUser();
+  } catch (err) {
+    if (isMembershipLookupError(err)) return <WorkspaceUnavailable />;
+    throw err;
+  }
+
   if (!userCtx) {
     redirect("/onboarding");
   }

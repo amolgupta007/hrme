@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { getCurrentUser, isAdmin, isManagerOrAbove } from "@/lib/current-user";
+import { isAdmin, isManagerOrAbove } from "@/lib/current-user";
+import { resolveMobileUser } from "@/lib/mobile/auth";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { getManagerScopedEmployeeIds } from "@/lib/attendance/manager-scope";
 import { getDirectReportIds } from "@/lib/managers";
@@ -28,10 +29,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
   }
 
-  const user = await getCurrentUser({ orgIdHint: request.headers.get("x-org-id") });
-  if (!user) {
-    return NextResponse.json({ error: "no_membership" }, { status: 403 });
-  }
+  const resolved = await resolveMobileUser(request);
+  if (!resolved.ok) return resolved.response;
+  const user = resolved.user;
 
   // Employees see nothing here — but 200 [] (not 403), the app gates the UI.
   if (!isManagerOrAbove(user.role)) {

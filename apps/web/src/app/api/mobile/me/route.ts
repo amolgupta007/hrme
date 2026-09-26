@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { getCurrentUser } from "@/lib/current-user";
+import { resolveMobileUser } from "@/lib/mobile/auth";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import {
   buildMePayload,
@@ -23,13 +23,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
   }
 
-  const user = await getCurrentUser({
-    orgIdHint: request.headers.get("x-org-id"),
-  });
-  if (!user) {
-    // Signed in but no org membership (web equivalent: /onboarding redirect)
-    return NextResponse.json({ error: "no_membership" }, { status: 403 });
-  }
+  // 403 no_membership = looked, found no org (web equivalent: /onboarding).
+  // 503 service_unavailable = could not look at all. This route decides the
+  // app's whole top-level state, so conflating the two showed "no workspace"
+  // during a database outage.
+  const resolved = await resolveMobileUser(request);
+  if (!resolved.ok) return resolved.response;
+  const user = resolved.user;
 
   const supabase = createAdminSupabase();
 

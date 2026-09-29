@@ -14,8 +14,8 @@ interface Props {
 
 export function ShiftFormDialog({ initial, onClose }: Props) {
   const [name, setName] = useState(initial?.name ?? "");
-  const [start, setStart] = useState(initial?.start_time ?? "09:00");
-  const [end, setEnd] = useState(initial?.end_time ?? "17:00");
+  const [start, setStart] = useState(initial?.start_time?.slice(0, 5) ?? "09:00");
+  const [end, setEnd] = useState(initial?.end_time?.slice(0, 5) ?? "17:00");
   const [breakMin, setBreakMin] = useState(initial?.break_minutes ?? 0);
   const [graceMin, setGraceMin] = useState(initial?.grace_minutes ?? 10);
   const [halfDayMin, setHalfDayMin] = useState(initial?.half_day_threshold_minutes ?? 240);

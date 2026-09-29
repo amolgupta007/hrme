@@ -70,7 +70,12 @@ export type RosterGrid = {
   shifts: Shift[]; // for the palette
 };
 
-const HHMM = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Invalid HH:MM");
+// Accept HH:MM:SS too — Postgres TIME round-trips with seconds, and a time
+// input seeded with "09:00:00" keeps submitting seconds. Normalise to HH:MM.
+const HHMM = z
+  .string()
+  .regex(/^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/, "Invalid HH:MM")
+  .transform((v) => v.slice(0, 5));
 const ShiftInputSchema = z.object({
   id: z.string().uuid().optional(),
   name: z.string().min(1).max(80),

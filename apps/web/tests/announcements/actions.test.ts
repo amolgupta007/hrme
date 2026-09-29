@@ -252,6 +252,13 @@ describe("edits after publish", () => {
     expect(status.rows.find((r: any) => r.employee_id === EMP_A1).state).toBe("pending");
     expect(db.announcement_acknowledgements).toHaveLength(1); // audit row survives
     expect(db.announcement_versions).toHaveLength(2);
+
+    // Found in the browser walkthrough: after a re-ack, the current-version
+    // count is 0 but delete must still be presented (and act) as an archive.
+    const [listed] = (await listAnnouncements() as any).data;
+    expect(listed.ack_totals.acknowledged).toBe(0);
+    expect(listed.has_ack_records).toBe(true);
+    expect(await deleteAnnouncement(id)).toEqual({ success: true, data: { archived: true } });
   });
 
   it("'minor fix' keeps existing acknowledgements", async () => {

@@ -54,6 +54,12 @@ export type Announcement = {
   my_ack: { state: Exclude<AckState, "left">; acknowledged_at: string | null } | null;
   /** Admin-only progress summary for ack-required announcements. */
   ack_totals: AckTotals | null;
+  /**
+   * Admin-only: any acknowledgement row exists, for ANY version. Deleting such
+   * an announcement archives it. Differs from ack_totals.acknowledged, which
+   * resets to 0 after a re-ack edit while the older records are still kept.
+   */
+  has_ack_records: boolean;
 };
 
 export type AnnouncementAudienceOptions = {
@@ -276,12 +282,14 @@ export async function listAnnouncements(): Promise<ActionResult<Announcement[]>>
           .eq("org_id", user.orgId)
           .in("announcement_id", ackIds)
       : Promise.resolve({ data: [] }),
-    ackIds.length
+    // All ids, not just ack-required ones: an announcement whose ack was later
+    // switched off still has records that make delete an archive.
+    ids.length
       ? supabase
           .from("announcement_acknowledgements")
           .select("announcement_id, employee_id, version, acknowledged_at")
           .eq("org_id", user.orgId)
-          .in("announcement_id", ackIds)
+          .in("announcement_id", ids)
       : Promise.resolve({ data: [] }),
   ]);
 
@@ -370,6 +378,7 @@ export async function listAnnouncements(): Promise<ActionResult<Announcement[]>>
       content_version: a.content_version ?? 1,
       my_ack: myAck,
       ack_totals: totals,
+      has_ack_records: admin && acks.some((k) => k.announcement_id === a.id),
     });
   }
   return { success: true, data: out };

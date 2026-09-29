@@ -104,7 +104,7 @@ export function AnnouncementsClient({ announcements, role, loadError }: Announce
     router.refresh();
   }
 
-  const deletingHasAcks = (deleting?.ack_totals?.acknowledged ?? 0) > 0;
+  const deletingHasAcks = !!deleting?.has_ack_records;
 
   return (
     <>

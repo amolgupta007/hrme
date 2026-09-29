@@ -725,7 +725,22 @@ Optional, per-org rule: employees who clock in late more than N days in an IST c
 
 **Cron**: `/api/cron/late-policy-reconcile` (daily — see Cron Jobs table).
 
-**v1 limitations**: overnight shifts not evaluated; calendar-month period only; bonus-block consequence only (no penalty deductions); single org-wide rule (targeting selects who it covers); Omni WhatsApp adapter pending.
+**v1 limitations**: overnight shifts not evaluated; calendar-month period only; single org-wide rule (targeting selects who it covers); Omni WhatsApp adapter pending. (Salary-band deductions shipped later via migrations 089/090; the leave-deduction ladder via 111 — see below.)
+
+### Late-arrival penalty ladder + lateness for all punch sources (2026-09-30, branch `feat/late-penalty-ladder`)
+
+Spec: `docs/demo/late-arrival-penalty-rules-prompt.md`; email reference `docs/demo/Attendance_Warning_Email_Templates.pdf`.
+
+- **Lateness is now computed for EVERY punch source.** It used to run only on the web clock-in, so biometric (ADMS) and mobile staff were never marked late and every late rule was inert for them (TMP Wagholi had salary bands enabled with 0 late rows ever). `recomputeAttendanceDay` now calls `evaluateDayLateness` (`src/lib/attendance/late-evaluation.ts`); the month step (flags, ladder, emails) is deferred via `waitUntil` so ingestion stays fast. Corrections/voids re-evaluate the day.
+- **Go-live guard:** `late_policies.evaluate_from` — days before it are never evaluated. Stamped when a policy is switched on, and set to the apply date for existing policies by migration 111, so the fix never back-dates penalties.
+- **One definition of "counts":** `loadCountableLates` (`src/lib/attendance/late-counting.ts`) over the pure `countableLates` (`@jambahr/shared/attendance/late-eligibility`): is_late AND not excused, not a week-off (employee > department > org), not a non-optional holiday, not an approved-leave day, not before go-live. Used by the evaluator, the nightly cron and payroll's salary bands.
+- **Ladder** = consequence `leave_deduction`: pure `planLateLadder` (`@jambahr/shared/attendance/late-ladder`) → `applyLateLadder` (`late-ladder-apply.ts`). Warning once at `ladder_warning_at`; deduction at every `ladder_deduct_at`th late (`ladder_repeat`); **CL first, then LOP** (0.5 left → 0.5 CL + 0.5 LOP; none → all LOP). `late_penalty_events` is unique per (org, employee, month, kind, occurrence) — reruns are no-ops. The count falling reverses a step (CL credited back, LOP removed); if the month's payroll is paid/disbursing and LOP is involved → `needs_review`. Waived steps are never re-applied.
+- **CL goes through an append-only ledger** (`leave_adjustments`, UPDATE/direct DELETE blocked by trigger). Every balance reader folds it in via `src/lib/leaves/balance.ts` (`loadLeaveAdjustmentUsage` returns ledger movement as used-days rows). Insights leave utilisation deliberately excludes it. **LOP** goes into the existing `payroll_entries.late_penalty_days/_deduction` (payslips now show "Late-arrival penalty").
+- **Emails** (`late-arrival-notice.tsx`): warning / deduction / lop / partial / correction, from `JambaHR <noreply@>`, employee To, reporting managers CC (+ owners/admins if `ladder_cc_admins`); phone-only staff get the in-app/push `late_penalty` notification and `email_status='skipped_no_email'`.
+- **Admin**: Attendance → **Late arrivals** tab (`late-penalties-tab.tsx`) — excuse a day (`excuseLateDay`, reason required), waive a deduction (`waiveLatePenalty`, reason required). Employees see `MyLateBanner`.
+- **Cron** `/api/cron/late-policy-reconcile` is now the source of truth: re-derives lateness from go-live and re-runs the month (current month + previous month during days 1–5).
+- **Also fixed:** bonus block only under block_bonus/both; Waive creates a missing flag; threshold email worded by consequence (WhatsApp bonus template only when the bonus is blocked); flags drop when the count falls back under the threshold.
+- **Known gap:** `/api/mobile/directory/[id]` selects the non-existent `leave_requests.leave_type`, so a mobile person profile's recent-leaves list is silently empty (same class as #42).
 
 ## Location-verified clock-in (Settings → Attendance) — shipped 2026-08-12 (D5)
 

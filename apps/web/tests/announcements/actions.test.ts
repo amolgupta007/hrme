@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { createFakeSupabase, type FakeDb } from "./fake-supabase";
+import { createFakeSupabase, type FakeDb } from "../helpers/fake-supabase";
 
 // ---- Module mocks -------------------------------------------------------
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));

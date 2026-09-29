@@ -134,3 +134,15 @@ CREATE POLICY late_penalty_events_org_read ON public.late_penalty_events
 DROP POLICY IF EXISTS leave_adjustments_org_read ON public.leave_adjustments;
 CREATE POLICY leave_adjustments_org_read ON public.leave_adjustments
   FOR SELECT USING (auth.jwt() ->> 'org_id' = org_id::text);
+
+-- ── notifications: in-app/push for ladder steps ─────────────────────────────
+ALTER TABLE public.notifications DROP CONSTRAINT IF EXISTS notifications_type_check;
+ALTER TABLE public.notifications ADD CONSTRAINT notifications_type_check
+  CHECK (type = ANY (ARRAY[
+    'leave_decision'::text,
+    'payslip_paid'::text,
+    'doc_ack'::text,
+    'announcement'::text,
+    'approval_pending'::text,
+    'late_penalty'::text
+  ]));

@@ -1,42 +1,69 @@
 import { NextResponse } from "next/server";
 import { createAdminSupabase } from "@/lib/supabase/server";
+import { monthBounds } from "@jambahr/shared/attendance/late-eligibility";
+import {
+  evaluateDayLateness,
+  evaluateLateMonth,
+  loadCoveredEmployeeIds,
+  type LatePolicyRow,
+} from "@/lib/attendance/late-evaluation";
 
-function istMonth(): string {
-  return new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 7);
+export const maxDuration = 300;
+
+/** IST "today" and the months to reconcile: this month, plus last month during the first 5 days. */
+function monthsToReconcile(now = new Date()): string[] {
+  const ist = new Date(now.getTime() + 5.5 * 3600 * 1000);
+  const month = ist.toISOString().slice(0, 7);
+  if (ist.getUTCDate() > 5) return [month];
+  const prev = new Date(Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth() - 1, 1)).toISOString().slice(0, 7);
+  return [prev, month];
 }
 
+/**
+ * Nightly safety net + source of truth for late policies. For every enabled
+ * policy it re-derives each covered employee's lateness for the month (from
+ * the policy's go-live date; catches punches that arrived out of order or
+ * shift changes), then re-runs the month: flags + alerts, or the ladder.
+ * Idempotent — safe to re-run.
+ */
 export async function GET(req: Request) {
   if (req.headers.get("authorization") !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const sb = createAdminSupabase();
-  const month = istMonth();
-  const monthStart = `${month}-01`;
-
+  const months = monthsToReconcile();
   const { data: policies } = await sb.from("late_policies").select("*").eq("enabled", true);
-  let flagged = 0;
-  for (const p of (policies ?? []) as any[]) {
-    const { data: lateRows } = await sb
-      .from("attendance_records")
-      .select("employee_id")
-      .eq("org_id", p.org_id).eq("is_late", true)
-      .gte("date", monthStart).lte("date", `${month}-31`);
-    const counts = new Map<string, number>();
-    for (const r of (lateRows ?? []) as any[]) counts.set(r.employee_id, (counts.get(r.employee_id) ?? 0) + 1);
-    for (const [employeeId, count] of counts) {
-      if (count < p.threshold_days) continue;
-      const { data: existing } = await sb
-        .from("late_policy_flags").select("id, status")
-        .eq("org_id", p.org_id).eq("employee_id", employeeId).eq("month", month).maybeSingle();
-      if (existing) {
-        if ((existing as any).status !== "overridden") {
-          await sb.from("late_policy_flags").update({ late_days_count: count, updated_at: new Date().toISOString() } as any).eq("id", (existing as any).id);
+
+  let employeesEvaluated = 0;
+  const errors: string[] = [];
+  for (const policy of (policies ?? []) as LatePolicyRow[]) {
+    try {
+      const covered = await loadCoveredEmployeeIds(sb, policy);
+      if (covered.size === 0) continue;
+      for (const month of months) {
+        const { start, end } = monthBounds(month);
+        const from = policy.evaluate_from && policy.evaluate_from > start ? policy.evaluate_from : start;
+        if (from > end) continue;
+        const { data: records } = await sb
+          .from("attendance_records")
+          .select("employee_id, date")
+          .eq("org_id", policy.org_id)
+          .in("employee_id", [...covered])
+          .gte("date", from)
+          .lte("date", end);
+        const rows = (records ?? []) as Array<{ employee_id: string; date: string }>;
+        for (const r of rows) {
+          await evaluateDayLateness(sb, policy.org_id, r.employee_id, r.date, { policy, covered, skipMonth: true });
         }
-      } else {
-        await sb.from("late_policy_flags").insert({ org_id: p.org_id, policy_id: p.id, employee_id: employeeId, month, late_days_count: count, status: "flagged" } as any);
-        flagged++;
+        for (const employeeId of new Set(rows.map((r) => r.employee_id))) {
+          await evaluateLateMonth(sb, policy, employeeId, month, { covered });
+          employeesEvaluated++;
+        }
       }
+    } catch (e) {
+      errors.push(`${policy.org_id}: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
-  return NextResponse.json({ ok: true, month, newlyFlagged: flagged });
+  if (errors.length) console.error("[late-policy-reconcile]", errors);
+  return NextResponse.json({ ok: errors.length === 0, months, employeesEvaluated, errors: errors.length });
 }

@@ -1016,6 +1016,10 @@ export type Database = {
           ip_address: string | null
           is_late: boolean
           last_out_location_id: string | null
+          late_excuse_reason: string | null
+          late_excused: boolean
+          late_excused_at: string | null
+          late_excused_by: string | null
           late_minutes: number | null
           late_policy_id: string | null
           needs_review: boolean
@@ -1046,6 +1050,10 @@ export type Database = {
           ip_address?: string | null
           is_late?: boolean
           last_out_location_id?: string | null
+          late_excuse_reason?: string | null
+          late_excused?: boolean
+          late_excused_at?: string | null
+          late_excused_by?: string | null
           late_minutes?: number | null
           late_policy_id?: string | null
           needs_review?: boolean
@@ -1076,6 +1084,10 @@ export type Database = {
           ip_address?: string | null
           is_late?: boolean
           last_out_location_id?: string | null
+          late_excuse_reason?: string | null
+          late_excused?: boolean
+          late_excused_at?: string | null
+          late_excused_by?: string | null
           late_minutes?: number | null
           late_policy_id?: string | null
           needs_review?: boolean
@@ -3802,6 +3814,114 @@ export type Database = {
           },
         ]
       }
+      late_penalty_events: {
+        Row: {
+          cl_balance_before: number | null
+          cl_days: number
+          created_at: string
+          email_status: string | null
+          employee_id: string
+          id: string
+          kind: string
+          late_count: number
+          late_record_ids: string[]
+          leave_policy_id: string | null
+          lop_days: number
+          month: string
+          occurrence_no: number
+          org_id: string
+          policy_id: string
+          status: string
+          status_at: string | null
+          status_by: string | null
+          status_reason: string | null
+          trigger_date: string
+          updated_at: string
+        }
+        Insert: {
+          cl_balance_before?: number | null
+          cl_days?: number
+          created_at?: string
+          email_status?: string | null
+          employee_id: string
+          id?: string
+          kind: string
+          late_count: number
+          late_record_ids?: string[]
+          leave_policy_id?: string | null
+          lop_days?: number
+          month: string
+          occurrence_no: number
+          org_id: string
+          policy_id: string
+          status?: string
+          status_at?: string | null
+          status_by?: string | null
+          status_reason?: string | null
+          trigger_date: string
+          updated_at?: string
+        }
+        Update: {
+          cl_balance_before?: number | null
+          cl_days?: number
+          created_at?: string
+          email_status?: string | null
+          employee_id?: string
+          id?: string
+          kind?: string
+          late_count?: number
+          late_record_ids?: string[]
+          leave_policy_id?: string | null
+          lop_days?: number
+          month?: string
+          occurrence_no?: number
+          org_id?: string
+          policy_id?: string
+          status?: string
+          status_at?: string | null
+          status_by?: string | null
+          status_reason?: string | null
+          trigger_date?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "late_penalty_events_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "late_penalty_events_leave_policy_id_fkey"
+            columns: ["leave_policy_id"]
+            isOneToOne: false
+            referencedRelation: "leave_policies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "late_penalty_events_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "late_penalty_events_policy_id_fkey"
+            columns: ["policy_id"]
+            isOneToOne: false
+            referencedRelation: "late_policies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "late_penalty_events_status_by_fkey"
+            columns: ["status_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       late_policies: {
         Row: {
           channel_email: boolean
@@ -3809,8 +3929,18 @@ export type Database = {
           consequence: string
           created_at: string
           enabled: boolean
+          evaluate_from: string | null
           fallback_cutoff_time: string | null
           id: string
+          ladder_cc_admins: boolean
+          ladder_cc_managers: boolean
+          ladder_deduct_at: number
+          ladder_deduct_days: number
+          ladder_dispute_days: number
+          ladder_leave_type: string
+          ladder_lop_fallback: boolean
+          ladder_repeat: boolean
+          ladder_warning_at: number | null
           late_definition: string
           name: string
           notify_on_late: boolean
@@ -3827,8 +3957,18 @@ export type Database = {
           consequence?: string
           created_at?: string
           enabled?: boolean
+          evaluate_from?: string | null
           fallback_cutoff_time?: string | null
           id?: string
+          ladder_cc_admins?: boolean
+          ladder_cc_managers?: boolean
+          ladder_deduct_at?: number
+          ladder_deduct_days?: number
+          ladder_dispute_days?: number
+          ladder_leave_type?: string
+          ladder_lop_fallback?: boolean
+          ladder_repeat?: boolean
+          ladder_warning_at?: number | null
           late_definition?: string
           name?: string
           notify_on_late?: boolean
@@ -3845,8 +3985,18 @@ export type Database = {
           consequence?: string
           created_at?: string
           enabled?: boolean
+          evaluate_from?: string | null
           fallback_cutoff_time?: string | null
           id?: string
+          ladder_cc_admins?: boolean
+          ladder_cc_managers?: boolean
+          ladder_deduct_at?: number
+          ladder_deduct_days?: number
+          ladder_dispute_days?: number
+          ladder_leave_type?: string
+          ladder_lop_fallback?: boolean
+          ladder_repeat?: boolean
+          ladder_warning_at?: number | null
           late_definition?: string
           name?: string
           notify_on_late?: boolean
@@ -4205,6 +4355,77 @@ export type Database = {
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      leave_adjustments: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          days: number
+          employee_id: string
+          id: string
+          org_id: string
+          policy_id: string
+          reason: string
+          source: string
+          source_ref: string
+          year: number
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          days: number
+          employee_id: string
+          id?: string
+          org_id: string
+          policy_id: string
+          reason: string
+          source: string
+          source_ref: string
+          year: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          days?: number
+          employee_id?: string
+          id?: string
+          org_id?: string
+          policy_id?: string
+          reason?: string
+          source?: string
+          source_ref?: string
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leave_adjustments_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leave_adjustments_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leave_adjustments_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leave_adjustments_policy_id_fkey"
+            columns: ["policy_id"]
+            isOneToOne: false
+            referencedRelation: "leave_policies"
             referencedColumns: ["id"]
           },
         ]

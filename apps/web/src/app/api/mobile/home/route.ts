@@ -5,6 +5,7 @@ import { resolveMobileUser } from "@/lib/mobile/auth";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { getManagerScopedEmployeeIds } from "@/lib/attendance/manager-scope";
 import { hasFeature } from "@/config/plans";
+import { filterVisibleAnnouncements } from "@/lib/announcements/visibility";
 import { istToday, type MobileHolidayLite } from "@jambahr/shared";
 import {
   buildHomePayload,
@@ -181,11 +182,19 @@ export async function GET(request: NextRequest) {
   // dashboard's "Latest announcements" query in src/actions/dashboard.ts).
   const { data: announcementRows } = await supabase
     .from("announcements")
-    .select("id, title, body, category, created_at")
+    .select("id, title, body, category, created_at, audience_type")
     .eq("org_id", user.orgId)
+    .is("archived_at", null)
     .order("is_pinned", { ascending: false })
     .order("created_at", { ascending: false })
-    .limit(3);
+    // Over-fetch: targeted announcements the viewer isn't in are dropped below.
+    .limit(10);
+  const visibleAnnouncementRows = await filterVisibleAnnouncements(supabase, {
+    orgId: user.orgId,
+    employeeId,
+    isAdmin: isAdmin(user.role),
+    rows: ((announcementRows as any[] | null) ?? []) as any[],
+  });
 
   // ── Unread notifications (bell badge) — best-effort, never breaks Home. ───
   let unreadNotifications = 0;
@@ -275,7 +284,7 @@ export async function GET(request: NextRequest) {
     pendingRegularizations,
     pendingApprovals: resolvePendingApprovals(isManagerOrAbove(user.role), pendingApprovalsRaw),
     trainingsOverdue: trainingsOverdueCount ?? 0,
-    announcements: ((announcementRows as any[] | null) ?? []) as AnnouncementRow[],
+    announcements: visibleAnnouncementRows as AnnouncementRow[],
     unreadNotifications,
     adminHome,
     lastPunchGeo,

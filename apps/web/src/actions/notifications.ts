@@ -4,6 +4,7 @@ import { auth } from "@clerk/nextjs/server";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/current-user";
 import { getPendingObjectivesCount } from "@/actions/objectives";
+import { loadPendingAcksFor } from "@/lib/announcements/pending";
 
 async function getOrgContext() {
   const { userId } = auth();
@@ -16,11 +17,13 @@ export type PendingCounts = {
   leaves: number;
   documents: number;
   objectives: number;
+  /** Announcements waiting for the caller's acknowledgement. */
+  announcements: number;
 };
 
 export async function getPendingCounts(): Promise<PendingCounts> {
   const ctx = await getOrgContext();
-  if (!ctx) return { leaves: 0, documents: 0, objectives: 0 };
+  if (!ctx) return { leaves: 0, documents: 0, objectives: 0, announcements: 0 };
 
   const supabase = createAdminSupabase();
 
@@ -33,7 +36,7 @@ export async function getPendingCounts(): Promise<PendingCounts> {
     .single();
   const myEmployeeId = (me as { id: string } | null)?.id ?? null;
 
-  const [leavesResult, docsResult, acksResult, objectivesCount] = await Promise.all([
+  const [leavesResult, docsResult, acksResult, objectivesCount, pendingAnnouncementAcks] = await Promise.all([
     supabase
       .from("leave_requests")
       .select("*", { count: "exact", head: true })
@@ -52,6 +55,9 @@ export async function getPendingCounts(): Promise<PendingCounts> {
           .eq("employee_id", myEmployeeId)
       : Promise.resolve({ data: [] }),
     getPendingObjectivesCount(ctx.orgId, ctx.clerkUserId),
+    myEmployeeId
+      ? loadPendingAcksFor(ctx.orgId, myEmployeeId).catch(() => [])
+      : Promise.resolve([]),
   ]);
 
   const ackedIds = new Set(((acksResult as any).data ?? []).map((a: any) => a.document_id));
@@ -61,5 +67,6 @@ export async function getPendingCounts(): Promise<PendingCounts> {
     leaves: leavesResult.count ?? 0,
     documents: unacknowledgedDocs,
     objectives: objectivesCount,
+    announcements: pendingAnnouncementAcks.length,
   };
 }

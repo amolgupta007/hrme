@@ -3,6 +3,7 @@ import { auth } from "@clerk/nextjs/server";
 import { isManagerOrAbove } from "@/lib/current-user";
 import { resolveMobileUser } from "@/lib/mobile/auth";
 import { createAdminSupabase } from "@/lib/supabase/server";
+import { loadLeaveAdjustmentUsage } from "@/lib/leaves/balance";
 import { istToday } from "@jambahr/shared";
 import {
   buildPersonProfile,
@@ -99,7 +100,11 @@ export async function GET(request: NextRequest, ctx: { params: { id: string } })
     employee: emp,
     todayRecord: (todayRecord as PersonProfileAttendanceRow) ?? null,
     policies: ((policies as PersonProfileLeavePolicyRow[]) ?? []),
-    approvedLeaveRequests: ((approvedLeaveRequests as PersonProfileApprovedLeaveRow[]) ?? []),
+    // Approved requests + the leave ledger (late-arrival penalty deductions).
+    approvedLeaveRequests: [
+      ...((approvedLeaveRequests as PersonProfileApprovedLeaveRow[]) ?? []),
+      ...(await loadLeaveAdjustmentUsage(supabase, { orgId: user.orgId, year: currentYear, employeeIds: [targetId] })),
+    ],
     recentLeaveRequests: ((recentLeaveRequests as PersonProfileLeaveRequestRow[]) ?? []),
   });
 

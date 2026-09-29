@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { resolveMobileUser } from "@/lib/mobile/auth";
 import { createAdminSupabase } from "@/lib/supabase/server";
+import { loadLeaveAdjustmentUsage } from "@/lib/leaves/balance";
 import { buildLeavePayload, type RawLeaveRequestRow } from "@/lib/mobile/leave-payload";
 import type { LeavePolicyUsage } from "@/lib/mobile/home-payload";
 
@@ -60,7 +61,11 @@ export async function GET(request: NextRequest) {
   ]);
 
   const usedByPolicy: Record<string, number> = {};
-  for (const r of (approved as { policy_id: string; days: number }[] | null) ?? []) {
+  // + the leave ledger (late-arrival penalty deductions / reversals).
+  const ledger = employeeId
+    ? await loadLeaveAdjustmentUsage(supabase, { orgId: user.orgId, year: currentYear, employeeIds: [employeeId] })
+    : [];
+  for (const r of [...((approved as { policy_id: string; days: number }[] | null) ?? []), ...ledger]) {
     usedByPolicy[r.policy_id] = (usedByPolicy[r.policy_id] ?? 0) + Number(r.days);
   }
   const policyUsage: LeavePolicyUsage[] = ((policies as any[]) ?? []).map((p) => ({

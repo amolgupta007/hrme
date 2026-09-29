@@ -4,6 +4,7 @@ import { createAdminSupabase } from "@/lib/supabase/server";
 import { getCurrentUser, isAdmin, isManagerOrAbove } from "@/lib/current-user";
 import { hasFeature } from "@/config/plans";
 import { filterVisibleAnnouncements } from "@/lib/announcements/visibility";
+import { loadLeaveAdjustmentUsage } from "@/lib/leaves/balance";
 import type { UserRole } from "@/types";
 
 async function getClerkOrgId(): Promise<string | null> {
@@ -397,7 +398,12 @@ export async function getDashboardData(): Promise<DashboardData | null> {
     // then subtract from each policy's annual allocation. Zero-allocation
     // policies (e.g. unpaid) carry no balance and are omitted from the widget.
     const usedByPolicy: Record<string, number> = {};
-    for (const r of (myApprovedLeavesResult.data ?? []) as { policy_id: string; days: number }[]) {
+    const myLedger = await loadLeaveAdjustmentUsage(supabase, {
+      orgId,
+      year: now.getFullYear(),
+      employeeIds: [employeeId],
+    });
+    for (const r of [...((myApprovedLeavesResult.data ?? []) as { policy_id: string; days: number }[]), ...myLedger]) {
       usedByPolicy[r.policy_id] = (usedByPolicy[r.policy_id] ?? 0) + Number(r.days);
     }
     myLeaveBalances = ((leavePoliciesResult.data ?? []) as {

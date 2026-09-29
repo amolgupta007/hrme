@@ -11,6 +11,7 @@ import { resend, FROM_EMAIL } from "@/lib/resend";
 import { resolveLeaveRecipients, type LeaveNotifiable } from "@/lib/leaves/request-recipients";
 import { managerIdsOf, isManagerOfEmployee } from "@/lib/managers";
 import { findOverlap, computeRemainingDays, type LeaveInterval } from "@/lib/leaves/validation";
+import { loadLeaveAdjustmentUsage } from "@/lib/leaves/balance";
 import { LeaveRequestEmail } from "@/components/emails/leave-request";
 import { LeaveStatusEmail } from "@/components/emails/leave-status";
 import { notifyLeaveDecision, notifyApprovalPending } from "@/lib/mobile/notify";
@@ -102,7 +103,13 @@ export async function listLeavePolicies(): Promise<ActionResult<PolicyWithUsage[
       .gte("start_date", `${currentYear}-01-01`)
       .lte("end_date", `${currentYear}-12-31`);
 
-    for (const req of approved ?? []) {
+    // + the leave ledger (e.g. late-arrival penalty deductions).
+    const ledger = await loadLeaveAdjustmentUsage(supabase, {
+      orgId: ctx.orgId,
+      year: currentYear,
+      employeeIds: [user.employeeId],
+    });
+    for (const req of [...(approved ?? []), ...ledger]) {
       usedByPolicy[req.policy_id] = (usedByPolicy[req.policy_id] ?? 0) + Number(req.days);
     }
   }
@@ -163,9 +170,10 @@ export async function listEmployeeBalances(): Promise<ActionResult<EmployeeBalan
 
   if (error) return { success: false, error: error.message };
 
-  // Aggregate used days per employee+policy
+  // Aggregate used days per employee+policy (approved requests + leave ledger)
+  const ledger = await loadLeaveAdjustmentUsage(supabase, { orgId: ctx.orgId, year: currentYear });
   const map: Record<string, EmployeeBalance> = {};
-  for (const row of data ?? []) {
+  for (const row of [...(data ?? []), ...ledger]) {
     const key = `${row.employee_id}__${row.policy_id}`;
     if (!map[key]) map[key] = { employee_id: row.employee_id, policy_id: row.policy_id, used_days: 0 };
     map[key].used_days += Number(row.days);
@@ -301,7 +309,16 @@ export async function requestLeave(
           r.start_date >= `${currentYear}-01-01` &&
           r.end_date <= `${currentYear}-12-31`
       )
-      .reduce((sum, r) => sum + Number(r.days), 0);
+      .reduce((sum, r) => sum + Number(r.days), 0) +
+      (
+        await loadLeaveAdjustmentUsage(supabase, {
+          orgId: ctx.orgId,
+          year: currentYear,
+          employeeIds: [validated.data.employeeId],
+        })
+      )
+        .filter((r) => r.policy_id === validated.data.policyId)
+        .reduce((sum, r) => sum + r.days, 0);
     const remaining = computeRemainingDays({
       daysPerYear: (policy as { days_per_year: number }).days_per_year,
       usedApproved,

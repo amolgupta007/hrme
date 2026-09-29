@@ -3,6 +3,7 @@ import { auth } from "@clerk/nextjs/server";
 import { isAdmin, isManagerOrAbove } from "@/lib/current-user";
 import { resolveMobileUser } from "@/lib/mobile/auth";
 import { createAdminSupabase } from "@/lib/supabase/server";
+import { loadLeaveAdjustmentUsage } from "@/lib/leaves/balance";
 import { getManagerScopedEmployeeIds } from "@/lib/attendance/manager-scope";
 import { getDirectReportIds } from "@/lib/managers";
 import {
@@ -100,6 +101,13 @@ export async function GET(request: NextRequest) {
   const yearStart = `${currentYear}-01-01`;
   const yearEnd = `${currentYear}-12-31`;
 
+  // Leave ledger usage (late-arrival penalty deductions) for the requesters.
+  const ledger = await loadLeaveAdjustmentUsage(supabase, {
+    orgId: user.orgId,
+    year: currentYear,
+    employeeIds: [...new Set(((pendingRows as any[]) ?? []).map((r) => r.employee_id as string))],
+  });
+
   const pending: PendingApprovalRow[] = ((pendingRows as any[]) ?? []).map((r) => {
     const usedApprovedForPolicy = approvedList
       .filter(
@@ -109,7 +117,10 @@ export async function GET(request: NextRequest) {
           a.start_date >= yearStart &&
           a.end_date <= yearEnd,
       )
-      .reduce((s, a) => s + Number(a.days), 0);
+      .reduce((s, a) => s + Number(a.days), 0) +
+      ledger
+        .filter((l) => l.employee_id === r.employee_id && l.policy_id === r.policy_id)
+        .reduce((s, l) => s + l.days, 0);
 
     return {
       requestId: r.id,

@@ -123,6 +123,13 @@ export function PayslipDialog({ open, onClose, data, orgName }: Props) {
                     negative
                   />
                 )}
+                {Number((data as any).late_penalty_deduction ?? 0) > 0 && (
+                  <SlipRow
+                    label={`Late-arrival penalty (${Number((data as any).late_penalty_days ?? 0)} days)`}
+                    value={Number((data as any).late_penalty_deduction)}
+                    negative
+                  />
+                )}
                 <div className="border-t border-border pt-1.5 mt-1.5">
                   <SlipRow label="Total Deductions" value={data.total_deductions} bold negative />
                 </div>

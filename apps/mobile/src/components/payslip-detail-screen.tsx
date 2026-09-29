@@ -117,6 +117,14 @@ export function PayslipDetailScreen({ entryId }: { entryId: string }) {
                 danger
               />
             ) : null}
+            {(d.deductions.latePenaltyDeduction ?? 0) > 0 ? (
+              <AmountRow
+                label="Late-arrival penalty"
+                sublabel={`${d.deductions.latePenaltyDays ?? 0} ${d.deductions.latePenaltyDays === 1 ? "day" : "days"}`}
+                amount={formatDeduction(d.deductions.latePenaltyDeduction ?? 0)}
+                danger
+              />
+            ) : null}
             <AmountRow
               label="Total deductions"
               amount={formatDeduction(d.totalDeductions)}

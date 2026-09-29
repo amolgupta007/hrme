@@ -5,7 +5,7 @@ describe("help loader", () => {
   beforeEach(() => clearHelpCache());
 
   it("loads all 59 help articles", () => {
-    expect(listHelpArticles().length).toBe(61);
+    expect(listHelpArticles().length).toBe(63);
   });
 
   it("returns null for unknown id", () => {

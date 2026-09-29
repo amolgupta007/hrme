@@ -124,3 +124,27 @@ export function planLateLadder(input: {
 
   return actions;
 }
+
+const ordinal = (n: number) => {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return `${n}${s[(v - 20) % 10] ?? s[v] ?? s[0]}`;
+};
+
+/**
+ * One-line summary of a ladder for the settings preview, e.g.
+ * "Warning at the 3rd late · 1 day of casual leave deducted at every 5th late
+ *  (loss of pay if no casual leave is left)".
+ */
+export function describeLadder(p: LadderPolicy & { leaveLabel: string }): string {
+  const days = `${p.deductDays} ${p.deductDays === 1 ? "day" : "days"}`;
+  const parts: string[] = [];
+  if (p.warningAt) parts.push(`Warning at the ${ordinal(p.warningAt)} late`);
+  const when = p.repeat ? `every ${ordinal(p.deductAt)} late` : `the ${ordinal(p.deductAt)} late (once a month)`;
+  let deduction = `${days} of ${p.leaveLabel} deducted at ${when}`;
+  deduction += p.lopFallback
+    ? ` (loss of pay if no ${p.leaveLabel} is left)`
+    : ` (nothing deducted if no ${p.leaveLabel} is left)`;
+  parts.push(parts.length ? deduction : deduction.charAt(0).toUpperCase() + deduction.slice(1));
+  return parts.join(" · ");
+}

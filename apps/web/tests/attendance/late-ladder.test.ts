@@ -178,3 +178,27 @@ describe("planLateLadder", () => {
     expect(out).toEqual([]);
   });
 });
+
+import { describeLadder } from "@jambahr/shared/attendance/late-ladder";
+
+describe("describeLadder", () => {
+  it("summarises the default ladder", () => {
+    expect(describeLadder({ ...policy, leaveLabel: "casual leave" })).toBe(
+      "Warning at the 3rd late · 1 day of casual leave deducted at every 5th late (loss of pay if no casual leave is left)"
+    );
+  });
+  it("no warning, once a month, half day, no LOP fallback", () => {
+    expect(
+      describeLadder({ warningAt: null, deductAt: 4, deductDays: 0.5, repeat: false, lopFallback: false, leaveLabel: "casual leave" })
+    ).toBe("0.5 days of casual leave deducted at the 4th late (once a month) (nothing deducted if no casual leave is left)");
+  });
+  it("ordinals: 1st, 2nd, 11th, 21st", () => {
+    const d = (n: number) => describeLadder({ ...policy, warningAt: n, deductAt: 31, leaveLabel: "x" });
+    expect([d(1), d(2), d(11), d(21)].map((s) => s.split(" late")[0])).toEqual([
+      "Warning at the 1st",
+      "Warning at the 2nd",
+      "Warning at the 11th",
+      "Warning at the 21st",
+    ]);
+  });
+});

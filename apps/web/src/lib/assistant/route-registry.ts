@@ -235,6 +235,24 @@ export const ROUTE_REGISTRY = {
   },
 
   // Attendance settings (Phase 1 shifts + week-off)
+  late_arrival_policy: {
+    path: "/dashboard/settings",
+    params: { section: "attendance" },
+    label: "Set up the late-arrival policy",
+    description: "Warning email, leave deduction / loss of pay, bonus block or salary bands for repeated late punch-ins.",
+    required_role: "admin",
+    required_plan: "starter",
+    required_org_feature: "attendanceEnabled",
+  },
+  late_arrival_penalties: {
+    path: "/dashboard/attendance",
+    params: { tab: "late" },
+    label: "Review late arrivals and penalties",
+    description: "See each employee's late arrivals for a month, excuse a day, or waive a deduction.",
+    required_role: "admin",
+    required_plan: "starter",
+    required_org_feature: "attendanceEnabled",
+  },
   settings_attendance: {
     path: "/dashboard/settings",
     params: { section: "attendance" },

@@ -94,9 +94,220 @@ export type Database = {
           },
         ]
       }
+      announcement_acknowledgements: {
+        Row: {
+          acknowledged_at: string
+          announcement_id: string
+          employee_id: string
+          id: string
+          ip_address: string | null
+          org_id: string
+          user_agent: string | null
+          version: number
+        }
+        Insert: {
+          acknowledged_at?: string
+          announcement_id: string
+          employee_id: string
+          id?: string
+          ip_address?: string | null
+          org_id: string
+          user_agent?: string | null
+          version: number
+        }
+        Update: {
+          acknowledged_at?: string
+          announcement_id?: string
+          employee_id?: string
+          id?: string
+          ip_address?: string | null
+          org_id?: string
+          user_agent?: string | null
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "announcement_acknowledgements_announcement_id_fkey"
+            columns: ["announcement_id"]
+            isOneToOne: false
+            referencedRelation: "announcements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "announcement_acknowledgements_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "announcement_acknowledgements_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      announcement_recipients: {
+        Row: {
+          added_reason: string
+          announcement_id: string
+          created_at: string
+          employee_id: string
+          last_reminded_at: string | null
+          org_id: string
+          reminder_count: number
+        }
+        Insert: {
+          added_reason?: string
+          announcement_id: string
+          created_at?: string
+          employee_id: string
+          last_reminded_at?: string | null
+          org_id: string
+          reminder_count?: number
+        }
+        Update: {
+          added_reason?: string
+          announcement_id?: string
+          created_at?: string
+          employee_id?: string
+          last_reminded_at?: string | null
+          org_id?: string
+          reminder_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "announcement_recipients_announcement_id_fkey"
+            columns: ["announcement_id"]
+            isOneToOne: false
+            referencedRelation: "announcements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "announcement_recipients_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "announcement_recipients_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      announcement_targets: {
+        Row: {
+          announcement_id: string
+          created_at: string
+          id: string
+          org_id: string
+          target_id: string
+          target_type: string
+        }
+        Insert: {
+          announcement_id: string
+          created_at?: string
+          id?: string
+          org_id: string
+          target_id: string
+          target_type: string
+        }
+        Update: {
+          announcement_id?: string
+          created_at?: string
+          id?: string
+          org_id?: string
+          target_id?: string
+          target_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "announcement_targets_announcement_id_fkey"
+            columns: ["announcement_id"]
+            isOneToOne: false
+            referencedRelation: "announcements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "announcement_targets_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      announcement_versions: {
+        Row: {
+          announcement_id: string
+          body: string
+          created_at: string
+          created_by: string | null
+          org_id: string
+          requires_reack: boolean
+          title: string
+          version: number
+        }
+        Insert: {
+          announcement_id: string
+          body: string
+          created_at?: string
+          created_by?: string | null
+          org_id: string
+          requires_reack?: boolean
+          title: string
+          version: number
+        }
+        Update: {
+          announcement_id?: string
+          body?: string
+          created_at?: string
+          created_by?: string | null
+          org_id?: string
+          requires_reack?: boolean
+          title?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "announcement_versions_announcement_id_fkey"
+            columns: ["announcement_id"]
+            isOneToOne: false
+            referencedRelation: "announcements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "announcement_versions_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "announcement_versions_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       announcements: {
         Row: {
+          ack_due_date: string | null
+          ack_required: boolean
+          ack_version: number
+          archived_at: string | null
+          audience_type: string
           body: string
+          category: string
+          content_version: number
           created_at: string
           created_by: string | null
           id: string
@@ -106,7 +317,14 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          ack_due_date?: string | null
+          ack_required?: boolean
+          ack_version?: number
+          archived_at?: string | null
+          audience_type?: string
           body: string
+          category?: string
+          content_version?: number
           created_at?: string
           created_by?: string | null
           id?: string
@@ -116,7 +334,14 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          ack_due_date?: string | null
+          ack_required?: boolean
+          ack_version?: number
+          archived_at?: string | null
+          audience_type?: string
           body?: string
+          category?: string
+          content_version?: number
           created_at?: string
           created_by?: string | null
           id?: string

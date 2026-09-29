@@ -3,6 +3,7 @@
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { getCurrentUser, isAdmin, isManagerOrAbove } from "@/lib/current-user";
 import { hasFeature } from "@/config/plans";
+import { filterVisibleAnnouncements } from "@/lib/announcements/visibility";
 import type { UserRole } from "@/types";
 
 async function getClerkOrgId(): Promise<string | null> {
@@ -285,11 +286,13 @@ export async function getDashboardData(): Promise<DashboardData | null> {
     // Latest announcements (pinned first)
     supabase
       .from("announcements")
-      .select("id, title, category, is_pinned, created_at")
+      .select("id, title, category, is_pinned, created_at, audience_type")
       .eq("org_id", orgId)
+      .is("archived_at", null)
       .order("is_pinned", { ascending: false })
       .order("created_at", { ascending: false })
-      .limit(2),
+      // Over-fetch: targeted announcements the viewer isn't in are dropped below.
+      .limit(10),
 
     // Grievances (open + in_review) — admin/owner only, but query always for simplicity
     supabase
@@ -522,7 +525,13 @@ export async function getDashboardData(): Promise<DashboardData | null> {
   }));
 
   // Latest announcements
-  const latestAnnouncements: LatestAnnouncement[] = (announcementsResult.data ?? []).map((a: any) => ({
+  const visibleAnnouncements = await filterVisibleAnnouncements(supabase, {
+    orgId,
+    employeeId,
+    isAdmin: isAdmin(role),
+    rows: (announcementsResult.data ?? []) as any[],
+  });
+  const latestAnnouncements: LatestAnnouncement[] = visibleAnnouncements.slice(0, 2).map((a: any) => ({
     id: a.id,
     title: a.title,
     category: a.category,

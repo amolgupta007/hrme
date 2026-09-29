@@ -215,8 +215,22 @@ export const ROUTE_REGISTRY = {
   post_announcement: {
     path: "/dashboard/announcements",
     label: "Post a company announcement",
-    description: "Share an org-wide note.",
+    description: "Share a note with everyone or chosen departments/people, optionally requiring acknowledgement.",
     required_role: "admin",
+    required_plan: "starter",
+  },
+  announcement_ack_status: {
+    path: "/dashboard/announcements/[id]",
+    label: "Track announcement acknowledgements",
+    description: "See who has acknowledged, remind pending people, add new joiners, export CSV.",
+    required_role: "admin",
+    required_plan: "starter",
+  },
+  acknowledge_announcement: {
+    path: "/dashboard/announcements",
+    label: "Acknowledge an announcement",
+    description: "Read and confirm an announcement that requires your acknowledgement.",
+    required_role: "employee",
     required_plan: "starter",
   },
 

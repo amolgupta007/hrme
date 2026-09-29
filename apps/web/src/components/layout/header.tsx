@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, Briefcase, FileText, Calendar, Target, MapPin, BarChart3 } from "lucide-react";
+import { Bell, Briefcase, FileText, Calendar, Target, MapPin, BarChart3, Megaphone } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import type { PendingCounts } from "@/actions/notifications";
@@ -31,7 +31,8 @@ export function Header({
   const notifRef = useRef<HTMLDivElement>(null);
 
   const isManagerOrAbove = role === "owner" || role === "admin" || role === "manager";
-  const totalCount = (badges?.leaves ?? 0) + (badges?.documents ?? 0) + (badges?.objectives ?? 0);
+  const totalCount =
+    (badges?.leaves ?? 0) + (badges?.documents ?? 0) + (badges?.objectives ?? 0) + (badges?.announcements ?? 0);
 
   // Build notification items based on role
   const items = [
@@ -48,6 +49,13 @@ export function Header({
       count: badges!.documents,
       href: "/dashboard/documents",
       color: "bg-indigo-50 dark:bg-indigo-950/40",
+    },
+    (badges?.announcements ?? 0) > 0 && {
+      icon: <Megaphone className="h-4 w-4 text-primary" />,
+      label: "Announcements to acknowledge",
+      count: badges!.announcements,
+      href: "/dashboard/announcements",
+      color: "bg-primary/10",
     },
     isManagerOrAbove && (badges?.objectives ?? 0) > 0 && {
       icon: <Target className="h-4 w-4 text-emerald-500" />,

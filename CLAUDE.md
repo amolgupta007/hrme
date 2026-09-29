@@ -690,6 +690,19 @@ already there — only the web UI was missing.
 - Scoped to the dialog + table. Approval emails, the dashboard leave widget and
   the attendance report still show numeric days, which is already correct.
 
+## Announcements — audience targeting + required acknowledgement (2026-09-30, branch `feat/announcement-ack`)
+
+Admins can target an announcement at **Everyone** (default) or departments ∪ employees, and toggle **Require acknowledgement** (optional due date). Spec: `docs/demo/announcement-acknowledgement-prompt.md`.
+
+- **Migration `109`** (applied to live HRme via MCP): `announcements.{category, audience_type, ack_required, ack_due_date, content_version, ack_version, archived_at}` + the `updated_at` trigger the table never had. Tables: `announcement_versions` (exact text per version), `announcement_targets`, `announcement_recipients` (audience **snapshot at publish**, carries the reminder cooldown), `announcement_acknowledgements` (append-only). `category` did NOT exist before 109 — the dashboard + mobile Home queries selecting it had been failing silently.
+- **Immutability is a trigger, not RLS** (`announcement_ack_guard`): UPDATE always raises; DELETE raises while the announcement, employee and org all still exist, so direct tampering fails even for the service role but lifecycle cascades still purge. Deleting an announcement that has acks **archives** it (`archived_at`) instead.
+- **Versioning**: an ack stores the `content_version` the employee read; it satisfies the announcement if `version >= ack_version`. Every title/body edit bumps `content_version`; a "require re-ack" edit also moves `ack_version`, a "minor fix" doesn't. Unique `(announcement_id, employee_id, version)` makes acknowledging idempotent (23505 → success).
+- **Audience** is frozen once ack is required (edit UI locks it). Late joiners are offered via an "Add them" banner on `/dashboard/announcements/[id]` that renders **only when there are any**. Leavers (`terminated`/`inactive`) drop out of the denominator; `on_leave` stays in.
+- **Reminders**: `remindAnnouncementAck` — in-app + push (`notifications` type `announcement`) + Resend batch email (`announcement-ack-reminder.tsx`), 24h per-recipient cooldown stamped **before** sending.
+- **Code**: actions `src/actions/announcements.ts`; pure/raw-org-id helpers in `src/lib/announcements/` (`ack-status`, `visibility`, `pending`, `notify`, `export`, `categories`) — plain modules, never `"use server"` (gotcha #85). Visibility (`filterVisibleAnnouncements`) also gates the dashboard banners + mobile Home card. Badge count = `PendingCounts.announcements`.
+- **Types** for 109 were hand-added to `database.types.ts` in generator format (no CLI token locally); a real `db:generate` should reproduce them.
+- **Not built**: mobile acknowledge flow (mobile Home still shows announcements, no ack button), automatic reminder cron, attachments/expiry. Documents' own acknowledgement flow is unchanged.
+
 ## Late-Punch Policy Module (Settings → Attendance) — shipped 2026-06-16
 
 Optional, per-org rule: employees who clock in late more than N days in an IST calendar month become bonus-ineligible that month; notified via email + WhatsApp. Off by default (`late_policies.enabled`). Whole feature dark when disabled. Spec/plan/operator doc: `docs/superpowers/specs/2026-06-16-late-punch-policy-design.md`, `docs/superpowers/plans/2026-06-16-late-punch-policy.md`, `docs/late-punch-policy.md`.

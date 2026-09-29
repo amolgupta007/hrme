@@ -64,6 +64,7 @@ const BADGE_MAP: Record<string, keyof PendingCounts> = {
   "/dashboard/leaves": "leaves",
   "/dashboard/documents": "documents",
   "/dashboard/objectives": "objectives",
+  "/dashboard/announcements": "announcements",
 };
 
 export function Sidebar({ badges, role, plan, features, employmentType }: { badges: PendingCounts; role: UserRole; plan: OrgPlan; features?: Record<string, boolean>; employmentType?: string | null }) {

@@ -13,6 +13,9 @@ import { cn, formatDate, getInitials } from "@/lib/utils";
 import type { UserRole } from "@/types";
 import type { DashboardData } from "@/actions/dashboard";
 import { OnboardingCard } from "@/components/dashboard/onboarding-card";
+import { ActionRequiredCard } from "@/components/dashboard/action-required-card";
+import { getMyPendingAcknowledgements } from "@/actions/announcements";
+import { announcementAnchor, categoryMeta } from "@/lib/announcements/categories";
 import type { OnboardingStatusResult } from "@/config/onboarding";
 
 // ---- Style maps ----
@@ -36,13 +39,6 @@ const URGENCY_LABELS = {
   today:     "Due Today",
   this_week: "This Week",
   upcoming:  "Upcoming",
-};
-
-const ANNOUNCEMENT_STYLES: Record<string, string> = {
-  urgent: "border-l-destructive bg-destructive/5 text-destructive",
-  policy: "border-l-amber-500 bg-amber-50 text-amber-800 dark:bg-amber-900/10 dark:text-amber-300",
-  event:  "border-l-blue-500 bg-blue-50 text-blue-800 dark:bg-blue-900/10 dark:text-blue-300",
-  general:"border-l-border bg-muted/40 text-foreground",
 };
 
 const LEAVE_TYPE_LABELS: Record<string, string> = {
@@ -302,6 +298,8 @@ export default async function DashboardPage() {
   const quickActions = getQuickActions(userRole);
   const showLeaveBalance = (userRole === "employee" || userRole === "manager") && myLeaveBalances.length > 0;
 
+  const pendingAcks = await getMyPendingAcknowledgements().catch(() => []);
+
   // Fetch onboarding status for employee role only
   let onboardingStatus: OnboardingStatusResult | null = null;
   if (userRole === "employee") {
@@ -324,10 +322,10 @@ export default async function DashboardPage() {
           {latestAnnouncements.map((a) => (
             <Link
               key={a.id}
-              href="/dashboard/announcements"
+              href={`/dashboard/announcements#${announcementAnchor(a.id)}`}
               className={cn(
-                "flex items-start gap-3 rounded-lg border border-l-4 px-4 py-3 text-sm transition-opacity hover:opacity-80",
-                ANNOUNCEMENT_STYLES[a.category] ?? ANNOUNCEMENT_STYLES.general
+                "flex items-start gap-3 rounded-lg border border-l-4 px-4 py-3 text-sm transition-colors hover:bg-muted/60",
+                categoryMeta(a.category).banner
               )}
             >
               {a.is_pinned
@@ -340,6 +338,9 @@ export default async function DashboardPage() {
           ))}
         </div>
       )}
+
+      {/* Announcements waiting for this person's acknowledgement */}
+      <ActionRequiredCard items={pendingAcks} />
 
       {/* Onboarding card — employee only, shown until ALL enabled steps are done (required + optional) */}
       {onboardingStatus && onboardingStatus.totalComplete < onboardingStatus.totalEnabled && (

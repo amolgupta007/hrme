@@ -74,7 +74,8 @@ export type AnnouncementRow = {
   id: string;
   title: string;
   body: string;
-  category: string | null;
+  /** Absent until migration 109 adds the column; maps to null. */
+  category?: string | null;
   created_at: string;
 };
 

@@ -285,7 +285,7 @@ export async function getDashboardData(): Promise<DashboardData | null> {
     // Latest announcements (pinned first)
     supabase
       .from("announcements")
-      .select("id, title, category, is_pinned, created_at")
+      .select("id, title, is_pinned, created_at")
       .eq("org_id", orgId)
       .order("is_pinned", { ascending: false })
       .order("created_at", { ascending: false })
@@ -525,7 +525,9 @@ export async function getDashboardData(): Promise<DashboardData | null> {
   const latestAnnouncements: LatestAnnouncement[] = (announcementsResult.data ?? []).map((a: any) => ({
     id: a.id,
     title: a.title,
-    category: a.category,
+    // `announcements` has no category column yet (migration 109 adds it);
+    // selecting it made this whole query fail and the banners never render.
+    category: a.category ?? "general",
     is_pinned: a.is_pinned,
     created_at: a.created_at,
   }));

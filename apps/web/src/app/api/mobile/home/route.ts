@@ -181,7 +181,7 @@ export async function GET(request: NextRequest) {
   // dashboard's "Latest announcements" query in src/actions/dashboard.ts).
   const { data: announcementRows } = await supabase
     .from("announcements")
-    .select("id, title, body, category, created_at")
+    .select("id, title, body, created_at")
     .eq("org_id", user.orgId)
     .order("is_pinned", { ascending: false })
     .order("created_at", { ascending: false })

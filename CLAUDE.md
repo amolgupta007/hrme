@@ -742,6 +742,15 @@ Spec: `docs/demo/late-arrival-penalty-rules-prompt.md`; email reference `docs/de
 - **Also fixed:** bonus block only under block_bonus/both; Waive creates a missing flag; threshold email worded by consequence (WhatsApp bonus template only when the bonus is blocked); flags drop when the count falls back under the threshold.
 - **Known gap:** `/api/mobile/directory/[id]` selects the non-existent `leave_requests.leave_type`, so a mobile person profile's recent-leaves list is silently empty (same class as #42).
 
+## Web-only timekeeping mode ("devices record presence") — 2026-09-30
+
+For orgs that timekeep on the web (first: Medialoop). Plan: `docs/planning/2026-09-30-web-timekeeping-mode.md`.
+
+- **Setting:** `organizations.settings.attendance.timekeeping_source` = `all` (default — every punch source pooled, first punch = clock-in) | `web_app`, plus `timekeeping_source_from` (IST date; earlier days keep pooled behaviour). Settings → Attendance → **Clock-in/out source** card; `updateTimekeepingSource` recalculates today on switch. Pure logic: `@jambahr/shared/attendance/timekeeping`.
+- **`web_app` mode:** `recomputeAttendanceDay` builds clock-in/out, hours, pairing and lateness from `web` / `mobile` / `manual` punches only; `adms`/`device` (and sourceless legacy) punches only fill the presence columns `device_first_seen_at` / `device_last_seen_at` / `device_first_seen_location_id` / `device_punch_count` (migration **112**; filled in every mode). A device-only day is still recorded with `clock_in_at` NULL → **present, "not clocked in"** (Team Today counts it present; History/Team Today show the chip; report status **P**, counted in daysPresent + `summary.notClockedIn`). The web Clock In guard reads the rollup, so a morning device badge can no longer block it.
+- **Deploy order:** migration 112 BEFORE the code — `recomputeAttendanceDay` writes the device columns for every org, so code-before-migration breaks all attendance writes.
+- **Not yet:** per-employee exceptions, a nudge to people who badged but didn't clock in, mobile admin Home presence counts.
+
 ## Location-verified clock-in (Settings → Attendance) — shipped 2026-08-12 (D5)
 
 Optional per-org: a **mobile** punch carries a coarse GPS fix, and the server decides — against the org's office geofences — whether it happened at an office or remote, reverse-geocoding remote punches to a locality ("Andheri East, Mumbai"). Off by default; the whole feature is dark until an admin enables it. Plan: `docs/superpowers/plans/2026-08-12-mobile-d5-geo-punch-and-prd-04-05.md`.

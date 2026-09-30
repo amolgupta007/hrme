@@ -87,7 +87,7 @@ const s = StyleSheet.create({
 });
 
 const LEGEND =
-  "Status: FD full · HD half · A absent · WO week-off · H holiday · L leave · – future" +
+  "Status: FD full · HD half · P seen at office, not clocked in · A absent · WO week-off · H holiday · L leave · – future" +
   "     |     Source: d device · m mobile · w web · * auto-closed · ! single punch";
 
 const DASH = "–"; // en-dash, WinAnsi-safe
@@ -111,6 +111,7 @@ function chipText(emp: ReportEmployee): string {
   const c = emp.summary;
   return (
     `Full Day : ${c.fullDays} · Half Day : ${c.halfDays} · Absent : ${c.absents} ` +
+    (c.notClockedIn > 0 ? `· Not clocked in : ${c.notClockedIn} ` : "") +
     `· Week Off : ${c.weekOffs} · Leave : ${c.leaves} · Holiday : ${c.holidays} ` +
     `· Total : ${formatHours(emp.totalMinutes)} h`
   );

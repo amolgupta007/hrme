@@ -192,7 +192,7 @@ describe("per-employee summary counts", () => {
       // 07-06 Mon & 07-07 Tue = absent, 07-08 Wed = future (> todayIst).
     })).employees[0];
     expect(emp.summary).toEqual({
-      fullDays: 1, halfDays: 1, absents: 2, weekOffs: 1, leaves: 1, holidays: 1,
+      fullDays: 1, halfDays: 1, absents: 2, weekOffs: 1, leaves: 1, holidays: 1, notClockedIn: 0,
     });
     // 2026-07-08 is future (todayIst = 07) and must not be counted anywhere.
     const total = Object.values(emp.summary).reduce((a, b) => a + b, 0);
@@ -319,5 +319,70 @@ describe("validateRange", () => {
   });
   it("accepts exactly 92 days", () => {
     expect(validateRange("2026-01-01", "2026-04-02")).toBeNull(); // 92 days inclusive
+  });
+});
+
+
+describe("web-only timekeeping (devices record presence)", () => {
+  const rec = (date: string, extra: object = {}) => ({
+    employee_id: "e1", date, clock_in_at: null, clock_out_at: null, total_minutes: null,
+    source: "device", auto_closed: false, out_of_zone_count: 0, is_late: false, ...extra,
+  });
+  const WEB = { source: "web_app" as const, from: "2026-07-01" };
+
+  it("seen at the device but not clocked in → P, counted present with no hours", () => {
+    const emp = buildReportData(baseInput({
+      timekeeping: WEB,
+      records: [rec("2026-07-01", { device_first_seen_at: "2026-07-01T03:35:00Z" })],
+      events: [{ employee_id: "e1", punched_at: "2026-07-01T03:35:00Z", source: "adms" }],
+    })).employees[0];
+    const day = emp.days.find((d) => d.date === "2026-07-01")!;
+    expect(day).toMatchObject({ state: "worked", statusCode: "P", minutes: 0, pairs: [] });
+    expect(emp.daysPresent).toBe(1);
+    expect(emp.summary.notClockedIn).toBe(1);
+    expect(emp.summary.fullDays).toBe(0);
+  });
+
+  it("device punches are left out of the hours and punch pairs; web punches count", () => {
+    const emp = buildReportData(baseInput({
+      timekeeping: WEB,
+      records: [rec("2026-07-01", {
+        clock_in_at: "2026-07-01T04:10:00Z", clock_out_at: "2026-07-01T13:10:00Z", total_minutes: 540,
+        source: "web", device_first_seen_at: "2026-07-01T03:35:00Z",
+      })],
+      // Two web sessions (lunch break) + device badges around them. The pairs
+      // must come from the WEB punches — two sessions — not the device ones and
+      // not the record's single first-in/last-out span.
+      events: [
+        { employee_id: "e1", punched_at: "2026-07-01T03:35:00Z", source: "adms" },
+        { employee_id: "e1", punched_at: "2026-07-01T04:10:00Z", source: "web" },
+        { employee_id: "e1", punched_at: "2026-07-01T07:30:00Z", source: "web" },
+        { employee_id: "e1", punched_at: "2026-07-01T08:10:00Z", source: "web" },
+        { employee_id: "e1", punched_at: "2026-07-01T13:10:00Z", source: "web" },
+        { employee_id: "e1", punched_at: "2026-07-01T13:20:00Z", source: "adms" },
+      ],
+    })).employees[0];
+    const day = emp.days.find((d) => d.date === "2026-07-01")!;
+    expect(day.pairs).toEqual([
+      { in: "09:40", out: "13:00", minutes: 200 },
+      { in: "13:40", out: "18:40", minutes: 300 },
+    ]);
+    expect(day.statusCode).toBe("FD");
+  });
+
+  it("before the switch date the device still keeps time", () => {
+    const emp = buildReportData(baseInput({
+      timekeeping: { source: "web_app", from: "2026-07-02" },
+      records: [rec("2026-07-01", { clock_in_at: "2026-07-01T03:35:00Z", device_first_seen_at: "2026-07-01T03:35:00Z" })],
+      events: [{ employee_id: "e1", punched_at: "2026-07-01T03:35:00Z", source: "adms" }],
+    })).employees[0];
+    expect(emp.days.find((d) => d.date === "2026-07-01")!.statusCode).not.toBe("P");
+  });
+
+  it("all-sources orgs never get P", () => {
+    const emp = buildReportData(baseInput({
+      records: [rec("2026-07-01", { device_first_seen_at: "2026-07-01T03:35:00Z" })],
+    })).employees[0];
+    expect(emp.days.find((d) => d.date === "2026-07-01")!.statusCode).not.toBe("P");
   });
 });

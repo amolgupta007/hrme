@@ -1008,7 +1008,11 @@ export type Database = {
           created_at: string | null
           date: string
           derived_status: string | null
+          device_first_seen_at: string | null
+          device_first_seen_location_id: string | null
           device_id: string | null
+          device_last_seen_at: string | null
+          device_punch_count: number
           employee_id: string
           first_in_location_id: string | null
           has_pending_punches: boolean
@@ -1042,7 +1046,11 @@ export type Database = {
           created_at?: string | null
           date: string
           derived_status?: string | null
+          device_first_seen_at?: string | null
+          device_first_seen_location_id?: string | null
           device_id?: string | null
+          device_last_seen_at?: string | null
+          device_punch_count?: number
           employee_id: string
           first_in_location_id?: string | null
           has_pending_punches?: boolean
@@ -1076,7 +1084,11 @@ export type Database = {
           created_at?: string | null
           date?: string
           derived_status?: string | null
+          device_first_seen_at?: string | null
+          device_first_seen_location_id?: string | null
           device_id?: string | null
+          device_last_seen_at?: string | null
+          device_punch_count?: number
           employee_id?: string
           first_in_location_id?: string | null
           has_pending_punches?: boolean

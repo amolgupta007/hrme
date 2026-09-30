@@ -4,7 +4,7 @@ import { resend, FROM_EMAIL } from "@/lib/resend";
 import { resolveProvider, type WhatsAppTemplateKey } from "@/lib/whatsapp";
 import { loadProviderConfig } from "@/lib/whatsapp/load-config";
 import { LatePunchAlert } from "@/components/emails/late-punch-alert";
-import { BonusIneligibleAlert } from "@/components/emails/bonus-ineligible-alert";
+import { BonusIneligibleAlert, thresholdEmailTitle } from "@/components/emails/bonus-ineligible-alert";
 import type { NotifyKind } from "@/lib/attendance/late-policy-notify";
 
 type DispatchInput = {
@@ -14,6 +14,8 @@ type DispatchInput = {
   employee: { id: string; name: string; email: string | null; phone: string | null; whatsappOptIn: boolean };
   kinds: NotifyKind[];
   channels: { email: boolean; whatsapp: boolean };
+  /** Drives the threshold email's wording (it used to always say "bonus"). */
+  consequence?: "block_bonus" | "salary_deduction" | "both" | "none" | "leave_deduction";
   data: { clockInTime: string; lateMinutes: number; lateDaysThisMonth: number; thresholdDays: number; monthLabel: string };
 };
 
@@ -65,6 +67,7 @@ export async function dispatchLateNotifications(input: DispatchInput): Promise<v
                     month: input.data.monthLabel,
                     lateDaysThisMonth: input.data.lateDaysThisMonth,
                     thresholdDays: input.data.thresholdDays,
+                    consequence: input.consequence,
                   }),
                 )
               : await render(
@@ -77,7 +80,10 @@ export async function dispatchLateNotifications(input: DispatchInput): Promise<v
                     thresholdDays: input.data.thresholdDays,
                   }),
                 );
-          const subject = kind === "threshold" ? `Bonus eligibility update — ${input.data.monthLabel}` : "Late punch-in recorded";
+          const subject =
+            kind === "threshold"
+              ? `${thresholdEmailTitle(input.consequence)} — ${input.data.monthLabel}`
+              : "Late punch-in recorded";
           const r = await resend.emails.send({ from: FROM_EMAIL, to: input.employee.email, subject, html });
           if ((r as any)?.error) {
             status = "failed";
@@ -94,7 +100,11 @@ export async function dispatchLateNotifications(input: DispatchInput): Promise<v
     }
 
     // WHATSAPP
-    if (input.channels.whatsapp && provider && input.employee.whatsappOptIn && input.employee.phone) {
+    // The Meta-approved threshold template says "not eligible for bonus", so
+    // only send it when the policy actually blocks the bonus.
+    const bonusWording = !input.consequence || input.consequence === "block_bonus" || input.consequence === "both";
+    const whatsappOk = kind !== "threshold" || bonusWording;
+    if (whatsappOk && input.channels.whatsapp && provider && input.employee.whatsappOptIn && input.employee.phone) {
       const claim = await sb
         .from("late_punch_notifications")
         .upsert(

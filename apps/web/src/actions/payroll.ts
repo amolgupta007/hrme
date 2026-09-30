@@ -12,6 +12,7 @@ import { recomputeEntryFromLineItems } from "@/lib/payroll/recompute-entry";
 import { computeLatePenaltyDeduction } from "@/lib/payroll/late-penalty";
 import type { PenaltyBand } from "@/lib/attendance/late-penalty-bands";
 import { resolveCoveredEmployeeIds } from "@/lib/attendance/late-policy-targets";
+import { loadCountableLates } from "@/lib/attendance/late-counting";
 import { resend, FROM_EMAIL } from "@/lib/resend";
 import { PayslipEmail } from "@/components/emails/payslip";
 import { notifyPayslipPaid } from "@/lib/mobile/notify";
@@ -661,13 +662,30 @@ export async function processPayrollRun(runId: string): Promise<ActionResult<voi
   const lateCountMap: Record<string, number> = {};
   const waivedSet = new Set<string>();
   let coveredEmployees = new Set<string>();
+  // Ladder mode (consequence 'leave_deduction'): LOP days already decided per
+  // step by the late-penalty ladder (the CL part went to the leave ledger).
+  let ladderEnabled = false;
+  const ladderLopMap: Record<string, number> = {};
   {
     const { data: policy } = await supabase
       .from("late_policies")
-      .select("id, enabled, consequence")
+      .select("id, enabled, consequence, evaluate_from")
       .eq("org_id", user.orgId)
       .maybeSingle();
-    const p = policy as { id: string; enabled: boolean; consequence: string } | null;
+    const p = policy as { id: string; enabled: boolean; consequence: string; evaluate_from: string | null } | null;
+    if (p && p.enabled && p.consequence === "leave_deduction") {
+      ladderEnabled = true;
+      const { data: events } = await supabase
+        .from("late_penalty_events")
+        .select("employee_id, lop_days")
+        .eq("org_id", user.orgId)
+        .eq("month", runData.month)
+        .eq("kind", "deduction")
+        .eq("status", "applied");
+      for (const e of (events ?? []) as any[]) {
+        ladderLopMap[e.employee_id] = (ladderLopMap[e.employee_id] ?? 0) + Number(e.lop_days);
+      }
+    }
     if (p && p.enabled && (p.consequence === "salary_deduction" || p.consequence === "both")) {
       const { data: bandRows } = await supabase
         .from("late_penalty_bands")
@@ -699,17 +717,16 @@ export async function processPayrollRun(runId: string): Promise<ActionResult<voi
           })),
         });
 
-        // Monthly late-day counts from the is_late attendance rows.
-        const { data: lateRows } = await supabase
-          .from("attendance_records")
-          .select("employee_id")
-          .eq("org_id", user.orgId)
-          .eq("is_late", true)
-          .gte("date", monthStart)
-          .lte("date", monthEnd);
-        for (const r of (lateRows ?? []) as any[]) {
-          lateCountMap[r.employee_id] = (lateCountMap[r.employee_id] ?? 0) + 1;
-        }
+        // Monthly COUNTABLE late days — the same loader the evaluator and cron
+        // use, so week-offs, holidays, approved leave, excused days and days
+        // before the policy's go-live never count.
+        const countable = await loadCountableLates(supabase, {
+          orgId: user.orgId,
+          month: runData.month,
+          employeeIds: [...coveredEmployees],
+          evaluateFrom: p.evaluate_from,
+        });
+        for (const [employeeId, lates] of countable) lateCountMap[employeeId] = lates.length;
 
         // Waived (overridden) flags for this month.
         const { data: flags } = await supabase
@@ -773,6 +790,11 @@ export async function processPayrollRun(runId: string): Promise<ActionResult<voi
       });
       latePenaltyDays = pen.penaltyDays;
       latePenaltyDeduction = pen.deduction;
+    }
+    if (ladderEnabled && (ladderLopMap[s.employee_id] ?? 0) > 0) {
+      // Same per-day rate as LOP; labelled "Late-arrival penalty" on the payslip.
+      latePenaltyDays = ladderLopMap[s.employee_id];
+      latePenaltyDeduction = Math.round((s.gross_monthly / runData.working_days) * latePenaltyDays);
     }
 
     const totalDeductions =
@@ -901,6 +923,8 @@ export async function sendPayslipEmail(runId: string): Promise<ActionResult<{ se
         tds: ent.tds,
         lopDays: ent.lop_days,
         lopDeduction: ent.lop_deduction,
+        latePenaltyDays: Number(ent.late_penalty_days ?? 0),
+        latePenaltyDeduction: Number(ent.late_penalty_deduction ?? 0),
         lineItems: ((items ?? []) as any[]).map((i) => ({ category: i.category, amount: i.amount, note: i.note, taxable: i.taxable })),
         totalDeductions: ent.total_deductions,
         netPay: ent.net_pay,
@@ -1316,7 +1340,18 @@ export async function addPayrollLineItem(input: z.infer<typeof LineItemSchema>):
       .from("payroll_runs").select("month").eq("id", (entry as any).payroll_run_id).single();
     const { data: entryRow } = await sb
       .from("payroll_entries").select("employee_id").eq("id", (entry as any).id).single();
-    if (runRow && entryRow) {
+    // Only a policy whose consequence blocks the bonus may refuse it (flags are
+    // also created under salary-deduction / none, where no bonus block applies).
+    const { data: bonusPolicy } = await sb
+      .from("late_policies")
+      .select("enabled, consequence")
+      .eq("org_id", user.orgId)
+      .maybeSingle();
+    const blocksBonus =
+      !!bonusPolicy &&
+      (bonusPolicy as any).enabled &&
+      ["block_bonus", "both"].includes((bonusPolicy as any).consequence);
+    if (blocksBonus && runRow && entryRow) {
       const { data: flag } = await sb
         .from("late_policy_flags").select("late_days_count, status")
         .eq("org_id", user.orgId)

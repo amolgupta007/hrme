@@ -35,7 +35,7 @@ export async function GET(request: NextRequest, ctx: { params: { entryId: string
   const { data: entry } = await supabase
     .from("payroll_entries")
     .select(
-      "id, org_id, employee_id, basic_monthly, hra_monthly, special_allowance_monthly, gross_salary, employee_pf, professional_tax, tds, lop_days, lop_deduction, bonus, total_deductions, net_pay, run:payroll_runs!payroll_run_id(id, month, status, paid_at)",
+      "id, org_id, employee_id, basic_monthly, hra_monthly, special_allowance_monthly, gross_salary, employee_pf, professional_tax, tds, lop_days, lop_deduction, late_penalty_days, late_penalty_deduction, bonus, total_deductions, net_pay, run:payroll_runs!payroll_run_id(id, month, status, paid_at)",
     )
     .eq("id", entryId)
     .maybeSingle();

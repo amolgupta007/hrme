@@ -9,6 +9,7 @@ import { getOvertimeRecords, getOvertimeSettings } from "@/actions/overtime";
 import { DEFAULT_OT_SETTINGS } from "@/lib/attendance/overtime-types";
 import { getManagerScopedEmployeeIds } from "@/lib/attendance/manager-scope";
 import { AttendanceClient } from "@/components/attendance/attendance-client";
+import { getMyLateStatus } from "@/actions/late-policy";
 
 function defaultWeekRange(): { from: string; to: string } {
   // IST today. Find this week's Monday (ISO Monday=1 ... Sunday=7).
@@ -72,9 +73,10 @@ export default async function AttendancePage() {
     if (eo || dOv) weekOffByEmployee[e.id] = resolveEffectiveWeekOff(basePolicy, dOv, eo);
   }
 
-  const [otRecordsResult, otSettingsResult] = await Promise.all([
+  const [otRecordsResult, otSettingsResult, lateStatus] = await Promise.all([
     isAdminUser ? getOvertimeRecords() : Promise.resolve(null),
     getOvertimeSettings(),
+    getMyLateStatus().catch(() => null),
   ]);
   const overtimeRecords = otRecordsResult?.success ? otRecordsResult.data : [];
   const overtimeSettings = otSettingsResult?.success ? otSettingsResult.data : DEFAULT_OT_SETTINGS;
@@ -113,6 +115,7 @@ export default async function AttendancePage() {
       rosterRange={{ from: rosterFrom, to: rosterTo }}
       overtimeRecords={overtimeRecords}
       overtimeSettings={overtimeSettings}
+      lateStatus={lateStatus}
     />
   );
 }

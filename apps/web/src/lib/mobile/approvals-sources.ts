@@ -12,6 +12,7 @@
 // (self excluded); employees see nothing. Payroll is admin-only and further
 // gated on the org having RazorpayX configured.
 import { isAdmin, isManagerOrAbove, type UserContext } from "@/lib/current-user";
+import { loadLeaveAdjustmentUsage } from "@/lib/leaves/balance";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { getManagerScopedEmployeeIds } from "@/lib/attendance/manager-scope";
 import { computeRemainingDays } from "@/lib/leaves/validation";
@@ -90,10 +91,21 @@ export async function fetchLeaveApprovals(sb: Sb, user: UserContext): Promise<Mo
       (a) => a.start_date >= yearStart && a.end_date <= yearEnd,
     );
 
+    // Leave ledger usage (late-arrival penalty deductions) for the requesters.
+    const ledger = await loadLeaveAdjustmentUsage(sb, {
+      orgId: user.orgId,
+      year: currentYear,
+      employeeIds: [...new Set(pending.map((r) => r.employee_id as string))],
+    });
+
     return pending.map((r) => {
-      const usedApproved = approvedList
-        .filter((a) => a.employee_id === r.employee_id && a.policy_id === r.policy_id)
-        .reduce((s, a) => s + Number(a.days), 0);
+      const usedApproved =
+        approvedList
+          .filter((a) => a.employee_id === r.employee_id && a.policy_id === r.policy_id)
+          .reduce((s, a) => s + Number(a.days), 0) +
+        ledger
+          .filter((l) => l.employee_id === r.employee_id && l.policy_id === r.policy_id)
+          .reduce((s, l) => s + l.days, 0);
       const daysPerYear = Number(r.leave_policies?.days_per_year ?? 0);
       const remainingBefore = computeRemainingDays({ daysPerYear, usedApproved });
       const days = Number(r.days);

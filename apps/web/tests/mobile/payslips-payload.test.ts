@@ -68,6 +68,9 @@ describe("buildPayslipDetail", () => {
       tds: 1500,
       lopDays: 1,
       lopDeduction: 1000,
+      // No late penalty on this entry → zeros (row hidden in the UI).
+      latePenaltyDays: 0,
+      latePenaltyDeduction: 0,
     });
     expect(d.bonus).toBe(2000);
     expect(d.totalDeductions).toBe(4500);

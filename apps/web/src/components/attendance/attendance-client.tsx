@@ -13,6 +13,9 @@ import type { WeekOffPolicy } from "@/lib/attendance/week-off";
 import { OvertimeTab } from "./overtime-tab";
 import { DailyAttendanceTab } from "./daily-attendance-tab";
 import { AttendanceReportsTab } from "./attendance-reports-tab";
+import { LatePenaltiesTab } from "./late-penalties-tab";
+import { MyLateBanner } from "./my-late-banner";
+import type { MyLateStatus } from "@/actions/late-policy";
 import { PunchTimelineDialog } from "./punch-timeline-dialog";
 import { MyScheduleCard } from "./my-schedule-card";
 import type { MyScheduleDay } from "@/lib/attendance/schedule-resolve";
@@ -35,6 +38,8 @@ interface Props {
   rosterRange: { from: string; to: string };
   overtimeRecords: OvertimeRecord[];
   overtimeSettings: OvertimeSettings;
+  /** The viewer's own late count this month (null when no late policy covers them). */
+  lateStatus?: MyLateStatus | null;
 }
 
 function formatTime(iso: string | null) {
@@ -53,11 +58,11 @@ function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
 }
 
-export function AttendanceClient({ today, history, team, employees, isManager, isAdmin, attendancePayrollEnabled, activeShift, mySchedule, roster, weekOff, weekOffByEmployee, rosterRange, overtimeRecords, overtimeSettings }: Props) {
+export function AttendanceClient({ today, history, team, employees, isManager, isAdmin, attendancePayrollEnabled, activeShift, mySchedule, roster, weekOff, weekOffByEmployee, rosterRange, overtimeRecords, overtimeSettings, lateStatus }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [liveTime, setLiveTime] = useState("");
-  const [activeTab, setActiveTab] = useState<"my" | "team" | "roster" | "overtime" | "daily" | "reports">(isManager ? "team" : "my");
+  const [activeTab, setActiveTab] = useState<"my" | "team" | "roster" | "overtime" | "daily" | "reports" | "late">(isManager ? "team" : "my");
   const [filterEmployee, setFilterEmployee] = useState("");
   const [punchTimeline, setPunchTimeline] = useState<AttendanceRecord | null>(null);
   const [filteredHistory, setFilteredHistory] = useState<AttendanceRecord[]>(history);
@@ -203,6 +208,9 @@ export function AttendanceClient({ today, history, team, employees, isManager, i
         )}
       </div>
 
+      {/* The viewer's own late arrivals this month */}
+      {lateStatus && lateStatus.lateCount > 0 && <MyLateBanner status={lateStatus} />}
+
       {/* Manager team overview */}
       {isManager && team && (
         <div className="grid gap-4 sm:grid-cols-3">
@@ -233,11 +241,12 @@ export function AttendanceClient({ today, history, team, employees, isManager, i
             ...(isAdmin && overtimeSettings.enabled ? [{ label: "Overtime", value: "overtime" }] : []),
             ...(isAdmin ? [{ label: "Locations", value: "daily" }] : []),
             ...(isAdmin ? [{ label: "Reports", value: "reports" }] : []),
+            ...(isAdmin ? [{ label: "Late arrivals", value: "late" }] : []),
             { label: "My History", value: "my" },
           ].map((tab) => (
             <button
               key={tab.value}
-              onClick={() => setActiveTab(tab.value as "my" | "team" | "roster" | "overtime" | "daily" | "reports")}
+              onClick={() => setActiveTab(tab.value as "my" | "team" | "roster" | "overtime" | "daily" | "reports" | "late")}
               className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
                 activeTab === tab.value
                   ? "border-primary text-primary"
@@ -301,6 +310,8 @@ export function AttendanceClient({ today, history, team, employees, isManager, i
       {activeTab === "daily" && isAdmin && <DailyAttendanceTab />}
 
       {activeTab === "reports" && isAdmin && <AttendanceReportsTab />}
+
+      {activeTab === "late" && isAdmin && <LatePenaltiesTab />}
 
       {/* My schedule + history tab */}
       {(activeTab === "my" || !isManager) && (

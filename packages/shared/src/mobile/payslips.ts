@@ -54,6 +54,9 @@ export type MobilePayslipDetail = {
     tds: number;
     lopDays: number;
     lopDeduction: number;
+    /** Late-arrival penalty; optional so older clients/servers stay compatible. */
+    latePenaltyDays?: number;
+    latePenaltyDeduction?: number;
   };
   bonus: number;
   lineItems: MobilePayslipLineItem[];

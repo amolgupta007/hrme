@@ -255,6 +255,14 @@ export function PayslipPdf({ data }: { data: PayslipPdfData }) {
               danger
             />
           ) : null}
+          {(d.deductions.latePenaltyDeduction ?? 0) > 0 ? (
+            <AmountRow
+              label="Late-arrival penalty"
+              sublabel={`${d.deductions.latePenaltyDays ?? 0} ${d.deductions.latePenaltyDays === 1 ? "day" : "days"}`}
+              value={deduction(d.deductions.latePenaltyDeduction ?? 0)}
+              danger
+            />
+          ) : null}
           <AmountRow label="Total deductions" value={deduction(d.totalDeductions)} danger emphasis />
         </View>
 

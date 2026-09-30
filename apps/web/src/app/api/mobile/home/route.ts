@@ -3,6 +3,7 @@ import { auth } from "@clerk/nextjs/server";
 import { isAdmin, isManagerOrAbove } from "@/lib/current-user";
 import { resolveMobileUser } from "@/lib/mobile/auth";
 import { createAdminSupabase } from "@/lib/supabase/server";
+import { loadLeaveAdjustmentUsage } from "@/lib/leaves/balance";
 import { getManagerScopedEmployeeIds } from "@/lib/attendance/manager-scope";
 import { hasFeature } from "@/config/plans";
 import { filterVisibleAnnouncements } from "@/lib/announcements/visibility";
@@ -88,7 +89,11 @@ export async function GET(request: NextRequest) {
   ]);
 
   const usedByPolicy: Record<string, number> = {};
-  for (const req of (approved as { policy_id: string; days: number }[] | null) ?? []) {
+  // + the leave ledger (late-arrival penalty deductions / reversals).
+  const ledger = employeeId
+    ? await loadLeaveAdjustmentUsage(supabase, { orgId: user.orgId, year: currentYear, employeeIds: [employeeId] })
+    : [];
+  for (const req of [...((approved as { policy_id: string; days: number }[] | null) ?? []), ...ledger]) {
     usedByPolicy[req.policy_id] = (usedByPolicy[req.policy_id] ?? 0) + Number(req.days);
   }
   const policyUsage: LeavePolicyUsage[] = ((policies as any[]) ?? []).map((p) => ({

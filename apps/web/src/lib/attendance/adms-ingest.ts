@@ -14,6 +14,8 @@
  */
 
 import { createAdminSupabase } from "@/lib/supabase/server";
+import { waitUntil } from "@vercel/functions";
+import { evaluateDayLateness } from "@/lib/attendance/late-evaluation";
 import { computeDailyAttendance, type PunchEvent } from "./daily-attendance";
 import { resolveEmployeeZoneLocationIds } from "./resolve-zone";
 import { decideAttribution, type GroupMatch } from "./cross-org-resolution";
@@ -430,5 +432,17 @@ export async function recomputeAttendanceDay(
     { onConflict: "org_id,employee_id,date" },
   );
 
-  if (error) console.error("[adms] rollup upsert failed:", error.message);
+  if (error) {
+    console.error("[adms] rollup upsert failed:", error.message);
+    return;
+  }
+
+  // Lateness for EVERY punch source (web/mobile/ADMS/manual/approve/void) —
+  // it used to run only on the web clock-in, so biometric and mobile staff
+  // were never marked late. Best-effort: never fail ingestion over it.
+  try {
+    await evaluateDayLateness(supabase, orgId, employeeId, istDate, { defer: waitUntil });
+  } catch (e) {
+    console.error("[late] day evaluation failed:", e instanceof Error ? e.message : e);
+  }
 }

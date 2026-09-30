@@ -13,6 +13,8 @@ const UNIQUE: Record<string, string[][]> = {
   announcement_acknowledgements: [["announcement_id", "employee_id", "version"]],
   announcement_recipients: [["announcement_id", "employee_id"]],
   announcement_versions: [["announcement_id", "version"]],
+  late_penalty_events: [["org_id", "employee_id", "month", "kind", "occurrence_no"]],
+  late_policy_flags: [["org_id", "employee_id", "month"]],
 };
 
 /** Column defaults the real schema applies (migration 109). */
@@ -28,6 +30,8 @@ const DEFAULTS: Record<string, Row> = {
     is_pinned: false,
   },
   announcement_recipients: { added_reason: "publish", last_reminded_at: null, reminder_count: 0 },
+  late_penalty_events: { status: "applied", cl_days: 0, lop_days: 0, email_status: null, status_reason: null },
+  notifications: { read_at: null },
 };
 
 let seq = 0;
@@ -83,7 +87,7 @@ function builder(db: FakeDb, table: string) {
     if (op === "update") {
       const hit = matches();
       hit.forEach((r) => Object.assign(r, payload));
-      return { data: null, error: null };
+      return { data: returning ? hit.map((r) => ({ ...r })) : null, error: null };
     }
     if (op === "delete") {
       const hit = new Set(matches());
@@ -133,6 +137,30 @@ function builder(db: FakeDb, table: string) {
     },
     in(c: string, vs: any[]) {
       filters.push((r) => vs.includes(r[c]));
+      return b;
+    },
+    gte(c: string, v: any) {
+      filters.push((r) => r[c] != null && r[c] >= v);
+      return b;
+    },
+    lte(c: string, v: any) {
+      filters.push((r) => r[c] != null && r[c] <= v);
+      return b;
+    },
+    /** Minimal PostgREST or(): comma-separated `col.eq.v`, `col.in.(a,b)`, `col.is.null`. */
+    or(expr: string) {
+      const parts = expr.match(/[a-z_]+\.(?:in\.\([^)]*\)|[a-z]+\.[^,]+)/g) ?? [];
+      const tests = parts.map((part) => {
+        const [col, op, ...rest] = part.split(".");
+        const val = rest.join(".");
+        if (op === "in") {
+          const vs = val.replace(/^\(|\)$/g, "").split(",");
+          return (r: Row) => vs.includes(String(r[col]));
+        }
+        if (op === "is") return (r: Row) => (r[col] ?? null) === null;
+        return (r: Row) => String(r[col]) === val;
+      });
+      filters.push((r) => tests.some((t) => t(r)));
       return b;
     },
     is(c: string, v: any) {

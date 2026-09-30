@@ -13,7 +13,8 @@ export type NotificationType =
   | "payslip_paid"
   | "doc_ack"
   | "announcement"
-  | "approval_pending";
+  | "approval_pending"
+  | "late_penalty";
 
 /** Kinds of pending approval that can page an approver (D4 owner/admin). */
 export type ApprovalType = "leave" | "regularization" | "ot" | "payroll";

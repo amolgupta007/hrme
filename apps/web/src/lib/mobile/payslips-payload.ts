@@ -54,6 +54,8 @@ export type PayslipEntryDetailRow = {
   tds: number | string;
   lop_days: number | string;
   lop_deduction: number | string;
+  late_penalty_days?: number | string | null;
+  late_penalty_deduction?: number | string | null;
   bonus: number | string;
   total_deductions: number | string;
   net_pay: number | string;
@@ -105,6 +107,8 @@ export function buildPayslipDetail(
       tds: num(entry.tds),
       lopDays: num(entry.lop_days),
       lopDeduction: num(entry.lop_deduction),
+      latePenaltyDays: num(entry.late_penalty_days ?? 0),
+      latePenaltyDeduction: num(entry.late_penalty_deduction ?? 0),
     },
     bonus: num(entry.bonus),
     lineItems: items,

@@ -26,6 +26,9 @@ interface PayslipEmailProps {
   tds: number;
   lopDays: number;
   lopDeduction: number;
+  /** Late-arrival penalty (salary bands or the late ladder's LOP). */
+  latePenaltyDays?: number;
+  latePenaltyDeduction?: number;
   lineItems: Array<{ category: string; amount: number; note: string | null; taxable: boolean }>;
   totalDeductions: number;
   netPay: number;
@@ -58,6 +61,8 @@ export function PayslipEmail({
   tds,
   lopDays,
   lopDeduction,
+  latePenaltyDays = 0,
+  latePenaltyDeduction = 0,
   lineItems,
   totalDeductions,
   netPay,
@@ -177,6 +182,14 @@ export function PayslipEmail({
                   LOP ({lopDays} day{lopDays === 1 ? "" : "s"})
                 </Column>
                 <Column align="right">{fmt(lopDeduction)}</Column>
+              </Row>
+            )}
+            {latePenaltyDeduction > 0 && (
+              <Row>
+                <Column>
+                  Late-arrival penalty ({latePenaltyDays} day{latePenaltyDays === 1 ? "" : "s"})
+                </Column>
+                <Column align="right">{fmt(latePenaltyDeduction)}</Column>
               </Row>
             )}
             <Row>

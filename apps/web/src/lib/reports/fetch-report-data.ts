@@ -1,6 +1,7 @@
 // Server-only data assembly for attendance reports. Plain module (NOT "use server")
 // so nothing here becomes a browser-callable RPC; the action + PDF route wrap it.
 import { createAdminSupabase } from "@/lib/supabase/server";
+import { normalizeTimekeepingSettings } from "@jambahr/shared/attendance/timekeeping";
 import type { WeekOffOverride, WeekOffPolicy } from "@/lib/attendance/week-off";
 import {
   buildReportData, enumerateDates, istToday,
@@ -78,7 +79,7 @@ export async function fetchAttendanceReportData(
     });
   }
 
-  const [records, events, holidayRows, leaveRows, policyRow, deptOvRows, empOvRows] =
+  const [records, events, holidayRows, leaveRows, policyRow, deptOvRows, empOvRows, orgRow] =
     await Promise.all([
       fetchAll((a, b) =>
         // FK-disambiguated embed (departments!department_id precedent above):
@@ -86,7 +87,7 @@ export async function fetchAttendanceReportData(
         // so `shifts!shift_id(...)` is unambiguous — used explicitly anyway,
         // matching this file's existing embed idiom.
         sb.from("attendance_records")
-          .select("employee_id, date, clock_in_at, clock_out_at, total_minutes, source, auto_closed, out_of_zone_count, is_late, shifts!shift_id(half_day_threshold_minutes)")
+          .select("employee_id, date, clock_in_at, clock_out_at, total_minutes, source, auto_closed, out_of_zone_count, is_late, device_first_seen_at, shifts!shift_id(half_day_threshold_minutes)")
           .eq("org_id", orgId).gte("date", from).lte("date", to)
           .in("employee_id", empIds)
           .order("date").order("employee_id")
@@ -94,7 +95,7 @@ export async function fetchAttendanceReportData(
       ),
       fetchAll((a, b) =>
         sb.from("attendance_punch_events")
-          .select("employee_id, punched_at")
+          .select("employee_id, punched_at, source")
           .eq("org_id", orgId).eq("status", "approved")
           // punched_at window widened −1/+2 days (UTC) so IST attribution at BOTH range
           // edges is complete: an IST punch at 00:00–05:29 on `from` is the previous UTC
@@ -122,6 +123,7 @@ export async function fetchAttendanceReportData(
       sb.from("week_off_policy").select("week_type, off_days, alt_saturday_rule").eq("org_id", orgId).maybeSingle(),
       sb.from("department_week_off_override").select("department_id, week_type, off_days, alt_saturday_rule").eq("org_id", orgId),
       sb.from("employee_week_off_override").select("employee_id, week_type, off_days, alt_saturday_rule").eq("org_id", orgId),
+      sb.from("organizations").select("settings").eq("id", orgId).maybeSingle(),
     ]);
 
   if (holidayRows.error) throw new Error(holidayRows.error.message);
@@ -167,6 +169,7 @@ export async function fetchAttendanceReportData(
       auto_closed: r.auto_closed as boolean | null,
       out_of_zone_count: r.out_of_zone_count as number | null,
       is_late: r.is_late as boolean | null,
+      device_first_seen_at: (r.device_first_seen_at as string | null) ?? null,
       half_day_threshold_minutes: shift?.half_day_threshold_minutes ?? null,
     };
   });
@@ -180,5 +183,6 @@ export async function fetchAttendanceReportData(
     holidays: (holidayRows.data ?? []) as { date: string }[],
     leaves: (leaveRows ?? []) as RawReportInputs["leaves"],
     orgPolicy, deptOverrides, empOverrides,
+    timekeeping: normalizeTimekeepingSettings((orgRow.data as any)?.settings),
   });
 }

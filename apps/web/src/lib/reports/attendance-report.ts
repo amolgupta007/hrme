@@ -5,11 +5,14 @@ import {
   type WeekOffPolicy, type WeekOffOverride,
 } from "@/lib/attendance/week-off";
 import { pairPunches } from "@/lib/attendance/pair-punches";
+import type { TimekeepingSettings } from "@jambahr/shared/attendance/timekeeping";
 
 export type DayState = "worked" | "week_off" | "holiday" | "leave" | "absent" | "future";
 export type SourceMarker = "d" | "m" | "w" | "*" | "";
-// Full day / Half day / Absent / Week-off / Holiday / Leave / future-dash.
-export type StatusCode = "FD" | "HD" | "A" | "WO" | "H" | "L" | "–";
+// Full day / Half day / Present-not-clocked-in / Absent / Week-off / Holiday /
+// Leave / future-dash. "P" only occurs in web-only timekeeping orgs: the device
+// saw them but they never clocked in on the web/app (present, no hours).
+export type StatusCode = "FD" | "HD" | "P" | "A" | "WO" | "H" | "L" | "–";
 export type ReportPair = { in: string; out: string | null; minutes: number };
 export type ReportDay = {
   date: string;
@@ -35,6 +38,8 @@ export type ReportSummary = {
   weekOffs: number;
   leaves: number;
   holidays: number;
+  /** Seen at the office by a device but never clocked in (web-only timekeeping). */
+  notClockedIn: number;
 };
 export type ReportEmployee = {
   id: string;
@@ -65,13 +70,16 @@ export type RawReportInputs = {
     employee_id: string; date: string;
     clock_in_at: string | null; clock_out_at: string | null;
     total_minutes: number | null; source: string | null;
+    device_first_seen_at?: string | null;
     auto_closed: boolean | null; out_of_zone_count: number | null; is_late: boolean | null;
     // From the assigned shift's half-day threshold (fetch layer flattens the
     // `shifts!shift_id(half_day_threshold_minutes)` embed onto the row).
     // Absent/null → half-day classification is skipped (worked days are FD).
     half_day_threshold_minutes?: number | null;
   }[];
-  events: { employee_id: string; punched_at: string }[];
+  events: { employee_id: string; punched_at: string; source?: string | null }[];
+  /** Web-only timekeeping: device punches don't count toward hours from `from`. */
+  timekeeping?: TimekeepingSettings;
   holidays: { date: string }[];
   leaves: { employee_id: string; start_date: string; end_date: string }[];
   orgPolicy: WeekOffPolicy;
@@ -159,11 +167,11 @@ export function buildReportData(input: RawReportInputs): AttendanceReportData {
   const recordsByEmpDate = new Map<string, RawReportInputs["records"][number]>();
   for (const r of input.records) recordsByEmpDate.set(`${r.employee_id}:${r.date}`, r);
 
-  const eventsByEmpDate = new Map<string, { id: string; punched_at: string }[]>();
+  const eventsByEmpDate = new Map<string, { id: string; punched_at: string; source: string | null }[]>();
   for (const e of input.events) {
     const key = `${e.employee_id}:${istDateOf(e.punched_at)}`;
     const arr = eventsByEmpDate.get(key) ?? [];
-    arr.push({ id: `${key}:${arr.length}`, punched_at: e.punched_at });
+    arr.push({ id: `${key}:${arr.length}`, punched_at: e.punched_at, source: e.source ?? null });
     eventsByEmpDate.set(key, arr);
   }
 
@@ -185,12 +193,19 @@ export function buildReportData(input: RawReportInputs): AttendanceReportData {
     let totalMinutes = 0;
     let daysPresent = 0;
     const summary: ReportSummary = {
-      fullDays: 0, halfDays: 0, absents: 0, weekOffs: 0, leaves: 0, holidays: 0,
+      fullDays: 0, halfDays: 0, absents: 0, weekOffs: 0, leaves: 0, holidays: 0, notClockedIn: 0,
     };
 
     const days: ReportDay[] = dates.map((date) => {
       const rec = recordsByEmpDate.get(`${emp.id}:${date}`);
-      const dayEvents = eventsByEmpDate.get(`${emp.id}:${date}`) ?? [];
+      const webOnly =
+        input.timekeeping?.source === "web_app" && (!input.timekeeping.from || date >= input.timekeeping.from);
+      const allDayEvents = eventsByEmpDate.get(`${emp.id}:${date}`) ?? [];
+      // Web-only timekeeping: device punches are presence, not hours.
+      const dayEvents = webOnly
+        ? allDayEvents.filter((e) => e.source !== "adms" && e.source !== "device" && e.source != null)
+        : allDayEvents;
+      const deviceOnly = webOnly && dayEvents.length === 0 && !rec?.clock_in_at && !!rec?.device_first_seen_at;
 
       let pairs: ReportPair[] = [];
       let minutes = 0;
@@ -224,7 +239,7 @@ export function buildReportData(input: RawReportInputs): AttendanceReportData {
       if (holidaySet.has(date)) state = "holiday";
       else if (onLeave) state = "leave";
       else if (isWeekOff(date, effective)) state = "week_off";
-      else if (worked) state = "worked";
+      else if (worked || deviceOnly) state = "worked";
       else if (date > input.todayIst) state = "future";
       else state = "absent";
 
@@ -238,10 +253,14 @@ export function buildReportData(input: RawReportInputs): AttendanceReportData {
       if (worked) totalMinutes += minutes;
       if (state === "worked") daysPresent += 1;
 
-      const statusCode = computeStatusCode(state, minutes, rec?.half_day_threshold_minutes ?? null);
+      const statusCode =
+        deviceOnly && state === "worked"
+          ? "P"
+          : computeStatusCode(state, minutes, rec?.half_day_threshold_minutes ?? null);
       switch (statusCode) {
         case "FD": summary.fullDays += 1; break;
         case "HD": summary.halfDays += 1; break;
+        case "P": summary.notClockedIn += 1; break;
         case "A": summary.absents += 1; break;
         case "WO": summary.weekOffs += 1; break;
         case "L": summary.leaves += 1; break;

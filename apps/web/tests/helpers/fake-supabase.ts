@@ -15,6 +15,7 @@ const UNIQUE: Record<string, string[][]> = {
   announcement_versions: [["announcement_id", "version"]],
   late_penalty_events: [["org_id", "employee_id", "month", "kind", "occurrence_no"]],
   late_policy_flags: [["org_id", "employee_id", "month"]],
+  attendance_records: [["org_id", "employee_id", "date"]],
 };
 
 /** Column defaults the real schema applies (migration 109). */
@@ -137,6 +138,14 @@ function builder(db: FakeDb, table: string) {
     },
     in(c: string, vs: any[]) {
       filters.push((r) => vs.includes(r[c]));
+      return b;
+    },
+    lt(c: string, v: any) {
+      filters.push((r) => r[c] != null && r[c] < v);
+      return b;
+    },
+    gt(c: string, v: any) {
+      filters.push((r) => r[c] != null && r[c] > v);
       return b;
     },
     gte(c: string, v: any) {

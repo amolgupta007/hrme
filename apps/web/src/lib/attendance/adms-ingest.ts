@@ -17,6 +17,7 @@ import { createAdminSupabase } from "@/lib/supabase/server";
 import { waitUntil } from "@vercel/functions";
 import { evaluateDayLateness } from "@/lib/attendance/late-evaluation";
 import { computeDailyAttendance, type PunchEvent } from "./daily-attendance";
+import { resolveTimekeepingMode, splitPunchesForTimekeeping } from "@jambahr/shared/attendance/timekeeping";
 import { resolveEmployeeZoneLocationIds } from "./resolve-zone";
 import { decideAttribution, type GroupMatch } from "./cross-org-resolution";
 import { getSiblingOrgIds, assertSameGroup } from "./company-group";
@@ -395,19 +396,39 @@ export async function recomputeAttendanceDay(
     istDate,
   );
 
+  // Timekeeping mode (org setting): in 'web_app' mode only web / mobile-app /
+  // manual punches set clock-in/out and hours; biometric-device punches only
+  // record presence. 'all' (default) pools every source as before.
+  const { data: orgRow } = await supabase.from("organizations").select("settings").eq("id", orgId).maybeSingle();
+  const mode = resolveTimekeepingMode((orgRow as any)?.settings, istDate);
+  const { timekeeping, presence } = splitPunchesForTimekeeping(approved, mode);
+
+  // Device presence (zone-filtered exactly like timekeeping punches).
+  const seen =
+    presence.length > 0
+      ? computeDailyAttendance({ events: presence as PunchEvent[], zoneLocationIds })
+      : null;
+  const deviceSeen = !!seen && seen.punchCount > 0;
+
   const result = computeDailyAttendance({
-    events: approved as PunchEvent[],
+    events: timekeeping as PunchEvent[],
     zoneLocationIds,
   });
 
-  // An absent day with no pending punches has nothing to record.
-  if (result.status === "absent" && !hasPending) return;
+  // An absent day with no pending punches has nothing to record — unless the
+  // device saw them (web_app mode: present, but not clocked in).
+  if (result.status === "absent" && !hasPending && !deviceSeen) return;
 
   // Rollup source label — precedence device/adms > mobile > web > device-fallback
   // (see resolveRollupSource). Uses the same `rows` set as the original stamping
   // logic so device/mobile detection stays byte-identical; only the new 'web'
   // tier is added (a pure-web day now stamps 'web' instead of the 'device' fallback).
-  const rollupSource = resolveRollupSource(rows.map((r) => (r as any).source));
+  const rollupSource =
+    mode === "web_app"
+      ? timekeeping.length > 0
+        ? resolveRollupSource(timekeeping.map((r) => (r as any).source))
+        : "device"
+      : resolveRollupSource(rows.map((r) => (r as any).source));
 
   const { error } = await supabase.from("attendance_records").upsert(
     {
@@ -428,6 +449,11 @@ export async function recomputeAttendanceDay(
       punch_count: result.punchCount,
       out_of_zone_count: result.outOfZoneCount,
       derived_status: result.status,
+      // Device presence (migration 112) — the whole story in web_app mode.
+      device_first_seen_at: deviceSeen ? seen!.firstInAt : null,
+      device_last_seen_at: deviceSeen ? seen!.lastOutAt ?? seen!.firstInAt : null,
+      device_first_seen_location_id: deviceSeen ? seen!.firstInLocationId : null,
+      device_punch_count: deviceSeen ? seen!.punchCount : 0,
     },
     { onConflict: "org_id,employee_id,date" },
   );

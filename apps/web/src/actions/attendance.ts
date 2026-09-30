@@ -8,10 +8,15 @@ import type { ActionResult } from "@/types";
 import { getActiveShiftForEmployee } from "@/actions/shifts";
 import { attributedDateForClockIn } from "@/lib/attendance/attribute-date";
 import { recomputeAttendanceDay } from "@/lib/attendance/adms-ingest";
+import { normalizeTimekeepingSettings, type TimekeepingMode } from "@jambahr/shared/attendance/timekeeping";
 import { isTooSoonToClockOut } from "@/lib/attendance/clock-out-guard";
 
 export type AttendanceSettings = {
   standardWorkdayHours: number;
+  /** Which punches keep time: every source, or web/app only (devices = presence). */
+  timekeepingSource: TimekeepingMode;
+  /** IST date web/app-only timekeeping took effect (null when "all"). */
+  timekeepingFrom: string | null;
 };
 
 const DEFAULT_STANDARD_WORKDAY_HOURS = 8;
@@ -33,7 +38,11 @@ export async function getAttendanceSettings(): Promise<ActionResult<AttendanceSe
   const parsed = typeof raw === "number" && Number.isFinite(raw) ? raw : DEFAULT_STANDARD_WORKDAY_HOURS;
   const standardWorkdayHours = Math.max(1, Math.min(16, Math.round(parsed * 10) / 10));
 
-  return { success: true, data: { standardWorkdayHours } };
+  const tk = normalizeTimekeepingSettings((data as any)?.settings);
+  return {
+    success: true,
+    data: { standardWorkdayHours, timekeepingSource: tk.source, timekeepingFrom: tk.source === "web_app" ? tk.from : null },
+  };
 }
 
 export async function updateAttendanceSettings(input: {
@@ -101,6 +110,9 @@ export type AttendanceRecord = {
   auto_closed: boolean;
   shift_id: string | null;
   attributed_date: string | null;
+  /** First/last time a biometric device saw them (web-only timekeeping: presence only). */
+  device_first_seen_at: string | null;
+  device_last_seen_at: string | null;
 };
 
 export type TodayStatus = {
@@ -108,6 +120,66 @@ export type TodayStatus = {
   isClockedIn: boolean;
   hoursToday: number | null;
 };
+
+/**
+ * Choose which punches keep time. "web_app": clock-in/out and hours come only
+ * from web, mobile-app and admin manual punches; biometric devices just record
+ * that the person was at the office. Takes effect from today (IST) — earlier
+ * days are never rewritten — and today's attendance is recalculated at once.
+ */
+export async function updateTimekeepingSource(input: {
+  source: TimekeepingMode;
+}): Promise<ActionResult<{ recalculated: number }>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can change this" };
+  if (input.source !== "all" && input.source !== "web_app") return { success: false, error: "Invalid option" };
+
+  const supabase = createAdminSupabase();
+  const { data: orgRow, error: readErr } = await supabase
+    .from("organizations")
+    .select("settings")
+    .eq("id", user.orgId)
+    .single();
+  if (readErr) return { success: false, error: readErr.message };
+
+  const existing = ((orgRow as any)?.settings ?? {}) as Record<string, any>;
+  const existingAttendance = (existing.attendance && typeof existing.attendance === "object" ? existing.attendance : {}) as Record<string, any>;
+  const current = normalizeTimekeepingSettings(existing);
+  if (current.source === input.source) return { success: true, data: { recalculated: 0 } };
+
+  const istToday = new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const nextSettings = {
+    ...existing,
+    attendance: {
+      ...existingAttendance,
+      timekeeping_source: input.source,
+      timekeeping_source_from: istToday,
+    },
+  };
+  const { error: writeErr } = await supabase
+    .from("organizations")
+    .update({ settings: nextSettings })
+    .eq("id", user.orgId);
+  if (writeErr) return { success: false, error: writeErr.message };
+
+  // Recalculate today for everyone who has punched, so the switch shows at once.
+  const dayStart = new Date(`${istToday}T00:00:00+05:30`);
+  const { data: punches } = await supabase
+    .from("attendance_punch_events")
+    .select("employee_id")
+    .eq("org_id", user.orgId)
+    .gte("punched_at", dayStart.toISOString())
+    .lt("punched_at", new Date(dayStart.getTime() + 86_400_000).toISOString());
+  const employeeIds = [...new Set(((punches ?? []) as Array<{ employee_id: string }>).map((p) => p.employee_id))];
+  for (const employeeId of employeeIds) {
+    await recomputeAttendanceDay(supabase, user.orgId, employeeId, istToday);
+  }
+
+  revalidatePath("/dashboard/settings");
+  revalidatePath("/dashboard/attendance");
+  return { success: true, data: { recalculated: employeeIds.length } };
+}
 
 // ---- Clock In ----
 export async function clockIn(ipAddress?: string): Promise<ActionResult<AttendanceRecord>> {
@@ -399,7 +471,9 @@ export async function getTeamTodayAttendance(): Promise<ActionResult<{
   ]);
 
   const records = (todayRecords ?? []).map(formatRecord);
-  const present = records.filter((r) => r.clock_in_at).length;
+  // Present = clocked in, or seen at the office by a device (web-only
+  // timekeeping orgs: seen-but-not-clocked-in still counts as present).
+  const present = records.filter((r) => r.clock_in_at || r.device_first_seen_at).length;
   const total = totalEmployees ?? 0;
 
   return {
@@ -428,6 +502,8 @@ function formatRecord(raw: any): AttendanceRecord {
     auto_closed: !!raw.auto_closed,
     shift_id: raw.shift_id ?? null,
     attributed_date: raw.attributed_date ?? null,
+    device_first_seen_at: raw.device_first_seen_at ?? null,
+    device_last_seen_at: raw.device_last_seen_at ?? null,
   };
 }
 

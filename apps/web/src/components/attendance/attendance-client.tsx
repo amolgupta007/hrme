@@ -54,6 +54,31 @@ function formatDuration(minutes: number | null) {
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
+/**
+ * Web-only timekeeping: when the web/app clock-in and the device disagree,
+ * show where the device saw them (context for disputes). Hidden when the device
+ * itself is the timekeeper (its first punch IS the clock-in).
+ */
+function SeenAtOffice({ rec }: { rec: AttendanceRecord }) {
+  if (!rec.device_first_seen_at || !rec.clock_in_at || rec.source === "device") return null;
+  return (
+    <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+      at office {formatTime(rec.device_first_seen_at)}
+    </span>
+  );
+}
+
+function NotClockedInChip() {
+  return (
+    <span
+      className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-950/50 dark:text-amber-300"
+      title="Seen at the office by the biometric device, but didn't clock in on the web"
+    >
+      Not clocked in
+    </span>
+  );
+}
+
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
 }
@@ -141,8 +166,15 @@ export function AttendanceClient({ today, history, team, employees, isManager, i
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
           <div className="space-y-1">
             <p className="text-sm font-medium text-muted-foreground">Today&apos;s Status</p>
-            {!today?.record ? (
-              <p className="text-2xl font-bold text-foreground">Not clocked in</p>
+            {!today?.record || !today.record.clock_in_at ? (
+              <div>
+                <p className="text-2xl font-bold text-foreground">Not clocked in</p>
+                {today?.record?.device_first_seen_at && (
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Seen at the office at {formatTime(today.record.device_first_seen_at)} — clock in here to start your day.
+                  </p>
+                )}
+              </div>
             ) : isClockedIn ? (
               <div>
                 <p className="text-2xl font-bold text-primary font-mono">{liveTime || "—"}</p>
@@ -276,13 +308,22 @@ export function AttendanceClient({ today, history, team, employees, isManager, i
                 <div key={rec.id} className="flex items-center justify-between px-5 py-3">
                   <div>
                     <p className="text-sm font-medium">{rec.employee_name}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      In: {formatTime(rec.clock_in_at)}
-                      {rec.clock_out_at ? ` · Out: ${formatTime(rec.clock_out_at)}` : " · Still in"}
+                    <p className="text-xs text-muted-foreground mt-0.5 flex flex-wrap items-center gap-x-1.5">
+                      {rec.clock_in_at ? (
+                        <>
+                          In: {formatTime(rec.clock_in_at)}
+                          {rec.clock_out_at ? ` · Out: ${formatTime(rec.clock_out_at)}` : " · Still in"}
+                        </>
+                      ) : (
+                        <>Seen at office {formatTime(rec.device_first_seen_at)}</>
+                      )}
+                      <SeenAtOffice rec={rec} />
                     </p>
                   </div>
                   <div className="text-right">
-                    {rec.total_minutes ? (
+                    {!rec.clock_in_at && rec.device_first_seen_at ? (
+                      <NotClockedInChip />
+                    ) : rec.total_minutes ? (
                       <span className="text-sm font-semibold text-foreground">{formatDuration(rec.total_minutes)}</span>
                     ) : (
                       <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
@@ -351,11 +392,14 @@ export function AttendanceClient({ today, history, team, employees, isManager, i
                   <div>
                     <p className="text-sm font-medium">{formatDate(rec.date)}</p>
                     <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1.5 flex-wrap">
-                      {rec.clock_in_at && !rec.clock_out_at ? (
+                      {!rec.clock_in_at && rec.device_first_seen_at ? (
+                        <>Seen at office {formatTime(rec.device_first_seen_at)}</>
+                      ) : rec.clock_in_at && !rec.clock_out_at ? (
                         <>{formatTime(rec.clock_in_at)} · Still in</>
                       ) : (
                         <>{formatTime(rec.clock_in_at)} → {formatTime(rec.clock_out_at)}</>
                       )}
+                      <SeenAtOffice rec={rec} />
                       {rec.source === "device" && (
                         <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
                           via device
@@ -365,7 +409,9 @@ export function AttendanceClient({ today, history, team, employees, isManager, i
                   </div>
                   <div className="flex items-center gap-3">
                     <div className="text-right">
-                      {rec.total_minutes ? (
+                      {!rec.clock_in_at && rec.device_first_seen_at ? (
+                        <NotClockedInChip />
+                      ) : rec.total_minutes ? (
                         <span className={`text-sm font-semibold ${rec.total_minutes >= 480 ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}`}>
                           {formatDuration(rec.total_minutes)}
                         </span>

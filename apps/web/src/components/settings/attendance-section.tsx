@@ -1,6 +1,7 @@
 "use client";
 
 import { WorkingHoursCard } from "./working-hours-card";
+import { TimekeepingSourceCard } from "./timekeeping-source-card";
 import { ShiftMasterCard } from "./shift-master-card";
 import { ShiftAssignmentsCard } from "./shift-assignments-card";
 import { WeekOffCard } from "./week-off-card";
@@ -50,6 +51,7 @@ export function AttendanceSection({ attendanceSettings, shifts, assignments, wee
         Configure shifts, assign employees to shifts, set the org-wide week-off policy, and
         manage the fallback working hours used when no shift is assigned.
       </p>
+      {attendanceSettings && <TimekeepingSourceCard settings={attendanceSettings} />}
       {attendanceSettings && <WorkingHoursCard settings={attendanceSettings} />}
       <ShiftMasterCard shifts={shifts} />
       <ShiftAssignmentsCard assignments={assignments} shifts={shifts} employees={employees} departments={departments} />

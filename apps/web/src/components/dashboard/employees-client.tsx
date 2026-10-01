@@ -221,6 +221,7 @@ export function EmployeesClient({ employees, departments, role, onboardingData }
             value={statusFilter}
             onValueChange={setStatusFilter}
             placeholder="Status"
+            allLabel="All statuses"
             options={[
               { value: "active", label: "Active" },
               { value: "on_leave", label: "On Leave" },
@@ -319,11 +320,14 @@ function FilterSelect({
   value,
   onValueChange,
   placeholder,
+  allLabel,
   options,
 }: {
   value: string;
   onValueChange: (v: string) => void;
   placeholder: string;
+  /** Label for the "show everything" option; defaults to "All <placeholder>s". */
+  allLabel?: string;
   options: { value: string; label: string }[];
 }) {
   const isActive = value !== "all";
@@ -352,7 +356,7 @@ function FilterSelect({
               value={NONE}
               className="relative flex cursor-pointer select-none items-center rounded-md px-2 py-1.5 text-sm outline-none hover:bg-accent data-[highlighted]:bg-accent"
             >
-              <Select.ItemText>All {placeholder}s</Select.ItemText>
+              <Select.ItemText>{allLabel ?? `All ${placeholder}s`}</Select.ItemText>
             </Select.Item>
             {options.map((opt) => (
               <Select.Item

@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest";
 import {
-  maskPhone,
   shouldShowPasswordPrompt,
   PASSWORD_PROMPT_SNOOZE_MS,
 } from "@/lib/auth/sign-in-options";
@@ -32,18 +31,3 @@ describe("shouldShowPasswordPrompt", () => {
   });
 });
 
-describe("maskPhone", () => {
-  it("masks an Indian E.164 number", () => {
-    expect(maskPhone("+919421195453")).toBe("+91 ••••• •5453");
-  });
-  it("handles spaced formats", () => {
-    expect(maskPhone("+91 98765 10013")).toBe("+91 ••••• •0013");
-  });
-  it("keeps last 4 for other shapes", () => {
-    expect(maskPhone("7795149888")).toBe("•••• 9888");
-  });
-  it("returns null for empty or too short", () => {
-    expect(maskPhone(null)).toBeNull();
-    expect(maskPhone("12")).toBeNull();
-  });
-});

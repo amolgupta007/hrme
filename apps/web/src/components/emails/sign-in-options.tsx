@@ -4,10 +4,6 @@ interface SignInOptionsEmailProps {
   firstName: string;
   orgName: string;
   email: string;
-  /** Masked mobile on the account, e.g. "+91 ••••• •5453". Null = no phone on file. */
-  maskedPhone: string | null;
-  /** False when a phone is on file but not yet usable for sign-in. */
-  phoneReady: boolean;
   signInUrl: string;
 }
 
@@ -21,8 +17,6 @@ export function SignInOptionsEmail({
   firstName = "there",
   orgName = "your company",
   email = "you@company.com",
-  maskedPhone = "+91 ••••• •5453",
-  phoneReady = true,
   signInUrl = "https://jambahr.com/sign-in",
 }: SignInOptionsEmailProps) {
   return (
@@ -57,30 +51,15 @@ export function SignInOptionsEmail({
           {/* 2 — phone code */}
           <Section style={cardStyle}>
             <Text style={cardHeadingStyle}>2 · Mobile number + SMS code</Text>
-            {maskedPhone && phoneReady ? (
-              <>
-                <Text style={stepStyle}>1. Go to jambahr.com/sign-in.</Text>
-                <Text style={stepStyle}>
-                  2. Click <strong>Use phone</strong> (top right of the Email address box).
-                </Text>
-                <Text style={stepStyle}>
-                  3. Enter your mobile number (<strong>{maskedPhone}</strong>) and click{" "}
-                  <strong>Continue</strong>.
-                </Text>
-                <Text style={stepStyle}>4. Enter the 6-digit code we text you.</Text>
-              </>
-            ) : maskedPhone ? (
-              <Text style={stepStyle}>
-                Your mobile number ({maskedPhone}) isn&apos;t switched on for sign-in yet.
-                We&apos;re fixing this and will let you know when it works. Until then,
-                please use option 1 or 3.
-              </Text>
-            ) : (
-              <Text style={stepStyle}>
-                There&apos;s no mobile number on your profile yet. Ask your HR admin to add
-                it if you&apos;d like to sign in by phone.
-              </Text>
-            )}
+            <Text style={stepStyle}>1. Go to jambahr.com/sign-in.</Text>
+            <Text style={stepStyle}>
+              2. Click <strong>Use phone</strong> (top right of the Email address box).
+            </Text>
+            <Text style={stepStyle}>
+              3. Enter the mobile number registered with your HR admin and click{" "}
+              <strong>Continue</strong>.
+            </Text>
+            <Text style={stepStyle}>4. Enter the 6-digit code we text you.</Text>
           </Section>
 
           {/* 3 — password */}

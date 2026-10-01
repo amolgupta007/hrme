@@ -17,6 +17,8 @@ import { ActionRequiredCard } from "@/components/dashboard/action-required-card"
 import { getMyPendingAcknowledgements } from "@/actions/announcements";
 import { announcementAnchor, categoryMeta } from "@/lib/announcements/categories";
 import type { OnboardingStatusResult } from "@/config/onboarding";
+import { getTeamUpcoming } from "@/actions/team-upcoming";
+import { WfhWeekCard, CelebrationsCard } from "@/components/dashboard/team-upcoming-cards";
 
 // ---- Style maps ----
 
@@ -294,6 +296,9 @@ export default async function DashboardPage() {
 
   const { userRole, userFirstName, whoIsOut, whoIsOutTotal, latestAnnouncements, activeReviewCycles, myLeaveBalances, myActiveObjectives, myLatestReview, upcomingHolidays } = data;
   const isEmployeeRole = userRole === "employee";
+  const teamUpcomingResult = await getTeamUpcoming();
+  const teamUpcoming = teamUpcomingResult.success ? teamUpcomingResult.data : null;
+  const todayIst = new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const statCards = buildStatCards(data);
   const quickActions = getQuickActions(userRole);
   const showLeaveBalance = (userRole === "employee" || userRole === "manager") && myLeaveBalances.length > 0;
@@ -472,6 +477,12 @@ export default async function DashboardPage() {
             </div>
           )}
         </div>
+
+        {/* Who's working from home this week (only when WFH is on for the org) */}
+        {teamUpcoming?.wfhEnabled && <WfhWeekCard data={teamUpcoming} today={todayIst} />}
+
+        {/* Birthdays & work anniversaries */}
+        {teamUpcoming && <CelebrationsCard data={teamUpcoming} today={todayIst} />}
 
         {/* Upcoming Deadlines */}
         <div className="rounded-xl border border-border bg-card overflow-hidden">

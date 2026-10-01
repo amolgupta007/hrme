@@ -94,12 +94,19 @@ export function AttendanceClient({ today, history, team, employees, isManager, i
 
   const isClockedIn = today?.isClockedIn ?? false;
   const clockInTime = today?.record?.clock_in_at ?? null;
+  // Multi-session days: the timer runs from the CURRENT session's start and adds
+  // the minutes already logged in earlier sessions (breaks don't count).
+  const multiSession = today?.multiSession ?? false;
+  const sessions = today?.sessions ?? [];
+  const timerStart = multiSession ? today?.currentSessionStartAt ?? null : clockInTime;
+  const timerBaseSeconds = multiSession ? (today?.closedMinutes ?? 0) * 60 : 0;
+  const clockedOutForNow = multiSession && !isClockedIn && !!today?.record?.clock_in_at;
 
   // Live elapsed timer
   useEffect(() => {
-    if (!isClockedIn || !clockInTime) { setLiveTime(""); return; }
+    if (!isClockedIn || !timerStart) { setLiveTime(""); return; }
     const update = () => {
-      const elapsed = Math.floor((Date.now() - new Date(clockInTime).getTime()) / 1000);
+      const elapsed = timerBaseSeconds + Math.floor((Date.now() - new Date(timerStart).getTime()) / 1000);
       const h = Math.floor(elapsed / 3600);
       const m = Math.floor((elapsed % 3600) / 60);
       const s = elapsed % 60;
@@ -108,7 +115,7 @@ export function AttendanceClient({ today, history, team, employees, isManager, i
     update();
     const interval = setInterval(update, 1000);
     return () => clearInterval(interval);
-  }, [isClockedIn, clockInTime]);
+  }, [isClockedIn, timerStart, timerBaseSeconds]);
 
   async function handleClockIn() {
     setLoading(true);
@@ -178,7 +185,11 @@ export function AttendanceClient({ today, history, team, employees, isManager, i
             ) : isClockedIn ? (
               <div>
                 <p className="text-2xl font-bold text-primary font-mono">{liveTime || "—"}</p>
-                <p className="text-sm text-muted-foreground mt-1">Clocked in at {formatTime(clockInTime)}</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {sessions.length > 1
+                    ? `Back in at ${formatTime(timerStart)} · first in at ${formatTime(clockInTime)}`
+                    : `Clocked in at ${formatTime(clockInTime)}`}
+                </p>
               </div>
             ) : (
               <div>
@@ -187,21 +198,23 @@ export function AttendanceClient({ today, history, team, employees, isManager, i
                   <p className="text-2xl font-bold text-foreground">{formatDuration(today.record.total_minutes)}</p>
                 </div>
                 <p className="text-sm text-muted-foreground mt-1">
-                  {formatTime(today.record.clock_in_at)} → {formatTime(today.record.clock_out_at)}
+                  {clockedOutForNow
+                    ? `Clocked out at ${formatTime(today.record.clock_out_at)} — clock in again any time today`
+                    : `${formatTime(today.record.clock_in_at)} → ${formatTime(today.record.clock_out_at)}`}
                 </p>
               </div>
             )}
           </div>
 
           <div className="flex items-center gap-3">
-            {!today?.record || (!isClockedIn && !today.record.clock_out_at) ? (
+            {!today?.record || (!isClockedIn && !today.record.clock_out_at) || clockedOutForNow ? (
               <button
                 onClick={handleClockIn}
                 disabled={loading}
                 className="inline-flex items-center gap-2 rounded-lg bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-60 transition-all"
               >
                 <LogIn className="h-4 w-4" />
-                Clock In
+                {clockedOutForNow ? "Clock In Again" : "Clock In"}
               </button>
             ) : isClockedIn ? (
               <button
@@ -236,6 +249,25 @@ export function AttendanceClient({ today, history, team, employees, isManager, i
               <p className="text-xs text-muted-foreground mb-1">Hours Logged</p>
               <p className="text-sm font-semibold">{formatDuration(today.record.total_minutes)}</p>
             </div>
+          </div>
+        )}
+
+        {sessions.length > 1 && (
+          <div className="mt-4 border-t border-border pt-4">
+            <p className="text-xs font-medium text-muted-foreground mb-2">Today&apos;s sessions</p>
+            <ul className="space-y-1">
+              {sessions.map((sess, i) => (
+                <li key={sess.inAt} className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Session {i + 1}</span>
+                  <span className="font-mono">
+                    {formatTime(sess.inAt)} → {sess.outAt ? formatTime(sess.outAt) : "now"}
+                  </span>
+                  <span className="w-16 text-right font-semibold">
+                    {sess.minutes === null ? <span className="text-primary">Active</span> : formatDuration(sess.minutes)}
+                  </span>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
       </div>
@@ -323,7 +355,7 @@ export function AttendanceClient({ today, history, team, employees, isManager, i
                   <div className="text-right">
                     {!rec.clock_in_at && rec.device_first_seen_at ? (
                       <NotClockedInChip />
-                    ) : rec.total_minutes ? (
+                    ) : rec.total_minutes && rec.clock_out_at ? (
                       <span className="text-sm font-semibold text-foreground">{formatDuration(rec.total_minutes)}</span>
                     ) : (
                       <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
@@ -405,13 +437,21 @@ export function AttendanceClient({ today, history, team, employees, isManager, i
                           via device
                         </span>
                       )}
+                      {rec.auto_closed && (
+                        <span
+                          className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-950/40 dark:text-amber-400"
+                          title="No clock-out was recorded, so the system closed the day at midnight"
+                        >
+                          Auto clock-out
+                        </span>
+                      )}
                     </p>
                   </div>
                   <div className="flex items-center gap-3">
                     <div className="text-right">
                       {!rec.clock_in_at && rec.device_first_seen_at ? (
                         <NotClockedInChip />
-                      ) : rec.total_minutes ? (
+                      ) : rec.total_minutes && rec.clock_out_at ? (
                         <span className={`text-sm font-semibold ${rec.total_minutes >= 480 ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}`}>
                           {formatDuration(rec.total_minutes)}
                         </span>

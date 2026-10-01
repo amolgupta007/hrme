@@ -176,6 +176,12 @@ function builder(db: FakeDb, table: string) {
       filters.push((r) => (r[c] ?? null) === v);
       return b;
     },
+    /** Only the `not(col, "is", null)` form is supported. */
+    not(c: string, op: string, v: any) {
+      if (op !== "is") throw new Error(`fake-supabase: not(${op}) unsupported`);
+      filters.push((r) => (r[c] ?? null) !== v);
+      return b;
+    },
     order() {
       return b;
     },

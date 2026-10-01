@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { recomputeAttendanceDay } from "@/lib/attendance/adms-ingest";
+import { loadTodaySessions } from "@/lib/attendance/web-sessions";
+import { autoCloseInstant } from "@jambahr/shared/attendance/sessions";
 
 const DEFAULT_STANDARD_WORKDAY_HOURS = 8;
 const IST_OFFSET = "+05:30";
@@ -116,9 +118,20 @@ export async function GET(req: Request) {
     }
 
     const clockInAt = new Date(row.clock_in_at);
-    const proposedClockOut = new Date(clockInAt.getTime() + resolvedHours * 60 * 60 * 1000);
     const dayCap = endOfDateIST(row.date);
-    const finalClockOut = proposedClockOut.getTime() < dayCap.getTime() ? proposedClockOut : dayCap;
+    // Multi-session days (web_app orgs): the open session is the LAST one, so
+    // never close before the last clock-in. Single-session days resolve to the
+    // historical rule: first clock-in + shift hours, capped at end of day.
+    const day = await loadTodaySessions(supabase, row.org_id, row.employee_id, row.date);
+    const lastPunchMs = day.lastPunchAt ? new Date(day.lastPunchAt).getTime() : clockInAt.getTime();
+    const finalClockOut = new Date(
+      autoCloseInstant({
+        firstInMs: clockInAt.getTime(),
+        lastPunchMs,
+        hours: resolvedHours,
+        dayCapMs: dayCap.getTime(),
+      }),
+    );
     const totalMinutes = Math.max(0, Math.round((finalClockOut.getTime() - clockInAt.getTime()) / 60000));
 
     // Re-check the row is still open (idempotent if a manual close raced in).

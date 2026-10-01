@@ -60,6 +60,16 @@ describe("default mode (all sources) — unchanged behaviour", () => {
   });
 });
 
+describe("default mode keeps first-in → last-out on multi-punch days", () => {
+  it("three device badges → last one is the clock-out, gross span", async () => {
+    punch("adms", "09:00");
+    punch("adms", "13:00");
+    punch("adms", "18:00");
+    await run();
+    expect(record()).toMatchObject({ clock_out_at: ist("18:00"), total_minutes: 540 });
+  });
+});
+
 describe("web_app mode", () => {
   beforeEach(() => seed(WEB_APP));
 
@@ -107,6 +117,33 @@ describe("web_app mode", () => {
     punch("adms", "09:05", { status: "pending" });
     await run();
     expect(record()).toMatchObject({ device_first_seen_at: null, has_pending_punches: true });
+  });
+
+  it("clocked out, then in again → open again; hours are the closed session only", async () => {
+    punch("web", "10:00");
+    punch("web", "13:00");
+    punch("web", "14:00");
+    await run();
+    expect(record()).toMatchObject({
+      clock_in_at: ist("10:00"),
+      clock_out_at: null,
+      total_minutes: 180,
+    });
+  });
+
+  it("two full sessions → closed; the break between them doesn't count", async () => {
+    punch("web", "10:00");
+    punch("web", "13:00");
+    punch("web", "14:00");
+    punch("web", "19:00");
+    await run();
+    expect(record()).toMatchObject({
+      clock_in_at: ist("10:00"),
+      clock_out_at: ist("19:00"),
+      total_minutes: 480,
+      worked_minutes: 480,
+      break_minutes: 60,
+    });
   });
 
   it("no punches at all → no record", async () => {

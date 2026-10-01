@@ -79,7 +79,7 @@ export async function fetchAttendanceReportData(
     });
   }
 
-  const [records, events, holidayRows, leaveRows, policyRow, deptOvRows, empOvRows, orgRow] =
+  const [records, events, holidayRows, leaveRows, policyRow, deptOvRows, empOvRows, orgRow, wfhRows] =
     await Promise.all([
       fetchAll((a, b) =>
         // FK-disambiguated embed (departments!department_id precedent above):
@@ -124,6 +124,11 @@ export async function fetchAttendanceReportData(
       sb.from("department_week_off_override").select("department_id, week_type, off_days, alt_saturday_rule").eq("org_id", orgId),
       sb.from("employee_week_off_override").select("employee_id, week_type, off_days, alt_saturday_rule").eq("org_id", orgId),
       sb.from("organizations").select("settings").eq("id", orgId).maybeSingle(),
+      sb.from("wfh_requests")
+        .select("employee_id, date")
+        .eq("org_id", orgId).eq("status", "approved")
+        .gte("date", from).lte("date", to)
+        .in("employee_id", empIds),
     ]);
 
   if (holidayRows.error) throw new Error(holidayRows.error.message);
@@ -182,6 +187,8 @@ export async function fetchAttendanceReportData(
     events: events as RawReportInputs["events"],
     holidays: (holidayRows.data ?? []) as { date: string }[],
     leaves: (leaveRows ?? []) as RawReportInputs["leaves"],
+    // Missing table (migration 113 unapplied) → no WFH days, never a failed report.
+    wfh: wfhRows.error ? [] : ((wfhRows.data ?? []) as RawReportInputs["wfh"]),
     orgPolicy, deptOverrides, empOverrides,
     timekeeping: normalizeTimekeepingSettings((orgRow.data as any)?.settings),
   });

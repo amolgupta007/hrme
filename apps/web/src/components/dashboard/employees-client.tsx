@@ -40,6 +40,7 @@ export function EmployeesClient({ employees, departments, role, onboardingData }
   const [deptFilter, setDeptFilter] = React.useState("all");
   const [roleFilter, setRoleFilter] = React.useState("all");
   const [statusFilter, setStatusFilter] = React.useState("all");
+  const [arrangementFilter, setArrangementFilter] = React.useState("all");
   // Invite state
   const [sendingInvites, setSendingInvites] = React.useState(false);
   const [syncingLogins, setSyncingLogins] = React.useState(false);
@@ -67,9 +68,13 @@ export function EmployeesClient({ employees, departments, role, onboardingData }
       if (deptFilter !== "all" && emp.department_name !== deptFilter) return false;
       if (roleFilter !== "all" && emp.role !== roleFilter) return false;
       if (statusFilter !== "all" && emp.status !== statusFilter) return false;
+      if (
+        arrangementFilter !== "all" &&
+        ((emp as { work_arrangement?: string }).work_arrangement ?? "office") !== arrangementFilter
+      ) return false;
       return true;
     });
-  }, [employees, search, deptFilter, roleFilter, statusFilter]);
+  }, [employees, search, deptFilter, roleFilter, statusFilter, arrangementFilter]);
 
   // Sort
   const sorted = React.useMemo(() => {
@@ -106,12 +111,14 @@ export function EmployeesClient({ employees, departments, role, onboardingData }
     return names;
   }, [employees]);
 
-  const hasActiveFilters = deptFilter !== "all" || roleFilter !== "all" || statusFilter !== "all";
+  const hasActiveFilters =
+    deptFilter !== "all" || roleFilter !== "all" || statusFilter !== "all" || arrangementFilter !== "all";
 
   function clearFilters() {
     setDeptFilter("all");
     setRoleFilter("all");
     setStatusFilter("all");
+    setArrangementFilter("all");
   }
 
   async function handleSendAllInvites() {
@@ -214,11 +221,22 @@ export function EmployeesClient({ employees, departments, role, onboardingData }
             value={statusFilter}
             onValueChange={setStatusFilter}
             placeholder="Status"
+            allLabel="All statuses"
             options={[
               { value: "active", label: "Active" },
               { value: "on_leave", label: "On Leave" },
               { value: "inactive", label: "Inactive" },
               { value: "terminated", label: "Terminated" },
+            ]}
+          />
+          <FilterSelect
+            value={arrangementFilter}
+            onValueChange={setArrangementFilter}
+            placeholder="Work arrangement"
+            options={[
+              { value: "office", label: "Office" },
+              { value: "hybrid", label: "Hybrid" },
+              { value: "remote", label: "Remote" },
             ]}
           />
           {hasActiveFilters && (
@@ -302,11 +320,14 @@ function FilterSelect({
   value,
   onValueChange,
   placeholder,
+  allLabel,
   options,
 }: {
   value: string;
   onValueChange: (v: string) => void;
   placeholder: string;
+  /** Label for the "show everything" option; defaults to "All <placeholder>s". */
+  allLabel?: string;
   options: { value: string; label: string }[];
 }) {
   const isActive = value !== "all";
@@ -335,7 +356,7 @@ function FilterSelect({
               value={NONE}
               className="relative flex cursor-pointer select-none items-center rounded-md px-2 py-1.5 text-sm outline-none hover:bg-accent data-[highlighted]:bg-accent"
             >
-              <Select.ItemText>All {placeholder}s</Select.ItemText>
+              <Select.ItemText>{allLabel ?? `All ${placeholder}s`}</Select.ItemText>
             </Select.Item>
             {options.map((opt) => (
               <Select.Item

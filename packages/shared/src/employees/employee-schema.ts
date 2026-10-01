@@ -20,6 +20,8 @@ export const employeeSchema = z
     designation: z.string().optional(),
     dateOfJoining: z.string().min(1, "Date of joining is required"),
     employmentType: z.enum(["full_time", "part_time", "contract", "intern"]),
+    /** Office (default) · Hybrid · Remote — remote staff never need a WFH request. */
+    workArrangement: z.enum(["office", "hybrid", "remote"]).optional(),
     role: z.enum(["admin", "manager", "employee"]),
     reportingManagerId: z.string().uuid().optional().or(z.literal("")),
     reportingManager2Id: z.string().uuid().optional().or(z.literal("")),

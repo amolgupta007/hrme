@@ -30,6 +30,8 @@ export type ReportDay = {
   firstIn: string | null;
   lastOut: string | null;
   statusCode: StatusCode;
+  /** An approved work-from-home day (a working day — status code still reflects hours). */
+  wfh: boolean;
 };
 export type ReportSummary = {
   fullDays: number;
@@ -40,6 +42,8 @@ export type ReportSummary = {
   holidays: number;
   /** Seen at the office by a device but never clocked in (web-only timekeeping). */
   notClockedIn: number;
+  /** Approved work-from-home days in the range. */
+  wfhDays: number;
 };
 export type ReportEmployee = {
   id: string;
@@ -82,6 +86,8 @@ export type RawReportInputs = {
   timekeeping?: TimekeepingSettings;
   holidays: { date: string }[];
   leaves: { employee_id: string; start_date: string; end_date: string }[];
+  /** Approved work-from-home days (optional — older callers omit it). */
+  wfh?: { employee_id: string; date: string }[];
   orgPolicy: WeekOffPolicy;
   deptOverrides: Record<string, WeekOffOverride>;
   empOverrides: Record<string, WeekOffOverride>;
@@ -163,6 +169,7 @@ export function formatHours(minutes: number): string {
 export function buildReportData(input: RawReportInputs): AttendanceReportData {
   const dates = enumerateDates(input.from, input.to);
   const holidaySet = new Set(input.holidays.map((h) => h.date));
+  const wfhSet = new Set((input.wfh ?? []).map((w) => `${w.employee_id}|${w.date}`));
 
   const recordsByEmpDate = new Map<string, RawReportInputs["records"][number]>();
   for (const r of input.records) recordsByEmpDate.set(`${r.employee_id}:${r.date}`, r);
@@ -193,7 +200,7 @@ export function buildReportData(input: RawReportInputs): AttendanceReportData {
     let totalMinutes = 0;
     let daysPresent = 0;
     const summary: ReportSummary = {
-      fullDays: 0, halfDays: 0, absents: 0, weekOffs: 0, leaves: 0, holidays: 0, notClockedIn: 0,
+      fullDays: 0, halfDays: 0, absents: 0, weekOffs: 0, leaves: 0, holidays: 0, notClockedIn: 0, wfhDays: 0,
     };
 
     const days: ReportDay[] = dates.map((date) => {
@@ -235,6 +242,8 @@ export function buildReportData(input: RawReportInputs): AttendanceReportData {
       const worked = minutes > 0 || pairs.length > 0;
 
       const onLeave = empLeaves.some((l) => l.start_date <= date && date <= l.end_date);
+      const isWfh = wfhSet.has(`${emp.id}|${date}`);
+      if (isWfh) summary.wfhDays += 1;
       let state: DayState;
       if (holidaySet.has(date)) state = "holiday";
       else if (onLeave) state = "leave";
@@ -280,6 +289,7 @@ export function buildReportData(input: RawReportInputs): AttendanceReportData {
         firstIn: pairs.length > 0 ? pairs[0].in : null,
         lastOut: pairs.length > 0 ? pairs[pairs.length - 1].out : null,
         statusCode,
+        wfh: isWfh,
       };
     });
 
@@ -299,7 +309,7 @@ export function buildReportData(input: RawReportInputs): AttendanceReportData {
 export function csvRows(data: AttendanceReportData): string[][] {
   const rows: string[][] = [[
     "date", "employee", "department", "state", "status_code", "hours",
-    "punch_pairs", "source", "auto_closed", "out_of_zone", "late",
+    "punch_pairs", "source", "auto_closed", "out_of_zone", "late", "wfh",
   ]];
   const markerToSource: Record<string, string> = { d: "device", m: "mobile", w: "web", "*": "auto_close" };
   for (const emp of data.employees) {
@@ -314,6 +324,7 @@ export function csvRows(data: AttendanceReportData): string[][] {
         day.autoClosed ? "yes" : "",
         day.outOfZoneCount > 0 ? String(day.outOfZoneCount) : "",
         day.isLate ? "yes" : "",
+        day.wfh ? "yes" : "",
       ]);
     }
   }

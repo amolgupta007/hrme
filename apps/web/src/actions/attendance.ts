@@ -12,6 +12,7 @@ import { normalizeTimekeepingSettings, type TimekeepingMode } from "@jambahr/sha
 import { isTooSoonToClockOut } from "@/lib/attendance/clock-out-guard";
 import { loadTodaySessions } from "@/lib/attendance/web-sessions";
 import type { WorkSession } from "@jambahr/shared/attendance/sessions";
+import { loadApprovedWfhDays } from "@/lib/attendance/wfh-days";
 
 export type AttendanceSettings = {
   standardWorkdayHours: number;
@@ -115,6 +116,10 @@ export type AttendanceRecord = {
   /** First/last time a biometric device saw them (web-only timekeeping: presence only). */
   device_first_seen_at: string | null;
   device_last_seen_at: string | null;
+  /** Employee's work arrangement: office | hybrid | remote. */
+  work_arrangement: string;
+  /** An approved work-from-home request covers this day. */
+  is_wfh: boolean;
 };
 
 export type TodayStatus = {
@@ -282,7 +287,7 @@ export async function clockIn(ipAddress?: string): Promise<ActionResult<Attendan
     .eq("org_id", user.orgId)
     .eq("employee_id", user.employeeId)
     .eq("date", istToday)
-    .select(`*, employees!employee_id(first_name, last_name)`)
+    .select(`*, employees!employee_id(first_name, last_name, work_arrangement)`)
     .single();
 
   if (error) return { success: false, error: error.message };
@@ -357,7 +362,7 @@ export async function clockOut(): Promise<ActionResult<AttendanceRecord>> {
 
   const { data, error } = await supabase
     .from("attendance_records")
-    .select(`*, employees!employee_id(first_name, last_name)`)
+    .select(`*, employees!employee_id(first_name, last_name, work_arrangement)`)
     .eq("org_id", user.orgId)
     .eq("employee_id", user.employeeId)
     .eq("date", today)
@@ -393,7 +398,7 @@ export async function getTodayStatus(): Promise<ActionResult<TodayStatus>> {
 
   const { data } = await supabase
     .from("attendance_records")
-    .select(`*, employees!employee_id(first_name, last_name)`)
+    .select(`*, employees!employee_id(first_name, last_name, work_arrangement)`)
     .eq("org_id", user.orgId)
     .eq("employee_id", user.employeeId)
     .eq("date", today)
@@ -431,7 +436,7 @@ export async function listAttendance(filters?: {
 
   let query = supabase
     .from("attendance_records")
-    .select(`*, employees!employee_id(first_name, last_name)`)
+    .select(`*, employees!employee_id(first_name, last_name, work_arrangement)`)
     .eq("org_id", user.orgId)
     .order("date", { ascending: false })
     .order("clock_in_at", { ascending: false });
@@ -466,7 +471,7 @@ export async function listAttendance(filters?: {
   const { data, error } = await query.limit(100);
   if (error) return { success: false, error: error.message };
 
-  return { success: true, data: (data ?? []).map(formatRecord) };
+  return { success: true, data: await annotateWfh(supabase, user.orgId, (data ?? []).map(formatRecord)) };
 }
 
 // ---- Team today overview (managers/admins) ----
@@ -504,7 +509,7 @@ export async function getTeamTodayAttendance(): Promise<ActionResult<{
     .eq("status", "active");
   let recordsQuery = supabase
     .from("attendance_records")
-    .select(`*, employees!employee_id(first_name, last_name)`)
+    .select(`*, employees!employee_id(first_name, last_name, work_arrangement)`)
     .eq("org_id", user.orgId)
     .eq("date", today);
   if (scopedIds !== null) {
@@ -517,7 +522,7 @@ export async function getTeamTodayAttendance(): Promise<ActionResult<{
     recordsQuery,
   ]);
 
-  const records = (todayRecords ?? []).map(formatRecord);
+  const records = await annotateWfh(supabase, user.orgId, (todayRecords ?? []).map(formatRecord));
   // Present = clocked in, or seen at the office by a device (web-only
   // timekeeping orgs: seen-but-not-clocked-in still counts as present).
   const present = records.filter((r) => r.clock_in_at || r.device_first_seen_at).length;
@@ -530,6 +535,20 @@ export async function getTeamTodayAttendance(): Promise<ActionResult<{
 }
 
 // ---- Helper ----
+/** Mark records whose day is an approved work-from-home day. */
+async function annotateWfh(
+  supabase: ReturnType<typeof createAdminSupabase>,
+  orgId: string,
+  records: AttendanceRecord[],
+): Promise<AttendanceRecord[]> {
+  if (records.length === 0) return records;
+  const dates = records.map((r) => r.date).sort();
+  const wfh = await loadApprovedWfhDays(supabase, orgId, dates[0], dates[dates.length - 1], [
+    ...new Set(records.map((r) => r.employee_id)),
+  ]);
+  return records.map((r) => (wfh.get(r.employee_id)?.has(r.date) ? { ...r, is_wfh: true } : r));
+}
+
 function formatRecord(raw: any): AttendanceRecord {
   const emp = raw.employees;
   const name = emp ? `${emp.first_name} ${emp.last_name}` : "Unknown";
@@ -551,6 +570,8 @@ function formatRecord(raw: any): AttendanceRecord {
     attributed_date: raw.attributed_date ?? null,
     device_first_seen_at: raw.device_first_seen_at ?? null,
     device_last_seen_at: raw.device_last_seen_at ?? null,
+    work_arrangement: emp?.work_arrangement ?? "office",
+    is_wfh: false,
   };
 }
 

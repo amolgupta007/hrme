@@ -14,6 +14,7 @@ import { OvertimeTab } from "./overtime-tab";
 import { DailyAttendanceTab } from "./daily-attendance-tab";
 import { AttendanceReportsTab } from "./attendance-reports-tab";
 import { LatePenaltiesTab } from "./late-penalties-tab";
+import { WorkArrangementBadge } from "@/components/employees/work-arrangement-badge";
 import { MyLateBanner } from "./my-late-banner";
 import type { MyLateStatus } from "@/actions/late-policy";
 import { PunchTimelineDialog } from "./punch-timeline-dialog";
@@ -59,6 +60,17 @@ function formatDuration(minutes: number | null) {
  * show where the device saw them (context for disputes). Hidden when the device
  * itself is the timekeeper (its first punch IS the clock-in).
  */
+function WfhChip() {
+  return (
+    <span
+      className="inline-flex items-center rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-medium text-violet-700 dark:bg-violet-900/30 dark:text-violet-300"
+      title="Approved work-from-home day"
+    >
+      WFH
+    </span>
+  );
+}
+
 function SeenAtOffice({ rec }: { rec: AttendanceRecord }) {
   if (!rec.device_first_seen_at || !rec.clock_in_at || rec.source === "device") return null;
   return (
@@ -339,7 +351,11 @@ export function AttendanceClient({ today, history, team, employees, isManager, i
               {team.records.map((rec) => (
                 <div key={rec.id} className="flex items-center justify-between px-5 py-3">
                   <div>
-                    <p className="text-sm font-medium">{rec.employee_name}</p>
+                    <p className="flex flex-wrap items-center gap-1.5 text-sm font-medium">
+                      {rec.employee_name}
+                      <WorkArrangementBadge arrangement={rec.work_arrangement} />
+                      {rec.is_wfh && <WfhChip />}
+                    </p>
                     <p className="text-xs text-muted-foreground mt-0.5 flex flex-wrap items-center gap-x-1.5">
                       {rec.clock_in_at ? (
                         <>
@@ -445,6 +461,7 @@ export function AttendanceClient({ today, history, team, employees, isManager, i
                           Auto clock-out
                         </span>
                       )}
+                      {rec.is_wfh && <WfhChip />}
                     </p>
                   </div>
                   <div className="flex items-center gap-3">

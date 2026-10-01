@@ -2899,6 +2899,7 @@ export type Database = {
           updated_at: string
           whatsapp_opt_in: boolean
           whatsapp_opt_in_at: string | null
+          work_arrangement: string
         }
         Insert: {
           aadhar_number?: string | null
@@ -2936,6 +2937,7 @@ export type Database = {
           updated_at?: string
           whatsapp_opt_in?: boolean
           whatsapp_opt_in_at?: string | null
+          work_arrangement?: string
         }
         Update: {
           aadhar_number?: string | null
@@ -2973,6 +2975,7 @@ export type Database = {
           updated_at?: string
           whatsapp_opt_in?: boolean
           whatsapp_opt_in_at?: string | null
+          work_arrangement?: string
         }
         Relationships: [
           {
@@ -6761,6 +6764,69 @@ export type Database = {
             foreignKeyName: "week_off_policy_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: true
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wfh_requests: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          date: string
+          decided_at: string | null
+          decided_by: string | null
+          decision_note: string | null
+          employee_id: string
+          id: string
+          org_id: string
+          over_quota: boolean
+          reason: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          date: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_note?: string | null
+          employee_id: string
+          id?: string
+          org_id: string
+          over_quota?: boolean
+          reason?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          date?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_note?: string | null
+          employee_id?: string
+          id?: string
+          org_id?: string
+          over_quota?: boolean
+          reason?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wfh_requests_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wfh_requests_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
             referencedRelation: "organizations"
             referencedColumns: ["id"]
           },

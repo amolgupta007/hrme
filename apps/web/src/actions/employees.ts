@@ -203,6 +203,7 @@ export async function addEmployee(
       designation: validated.data.designation || null,
       date_of_joining: validated.data.dateOfJoining,
       employment_type: validated.data.employmentType,
+      work_arrangement: validated.data.workArrangement ?? "office",
       role: validated.data.role,
       reporting_manager_id: validated.data.reportingManagerId || null,
       reporting_manager_2_id:
@@ -320,6 +321,7 @@ export async function updateEmployee(
       designation: validated.data.designation || null,
       date_of_joining: validated.data.dateOfJoining,
       employment_type: validated.data.employmentType,
+      ...(validated.data.workArrangement ? { work_arrangement: validated.data.workArrangement } : {}),
       role,
       reporting_manager_id: validated.data.reportingManagerId || null,
       reporting_manager_2_id:

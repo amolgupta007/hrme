@@ -28,6 +28,7 @@ const EMPTY_FORM = {
   designation: "",
   dateOfJoining: new Date().toISOString().split("T")[0],
   employmentType: "full_time" as const,
+  workArrangement: "office" as "office" | "hybrid" | "remote",
   role: "employee" as const,
   reportingManagerId: "",
   reportingManager2Id: "",
@@ -51,6 +52,8 @@ export function EmployeeForm({ open, onOpenChange, employee, departments, employ
         designation: employee.designation ?? "",
         dateOfJoining: employee.date_of_joining,
         employmentType: employee.employment_type as typeof EMPTY_FORM.employmentType,
+        workArrangement: ((employee as { work_arrangement?: string }).work_arrangement ??
+          "office") as typeof EMPTY_FORM.workArrangement,
         role: (employee.role === "owner" ? "admin" : employee.role) as typeof EMPTY_FORM.role,
         reportingManagerId: employee.reporting_manager_id ?? "",
         reportingManager2Id: employee.reporting_manager_2_id ?? "",
@@ -227,6 +230,18 @@ export function EmployeeForm({ open, onOpenChange, employee, departments, employ
                 />
               </Field>
             </div>
+
+            <Field label="Work arrangement">
+              <SelectField
+                value={form.workArrangement}
+                onValueChange={(v) => set("workArrangement", v)}
+                options={[
+                  { value: "office", label: "Office — works from the office" },
+                  { value: "hybrid", label: "Hybrid — some days from home" },
+                  { value: "remote", label: "Remote — works from home full time" },
+                ]}
+              />
+            </Field>
 
             <div className="grid grid-cols-2 gap-4">
               <Field label="Department">

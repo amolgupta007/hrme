@@ -21,17 +21,28 @@ export async function sendAccountSetupInvite(
   }
 ): Promise<SendAccountSetupResult> {
   const base = process.env.NEXT_PUBLIC_APP_URL ?? "https://jambahr.com";
-  // Point at sign-UP, not sign-in: the invitee has an employees row but no Clerk
-  // account yet, so /sign-in rejects them with "email not found". Clerk's sign-up
-  // card carries a "Sign in instead" link, so this is safe for someone who does
-  // already have an account. Prefilled so the address matches the row exactly.
-  const setupUrl = `${base}/sign-up?email=${encodeURIComponent(input.email)}`;
+  // Two cases. Employees added with a phone get a Clerk account up front
+  // (syncEmployeeAuthIdentifiers) — for them /sign-up fails ("email taken"), so
+  // send them to /sign-in, where an emailed code gets them in. Email-only
+  // employees have no Clerk account yet, so /sign-in would reject them with
+  // "email not found" (PR #39); they still go to /sign-up, prefilled so the
+  // address matches the row exactly.
+  const { data: row } = await supabase
+    .from("employees")
+    .select("clerk_user_id")
+    .eq("id", input.employeeId)
+    .maybeSingle();
+  const hasAccount = !!(row as { clerk_user_id: string | null } | null)?.clerk_user_id;
+  const setupUrl = hasAccount
+    ? `${base}/sign-in`
+    : `${base}/sign-up?email=${encodeURIComponent(input.email)}`;
   try {
     const html = await render(
       AccountSetupEmail({
         orgName: input.orgName,
         firstName: input.firstName ?? "there",
         setupUrl,
+        hasAccount,
       })
     );
     await resend.emails.send({

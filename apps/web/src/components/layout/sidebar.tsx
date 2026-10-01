@@ -27,6 +27,7 @@ import {
   Bug,
   Briefcase,
   FileSignature,
+  KeyRound,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -182,6 +183,11 @@ export function Sidebar({ badges, role, plan, features, employmentType }: { badg
                 label="My Profile"
                 labelIcon={<UserCircle className="h-4 w-4" />}
                 href="/dashboard/profile"
+              />
+              <UserButton.Link
+                label="Set or change password"
+                labelIcon={<KeyRound className="h-4 w-4" />}
+                href="/account/security"
               />
               <UserButton.Link
                 label="My Feedback"

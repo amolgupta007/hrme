@@ -419,6 +419,20 @@ export async function recomputeAttendanceDay(
   // device saw them (web_app mode: present, but not clocked in).
   if (result.status === "absent" && !hasPending && !deviceSeen) return;
 
+  // web_app mode = clock in and out as often as you like: punches alternate
+  // in/out, so an ODD count means clocked in right now (no clock-out yet), and
+  // hours are the closed sessions only — the gaps between them don't count.
+  // The first clock-in stays the day's arrival (lateness keys on it). 'all'
+  // mode keeps first-in → last-out (gross span), unchanged.
+  const sessionDay = mode === "web_app";
+  const openSession = sessionDay && result.punchCount % 2 === 1;
+  const clockOutAt = openSession ? null : result.lastOutAt;
+  const totalMinutes = sessionDay
+    ? result.punchCount >= 2
+      ? result.workedMinutes
+      : null
+    : result.totalMinutes;
+
   // Rollup source label — precedence device/adms > mobile > web > device-fallback
   // (see resolveRollupSource). Uses the same `rows` set as the original stamping
   // logic so device/mobile detection stays byte-identical; only the new 'web'
@@ -436,8 +450,8 @@ export async function recomputeAttendanceDay(
       employee_id: employeeId,
       date: istDate,
       clock_in_at: result.firstInAt,
-      clock_out_at: result.lastOutAt,
-      total_minutes: result.totalMinutes,
+      clock_out_at: clockOutAt,
+      total_minutes: totalMinutes,
       worked_minutes: result.workedMinutes,
       break_minutes: result.breakMinutes,
       needs_review: result.needsReview || hasPending,
@@ -445,7 +459,7 @@ export async function recomputeAttendanceDay(
       source: rollupSource, // device/adms > mobile > web precedence (resolveRollupSource; migration 102)
       // Phase 2 multi-location rollup fields (derived from the event stream).
       first_in_location_id: result.firstInLocationId,
-      last_out_location_id: result.lastOutLocationId,
+      last_out_location_id: openSession ? null : result.lastOutLocationId,
       punch_count: result.punchCount,
       out_of_zone_count: result.outOfZoneCount,
       derived_status: result.status,

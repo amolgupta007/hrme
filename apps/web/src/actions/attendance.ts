@@ -10,6 +10,8 @@ import { attributedDateForClockIn } from "@/lib/attendance/attribute-date";
 import { recomputeAttendanceDay } from "@/lib/attendance/adms-ingest";
 import { normalizeTimekeepingSettings, type TimekeepingMode } from "@jambahr/shared/attendance/timekeeping";
 import { isTooSoonToClockOut } from "@/lib/attendance/clock-out-guard";
+import { loadTodaySessions } from "@/lib/attendance/web-sessions";
+import type { WorkSession } from "@jambahr/shared/attendance/sessions";
 
 export type AttendanceSettings = {
   standardWorkdayHours: number;
@@ -119,6 +121,14 @@ export type TodayStatus = {
   record: AttendanceRecord | null;
   isClockedIn: boolean;
   hoursToday: number | null;
+  /** Today's clock-in sessions, oldest first (only filled on multi-session days). */
+  sessions: WorkSession[];
+  /** Start of the session running now; null when clocked out. */
+  currentSessionStartAt: string | null;
+  /** Minutes in today's finished sessions (excludes the running one). */
+  closedMinutes: number;
+  /** Clocking in again after a clock-out is allowed today. */
+  multiSession: boolean;
 };
 
 /**
@@ -213,7 +223,15 @@ export async function clockIn(ipAddress?: string): Promise<ActionResult<Attendan
     .eq("date", istToday)
     .maybeSingle();
 
-  if (existing) {
+  const today = await loadTodaySessions(supabase, user.orgId, user.employeeId, istToday);
+  if (today.multiSession) {
+    // web_app orgs: clock in again after a clock-out, as often as needed today.
+    if (today.open) return { success: false, error: "You are already clocked in" };
+    // A new IN within 60s of the last OUT would be collapsed by the punch dedupe.
+    if (today.lastPunchAt && isTooSoonToClockOut(today.lastPunchAt, Date.now())) {
+      return { success: false, error: "Please wait a minute before clocking in again" };
+    }
+  } else if (existing) {
     if ((existing as any).clock_in_at && !(existing as any).clock_out_at) {
       return { success: false, error: "You are already clocked in" };
     }
@@ -296,16 +314,22 @@ export async function clockOut(): Promise<ActionResult<AttendanceRecord>> {
     .eq("date", today)
     .maybeSingle();
 
-  if (!existing || !(existing as any).clock_in_at) {
-    return { success: false, error: "You have not clocked in today" };
+  const sessions = await loadTodaySessions(supabase, user.orgId, user.employeeId, today);
+  if (sessions.multiSession) {
+    if (!sessions.open) return { success: false, error: "You are not clocked in" };
+  } else {
+    if (!existing || !(existing as any).clock_in_at) {
+      return { success: false, error: "You have not clocked in today" };
+    }
+    if ((existing as any).clock_out_at) {
+      return { success: false, error: "You have already clocked out today" };
+    }
   }
-  if ((existing as any).clock_out_at) {
-    return { success: false, error: "You have already clocked out today" };
-  }
-  // An OUT event within 60s of the IN event (both null-location web punches)
+  // An OUT event within 60s of the last IN event (both null-location web punches)
   // would be collapsed by dedupePunches — success-reported but silently no-op'd.
   // Block until the dedupe window has passed (see clock-out-guard.ts).
-  if (isTooSoonToClockOut((existing as any).clock_in_at, Date.now())) {
+  const lastInAt = sessions.multiSession ? sessions.lastPunchAt : (existing as any).clock_in_at;
+  if (lastInAt && isTooSoonToClockOut(lastInAt, Date.now())) {
     return { success: false, error: "Please wait a minute before clocking out" };
   }
 
@@ -349,7 +373,20 @@ export async function clockOut(): Promise<ActionResult<AttendanceRecord>> {
 export async function getTodayStatus(): Promise<ActionResult<TodayStatus>> {
   const user = await getCurrentUser();
   if (!user) return { success: false, error: "Not authenticated" };
-  if (!user.employeeId) return { success: true, data: { record: null, isClockedIn: false, hoursToday: null } };
+  if (!user.employeeId) {
+    return {
+      success: true,
+      data: {
+        record: null,
+        isClockedIn: false,
+        hoursToday: null,
+        sessions: [],
+        currentSessionStartAt: null,
+        closedMinutes: 0,
+        multiSession: false,
+      },
+    };
+  }
 
   const supabase = createAdminSupabase();
   const today = new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
@@ -362,13 +399,23 @@ export async function getTodayStatus(): Promise<ActionResult<TodayStatus>> {
     .eq("date", today)
     .single();
 
-  if (!data) return { success: true, data: { record: null, isClockedIn: false, hoursToday: null } };
+  const sessions = await loadTodaySessions(supabase, user.orgId, user.employeeId, today);
+  const sessionFields = {
+    sessions: sessions.multiSession ? sessions.sessions : [],
+    currentSessionStartAt: sessions.open ? sessions.sessions[sessions.sessions.length - 1].inAt : null,
+    closedMinutes: sessions.closedMinutes,
+    multiSession: sessions.multiSession,
+  };
+
+  if (!data) {
+    return { success: true, data: { record: null, isClockedIn: false, hoursToday: null, ...sessionFields } };
+  }
 
   const record = formatRecord(data);
   const isClockedIn = !!record.clock_in_at && !record.clock_out_at;
   const hoursToday = record.total_minutes ? record.total_minutes / 60 : null;
 
-  return { success: true, data: { record, isClockedIn, hoursToday } };
+  return { success: true, data: { record, isClockedIn, hoursToday, ...sessionFields } };
 }
 
 // ---- List attendance (my own or team for managers) ----

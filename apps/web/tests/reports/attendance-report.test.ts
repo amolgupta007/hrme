@@ -192,7 +192,7 @@ describe("per-employee summary counts", () => {
       // 07-06 Mon & 07-07 Tue = absent, 07-08 Wed = future (> todayIst).
     })).employees[0];
     expect(emp.summary).toEqual({
-      fullDays: 1, halfDays: 1, absents: 2, weekOffs: 1, leaves: 1, holidays: 1, notClockedIn: 0,
+      fullDays: 1, halfDays: 1, absents: 2, weekOffs: 1, leaves: 1, holidays: 1, notClockedIn: 0, wfhDays: 0,
     });
     // 2026-07-08 is future (todayIst = 07) and must not be counted anywhere.
     const total = Object.values(emp.summary).reduce((a, b) => a + b, 0);
@@ -274,6 +274,24 @@ describe("helpers", () => {
   });
 });
 
+describe("work-from-home days", () => {
+  it("flags an approved WFH day and counts it, keeping the hours-based status", () => {
+    const emp = buildReportData(baseInput({
+      from: "2026-07-01", to: "2026-07-02", todayIst: "2026-07-07",
+      wfh: [{ employee_id: "e1", date: "2026-07-01" }],
+      records: [
+        { employee_id: "e1", date: "2026-07-01", clock_in_at: "2026-07-01T03:30:00Z", clock_out_at: "2026-07-01T11:30:00Z", total_minutes: 480, source: "web", auto_closed: false, out_of_zone_count: 0, is_late: false, half_day_threshold_minutes: 240 },
+      ],
+    })).employees[0];
+    const day = emp.days.find((d) => d.date === "2026-07-01")!;
+    expect(day.wfh).toBe(true);
+    expect(day.statusCode).toBe("FD");
+    expect(day.state).toBe("worked");
+    expect(emp.summary.wfhDays).toBe(1);
+    expect(emp.days.find((d) => d.date === "2026-07-02")!.wfh).toBe(false);
+  });
+});
+
 describe("csvRows", () => {
   it("emits header + one row per employee-day with pair string and status_code", () => {
     const rows = csvRows(buildReportData(baseInput({
@@ -284,7 +302,7 @@ describe("csvRows", () => {
       ],
     })));
     // status_code column added after "state" (plan §5 Task 1).
-    expect(rows[0]).toEqual(["date", "employee", "department", "state", "status_code", "hours", "punch_pairs", "source", "auto_closed", "out_of_zone", "late"]);
+    expect(rows[0]).toEqual(["date", "employee", "department", "state", "status_code", "hours", "punch_pairs", "source", "auto_closed", "out_of_zone", "late", "wfh"]);
     const worked = rows.find((r) => r[0] === "2026-07-02")!;
     expect(worked[1]).toBe("Priya S");
     expect(worked[3]).toBe("worked");

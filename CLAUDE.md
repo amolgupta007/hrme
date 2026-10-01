@@ -752,6 +752,24 @@ For orgs that timekeep on the web (first: Medialoop). Plan: `docs/planning/2026-
 - **Multiple sessions per day (web_app mode only):** employees can clock out and back in as often as they like until the day ends. Punches alternate in/out by time order — an odd count = clocked in now (`clock_out_at` NULL), `total_minutes` = sum of closed sessions (breaks excluded), first clock-in stays the arrival (lateness). Pure logic `@jambahr/shared/attendance/sessions` (`deriveWorkSessions`, `autoCloseInstant`); today's sessions via `loadTodaySessions` (`src/lib/attendance/web-sessions.ts`). The midnight auto clock-out closes only the last open session and never before the last clock-in (2 min after it). `all` mode keeps first-in → last-out. Web history shows an "Auto clock-out" chip on `auto_closed` days.
 - **Not yet:** per-employee exceptions, a nudge to people who badged but didn't clock in, mobile admin Home presence counts.
 
+## Work from home + work arrangement (2026-10-01, branch `feat/wfh-requests`)
+
+WFH is its **own request**, not a leave type. A WFH day is a working day: they still clock in, and lateness applies. Leave means "not working" to reports, lateness, insights and the directory. Plan: `docs/planning/2026-10-01-work-from-home-requests.md`.
+
+- **Migration 113** (applied to live HRme 2026-10-01): `employees.work_arrangement` (`office` default | `hybrid` | `remote`) + `wfh_requests` (one row per DAY; `status` pending/approved/rejected/cancelled; `over_quota`; partial unique `(employee_id, date)` among pending/approved; RLS on, no policies → service role only).
+- **Policy** `organizations.settings.attendance.wfh = { enabled, monthly_allowance }` (Settings → Attendance → Work from home, `wfh-policy-card.tsx`).
+- **Rules** (pure, `@jambahr/shared/attendance/wfh`):
+  - `planWfhRequest`: remote never asks; no past days, though today is allowed; no overlap with pending/approved leave; pending + approved count toward the IST-month allowance, and days beyond it are `over_quota`.
+  - `canDecideWfh`: owner/admin always; reporting manager(s) only within the allowance.
+  - `reflagOverQuota`: runs on cancel/reject, so a freed slot moves the next pending day back to the manager.
+- **Actions** `src/actions/wfh.ts`: `getMyWfh`, `requestWfh`, `cancelWfh`, `listWfhApprovals`, `decideWfh` (a reason is required to not approve), `get/updateWfhPolicy`. Emails go via `wfh-request.tsx`: the request goes to the reporting manager(s), plus admins when over the allowance or no manager is set; the decision goes to the employee.
+- **UI:**
+  - Leaves page `WfhPanel`: quota, request dialog, my requests, approvals.
+  - Remote/Hybrid badge (`components/employees/work-arrangement-badge.tsx`) in Employees (+ "Work arrangement" filter), Directory and Team Today.
+  - "WFH" chip on Team Today/History.
+  - Report: `ReportDay.wfh`, `summary.wfhDays`, CSV `wfh` column. The status code still reflects hours.
+- **Not yet:** mobile request/approvals and mobile badges (phase 3); hybrid fixed days; flagging a remote punch without approval; pending-count badge in the sidebar; server-action tests (the fake Supabase can't do embeds; the pure rules are tested).
+
 ## Location-verified clock-in (Settings → Attendance) — shipped 2026-08-12 (D5)
 
 Optional per-org: a **mobile** punch carries a coarse GPS fix, and the server decides — against the org's office geofences — whether it happened at an office or remote, reverse-geocoding remote punches to a locality ("Andheri East, Mumbai"). Off by default; the whole feature is dark until an admin enables it. Plan: `docs/superpowers/plans/2026-08-12-mobile-d5-geo-punch-and-prd-04-05.md`.

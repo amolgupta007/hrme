@@ -16,6 +16,7 @@ import { terminateEmployee } from "@/actions/employees";
 import { sendInvite, resendInvite } from "@/actions/invites";
 import { reprovisionPhoneEmployee } from "@/actions/employees";
 import { EmployeeBankAccountDialog } from "./employee-bank-account-dialog";
+import { WorkArrangementBadge } from "@/components/employees/work-arrangement-badge";
 import type { Employee, Department } from "@/types";
 
 type EmployeeWithDept = Employee & {
@@ -143,6 +144,7 @@ export function EmployeeTable({
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-medium">{fullName}</span>
                           <RoleBadge role={emp.role} />
+                          <WorkArrangementBadge arrangement={(emp as { work_arrangement?: string }).work_arrangement} />
                         </div>
                         <div className="text-xs text-muted-foreground">
                           {emp.email || emp.phone || "—"}

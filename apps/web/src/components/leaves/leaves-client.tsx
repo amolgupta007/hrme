@@ -16,6 +16,8 @@ interface LeavesClientProps {
   balances: EmployeeBalance[];
   role: UserRole;
   currentEmployeeId: string | null;
+  /** Work-from-home panel (rendered by the server page). */
+  wfhSlot?: React.ReactNode;
 }
 
 const TYPE_COLORS: Record<string, string> = {
@@ -28,7 +30,7 @@ const TYPE_COLORS: Record<string, string> = {
   custom:    "bg-muted text-muted-foreground",
 };
 
-export function LeavesClient({ employees, policies, requests, balances, role, currentEmployeeId }: LeavesClientProps) {
+export function LeavesClient({ employees, policies, requests, balances, role, currentEmployeeId, wfhSlot }: LeavesClientProps) {
   const [formOpen, setFormOpen] = React.useState(false);
   const [filter, setFilter] = React.useState("all");
   const canApprove = hasPermission(role, "manager");
@@ -73,6 +75,8 @@ export function LeavesClient({ employees, policies, requests, balances, role, cu
           })}
         </div>
       )}
+
+      {wfhSlot}
 
       {/* Requests table */}
       <div>

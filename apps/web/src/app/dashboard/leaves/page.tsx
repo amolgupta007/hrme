@@ -2,15 +2,20 @@ import { listLeavePolicies, listLeaveRequests, listEmployeeBalances } from "@/ac
 import { listEmployees } from "@/actions/employees";
 import { getCurrentUser } from "@/lib/current-user";
 import { LeavesClient } from "@/components/leaves/leaves-client";
+import { WfhPanel } from "@/components/leaves/wfh-panel";
+import { getMyWfh, listWfhApprovals } from "@/actions/wfh";
 
 export default async function LeavesPage() {
-  const [policiesResult, requestsResult, employeesResult, balancesResult, userCtx] = await Promise.all([
-    listLeavePolicies(),
-    listLeaveRequests(),
-    listEmployees(),
-    listEmployeeBalances(),
-    getCurrentUser(),
-  ]);
+  const [policiesResult, requestsResult, employeesResult, balancesResult, userCtx, myWfhResult, wfhApprovalsResult] =
+    await Promise.all([
+      listLeavePolicies(),
+      listLeaveRequests(),
+      listEmployees(),
+      listEmployeeBalances(),
+      getCurrentUser(),
+      getMyWfh(),
+      listWfhApprovals(),
+    ]);
 
   const policies = policiesResult.success ? policiesResult.data : [];
   const requests = requestsResult.success ? requestsResult.data : [];
@@ -38,7 +43,7 @@ export default async function LeavesPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Leave Management</h1>
         <p className="mt-1 text-muted-foreground">
-          Request time off and manage leave approvals.
+          Request time off or work from home, and manage approvals.
         </p>
       </div>
 
@@ -49,6 +54,12 @@ export default async function LeavesPage() {
         balances={balances}
         role={role}
         currentEmployeeId={currentEmployeeId}
+        wfhSlot={
+          <WfhPanel
+            my={myWfhResult.success ? myWfhResult.data : null}
+            approvals={wfhApprovalsResult.success ? wfhApprovalsResult.data : null}
+          />
+        }
       />
     </div>
   );

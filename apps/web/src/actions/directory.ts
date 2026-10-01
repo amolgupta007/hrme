@@ -17,6 +17,8 @@ export type DirectoryEmployee = {
   designation: string | null;
   role: string;
   employment_type: string;
+  /** office | hybrid | remote */
+  work_arrangement: string;
   status: string;
   is_on_leave: boolean;
   avatar_url: string | null;
@@ -34,7 +36,7 @@ export async function listDirectoryEmployees(): Promise<ActionResult<DirectoryEm
   const supabase = createAdminSupabase();
   const { data, error } = await supabase
     .from("employees")
-    .select("id, first_name, last_name, email, designation, role, employment_type, status, avatar_url, department_id, reporting_manager_id, reporting_manager_2_id, departments!department_id(name)")
+    .select("id, first_name, last_name, email, designation, role, employment_type, work_arrangement, status, avatar_url, department_id, reporting_manager_id, reporting_manager_2_id, departments!department_id(name)")
     .eq("org_id", orgId)
     .neq("status", "terminated")
     .order("first_name");
@@ -66,6 +68,7 @@ export async function listDirectoryEmployees(): Promise<ActionResult<DirectoryEm
     designation: e.designation,
     role: e.role,
     employment_type: e.employment_type,
+    work_arrangement: e.work_arrangement ?? "office",
     status: e.status,
     is_on_leave: onLeaveSet.has(e.id),
     avatar_url: e.avatar_url,

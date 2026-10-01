@@ -4,6 +4,7 @@ import * as React from "react";
 import { Search, LayoutGrid, GitBranch, Briefcase, Building2, UserCheck } from "lucide-react";
 import { cn, getInitials } from "@/lib/utils";
 import { OrgTree } from "./org-tree";
+import { WorkArrangementBadge } from "@/components/employees/work-arrangement-badge";
 import type { DirectoryEmployee } from "@/actions/directory";
 
 interface DirectoryClientProps {
@@ -163,6 +164,7 @@ function EmployeeCard({ employee: e }: { employee: DirectoryEmployee }) {
             )}>
               {e.role}
             </span>
+            <WorkArrangementBadge arrangement={e.work_arrangement} className="shrink-0" />
           </div>
           {e.designation && (
             <p className="text-xs text-muted-foreground truncate mt-0.5 flex items-center gap-1">

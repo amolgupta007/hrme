@@ -112,6 +112,7 @@ function chipText(emp: ReportEmployee): string {
   return (
     `Full Day : ${c.fullDays} · Half Day : ${c.halfDays} · Absent : ${c.absents} ` +
     (c.notClockedIn > 0 ? `· Not clocked in : ${c.notClockedIn} ` : "") +
+    (c.wfhDays > 0 ? `· WFH : ${c.wfhDays} ` : "") +
     `· Week Off : ${c.weekOffs} · Leave : ${c.leaves} · Holiday : ${c.holidays} ` +
     `· Total : ${formatHours(emp.totalMinutes)} h`
   );

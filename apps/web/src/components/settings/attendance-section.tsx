@@ -2,6 +2,7 @@
 
 import { WorkingHoursCard } from "./working-hours-card";
 import { TimekeepingSourceCard } from "./timekeeping-source-card";
+import { WfhPolicyCard } from "./wfh-policy-card";
 import { ShiftMasterCard } from "./shift-master-card";
 import { ShiftAssignmentsCard } from "./shift-assignments-card";
 import { WeekOffCard } from "./week-off-card";
@@ -52,6 +53,7 @@ export function AttendanceSection({ attendanceSettings, shifts, assignments, wee
         manage the fallback working hours used when no shift is assigned.
       </p>
       {attendanceSettings && <TimekeepingSourceCard settings={attendanceSettings} />}
+      <WfhPolicyCard />
       {attendanceSettings && <WorkingHoursCard settings={attendanceSettings} />}
       <ShiftMasterCard shifts={shifts} />
       <ShiftAssignmentsCard assignments={assignments} shifts={shifts} employees={employees} departments={departments} />

@@ -1,4 +1,16 @@
-import { Html, Head, Body, Container, Section, Text, Button, Hr } from "@react-email/components";
+import {
+  Html,
+  Head,
+  Body,
+  Container,
+  Section,
+  Text,
+  Button,
+  Hr,
+  Img,
+  Row,
+  Column,
+} from "@react-email/components";
 
 interface SignInOptionsEmailProps {
   firstName: string;
@@ -24,9 +36,16 @@ export function SignInOptionsEmail({
       <Head />
       <Body style={bodyStyle}>
         <Container style={containerStyle}>
-          <Text style={brandStyle}>
-            Jamba<span style={{ color: "#0d9488" }}>HR</span>
-          </Text>
+          <Row style={{ marginBottom: "24px" }}>
+            <Column style={{ width: "48px", verticalAlign: "middle" }}>
+              <Img src={LOGO_URL} width="40" height="40" alt="JambaHR" />
+            </Column>
+            <Column style={{ verticalAlign: "middle" }}>
+              <Text style={brandStyle}>
+                Jamba<span style={{ color: "#0d9488" }}>HR</span>
+              </Text>
+            </Column>
+          </Row>
 
           <Text style={headingStyle}>Three ways to sign in to JambaHR</Text>
           <Text style={textStyle}>
@@ -107,6 +126,9 @@ export function SignInOptionsEmail({
   );
 }
 
+// Served from the live site; emails need an absolute URL.
+const LOGO_URL = "https://jambahr.com/Jamba-s.png";
+
 const bodyStyle = {
   backgroundColor: "#f8f9fa",
   fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
@@ -116,7 +138,7 @@ const brandStyle = {
   fontSize: "22px",
   fontWeight: "800" as const,
   color: "#1a1a2e",
-  marginBottom: "24px",
+  margin: "0",
 };
 const headingStyle = {
   fontSize: "22px",

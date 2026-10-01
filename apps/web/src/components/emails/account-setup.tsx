@@ -13,12 +13,15 @@ interface AccountSetupEmailProps {
   orgName: string;
   firstName: string;
   setupUrl: string;
+  /** Account already exists (added with a phone) — sign in with a code, no sign-up. */
+  hasAccount?: boolean;
 }
 
 export function AccountSetupEmail({
   orgName = "your team",
   firstName = "there",
   setupUrl = "https://jambahr.com/sign-up",
+  hasAccount = false,
 }: AccountSetupEmailProps) {
   return (
     <Html>
@@ -29,11 +32,20 @@ export function AccountSetupEmail({
           <Text style={brandStyle}>Jamba<span style={{ color: "#0d9488" }}>HR</span></Text>
 
           <Text style={headingStyle}>You&apos;ve been added to {orgName} 👋</Text>
-          <Text style={textStyle}>
-            Hi {firstName}, your HR admin has added you to <strong>{orgName}</strong> on
-            JambaHR. Create your password below to finish setting up your account —
-            the email address is already filled in, so leave it exactly as-is.
-          </Text>
+          {hasAccount ? (
+            <Text style={textStyle}>
+              Hi {firstName}, your HR admin has added you to <strong>{orgName}</strong> on
+              JambaHR. Your account is ready — sign in with this email address (or your
+              mobile number) and we&apos;ll send you a one-time code. Once you&apos;re in,
+              you can set a password from the banner at the top of the page.
+            </Text>
+          ) : (
+            <Text style={textStyle}>
+              Hi {firstName}, your HR admin has added you to <strong>{orgName}</strong> on
+              JambaHR. Create your password below to finish setting up your account —
+              the email address is already filled in, so leave it exactly as-is.
+            </Text>
+          )}
 
           <Section style={cardStyle}>
             <Text style={cardHeadingStyle}>What you can do in JambaHR</Text>
@@ -43,7 +55,7 @@ export function AccountSetupEmail({
           </Section>
 
           <Button style={buttonStyle} href={setupUrl}>
-            Set up my account →
+            {hasAccount ? "Sign in to JambaHR →" : "Set up my account →"}
           </Button>
 
           <Text style={textStyle}>

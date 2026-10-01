@@ -9,6 +9,7 @@ import { AssistantLauncher } from "@/components/assistant/assistant-launcher";
 import { canUseAssistant } from "@/lib/assistant/permissions";
 import { hasFeature } from "@/config/plans";
 import { WorkspaceUnavailable } from "@/components/layout/workspace-unavailable";
+import { SetPasswordBanner } from "@/components/layout/set-password-banner";
 
 export default async function DashboardLayout({
   children,
@@ -68,6 +69,7 @@ export default async function DashboardLayout({
             orgs={orgs}
             activeOrgId={userCtx.orgId}
           />
+          <SetPasswordBanner />
           <main className="flex-1 p-6">{children}</main>
         </div>
         <AssistantLauncher enabled={assistantEnabled} role={role} />

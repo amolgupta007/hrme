@@ -1,3 +1,5 @@
+import { waitUntil } from "@vercel/functions";
+import { sendRunPayslips } from "./payslip-email";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 /**
@@ -87,9 +89,22 @@ export async function reconcileBatchAndRunStatus(
 
   const runUpdates: Record<string, any> = { status: runStatus };
   if (runStatus === "paid") runUpdates.paid_at = new Date().toISOString();
-  await sb
+  // Only a real transition writes (so paid_at isn't bumped on every webhook).
+  const { data: changed } = await sb
     .from("payroll_runs")
     .update(runUpdates as any)
     .eq("id", runId)
-    .eq("org_id", orgId);
+    .eq("org_id", orgId)
+    .neq("status", runStatus)
+    .select("id");
+
+  // The payout just completed: email pay slips to anyone not already sent one.
+  // Best-effort and after the response (waitUntil) — never blocks the webhook.
+  if (runStatus === "paid" && (changed ?? []).length > 0) {
+    try {
+      waitUntil(sendRunPayslips(sb, orgId, runId, { onlyUnsent: true }).then(() => undefined).catch(() => undefined));
+    } catch {
+      // waitUntil unavailable outside a request — skip; "Send payslips" covers it.
+    }
+  }
 }

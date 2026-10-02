@@ -5,12 +5,13 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   Building2, Plus, Play, CheckCircle, Trash2, ChevronDown,
-  ChevronRight, Pencil, FileText, Users, IndianRupee, Clock,
+  ChevronRight, Pencil, FileText, Users, IndianRupee, Clock, Calculator, Lock, RotateCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatINR } from "@/lib/ctc";
 import { SalaryStructureDialog } from "./salary-structure-dialog";
+import { EngineSalaryTab } from "./engine/engine-salary-tab";
 import { PayrollRunDialog } from "./payroll-run-dialog";
 import { EntryEditDialog } from "./entry-edit-dialog";
 import { PayslipDialog } from "./payslip-dialog";
@@ -19,7 +20,10 @@ import { PayNowButton } from "./pay-now-button";
 import { DisbursementTab } from "./disbursement-tab";
 import { BonusIneligibleBadge } from "./bonus-ineligible-badge";
 import { LatePenaltyChip } from "./late-penalty-chip";
+import { ReopenRunDialog } from "./reopen-run-dialog";
 import {
+  calculatePayrollRun,
+  reopenPayrollRun,
   processPayrollRun,
   markPayrollPaid,
   deletePayrollRun,
@@ -44,6 +48,8 @@ interface Employee {
 
 interface Props {
   isAdmin: boolean;
+  /** The org has set up the payroll engine: Salary Structures uses its editor. */
+  engineEnabled?: boolean;
   employees: Employee[];
   salaryStructures: SalaryStructureRow[];
   payrollRuns: PayrollRun[];
@@ -70,13 +76,16 @@ function monthLabel(m: string) {
 }
 
 function statusBadge(status: string) {
-  if (status === "paid") return <Badge variant="success">Paid</Badge>;
-  if (status === "processed") return <Badge variant="secondary">Processed</Badge>;
-  return <Badge variant="outline">Draft</Badge>;
+  if (status === "paid") return <Badge variant="success"><Lock className="mr-1 h-3 w-3" />Paid</Badge>;
+  if (status === "processed") return <Badge variant="secondary"><Lock className="mr-1 h-3 w-3" />Processed · locked</Badge>;
+  if (status === "disbursing") return <Badge variant="secondary"><Lock className="mr-1 h-3 w-3" />Paying out</Badge>;
+  if (status === "disbursement_failed") return <Badge variant="destructive"><Lock className="mr-1 h-3 w-3" />Payout failed</Badge>;
+  return <Badge variant="outline">Draft · editable</Badge>;
 }
 
 export function PayrollClient({
   isAdmin,
+  engineEnabled = false,
   employees,
   salaryStructures,
   payrollRuns,
@@ -101,9 +110,8 @@ export function PayrollClient({
   }>({ open: false });
   const [runDialog, setRunDialog] = useState(false);
   const [editEntry, setEditEntry] = useState<PayrollEntry | null>(null);
-  const [viewSlip, setViewSlip] = useState<
-    ((PayrollEntry & { month: string; employee_name: string }) | (MyPayslip & { employee_name: string })) | null
-  >(null);
+  /** Entry id of the pay slip being viewed. */
+  const [viewSlip, setViewSlip] = useState<string | null>(null);
 
   // Expanded run
   const [expandedRun, setExpandedRun] = useState<string | null>(null);
@@ -112,6 +120,9 @@ export function PayrollClient({
   const [processingRun, setProcessingRun] = useState<string | null>(null);
   const [markingPaid, setMarkingPaid] = useState<string | null>(null);
   const [deletingRun, setDeletingRun] = useState<string | null>(null);
+  const [calculatingRun, setCalculatingRun] = useState<string | null>(null);
+  const [reopenRun, setReopenRun] = useState<{ id: string; month: string } | null>(null);
+  const [runNotes, setRunNotes] = useState<Record<string, { skipped: { name: string; reason: string }[]; excluded: { name: string; reason: string | null }[]; warnings: string[] }>>({});
 
   // Active employees without salary configured
   const activeEmployeeIds = new Set(employees.filter((e) => e.status === "active").map((e) => e.id));
@@ -133,16 +144,33 @@ export function PayrollClient({
     }
   }
 
-  async function handleProcess(runId: string) {
-    const run = payrollRuns.find((r) => r.id === runId);
-    if (run?.status === "processed") {
-      if (!confirm("This run has already been processed. Reprocessing will reset all manual bonus and LOP edits. Continue?")) return;
+  async function refreshEntries(runId: string) {
+    const entries = await getPayrollEntries(runId);
+    if (entries.success) setRunEntries((prev) => ({ ...prev, [runId]: entries.data }));
+  }
+
+  async function handleCalculate(runId: string) {
+    setCalculatingRun(runId);
+    try {
+      const result = await calculatePayrollRun(runId);
+      if (!result.success) return void toast.error(result.error);
+      setRunNotes((n) => ({ ...n, [runId]: result.data }));
+      toast.success(`Calculated ${result.data.calculated} employee${result.data.calculated === 1 ? "" : "s"} — review, then Process to lock the month`);
+      router.refresh();
+      await refreshEntries(runId);
+      setExpandedRun(runId);
+    } finally {
+      setCalculatingRun(null);
     }
+  }
+
+  async function handleProcess(runId: string) {
     setProcessingRun(runId);
     try {
       const result = await processPayrollRun(runId);
       if (result.success) {
-        toast.success("Payroll processed successfully");
+        setRunNotes((n) => ({ ...n, [runId]: result.data }));
+        toast.success("Payroll processed and locked");
         router.refresh();
         // Refresh entries
         const entries = await getPayrollEntries(runId);
@@ -192,7 +220,7 @@ export function PayrollClient({
             Salary structures, monthly runs, and payslips.
           </p>
         </div>
-        {isAdmin && activeTab === "Salary Structures" && (
+        {isAdmin && activeTab === "Salary Structures" && !engineEnabled && (
           <Button onClick={() => setSalaryDialog({ open: true })}>
             <Plus className="h-4 w-4 mr-2" />
             Configure Salary
@@ -207,7 +235,7 @@ export function PayrollClient({
       </div>
 
       {/* Alert: unconfigured employees */}
-      {isAdmin && unconfiguredCount > 0 && activeTab === "Salary Structures" && (
+      {isAdmin && !engineEnabled && unconfiguredCount > 0 && activeTab === "Salary Structures" && (
         <button
           type="button"
           onClick={() => setSalaryDialog({ open: true })}
@@ -237,7 +265,8 @@ export function PayrollClient({
       </div>
 
       {/* ─── Salary Structures Tab ─── */}
-      {activeTab === "Salary Structures" && (
+      {activeTab === "Salary Structures" && engineEnabled && <EngineSalaryTab />}
+      {activeTab === "Salary Structures" && !engineEnabled && (
         <div>
           {salaryStructures.length === 0 ? (
             <div className="rounded-xl border border-dashed border-border p-12 text-center">
@@ -361,13 +390,32 @@ export function PayrollClient({
 
                     <div className="flex items-center gap-2">
                       {run.status === "draft" && (
-                        <Button
-                          size="sm"
-                          onClick={() => handleProcess(run.id)}
-                          disabled={processingRun === run.id}
-                        >
-                          <Play className="h-3.5 w-3.5 mr-1" />
-                          {processingRun === run.id ? "Processing…" : "Process"}
+                        <>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleCalculate(run.id)}
+                            disabled={calculatingRun === run.id || processingRun === run.id}
+                            title="Work out every entry. You can review, edit and recalculate as often as you like."
+                          >
+                            <Calculator className="h-3.5 w-3.5 mr-1" />
+                            {calculatingRun === run.id ? "Calculating…" : "Calculate"}
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => handleProcess(run.id)}
+                            disabled={processingRun === run.id || calculatingRun === run.id}
+                            title="Recalculate and lock this month. Payslips and payouts come from the locked figures."
+                          >
+                            <Play className="h-3.5 w-3.5 mr-1" />
+                            {processingRun === run.id ? "Processing…" : "Process & lock"}
+                          </Button>
+                        </>
+                      )}
+                      {run.status === "processed" && (
+                        <Button size="sm" variant="ghost" onClick={() => setReopenRun({ id: run.id, month: run.month })} title="Unlock this month to correct it (before any payout)">
+                          <RotateCcw className="h-3.5 w-3.5 mr-1" />
+                          Reopen
                         </Button>
                       )}
                       {run.status === "processed" && (
@@ -385,12 +433,6 @@ export function PayrollClient({
                           </Button>
                         )
                       )}
-                      {(run.status as string) === "disbursing" && (
-                        <Badge variant="secondary">Disbursing…</Badge>
-                      )}
-                      {(run.status as string) === "disbursement_failed" && (
-                        <Badge variant="destructive">Disbursement failed</Badge>
-                      )}
                       {(run.status === "processed" || run.status === "paid") && (
                         <Button
                           size="sm"
@@ -404,7 +446,7 @@ export function PayrollClient({
                           Send payslips
                         </Button>
                       )}
-                      {run.status !== "paid" && (
+                      {(run.status === "draft" || run.status === "processed") && (
                         <Button
                           size="sm"
                           variant="ghost"
@@ -426,7 +468,7 @@ export function PayrollClient({
                       <div className="p-6 text-center text-sm text-muted-foreground">Loading entries…</div>
                     ) : (runEntries[run.id] ?? []).length === 0 ? (
                       <div className="p-6 text-center text-sm text-muted-foreground">
-                        No entries yet. Click Process to compute salaries.
+                        No entries yet. Click Calculate to work out this month&apos;s salaries.
                       </div>
                     ) : (
                       <table className="w-full text-sm">
@@ -438,7 +480,7 @@ export function PayrollClient({
                             <th className="text-right px-4 py-2.5 font-medium text-muted-foreground">PT</th>
                             <th className="text-right px-4 py-2.5 font-medium text-muted-foreground">TDS</th>
                             <th className="text-right px-4 py-2.5 font-medium text-muted-foreground">LOP</th>
-                            <th className="text-right px-4 py-2.5 font-medium text-muted-foreground">Bonus</th>
+                            <th className="text-right px-4 py-2.5 font-medium text-muted-foreground">Adjustments</th>
                             <th className="text-right px-4 py-2.5 font-medium text-muted-foreground">Net Pay</th>
                             <th className="px-4 py-2.5" />
                           </tr>
@@ -486,16 +528,17 @@ export function PayrollClient({
                                 {entry.lop_days > 0 ? (
                                   <span className="text-destructive">{entry.lop_days}d</span>
                                 ) : "—"}
+                                {entry.edited && <span className="ml-1 text-[10px] text-muted-foreground" title="Set by hand — kept when the month is recalculated">✎</span>}
                               </td>
                               <td className="px-4 py-2.5 text-right font-mono">
-                                {entry.bonus > 0 ? formatINR(entry.bonus) : "—"}
+                                {entry.total_line_items !== 0 ? formatINR(entry.total_line_items) : "—"}
                               </td>
                               <td className="px-4 py-2.5 text-right font-mono font-semibold text-primary">
                                 {formatINR(entry.net_pay)}
                               </td>
                               <td className="px-4 py-2.5">
                                 <div className="flex items-center gap-1">
-                                  {run.status !== "paid" && (
+                                  {run.status === "draft" && (
                                     <Button
                                       variant="ghost"
                                       size="sm"
@@ -508,13 +551,7 @@ export function PayrollClient({
                                   <Button
                                     variant="ghost"
                                     size="sm"
-                                    onClick={() =>
-                                      setViewSlip({
-                                        ...entry,
-                                        month: run.month,
-                                        employee_name: entry.employee_name,
-                                      })
-                                    }
+                                    onClick={() => setViewSlip(entry.id)}
                                     title="View payslip"
                                   >
                                     <FileText className="h-3.5 w-3.5" />
@@ -541,7 +578,18 @@ export function PayrollClient({
                         </tfoot>
                       </table>
                     )}
-                    {razorpayxConnected && (run.status === "processed" || run.status === "paid" || (run.status as string) === "disbursing" || (run.status as string) === "disbursement_failed") && (
+                    {runNotes[run.id] && (runNotes[run.id].skipped.length > 0 || runNotes[run.id].excluded.length > 0 || runNotes[run.id].warnings.length > 0) && (
+                      <div className="space-y-1 border-t border-border px-5 py-3 text-xs text-muted-foreground">
+                        {runNotes[run.id].skipped.length > 0 && (
+                          <p><span className="font-medium text-foreground">Not paid this month:</span> {runNotes[run.id].skipped.map((x) => `${x.name} — ${x.reason}`).join("; ")}</p>
+                        )}
+                        {runNotes[run.id].excluded.length > 0 && (
+                          <p><span className="font-medium text-foreground">Not on this company&apos;s payroll:</span> {runNotes[run.id].excluded.map((x) => x.name + (x.reason ? ` (${x.reason})` : "")).join("; ")}</p>
+                        )}
+                        {runNotes[run.id].warnings.map((w) => <p key={w} className="text-amber-700 dark:text-amber-400">{w}</p>)}
+                      </div>
+                    )}
+                    {razorpayxConnected && (run.status === "processed" || run.status === "paid" || run.status === "disbursing" || run.status === "disbursement_failed") && (
                       <div className="border-t border-border p-5">
                         <h3 className="text-sm font-semibold mb-3">Disbursement (RazorpayX)</h3>
                         <DisbursementTab runId={run.id} />
@@ -597,9 +645,7 @@ export function PayrollClient({
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() =>
-                            setViewSlip({ ...slip, employee_name: currentEmployeeName })
-                          }
+                          onClick={() => setViewSlip(slip.entry_id)}
                         >
                           <FileText className="h-3.5 w-3.5 mr-1" />
                           View
@@ -672,6 +718,21 @@ export function PayrollClient({
       )}
 
       {/* Dialogs */}
+      {reopenRun && (
+        <ReopenRunDialog
+          month={reopenRun.month}
+          onClose={() => setReopenRun(null)}
+          onConfirm={async (reason) => {
+            const res = await reopenPayrollRun(reopenRun.id, reason);
+            if (!res.success) return res.error;
+            toast.success(`${monthLabel(reopenRun.month)} reopened — recalculate, then process again`);
+            setReopenRun(null);
+            router.refresh();
+            return null;
+          }}
+        />
+      )}
+
       <SalaryStructureDialog
         open={salaryDialog.open}
         onClose={() => { setSalaryDialog({ open: false }); router.refresh(); }}
@@ -685,7 +746,7 @@ export function PayrollClient({
       {editEntry && (
         <EntryEditDialog
           open
-          onClose={() => { setEditEntry(null); router.refresh(); }}
+          onClose={() => { setEditEntry(null); router.refresh(); if (expandedRun) void refreshEntries(expandedRun); }}
           entry={editEntry}
         />
       )}
@@ -694,8 +755,7 @@ export function PayrollClient({
         <PayslipDialog
           open
           onClose={() => setViewSlip(null)}
-          data={viewSlip}
-          orgName={orgName}
+          entryId={viewSlip}
         />
       )}
     </div>

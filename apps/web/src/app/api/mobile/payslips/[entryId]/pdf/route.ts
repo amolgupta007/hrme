@@ -2,12 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { resolveMobileUser } from "@/lib/mobile/auth";
 import { createAdminSupabase } from "@/lib/supabase/server";
-import {
-  buildPayslipDetail,
-  type PayslipEntryDetailRow,
-  type PayslipLineItemRow,
-} from "@/lib/mobile/payslips-payload";
-import { renderPayslipPdf, type PayslipPdfData } from "@/lib/mobile/payslip-pdf";
+import { loadPayslip } from "@/lib/payroll/payslip-data";
+import { renderPayslipDocumentPdf } from "@/lib/payroll/payslip-pdf";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -17,8 +13,9 @@ export const maxDuration = 30;
  * Stage A). Same auth + IDOR + draft guards as the detail route
  * (`../route.ts`) — the entry must belong to BOTH the caller's org AND employee
  * id (service-role bypasses RLS, gotcha #5), else 404; a draft run also 404s.
- * Renders via @react-pdf/renderer (Helvetica-only, WinAnsi-safe glyphs) and
- * streams `application/pdf` as an attachment.
+ * Renders the org's pay slip format (payroll engine step 6 — the same
+ * PayslipDocument + renderer as the web download) and streams
+ * `application/pdf` as an attachment.
  */
 export async function GET(request: NextRequest, ctx: { params: { entryId: string } }) {
   const { userId } = auth();
@@ -33,62 +30,15 @@ export async function GET(request: NextRequest, ctx: { params: { entryId: string
   const entryId = ctx.params.entryId;
   const supabase = createAdminSupabase();
 
-  const { data: entry } = await supabase
-    .from("payroll_entries")
-    .select(
-      "id, org_id, employee_id, basic_monthly, hra_monthly, special_allowance_monthly, gross_salary, employee_pf, professional_tax, tds, lop_days, lop_deduction, late_penalty_days, late_penalty_deduction, bonus, total_deductions, net_pay, run:payroll_runs!payroll_run_id(id, month, status, paid_at)",
-    )
-    .eq("id", entryId)
-    .maybeSingle();
-
-  const e = entry as any;
-  if (
-    !e ||
-    e.org_id !== user.orgId ||
-    !user.employeeId ||
-    e.employee_id !== user.employeeId ||
-    e.run?.status === "draft"
-  ) {
-    return NextResponse.json({ error: "not_found" }, { status: 404 });
-  }
-
   try {
-    const { data: lineItemRows } = await supabase
-      .from("payroll_line_items")
-      .select("category, note, amount, taxable")
-      .eq("org_id", user.orgId)
-      .eq("payroll_entry_id", entryId)
-      .order("created_at", { ascending: true });
-
-    const lineItems: PayslipLineItemRow[] = ((lineItemRows as any[]) ?? []).map((li) => ({
-      category: li.category,
-      note: li.note ?? null,
-      amount: li.amount,
-      taxable: !!li.taxable,
-    }));
-
-    const [{ data: org }, { data: emp }] = await Promise.all([
-      supabase.from("organizations").select("name").eq("id", user.orgId).maybeSingle(),
-      supabase
-        .from("employees")
-        .select("first_name, last_name, designation")
-        .eq("id", user.employeeId)
-        .maybeSingle(),
-    ]);
-
-    const empRow = emp as any;
-    const employeeName =
-      [empRow?.first_name, empRow?.last_name].filter(Boolean).join(" ").trim() || "Employee";
-
-    const data: PayslipPdfData = {
-      orgName: (org as any)?.name ?? "Organization",
-      employeeName,
-      designation: empRow?.designation ?? null,
-      detail: buildPayslipDetail(e as PayslipEntryDetailRow, lineItems),
-    };
-
-    const pdf = await renderPayslipPdf(data);
-    const monthSlug = data.detail.month.replace(/[^0-9a-zA-Z-]/g, "") || "payslip";
+    // Same model + renderer as the web download (org pay slip format, logo).
+    const slip = await loadPayslip(supabase as any, user.orgId, entryId);
+    // Mobile is self-service only: the entry must be the caller's own, never a draft.
+    if (!slip || !user.employeeId || slip.employeeId !== user.employeeId || slip.runStatus === "draft") {
+      return NextResponse.json({ error: "not_found" }, { status: 404 });
+    }
+    const pdf = await renderPayslipDocumentPdf(slip.doc, slip.logo);
+    const monthSlug = slip.month.replace(/[^0-9a-zA-Z-]/g, "") || "payslip";
     return new Response(new Uint8Array(pdf), {
       status: 200,
       headers: {

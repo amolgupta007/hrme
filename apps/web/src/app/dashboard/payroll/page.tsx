@@ -14,6 +14,8 @@ import { PayrollClient } from "@/components/payroll/payroll-client";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { getRazorpayXCredentials } from "@/actions/razorpayx-credentials";
 import { getLateFlagsForMonth } from "@/actions/late-policy";
+import { loadPayrollConfig } from "@/lib/payroll/engine-config";
+import { currentPayMonthIST } from "@jambahr/shared/payroll/engine";
 
 export default async function PayrollPage() {
   const userCtx = await getCurrentUser();
@@ -80,8 +82,21 @@ export default async function PayrollPage() {
     if (emp) currentEmployeeName = `${emp.first_name} ${emp.last_name}`;
   }
 
+  // Orgs that have set up the payroll engine (Settings → Payroll) get the
+  // engine's salary editor; everyone else keeps the current screens unchanged.
+  let engineEnabled = false;
+  if (adminUser && userCtx) {
+    try {
+      const cfg = await loadPayrollConfig(createAdminSupabase(), userCtx.orgId, currentPayMonthIST());
+      engineEnabled = cfg.source === "saved";
+    } catch {
+      engineEnabled = false;
+    }
+  }
+
   return (
     <PayrollClient
+      engineEnabled={engineEnabled}
       isAdmin={adminUser}
       employees={employees as any}
       salaryStructures={salaryStructures}

@@ -88,7 +88,7 @@ export function PayrollRunDialog({ open, onClose }: Props) {
               onChange={(e) => setWorkingDays(e.target.value)}
             />
             <p className="text-xs text-muted-foreground mt-1">
-              Used to calculate LOP deductions per day
+              Used for the per-day rate when your payroll settings use a fixed number of days
             </p>
           </div>
 
@@ -104,8 +104,8 @@ export function PayrollRunDialog({ open, onClose }: Props) {
           </div>
 
           <div className="rounded-md bg-muted/50 border border-border px-4 py-3 text-xs text-muted-foreground space-y-1">
-            <p>After creating, click <strong>Process</strong> to compute salaries from configured salary structures.</p>
-            <p>You can adjust individual entries (bonus, LOP) before marking as paid.</p>
+            <p>After creating, click <strong>Calculate</strong> to work out every salary. Review and adjust entries (LOP days, one-off additions) and recalculate as often as you like.</p>
+            <p><strong>Process &amp; lock</strong> freezes the month: payslips and payouts use the locked figures. A processed month can be reopened until a payout starts.</p>
           </div>
 
           <div className="flex gap-2 pt-1">

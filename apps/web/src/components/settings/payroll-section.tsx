@@ -2,6 +2,7 @@
 
 import { SalaryStructureConfigCard } from "./salary-structure-config-card";
 import { RazorpayXCard } from "./razorpayx-card";
+import { PayrollEngineSection } from "./payroll/payroll-engine-section";
 import type { SalaryStructureConfig } from "@/actions/payroll";
 import type { RatioConfig } from "@/lib/ctc";
 import type { MaskedRazorpayXCredentials } from "@/actions/razorpayx-credentials";
@@ -22,6 +23,7 @@ export function PayrollSection({ activeConfig, history, razorpayxCredentials }: 
       </p>
       <SalaryStructureConfigCard activeConfig={activeConfig} history={history} />
       <RazorpayXCard credentials={razorpayxCredentials} />
+      <PayrollEngineSection />
     </div>
   );
 }

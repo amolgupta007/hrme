@@ -2749,6 +2749,118 @@ export type Database = {
           },
         ]
       }
+      employee_salary_component_values: {
+        Row: {
+          amount: number | null
+          component_code: string
+          created_at: string
+          id: string
+          org_id: string
+          pct: number | null
+          revision_id: string
+        }
+        Insert: {
+          amount?: number | null
+          component_code: string
+          created_at?: string
+          id?: string
+          org_id: string
+          pct?: number | null
+          revision_id: string
+        }
+        Update: {
+          amount?: number | null
+          component_code?: string
+          created_at?: string
+          id?: string
+          org_id?: string
+          pct?: number | null
+          revision_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employee_salary_component_values_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_salary_component_values_revision_id_fkey"
+            columns: ["revision_id"]
+            isOneToOne: false
+            referencedRelation: "employee_salary_revisions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      employee_salary_revisions: {
+        Row: {
+          annual_ctc: number | null
+          created_at: string
+          created_by: string | null
+          declared_deductions_annual: number
+          effective_from_month: string
+          employee_id: string
+          id: string
+          monthly_gross: number | null
+          notes: string | null
+          org_id: string
+          pt_state: string | null
+          tax_regime: string
+        }
+        Insert: {
+          annual_ctc?: number | null
+          created_at?: string
+          created_by?: string | null
+          declared_deductions_annual?: number
+          effective_from_month: string
+          employee_id: string
+          id?: string
+          monthly_gross?: number | null
+          notes?: string | null
+          org_id: string
+          pt_state?: string | null
+          tax_regime?: string
+        }
+        Update: {
+          annual_ctc?: number | null
+          created_at?: string
+          created_by?: string | null
+          declared_deductions_annual?: number
+          effective_from_month?: string
+          employee_id?: string
+          id?: string
+          monthly_gross?: number | null
+          notes?: string | null
+          org_id?: string
+          pt_state?: string | null
+          tax_regime?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employee_salary_revisions_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_salary_revisions_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_salary_revisions_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       employee_week_off_override: {
         Row: {
           alt_saturday_rule: string
@@ -2880,6 +2992,7 @@ export type Database = {
           emergency_contact_phone: string | null
           emergency_contact_relationship: string | null
           employment_type: string
+          esic_number: string | null
           first_name: string
           gender: string | null
           id: string
@@ -2888,18 +3001,23 @@ export type Database = {
           metadata: Json
           org_id: string
           pan_number: string | null
+          payroll_excluded: boolean
+          payroll_excluded_reason: string | null
           permanent_address: Json | null
           personal_email: string | null
+          pf_number: string | null
           phone: string | null
           pronouns: string | null
           reporting_manager_2_id: string | null
           reporting_manager_id: string | null
           role: string
           status: string
+          uan: string | null
           updated_at: string
           whatsapp_opt_in: boolean
           whatsapp_opt_in_at: string | null
           work_arrangement: string
+          work_location: string | null
         }
         Insert: {
           aadhar_number?: string | null
@@ -2918,6 +3036,7 @@ export type Database = {
           emergency_contact_phone?: string | null
           emergency_contact_relationship?: string | null
           employment_type?: string
+          esic_number?: string | null
           first_name: string
           gender?: string | null
           id?: string
@@ -2926,18 +3045,23 @@ export type Database = {
           metadata?: Json
           org_id: string
           pan_number?: string | null
+          payroll_excluded?: boolean
+          payroll_excluded_reason?: string | null
           permanent_address?: Json | null
           personal_email?: string | null
+          pf_number?: string | null
           phone?: string | null
           pronouns?: string | null
           reporting_manager_2_id?: string | null
           reporting_manager_id?: string | null
           role?: string
           status?: string
+          uan?: string | null
           updated_at?: string
           whatsapp_opt_in?: boolean
           whatsapp_opt_in_at?: string | null
           work_arrangement?: string
+          work_location?: string | null
         }
         Update: {
           aadhar_number?: string | null
@@ -2956,6 +3080,7 @@ export type Database = {
           emergency_contact_phone?: string | null
           emergency_contact_relationship?: string | null
           employment_type?: string
+          esic_number?: string | null
           first_name?: string
           gender?: string | null
           id?: string
@@ -2964,18 +3089,23 @@ export type Database = {
           metadata?: Json
           org_id?: string
           pan_number?: string | null
+          payroll_excluded?: boolean
+          payroll_excluded_reason?: string | null
           permanent_address?: Json | null
           personal_email?: string | null
+          pf_number?: string | null
           phone?: string | null
           pronouns?: string | null
           reporting_manager_2_id?: string | null
           reporting_manager_id?: string | null
           role?: string
           status?: string
+          uan?: string | null
           updated_at?: string
           whatsapp_opt_in?: boolean
           whatsapp_opt_in_at?: string | null
           work_arrangement?: string
+          work_location?: string | null
         }
         Relationships: [
           {
@@ -5033,6 +5163,7 @@ export type Database = {
       }
       organizations: {
         Row: {
+          address: Json | null
           billing_cycle: string | null
           clerk_org_id: string | null
           created_at: string
@@ -5040,11 +5171,14 @@ export type Database = {
           custom_max_employees: number | null
           custom_per_feature_rate: number | null
           custom_platform_fee: number | null
+          esi_code: string | null
           gstin: string | null
           id: string
           logo_url: string | null
           max_employees: number
           name: string
+          pan: string | null
+          pf_establishment_code: string | null
           plan: string
           platform_fee_paid: number
           policy_version_accepted: string | null
@@ -5055,10 +5189,12 @@ export type Database = {
           stripe_subscription_id: string | null
           subscription_paused_at: string | null
           subscription_status: string | null
+          tan: string | null
           terms_accepted_at: string | null
           updated_at: string
         }
         Insert: {
+          address?: Json | null
           billing_cycle?: string | null
           clerk_org_id?: string | null
           created_at?: string
@@ -5066,11 +5202,14 @@ export type Database = {
           custom_max_employees?: number | null
           custom_per_feature_rate?: number | null
           custom_platform_fee?: number | null
+          esi_code?: string | null
           gstin?: string | null
           id?: string
           logo_url?: string | null
           max_employees?: number
           name: string
+          pan?: string | null
+          pf_establishment_code?: string | null
           plan?: string
           platform_fee_paid?: number
           policy_version_accepted?: string | null
@@ -5081,10 +5220,12 @@ export type Database = {
           stripe_subscription_id?: string | null
           subscription_paused_at?: string | null
           subscription_status?: string | null
+          tan?: string | null
           terms_accepted_at?: string | null
           updated_at?: string
         }
         Update: {
+          address?: Json | null
           billing_cycle?: string | null
           clerk_org_id?: string | null
           created_at?: string
@@ -5092,11 +5233,14 @@ export type Database = {
           custom_max_employees?: number | null
           custom_per_feature_rate?: number | null
           custom_platform_fee?: number | null
+          esi_code?: string | null
           gstin?: string | null
           id?: string
           logo_url?: string | null
           max_employees?: number
           name?: string
+          pan?: string | null
+          pf_establishment_code?: string | null
           plan?: string
           platform_fee_paid?: number
           policy_version_accepted?: string | null
@@ -5107,6 +5251,7 @@ export type Database = {
           stripe_subscription_id?: string | null
           subscription_paused_at?: string | null
           subscription_status?: string | null
+          tan?: string | null
           terms_accepted_at?: string | null
           updated_at?: string
         }
@@ -5282,16 +5427,158 @@ export type Database = {
           },
         ]
       }
+      payroll_audit_log: {
+        Row: {
+          action: string
+          actor_employee_id: string | null
+          created_at: string
+          entity: string
+          entity_id: string | null
+          field: string | null
+          id: string
+          new_value: Json | null
+          old_value: Json | null
+          org_id: string
+          reason: string | null
+        }
+        Insert: {
+          action: string
+          actor_employee_id?: string | null
+          created_at?: string
+          entity: string
+          entity_id?: string | null
+          field?: string | null
+          id?: string
+          new_value?: Json | null
+          old_value?: Json | null
+          org_id: string
+          reason?: string | null
+        }
+        Update: {
+          action?: string
+          actor_employee_id?: string | null
+          created_at?: string
+          entity?: string
+          entity_id?: string | null
+          field?: string | null
+          id?: string
+          new_value?: Json | null
+          old_value?: Json | null
+          org_id?: string
+          reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payroll_audit_log_actor_employee_id_fkey"
+            columns: ["actor_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payroll_audit_log_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payroll_components: {
+        Row: {
+          amount: number | null
+          base: string | null
+          code: string
+          created_at: string
+          created_by: string | null
+          display_order: number
+          effective_from_month: string
+          enabled: boolean
+          id: string
+          is_system: boolean
+          kind: string
+          label: string
+          method: string
+          org_id: string
+          pct: number | null
+          prorate: boolean
+          rule: string | null
+          show_on_payslip: boolean
+          taxable: boolean
+        }
+        Insert: {
+          amount?: number | null
+          base?: string | null
+          code: string
+          created_at?: string
+          created_by?: string | null
+          display_order?: number
+          effective_from_month: string
+          enabled?: boolean
+          id?: string
+          is_system?: boolean
+          kind: string
+          label: string
+          method: string
+          org_id: string
+          pct?: number | null
+          prorate?: boolean
+          rule?: string | null
+          show_on_payslip?: boolean
+          taxable?: boolean
+        }
+        Update: {
+          amount?: number | null
+          base?: string | null
+          code?: string
+          created_at?: string
+          created_by?: string | null
+          display_order?: number
+          effective_from_month?: string
+          enabled?: boolean
+          id?: string
+          is_system?: boolean
+          kind?: string
+          label?: string
+          method?: string
+          org_id?: string
+          pct?: number | null
+          prorate?: boolean
+          rule?: string | null
+          show_on_payslip?: boolean
+          taxable?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payroll_components_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payroll_components_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payroll_entries: {
         Row: {
           annual_taxable_income: number | null
           basic_monthly: number
           bonus: number
           created_at: string
+          ctc_monthly: number | null
+          days_paid: number | null
           edited_at: string | null
           edited_by: string | null
           employee_id: string
           employee_pf: number
+          employer_contributions_total: number | null
+          engine_version: number | null
           gross_salary: number
           hra_monthly: number
           id: string
@@ -5306,6 +5593,7 @@ export type Database = {
           payslip_url: string | null
           previous_net_pay: number | null
           professional_tax: number
+          snapshot: Json | null
           special_allowance_monthly: number
           tds: number
           total_deductions: number
@@ -5316,10 +5604,14 @@ export type Database = {
           basic_monthly: number
           bonus?: number
           created_at?: string
+          ctc_monthly?: number | null
+          days_paid?: number | null
           edited_at?: string | null
           edited_by?: string | null
           employee_id: string
           employee_pf?: number
+          employer_contributions_total?: number | null
+          engine_version?: number | null
           gross_salary: number
           hra_monthly: number
           id?: string
@@ -5334,6 +5626,7 @@ export type Database = {
           payslip_url?: string | null
           previous_net_pay?: number | null
           professional_tax?: number
+          snapshot?: Json | null
           special_allowance_monthly: number
           tds?: number
           total_deductions: number
@@ -5344,10 +5637,14 @@ export type Database = {
           basic_monthly?: number
           bonus?: number
           created_at?: string
+          ctc_monthly?: number | null
+          days_paid?: number | null
           edited_at?: string | null
           edited_by?: string | null
           employee_id?: string
           employee_pf?: number
+          employer_contributions_total?: number | null
+          engine_version?: number | null
           gross_salary?: number
           hra_monthly?: number
           id?: string
@@ -5362,6 +5659,7 @@ export type Database = {
           payslip_url?: string | null
           previous_net_pay?: number | null
           professional_tax?: number
+          snapshot?: Json | null
           special_allowance_monthly?: number
           tds?: number
           total_deductions?: number
@@ -5402,8 +5700,11 @@ export type Database = {
         Row: {
           amount: number
           category: string
+          component_code: string | null
+          corrects_entry_id: string | null
           created_at: string
           created_by: string | null
+          direction: string
           id: string
           note: string | null
           org_id: string
@@ -5413,8 +5714,11 @@ export type Database = {
         Insert: {
           amount: number
           category: string
+          component_code?: string | null
+          corrects_entry_id?: string | null
           created_at?: string
           created_by?: string | null
+          direction?: string
           id?: string
           note?: string | null
           org_id: string
@@ -5424,8 +5728,11 @@ export type Database = {
         Update: {
           amount?: number
           category?: string
+          component_code?: string | null
+          corrects_entry_id?: string | null
           created_at?: string
           created_by?: string | null
+          direction?: string
           id?: string
           note?: string | null
           org_id?: string
@@ -5433,6 +5740,13 @@ export type Database = {
           taxable?: boolean
         }
         Relationships: [
+          {
+            foreignKeyName: "payroll_line_items_corrects_entry_id_fkey"
+            columns: ["corrects_entry_id"]
+            isOneToOne: false
+            referencedRelation: "payroll_entries"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "payroll_line_items_created_by_fkey"
             columns: ["created_by"]
@@ -5467,6 +5781,8 @@ export type Database = {
           paid_at: string | null
           paid_by: string | null
           processed_at: string | null
+          rule_versions: Json | null
+          settings_snapshot: Json | null
           status: string
           structure_config_snapshot: Json | null
           total_deductions: number | null
@@ -5484,6 +5800,8 @@ export type Database = {
           paid_at?: string | null
           paid_by?: string | null
           processed_at?: string | null
+          rule_versions?: Json | null
+          settings_snapshot?: Json | null
           status?: string
           structure_config_snapshot?: Json | null
           total_deductions?: number | null
@@ -5501,6 +5819,8 @@ export type Database = {
           paid_at?: string | null
           paid_by?: string | null
           processed_at?: string | null
+          rule_versions?: Json | null
+          settings_snapshot?: Json | null
           status?: string
           structure_config_snapshot?: Json | null
           total_deductions?: number | null
@@ -5521,6 +5841,72 @@ export type Database = {
             columns: ["paid_by"]
             isOneToOne: false
             referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payroll_settings: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          day_basis: string
+          effective_from_month: string
+          fixed_days: number | null
+          id: string
+          input_mode: string
+          line_rounding: string
+          lop_source: string
+          lop_treatment: string
+          net_rounding: string
+          org_id: string
+          payslip: Json
+          prorate_joiners_leavers: boolean
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          day_basis: string
+          effective_from_month: string
+          fixed_days?: number | null
+          id?: string
+          input_mode: string
+          line_rounding?: string
+          lop_source: string
+          lop_treatment: string
+          net_rounding?: string
+          org_id: string
+          payslip?: Json
+          prorate_joiners_leavers: boolean
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          day_basis?: string
+          effective_from_month?: string
+          fixed_days?: number | null
+          id?: string
+          input_mode?: string
+          line_rounding?: string
+          lop_source?: string
+          lop_treatment?: string
+          net_rounding?: string
+          org_id?: string
+          payslip?: Json
+          prorate_joiners_leavers?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payroll_settings_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payroll_settings_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -6553,6 +6939,63 @@ export type Database = {
           title?: string
         }
         Relationships: []
+      }
+      statutory_rules: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          effective_from_month: string
+          id: string
+          jurisdiction: string | null
+          label: string | null
+          notes: string | null
+          org_id: string | null
+          params: Json
+          rule_key: string
+          scope: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          effective_from_month: string
+          id?: string
+          jurisdiction?: string | null
+          label?: string | null
+          notes?: string | null
+          org_id?: string | null
+          params: Json
+          rule_key: string
+          scope: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          effective_from_month?: string
+          id?: string
+          jurisdiction?: string | null
+          label?: string | null
+          notes?: string | null
+          org_id?: string | null
+          params?: Json
+          rule_key?: string
+          scope?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "statutory_rules_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "statutory_rules_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       training_courses: {
         Row: {

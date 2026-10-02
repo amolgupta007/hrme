@@ -2,19 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { render } from "@react-email/render";
 import { waitUntil } from "@vercel/functions";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { getCurrentUser, isAdmin } from "@/lib/current-user";
-import { computeCTCBreakdown, getProfessionalTax, computeTaxByRegime, computeAdditionalTaxOnBonus, computeMonthsInFY, DEFAULT_RATIO_CONFIG, type RatioConfig } from "@/lib/ctc";
+import { computeCTCBreakdown, DEFAULT_RATIO_CONFIG, type RatioConfig } from "@/lib/ctc";
 import type { LineItem, LineItemCategory } from "@/lib/payroll/line-items";
-import { recomputeEntryFromLineItems } from "@/lib/payroll/recompute-entry";
-import { computeLatePenaltyDeduction } from "@/lib/payroll/late-penalty";
-import type { PenaltyBand } from "@/lib/attendance/late-penalty-bands";
-import { resolveCoveredEmployeeIds } from "@/lib/attendance/late-policy-targets";
-import { loadCountableLates } from "@/lib/attendance/late-counting";
-import { resend, FROM_EMAIL } from "@/lib/resend";
-import { PayslipEmail } from "@/components/emails/payslip";
+import { calculateRunEntries, runSnapshot, runTotals, type CalculateResult, type RunRow } from "@/lib/payroll/engine-run";
+import { writePayrollAudit } from "@/lib/payroll/engine-config";
+import { sendRunPayslips } from "@/lib/payroll/payslip-email";
 import { notifyPayslipPaid } from "@/lib/mobile/notify";
 import type { ActionResult } from "@/types";
 
@@ -56,10 +51,12 @@ export type SalaryStructureRow = {
   computed_at: string | null;
 };
 
+export type PayrollRunStatus = "draft" | "processed" | "disbursing" | "disbursement_failed" | "paid";
+
 export type PayrollRun = {
   id: string;
   month: string;
-  status: "draft" | "processed" | "paid";
+  status: PayrollRunStatus;
   working_days: number;
   total_gross: number | null;
   total_deductions: number | null;
@@ -88,6 +85,10 @@ export type PayrollEntry = {
   late_penalty_days: number;
   late_penalty_deduction: number;
   bonus: number;
+  /** One-off adjustments: earnings minus deductions. */
+  total_line_items: number;
+  /** Days set by hand on a draft run (kept across recalculation). */
+  edited: boolean;
   total_deductions: number;
   net_pay: number;
 };
@@ -95,7 +96,7 @@ export type PayrollEntry = {
 export type MyPayslip = {
   run_id: string;
   month: string;
-  status: "draft" | "processed" | "paid";
+  status: PayrollRunStatus;
   paid_at: string | null;
   entry_id: string;
   basic_monthly: number;
@@ -554,424 +555,168 @@ export async function createPayrollRun(
   return { success: true, data: { id: (data as { id: string }).id } };
 }
 
-export async function processPayrollRun(runId: string): Promise<ActionResult<void>> {
+async function loadOwnRun(supabase: ReturnType<typeof createAdminSupabase>, orgId: string, runId: string): Promise<RunRow | null> {
+  const { data } = await supabase
+    .from("payroll_runs")
+    .select("id, org_id, month, status, working_days")
+    .eq("id", runId)
+    .eq("org_id", orgId)
+    .maybeSingle();
+  return (data as RunRow | null) ?? null;
+}
+
+/** Shown whenever a change is attempted on a run that isn't a draft. */
+const LOCKED_RUN = "This month's payroll is processed and locked. Reopen it to make changes.";
+
+/**
+ * Calculates (or recalculates) a draft run's entries on the payroll engine.
+ * The run stays a draft: entries can be reviewed, edited and recalculated
+ * freely until it is processed. Rules are chosen by the run's PAY MONTH.
+ */
+export async function calculatePayrollRun(runId: string): Promise<ActionResult<CalculateResult>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can calculate payroll" };
+  const supabase = createAdminSupabase();
+  const run = await loadOwnRun(supabase, user.orgId, runId);
+  if (!run) return { success: false, error: "Payroll run not found" };
+  if (run.status !== "draft") return { success: false, error: LOCKED_RUN };
+  try {
+    const result = await calculateRunEntries(supabase as any, run);
+    const totals = await runTotals(supabase as any, run.id);
+    const { error } = await supabase.from("payroll_runs").update(totals as any).eq("id", run.id).eq("org_id", user.orgId);
+    if (error) return { success: false, error: error.message };
+    revalidatePath("/dashboard/payroll");
+    return { success: true, data: result };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : "Could not calculate payroll" };
+  }
+}
+
+/**
+ * Processes a draft run: recalculates every entry one last time, then freezes
+ * the run — entries carry a full snapshot (lines, employee details, rule
+ * versions with their params) and the run records the settings and rules it
+ * used. Later changes to salaries, settings or rules never alter it.
+ */
+export async function processPayrollRun(runId: string): Promise<ActionResult<CalculateResult>> {
   const user = await getCurrentUser();
   if (!user) return { success: false, error: "Not authenticated" };
   if (!isAdmin(user.role)) return { success: false, error: "Only admins can process payroll" };
-
   const supabase = createAdminSupabase();
+  const run = await loadOwnRun(supabase, user.orgId, runId);
+  if (!run) return { success: false, error: "Payroll run not found" };
+  if (run.status !== "draft") return { success: false, error: "Only draft runs can be processed" };
 
-  // Fetch the run
-  const { data: run, error: runError } = await supabase
-    .from("payroll_runs")
-    .select("*")
-    .eq("id", runId)
-    .eq("org_id", user.orgId)
-    .single();
+  try {
+    const result = await calculateRunEntries(supabase as any, run);
+    if (result.calculated === 0) {
+      const why = result.skipped.map((x) => `${x.name} (${x.reason})`).join(", ") || "no salaries set";
+      return { success: false, error: `Nobody could be paid for ${run.month}: ${why}` };
+    }
+    const totals = await runTotals(supabase as any, run.id);
+    const snapshot = await runSnapshot(supabase as any, run);
+    const { data: updated, error } = await supabase
+      .from("payroll_runs")
+      .update({
+        ...totals,
+        ...snapshot,
+        status: "processed",
+        processed_at: new Date().toISOString(),
+        structure_config_snapshot: null,
+      } as any)
+      .eq("id", run.id)
+      .eq("org_id", user.orgId)
+      .eq("status", "draft")
+      .select("id");
+    if (error) return { success: false, error: error.message };
+    if (!updated?.length) return { success: false, error: "The run changed while it was being processed — reload and try again" };
 
-  if (runError || !run) return { success: false, error: "Payroll run not found" };
-  const runData = run as any;
-  if (runData.status !== "draft") return { success: false, error: "Only draft runs can be processed" };
+    const auditErr = await writePayrollAudit(supabase as any, user.orgId, user.employeeId ?? null, [{
+      entity: "run", entityId: run.id, action: "transition", field: `${run.month}.status`,
+      oldValue: "draft", newValue: { status: "processed", ...totals, skipped: result.skipped, excluded: result.excluded },
+    }]);
+    if (auditErr) console.warn("[payroll] process audit write failed", auditErr);
+    revalidatePath("/dashboard/payroll");
+    return { success: true, data: result };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : "Could not process payroll" };
+  }
+}
 
-  // PRD 02 Phase 1: snapshot the active ratio config for immutability.
-  const activeRatioConfig = await getActiveRatioConfig(user.orgId);
-  const { data: configRow } = await supabase
-    .from("salary_structure_config")
-    .select("id, effective_from")
-    .eq("org_id", user.orgId)
-    .lte("effective_from", new Date().toISOString().slice(0, 10))
-    .order("effective_from", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  const configSnapshot = {
-    ...activeRatioConfig,
-    effective_from: (configRow as any)?.effective_from ?? null,
-    config_id: (configRow as any)?.id ?? null,
-  };
-
-  // Compute month boundaries upfront — used for salary effective-from filter and approved-leaves lookup
-  const [year, monthNum] = runData.month.split("-");
-  const monthStart = `${year}-${monthNum}-01`;
-  const monthEnd = new Date(parseInt(year), parseInt(monthNum), 0)
-    .toISOString()
-    .split("T")[0];
-
-  // P-013: only include salary structures effective on or before this run's month start
-  const { data: salaries, error: salaryError } = await supabase
-    .from("salary_structures")
-    .select(`
-      employee_id, gross_monthly, basic_monthly, hra_monthly,
-      special_allowance_monthly, employee_pf_monthly,
-      professional_tax_monthly, tds_monthly, net_monthly, state,
-      tax_regime, additional_deductions_annual
-    `)
-    .eq("org_id", user.orgId)
-    .lte("effective_from", monthStart);
-
-  if (salaryError) return { success: false, error: salaryError.message };
-  if (!salaries || salaries.length === 0) {
+/**
+ * Reopens a processed run for corrections — only before any money has moved
+ * (no payout started). After that, corrections go into a later month's run
+ * as an adjustment instead. Reason required; audited.
+ */
+export async function reopenPayrollRun(runId: string, reason: string): Promise<ActionResult<void>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can reopen payroll" };
+  const why = (reason ?? "").trim();
+  if (why.length < 3) return { success: false, error: "Say why this month is being reopened" };
+  const supabase = createAdminSupabase();
+  const run = await loadOwnRun(supabase, user.orgId, runId);
+  if (!run) return { success: false, error: "Payroll run not found" };
+  if (run.status !== "processed") {
     return {
       success: false,
-      error: `No salary structures effective on or before ${monthStart}. Configure salaries for active employees first.`,
+      error: run.status === "draft" ? "This run is already open" : "Money has already moved for this month — add a correction to a later month's run instead",
     };
   }
+  const { data: batches, error: bErr } = await supabase
+    .from("disbursement_batches").select("id").eq("payroll_run_id", run.id).neq("status", "cancelled").limit(1);
+  if (bErr) return { success: false, error: bErr.message };
+  if ((batches ?? []).length > 0) return { success: false, error: "A payout has been started for this month — cancel it before reopening" };
 
-  const { data: leaves } = await supabase
-    .from("leave_requests")
-    .select("employee_id, days, leave_policies(type)")
-    .eq("org_id", user.orgId)
-    .eq("status", "approved")
-    .gte("start_date", monthStart)
-    .lte("end_date", monthEnd);
-
-  // Build LOP map: employee_id → lop_days (unpaid leaves only)
-  const lopMap: Record<string, number> = {};
-  for (const leave of leaves ?? []) {
-    const l = leave as any;
-    const leaveType = l.leave_policies?.type;
-    // Count as LOP only if not a paid/sick/casual type — i.e., unpaid
-    if (leaveType === "unpaid") {
-      lopMap[l.employee_id] = (lopMap[l.employee_id] ?? 0) + (l.days ?? 0);
-    }
-  }
-
-  // P-002: fetch each employee's date_of_joining for mid-FY income projection.
-  // Also fetch employment_type to exclude contractors from salaried payroll.
-  const employeeIds = (salaries as any[]).map((s) => s.employee_id);
-  const { data: emps } = await supabase
-    .from("employees")
-    .select("id, date_of_joining, employment_type, department_id")
-    .eq("org_id", user.orgId)
-    .in("id", employeeIds);
-  const joiningMap = new Map<string, string | null>(
-    (emps ?? []).map((e: any) => [e.id, (e.date_of_joining as string | null) ?? null])
-  );
-
-  // Exclude contractors from salaried payroll runs. A contractor should not have
-  // a salary_structures row, but this guards against accidental misconfig.
-  const contractorIds = new Set(
-    (emps ?? []).filter((e: any) => e.employment_type === "contract").map((e: any) => e.id)
-  );
-  const salariedStructures = (salaries as any[]).filter((s) => !contractorIds.has(s.employee_id));
-
-  // Late-penalty consequence: if the org's late policy deducts salary, resolve
-  // the covered employees, their monthly late-day counts, penalty bands, and any
-  // waived (overridden) flags. Penalty reduces net pay only (not taxable income).
-  let penaltyEnabled = false;
-  let penaltyBands: PenaltyBand[] = [];
-  const lateCountMap: Record<string, number> = {};
-  const waivedSet = new Set<string>();
-  let coveredEmployees = new Set<string>();
-  // Ladder mode (consequence 'leave_deduction'): LOP days already decided per
-  // step by the late-penalty ladder (the CL part went to the leave ledger).
-  let ladderEnabled = false;
-  const ladderLopMap: Record<string, number> = {};
-  {
-    const { data: policy } = await supabase
-      .from("late_policies")
-      .select("id, enabled, consequence, evaluate_from")
-      .eq("org_id", user.orgId)
-      .maybeSingle();
-    const p = policy as { id: string; enabled: boolean; consequence: string; evaluate_from: string | null } | null;
-    if (p && p.enabled && p.consequence === "leave_deduction") {
-      ladderEnabled = true;
-      const { data: events } = await supabase
-        .from("late_penalty_events")
-        .select("employee_id, lop_days")
-        .eq("org_id", user.orgId)
-        .eq("month", runData.month)
-        .eq("kind", "deduction")
-        .eq("status", "applied");
-      for (const e of (events ?? []) as any[]) {
-        ladderLopMap[e.employee_id] = (ladderLopMap[e.employee_id] ?? 0) + Number(e.lop_days);
-      }
-    }
-    if (p && p.enabled && (p.consequence === "salary_deduction" || p.consequence === "both")) {
-      const { data: bandRows } = await supabase
-        .from("late_penalty_bands")
-        .select("min_late_days, max_late_days, deduction_days")
-        .eq("org_id", user.orgId)
-        .eq("policy_id", p.id)
-        .order("sort", { ascending: true });
-      penaltyBands = ((bandRows ?? []) as any[]).map((b) => ({
-        min_late_days: b.min_late_days,
-        max_late_days: b.max_late_days,
-        deduction_days: Number(b.deduction_days),
-      }));
-
-      if (penaltyBands.length > 0) {
-        penaltyEnabled = true;
-        const { data: targetRows } = await supabase
-          .from("late_policy_targets")
-          .select("target_type, target_id")
-          .eq("org_id", user.orgId)
-          .eq("policy_id", p.id);
-        coveredEmployees = resolveCoveredEmployeeIds({
-          targets: ((targetRows ?? []) as any[]).map((t) => ({
-            target_type: t.target_type,
-            target_id: t.target_id,
-          })),
-          employees: ((emps ?? []) as any[]).map((e) => ({
-            id: e.id,
-            department_id: e.department_id,
-          })),
-        });
-
-        // Monthly COUNTABLE late days — the same loader the evaluator and cron
-        // use, so week-offs, holidays, approved leave, excused days and days
-        // before the policy's go-live never count.
-        const countable = await loadCountableLates(supabase, {
-          orgId: user.orgId,
-          month: runData.month,
-          employeeIds: [...coveredEmployees],
-          evaluateFrom: p.evaluate_from,
-        });
-        for (const [employeeId, lates] of countable) lateCountMap[employeeId] = lates.length;
-
-        // Waived (overridden) flags for this month.
-        const { data: flags } = await supabase
-          .from("late_policy_flags")
-          .select("employee_id, status")
-          .eq("org_id", user.orgId)
-          .eq("month", runData.month);
-        for (const f of (flags ?? []) as any[]) {
-          if (f.status === "overridden") waivedSet.add(f.employee_id);
-        }
-      }
-    }
-  }
-
-  // PRD 02 Phase 1: line items are not pre-fetched here because they only exist
-  // AFTER a run is processed (admin adds them in the entry-edit dialog). The
-  // empty map keeps the per-entry math below simple — `recomputeEntryFromLineItems`
-  // handles the post-process line-item recompute path separately.
-  const existingLineItemsByEmployee = new Map<string, Array<{ amount: number; taxable: boolean }>>();
-
-  // Build entries — TDS is projected over months_in_fy so mid-FY joiners aren't
-  // over-deducted. Stored on each entry for later read-back in updatePayrollEntry.
-  const entries = salariedStructures.map((s) => {
-    const lopDays = lopMap[s.employee_id] ?? 0;
-    const lopDeduction = lopDays > 0
-      ? Math.round((s.gross_monthly / runData.working_days) * lopDays)
-      : 0;
-
-    const regime: "new" | "old" = (s.tax_regime as "new" | "old") ?? "new";
-    const standardDeduction = regime === "old" ? 50000 : 75000;
-    const allowedExtraDed =
-      regime === "old" ? Number(s.additional_deductions_annual ?? 0) : 0;
-    const monthsInFY = computeMonthsInFY(runData.month, joiningMap.get(s.employee_id) ?? null);
-    const annualTaxableIncome = Math.max(
-      0,
-      s.gross_monthly * monthsInFY -
-        s.employee_pf_monthly * monthsInFY -
-        standardDeduction -
-        allowedExtraDed
-    );
-    const annualTax = computeTaxByRegime(annualTaxableIncome, regime);
-    const monthlyTds = Math.round(annualTax / monthsInFY);
-
-    const lineItems = existingLineItemsByEmployee.get(s.employee_id) ?? [];
-    const taxableLineSum = lineItems.filter((i) => i.taxable).reduce((a, b) => a + b.amount, 0);
-    const nonTaxableLineSum = lineItems.filter((i) => !i.taxable).reduce((a, b) => a + b.amount, 0);
-    const totalLineItems = taxableLineSum + nonTaxableLineSum;
-    const bonusTax = computeAdditionalTaxOnBonus(annualTaxableIncome, taxableLineSum, regime);
-    const adjustedTds = monthlyTds + bonusTax;
-
-    // Late-penalty deduction (net-only; does not affect TDS). Skipped for
-    // employees not covered by the policy or whose flag was waived this month.
-    let latePenaltyDays = 0;
-    let latePenaltyDeduction = 0;
-    if (penaltyEnabled && coveredEmployees.has(s.employee_id) && !waivedSet.has(s.employee_id)) {
-      const pen = computeLatePenaltyDeduction({
-        lateDays: lateCountMap[s.employee_id] ?? 0,
-        bands: penaltyBands,
-        grossMonthly: s.gross_monthly,
-        workingDays: runData.working_days,
-      });
-      latePenaltyDays = pen.penaltyDays;
-      latePenaltyDeduction = pen.deduction;
-    }
-    if (ladderEnabled && (ladderLopMap[s.employee_id] ?? 0) > 0) {
-      // Same per-day rate as LOP; labelled "Late-arrival penalty" on the payslip.
-      latePenaltyDays = ladderLopMap[s.employee_id];
-      latePenaltyDeduction = Math.round((s.gross_monthly / runData.working_days) * latePenaltyDays);
-    }
-
-    const totalDeductions =
-      s.employee_pf_monthly +
-      s.professional_tax_monthly +
-      adjustedTds +
-      lopDeduction +
-      latePenaltyDeduction;
-    const netPay = Math.max(0, s.gross_monthly + totalLineItems - totalDeductions);
-
-    return {
-      payroll_run_id: runId,
-      org_id: user.orgId,
-      employee_id: s.employee_id,
-      basic_monthly: s.basic_monthly,
-      hra_monthly: s.hra_monthly,
-      special_allowance_monthly: s.special_allowance_monthly,
-      gross_salary: s.gross_monthly,
-      employee_pf: s.employee_pf_monthly,
-      professional_tax: s.professional_tax_monthly,
-      tds: adjustedTds,
-      lop_days: lopDays,
-      lop_deduction: lopDeduction,
-      late_penalty_days: latePenaltyDays,
-      late_penalty_deduction: latePenaltyDeduction,
-      bonus: 0, // legacy column kept for back-compat; line items are the new path
-      total_line_items: totalLineItems,
-      total_deductions: totalDeductions,
-      net_pay: netPay,
-      annual_taxable_income: annualTaxableIncome,
-      months_in_fy: monthsInFY,
-    };
-  });
-
-  // Delete existing entries if reprocessing
-  await supabase.from("payroll_entries").delete().eq("payroll_run_id", runId);
-
-  const { error: entryError } = await supabase.from("payroll_entries").insert(entries);
-  if (entryError) return { success: false, error: entryError.message };
-
-  const totalGross = entries.reduce((s, e) => s + e.gross_salary, 0);
-  const totalDeductions = entries.reduce((s, e) => s + e.total_deductions, 0);
-  const totalNet = entries.reduce((s, e) => s + e.net_pay, 0);
-
-  const { error: updateError } = await supabase
+  const { data: before } = await supabase
+    .from("payroll_runs").select("total_gross, total_deductions, total_net, employee_count, processed_at").eq("id", run.id).single();
+  const { data: updated, error } = await supabase
     .from("payroll_runs")
-    .update({
-      status: "processed",
-      total_gross: Math.round(totalGross),
-      total_deductions: Math.round(totalDeductions),
-      total_net: Math.round(totalNet),
-      employee_count: entries.length,
-      processed_at: new Date().toISOString(),
-      structure_config_snapshot: configSnapshot,
-    })
-    .eq("id", runId);
-  if (updateError) return { success: false, error: updateError.message };
-
+    .update({ status: "draft", processed_at: null } as any)
+    .eq("id", run.id).eq("org_id", user.orgId).eq("status", "processed")
+    .select("id");
+  if (error) return { success: false, error: error.message };
+  if (!updated?.length) return { success: false, error: "The run changed — reload and try again" };
+  const auditErr = await writePayrollAudit(supabase as any, user.orgId, user.employeeId ?? null, [{
+    entity: "run", entityId: run.id, action: "transition", field: `${run.month}.status`,
+    oldValue: { status: "processed", ...((before as object) ?? {}) }, newValue: "draft", reason: why,
+  }]);
+  if (auditErr) return { success: false, error: `Reopened, but the change could not be logged: ${auditErr}` };
   revalidatePath("/dashboard/payroll");
   return { success: true, data: undefined };
 }
 
-/**
- * Sends payslip emails for every entry in a processed (or paid) run.
- * Records one row in payslip_deliveries per (entry, channel='email').
- * Best-effort; never throws — failures are recorded as status='failed'.
- */
+/** Recalculates one employee's entry in a draft run (after an edit or a line-item change). */
+async function recalculateDraftEntry(supabase: ReturnType<typeof createAdminSupabase>, orgId: string, entryId: string): Promise<string | null> {
+  const { data: entry } = await supabase
+    .from("payroll_entries").select("employee_id, payroll_run_id").eq("id", entryId).eq("org_id", orgId).maybeSingle();
+  if (!entry) return "Entry not found";
+  const run = await loadOwnRun(supabase, orgId, (entry as any).payroll_run_id);
+  if (!run) return "Payroll run not found";
+  if (run.status !== "draft") return LOCKED_RUN;
+  try {
+    await calculateRunEntries(supabase as any, run, { employeeId: (entry as any).employee_id });
+    const totals = await runTotals(supabase as any, run.id);
+    await supabase.from("payroll_runs").update(totals as any).eq("id", run.id);
+    return null;
+  } catch (e) {
+    return e instanceof Error ? e.message : "Could not recalculate";
+  }
+}
+
 export async function sendPayslipEmail(runId: string): Promise<ActionResult<{ sent: number; failed: number }>> {
   const user = await getCurrentUser();
   if (!user) return { success: false, error: "Not authenticated" };
   if (!isAdmin(user.role)) return { success: false, error: "Only admins can send payslips" };
 
   const sb = createAdminSupabase();
-  const { data: run } = await sb.from("payroll_runs").select("id, org_id, month, status").eq("id", runId).single();
+  const { data: run } = await sb.from("payroll_runs").select("id, org_id, status").eq("id", runId).single();
   if (!run || (run as any).org_id !== user.orgId) return { success: false, error: "Run not found" };
-  const status = (run as any).status as string;
-  if (status === "draft") return { success: false, error: "Process the run before sending payslips" };
+  if ((run as any).status === "draft") return { success: false, error: "Process the run before sending payslips" };
 
-  const { data: org } = await sb.from("organizations").select("name").eq("id", user.orgId).single();
-  const orgName = (org as any)?.name ?? "Your employer";
-  // Mirrors the monthLabel formatting already used by the payslip email template
-  // (src/components/emails/payslip.tsx) — kept as a local copy since that helper
-  // isn't exported.
-  const monthLabel = (() => {
-    const m = (run as any).month as string;
-    const [y, mm] = m.split("-");
-    const d = new Date(Number(y), Number(mm) - 1, 1);
-    return isNaN(d.getTime()) ? m : d.toLocaleString("en-IN", { month: "long", year: "numeric" });
-  })();
-
-  const { data: entries } = await sb
-    .from("payroll_entries")
-    .select(`id, employee_id, basic_monthly, hra_monthly, special_allowance_monthly, gross_salary, employee_pf, professional_tax, tds, lop_days, lop_deduction, total_line_items, total_deductions, net_pay, employees!employee_id(first_name, last_name, email)`)
-    .eq("payroll_run_id", runId)
-    .eq("org_id", user.orgId);
-
-  let sent = 0, failed = 0;
-  for (const ent of (entries ?? []) as any[]) {
-    const email = ent.employees?.email;
-    if (!email) {
-      await sb.from("payslip_deliveries").upsert({
-        org_id: user.orgId,
-        payroll_entry_id: ent.id,
-        channel: "email",
-        status: "failed",
-        error: "no email on file for employee",
-      } as any, { onConflict: "payroll_entry_id,channel" });
-      failed++;
-      continue;
-    }
-    const employeeName = `${ent.employees.first_name} ${ent.employees.last_name}`;
-
-    const { data: items } = await sb.from("payroll_line_items").select("category, amount, taxable, note").eq("payroll_entry_id", ent.id);
-
-    try {
-      const html = await render(PayslipEmail({
-        orgName,
-        employeeName,
-        month: (run as any).month,
-        basicMonthly: ent.basic_monthly,
-        hraMonthly: ent.hra_monthly,
-        specialAllowanceMonthly: ent.special_allowance_monthly,
-        grossSalary: ent.gross_salary,
-        employeePf: ent.employee_pf,
-        professionalTax: ent.professional_tax,
-        tds: ent.tds,
-        lopDays: ent.lop_days,
-        lopDeduction: ent.lop_deduction,
-        latePenaltyDays: Number(ent.late_penalty_days ?? 0),
-        latePenaltyDeduction: Number(ent.late_penalty_deduction ?? 0),
-        lineItems: ((items ?? []) as any[]).map((i) => ({ category: i.category, amount: i.amount, note: i.note, taxable: i.taxable })),
-        totalDeductions: ent.total_deductions,
-        netPay: ent.net_pay,
-        viewInAppUrl: `${process.env.NEXT_PUBLIC_APP_URL ?? "https://jambahr.com"}/dashboard/payroll`,
-      }));
-
-      const sendResult = await resend.emails.send({
-        from: FROM_EMAIL,
-        to: email,
-        subject: `Payslip — ${(run as any).month}`,
-        html,
-      });
-
-      await sb.from("payslip_deliveries").upsert({
-        org_id: user.orgId,
-        payroll_entry_id: ent.id,
-        channel: "email",
-        status: sendResult.error ? "failed" : "sent",
-        sent_at: sendResult.error ? null : new Date().toISOString(),
-        error: sendResult.error ? sendResult.error.message : null,
-        resend_message_id: sendResult.data?.id ?? null,
-      } as any, { onConflict: "payroll_entry_id,channel" });
-      if (sendResult.error) failed++; else sent++;
-
-      // Notify mobile (best-effort, never blocks payslip delivery bookkeeping)
-      try {
-        await notifyPayslipPaid(sb, {
-          orgId: user.orgId,
-          employeeId: ent.employee_id,
-          monthLabel,
-        });
-      } catch {
-        // Push/notification failure must not break the core action
-      }
-    } catch (err: any) {
-      await sb.from("payslip_deliveries").upsert({
-        org_id: user.orgId,
-        payroll_entry_id: ent.id,
-        channel: "email",
-        status: "failed",
-        error: err?.message ?? "send failed",
-      } as any, { onConflict: "payroll_entry_id,channel" });
-      failed++;
-    }
-  }
-
-  revalidatePath("/dashboard/payroll");
+  // Sends (or re-sends) every entry, each with its PDF pay slip attached.
+  const { sent, failed } = await sendRunPayslips(sb as any, user.orgId, runId);
   return { success: true, data: { sent, failed } };
 }
 
@@ -982,7 +727,7 @@ export async function markPayrollPaid(runId: string): Promise<ActionResult<void>
 
   const supabase = createAdminSupabase();
 
-  const { error } = await supabase
+  const { data: paidRows, error } = await supabase
     .from("payroll_runs")
     .update({
       status: "paid",
@@ -991,13 +736,15 @@ export async function markPayrollPaid(runId: string): Promise<ActionResult<void>
     })
     .eq("id", runId)
     .eq("org_id", user.orgId)
-    .eq("status", "processed");
+    .eq("status", "processed")
+    .select("id");
 
   if (error) return { success: false, error: error.message };
+  if (!(paidRows ?? []).length) return { success: false, error: "Only a processed run can be marked paid" };
 
   revalidatePath("/dashboard/payroll");
   // Best-effort payslip email — survives function freeze via waitUntil.
-  try { waitUntil(sendPayslipEmail(runId).then(() => undefined)); } catch {}
+  try { waitUntil(sendRunPayslips(supabase as any, user.orgId, runId, { onlyUnsent: true }).then(() => undefined)); } catch {}
   return { success: true, data: undefined };
 }
 
@@ -1015,9 +762,13 @@ export async function deletePayrollRun(runId: string): Promise<ActionResult<void
     .eq("org_id", user.orgId)
     .single();
 
-  if ((run as any)?.status === "paid") {
-    return { success: false, error: "Cannot delete a paid payroll run" };
+  const status = (run as any)?.status as string | undefined;
+  if (status && status !== "draft" && status !== "processed") {
+    return { success: false, error: "Money has moved for this run — it can't be deleted" };
   }
+  const { data: batches } = await supabase
+    .from("disbursement_batches").select("id").eq("payroll_run_id", runId).neq("status", "cancelled").limit(1);
+  if ((batches ?? []).length > 0) return { success: false, error: "A payout has been started for this run — cancel it first" };
 
   await supabase.from("payroll_entries").delete().eq("payroll_run_id", runId);
   const { error } = await supabase
@@ -1044,7 +795,7 @@ export async function getPayrollEntries(runId: string): Promise<ActionResult<Pay
   const [{ data: entries, error }, { data: employees }, { data: departments }] = await Promise.all([
     supabase
       .from("payroll_entries")
-      .select("id, employee_id, basic_monthly, hra_monthly, special_allowance_monthly, gross_salary, employee_pf, professional_tax, tds, lop_days, lop_deduction, late_penalty_days, late_penalty_deduction, bonus, total_deductions, net_pay")
+      .select("id, employee_id, basic_monthly, hra_monthly, special_allowance_monthly, gross_salary, employee_pf, professional_tax, tds, lop_days, lop_deduction, late_penalty_days, late_penalty_deduction, bonus, total_line_items, edited_at, total_deductions, net_pay")
       .eq("payroll_run_id", runId)
       .eq("org_id", user.orgId)
       .order("created_at"),
@@ -1082,6 +833,8 @@ export async function getPayrollEntries(runId: string): Promise<ActionResult<Pay
       late_penalty_days: Number(r.late_penalty_days ?? 0),
       late_penalty_deduction: r.late_penalty_deduction ?? 0,
       bonus: r.bonus,
+      total_line_items: Number(r.total_line_items ?? 0),
+      edited: !!r.edited_at,
       total_deductions: r.total_deductions,
       net_pay: r.net_pay,
     };
@@ -1092,107 +845,54 @@ export async function getPayrollEntries(runId: string): Promise<ActionResult<Pay
 
 export async function updatePayrollEntry(
   entryId: string,
-  updates: { bonus: number; lop_days: number; late_penalty_days?: number }
+  updates: { bonus?: number; lop_days: number; late_penalty_days?: number }
 ): Promise<ActionResult<void>> {
   const user = await getCurrentUser();
   if (!user) return { success: false, error: "Not authenticated" };
   if (!isAdmin(user.role)) return { success: false, error: "Only admins can edit payroll entries" };
+  if (!(updates.lop_days >= 0) || updates.lop_days > 31) return { success: false, error: "LOP days must be between 0 and 31" };
+  if (updates.late_penalty_days !== undefined && (!(updates.late_penalty_days >= 0) || updates.late_penalty_days > 31)) {
+    return { success: false, error: "Late-penalty days must be between 0 and 31" };
+  }
 
   const supabase = createAdminSupabase();
-
-  // Fetch current entry (net_pay captured for previous_net_pay audit column)
   const { data: entry, error: fetchErr } = await supabase
     .from("payroll_entries")
-    .select("gross_salary, employee_pf, professional_tax, tds, net_pay, payroll_run_id, employee_id, annual_taxable_income, months_in_fy, late_penalty_days, late_penalty_deduction")
+    .select("net_pay, payroll_run_id, employee_id, lop_days, late_penalty_days")
     .eq("id", entryId)
     .eq("org_id", user.orgId)
     .single();
-
   if (fetchErr || !entry) return { success: false, error: "Entry not found" };
   const e = entry as any;
+  const run = await loadOwnRun(supabase, user.orgId, e.payroll_run_id);
+  if (!run) return { success: false, error: "Payroll run not found" };
+  if (run.status !== "draft") return { success: false, error: LOCKED_RUN };
 
-  // Fetch working days from run
-  const { data: run } = await supabase
-    .from("payroll_runs")
-    .select("working_days, status")
-    .eq("id", e.payroll_run_id)
-    .single();
-
-  if ((run as any)?.status === "paid") {
-    return { success: false, error: "Cannot edit entries in a paid payroll run" };
-  }
-
-  const workingDays = (run as any)?.working_days ?? 26;
-  const lopDeduction = updates.lop_days > 0
-    ? Math.round((e.gross_salary / workingDays) * updates.lop_days)
-    : 0;
-
-  // Late-penalty: admin may override the penalty days per entry; otherwise keep
-  // the value computed at process time. Same per-day rate as LOP; net-only.
-  const latePenaltyDays = updates.late_penalty_days ?? Number(e.late_penalty_days ?? 0);
-  const latePenaltyDeduction = latePenaltyDays > 0
-    ? Math.round((e.gross_salary / workingDays) * latePenaltyDays)
-    : 0;
-
-  // P-005 + P-003: re-derive base TDS regime-aware, then add marginal tax on bonus.
-  // Idempotent on re-edit: bonus=0 collapses bonusTax to 0. Salary structure provides
-  // regime + old-regime deductions; falls back to new regime if structure missing.
-  const { data: salary } = await supabase
-    .from("salary_structures")
-    .select("tax_regime, additional_deductions_annual")
-    .eq("org_id", user.orgId)
-    .eq("employee_id", e.employee_id)
-    .maybeSingle();
-  const regime: "new" | "old" = ((salary as any)?.tax_regime as "new" | "old") ?? "new";
-  const standardDeduction = regime === "old" ? 50000 : 75000;
-  const extraDeductions =
-    regime === "old" ? Number((salary as any)?.additional_deductions_annual ?? 0) : 0;
-
-  // P-002: prefer the FY snapshot stored at process time; fall back to gross×12 for
-  // legacy entries written before the snapshot columns existed.
-  const monthsInFY: number = Number(e.months_in_fy) > 0 ? Number(e.months_in_fy) : 12;
-  const annualTaxable: number =
-    e.annual_taxable_income != null
-      ? Number(e.annual_taxable_income)
-      : Math.max(0, e.gross_salary * 12 - e.employee_pf * 12 - standardDeduction - extraDeductions);
-  const baseTdsMonthly = Math.round(computeTaxByRegime(annualTaxable, regime) / monthsInFY);
-  const bonusTax = computeAdditionalTaxOnBonus(annualTaxable, updates.bonus, regime);
-  const adjustedTds = baseTdsMonthly + bonusTax;
-
-  const totalDeductions =
-    e.employee_pf + e.professional_tax + adjustedTds + lopDeduction + latePenaltyDeduction;
-  const netPay = Math.max(0, e.gross_salary + updates.bonus - totalDeductions);
-
+  // Marking the entry as edited makes recalculation keep these days instead of re-deriving them.
   const { error } = await supabase
     .from("payroll_entries")
     .update({
-      bonus: updates.bonus,
       lop_days: updates.lop_days,
-      lop_deduction: lopDeduction,
-      late_penalty_days: latePenaltyDays,
-      late_penalty_deduction: latePenaltyDeduction,
-      tds: adjustedTds,
-      total_deductions: totalDeductions,
-      net_pay: netPay,
+      late_penalty_days: updates.late_penalty_days ?? e.late_penalty_days ?? 0,
       previous_net_pay: e.net_pay,
       edited_by: user.employeeId ?? null,
       edited_at: new Date().toISOString(),
-    })
+    } as any)
     .eq("id", entryId)
     .eq("org_id", user.orgId);
-
   if (error) return { success: false, error: error.message };
 
-  // Fold any line items into this entry's TDS + totals + net pay, and roll up
-  // the run totals to include `total_line_items`. Without this call, line items
-  // get silently wiped from net_pay whenever an admin edits LOP/bonus.
-  await recomputeEntryFromLineItems(entryId);
-
+  const recalcErr = await recalculateDraftEntry(supabase, user.orgId, entryId);
+  if (recalcErr) return { success: false, error: recalcErr };
+  const auditErr = await writePayrollAudit(supabase as any, user.orgId, user.employeeId ?? null, [{
+    entity: "entry", entityId: entryId, action: "update", field: `${run.month}.${e.employee_id}`,
+    oldValue: { lop_days: e.lop_days, late_penalty_days: e.late_penalty_days, net_pay: e.net_pay },
+    newValue: { lop_days: updates.lop_days, late_penalty_days: updates.late_penalty_days ?? e.late_penalty_days },
+  }]);
+  if (auditErr) console.warn("[payroll] entry audit write failed", auditErr);
   revalidatePath("/dashboard/payroll");
   return { success: true, data: undefined };
 }
-
-// ---- Employee: My Payslips ----
 
 export async function getMyPayslips(): Promise<ActionResult<MyPayslip[]>> {
   const user = await getCurrentUser();
@@ -1332,7 +1032,7 @@ export async function addPayrollLineItem(input: z.infer<typeof LineItemSchema>):
     .select("status")
     .eq("id", (entry as any).payroll_run_id)
     .single();
-  if ((run as any)?.status === "paid") return { success: false, error: "Cannot add line items to a paid run" };
+  if ((run as any)?.status !== "draft") return { success: false, error: LOCKED_RUN };
 
   // Late-policy bonus block: refuse a bonus for an employee flagged this month.
   if (parsed.data.category === "bonus" && !parsed.data.override) {
@@ -1383,7 +1083,8 @@ export async function addPayrollLineItem(input: z.infer<typeof LineItemSchema>):
 
   if (error) return { success: false, error: error.message };
 
-  await recomputeEntryFromLineItems((entry as any).id);
+  const recalcErr = await recalculateDraftEntry(sb, user.orgId, (entry as any).id);
+  if (recalcErr) return { success: false, error: recalcErr };
   revalidatePath("/dashboard/payroll");
   return { success: true, data: { id: (data as { id: string }).id } };
 }
@@ -1411,16 +1112,17 @@ export async function removePayrollLineItem(itemId: string): Promise<ActionResul
     .select("status")
     .eq("id", (entry as any).payroll_run_id)
     .single();
-  if ((run as any)?.status === "paid") return { success: false, error: "Cannot remove line items from a paid run" };
+  if ((run as any)?.status !== "draft") return { success: false, error: LOCKED_RUN };
 
   const { error } = await sb.from("payroll_line_items").delete().eq("id", itemId);
   if (error) return { success: false, error: error.message };
 
-  await recomputeEntryFromLineItems((item as any).payroll_entry_id);
+  const recalcErr = await recalculateDraftEntry(sb, user.orgId, (item as any).payroll_entry_id);
+  if (recalcErr) return { success: false, error: recalcErr };
   revalidatePath("/dashboard/payroll");
   return { success: true, data: undefined };
 }
 
-// `recomputeEntryFromLineItems` lives in `src/lib/payroll/recompute-entry.ts`
-// so it can be shared with other server-action modules (e.g. overtime push).
-// Imported above; do not redeclare here.
+// Entry recalculation goes through the payroll engine (`calculateRunEntries`
+// in src/lib/payroll/engine-run.ts), shared with the overtime push and the
+// late-penalty ladder. Only draft runs are ever recalculated.

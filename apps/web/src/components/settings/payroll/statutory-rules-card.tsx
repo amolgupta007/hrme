@@ -36,7 +36,11 @@ function summary(key: StatutoryRuleKey, p: unknown): string {
   switch (key) {
     case "epf": {
       const e = p as EpfParams;
-      return `${e.eeRate}% employee + ${e.erRate}% employer on ${e.wageBase.join(" + ")}, ${e.wageCeiling === null ? "no ceiling" : `wages up to ${inr(e.wageCeiling)}`}${e.contributeAboveCeiling ? " (on full wages)" : ""}`;
+      const wages =
+        e.wageCeiling === null ? "no ceiling"
+        : e.contributeAboveCeiling ? `full wages (above the ${inr(e.wageCeiling)} ceiling too)`
+        : `wages up to ${inr(e.wageCeiling)}`;
+      return `${e.eeRate}% employee + ${e.erRate}% employer on ${e.wageBase.join(" + ")}, ${wages}`;
     }
     case "esi": {
       const e = p as EsiParams;

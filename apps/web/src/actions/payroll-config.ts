@@ -210,10 +210,15 @@ export async function savePayrollSettings(input: PayrollSettingsInput): Promise<
     .single();
   if (error) return { success: false, error: error.message };
 
-  const audit: AuditEntry[] = diffFields(firstSave ? null : before, after).map((d) => ({
-    entity: "settings", entityId: (saved as { id: string }).id, action: firstSave ? "create" : "update",
-    field: `${s.effectiveFromMonth}.${d.field}`, oldValue: d.oldValue, newValue: d.newValue, reason: s.reason ?? null,
-  }));
+  const entityId = (saved as { id: string }).id;
+  // First save: one entry holding today's behaviour (old) and what was saved (new).
+  // Later saves: one entry per changed field.
+  const audit: AuditEntry[] = firstSave
+    ? [{ entity: "settings", entityId, action: "create", field: s.effectiveFromMonth, oldValue: before, newValue: after, reason: s.reason ?? null }]
+    : diffFields(before, after).map((d) => ({
+        entity: "settings", entityId, action: "update",
+        field: `${s.effectiveFromMonth}.${d.field}`, oldValue: d.oldValue, newValue: d.newValue, reason: s.reason ?? null,
+      }));
 
   if (seedComponents) {
     const rows = seedComponents.map((c) => componentRow(orgId, s.effectiveFromMonth, c, employeeId ?? null));

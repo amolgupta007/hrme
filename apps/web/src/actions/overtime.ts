@@ -10,7 +10,7 @@ import {
   computeWeeklyOvertimeMinutes,
   computeHourlyRate,
 } from "@/lib/attendance/ot";
-import { recomputeEntryFromLineItems } from "@/lib/payroll/recompute-entry";
+import { calculateRunEntries, runTotals } from "@/lib/payroll/engine-run";
 import {
   DEFAULT_OT_SETTINGS,
 } from "@/lib/attendance/overtime-types";
@@ -453,18 +453,19 @@ export async function pushOvertimeToPayroll(
   // Find the open run for this month.
   const { data: run } = await sb
     .from("payroll_runs")
-    .select("id, working_days, status")
+    .select("id, org_id, month, working_days, status")
     .eq("org_id", user.orgId)
     .eq("month", parsed.data.month)
     .maybeSingle();
   if (!run) {
     return {
       success: false,
-      error: `No payroll run exists for ${parsed.data.month}. Process the run first.`,
+      error: `No payroll run exists for ${parsed.data.month}. Create it and click Calculate first.`,
     };
   }
-  if ((run as any).status === "paid") {
-    return { success: false, error: "Cannot push to a paid run" };
+  // Processed months are frozen (payroll engine): OT goes into a draft run only.
+  if ((run as any).status !== "draft") {
+    return { success: false, error: `${parsed.data.month} payroll is processed and locked — reopen it to add overtime` };
   }
 
   // Find approved, not-yet-pushed OT records in the month.
@@ -557,12 +558,15 @@ export async function pushOvertimeToPayroll(
     pushed++;
   }
 
-  // Recompute TDS + roll-ups for every touched entry.
-  // Uses the shared helper from src/lib/payroll/recompute-entry (also used by
-  // src/actions/payroll.ts) so the math stays in lock-step with manual line-
-  // item add/remove flows.
-  for (const entryId of entryIdsToRecompute) {
-    await recomputeEntryFromLineItems(entryId);
+  // Recalculate every touched employee on the payroll engine (OT line items
+  // are carried as taxable one-off adjustments), then refresh the run totals.
+  if (entryIdsToRecompute.size > 0) {
+    const { data: touched } = await sb
+      .from("payroll_entries").select("employee_id").in("id", [...entryIdsToRecompute]);
+    for (const t of (touched ?? []) as { employee_id: string }[]) {
+      await calculateRunEntries(sb as any, run as any, { employeeId: t.employee_id });
+    }
+    await sb.from("payroll_runs").update((await runTotals(sb as any, (run as any).id)) as any).eq("id", (run as any).id);
   }
 
   revalidatePath("/dashboard/attendance");

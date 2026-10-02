@@ -13,7 +13,6 @@ vi.mock("@/lib/resend", () => ({
 }));
 vi.mock("@react-email/render", () => ({ render: vi.fn(async () => "<html/>") }));
 vi.mock("@/lib/mobile/push", () => ({ sendPush: vi.fn(async () => {}) }));
-vi.mock("@/lib/payroll/recompute-entry", () => ({ recomputeEntryFromLineItems: vi.fn(async () => {}) }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 let currentUser: any;

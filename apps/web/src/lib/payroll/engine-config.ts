@@ -135,11 +135,13 @@ export interface PayrollConfig {
   rules: StatutoryRule[];
 }
 
-async function legacyRatios(sb: SupabaseClient, orgId: string): Promise<RatioConfig> {
+/** The org's pre-engine ratios in force for the pay month (by effective date, never "newest"). */
+async function legacyRatios(sb: SupabaseClient, orgId: string, month: PayMonth): Promise<RatioConfig> {
   const { data } = await sb
     .from("salary_structure_config")
     .select("basic_pct, hra_pct_metro, hra_pct_non_metro, gratuity_pct")
     .eq("org_id", orgId)
+    .lte("effective_from", `${month}-01`)
     .order("effective_from", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -171,7 +173,7 @@ export async function loadPayrollConfig(sb: SupabaseClient, orgId: string, month
   if (s && comps.length > 0) return { source: "saved", settings: s, components: comps, rules };
 
   // Not configured (or not yet for this month): today's behaviour, exactly.
-  const ratios = await legacyRatios(sb, orgId);
+  const ratios = await legacyRatios(sb, orgId, month);
   return {
     source: "legacy",
     settings: s ?? { ...legacySettings(), lopSource: "unpaid_leave", effectiveFromMonth: month },

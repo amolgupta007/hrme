@@ -15,7 +15,7 @@ import type { LateDay } from "@jambahr/shared/attendance/late-eligibility";
 import { loadRemainingBalance } from "@/lib/leaves/balance";
 import { managerIdsOf } from "@/lib/managers";
 import { notify } from "@/lib/mobile/notify";
-import { recomputeEntryFromLineItems } from "@/lib/payroll/recompute-entry";
+import { calculateRunEntries } from "@/lib/payroll/engine-run";
 import { resend, NOREPLY_EMAIL } from "@/lib/resend";
 import {
   LateArrivalNotice,
@@ -103,8 +103,10 @@ async function writeLedger(
 }
 
 /**
- * Keep an already-processed (unpaid) payroll entry in step with the month's
- * applied LOP. Draft runs pick it up at process time; paid runs are never touched.
+ * Keep a DRAFT payroll run in step with the month's applied late-penalty LOP.
+ * Processed runs are frozen (payroll engine, step 5): a change after
+ * processing is picked up by reopening the month before money moves; paid
+ * months are handled by the needs_review path above.
  */
 export async function refreshPayrollLatePenalty(
   supabase: Supabase,
@@ -114,35 +116,22 @@ export async function refreshPayrollLatePenalty(
 ): Promise<void> {
   const { data: runs } = await supabase
     .from("payroll_runs")
-    .select("id, status, working_days")
+    .select("id, org_id, month, status, working_days")
     .eq("org_id", orgId)
     .eq("month", month)
-    .eq("status", "processed")
+    .eq("status", "draft")
     .limit(1);
   const run = ((runs ?? []) as any[])[0];
   if (!run) return;
   const { data: entry } = await supabase
     .from("payroll_entries")
-    .select("id, gross_salary")
+    .select("id, edited_at")
     .eq("payroll_run_id", run.id)
     .eq("employee_id", employeeId)
     .maybeSingle();
-  if (!entry) return;
-  const { data: events } = await supabase
-    .from("late_penalty_events")
-    .select("lop_days")
-    .eq("org_id", orgId)
-    .eq("employee_id", employeeId)
-    .eq("month", month)
-    .eq("kind", "deduction")
-    .eq("status", "applied");
-  const days = ((events ?? []) as any[]).reduce((s, e) => s + Number(e.lop_days), 0);
-  const deduction = days > 0 ? Math.round(((entry as any).gross_salary / run.working_days) * days) : 0;
-  await supabase
-    .from("payroll_entries")
-    .update({ late_penalty_days: days, late_penalty_deduction: deduction })
-    .eq("id", (entry as any).id);
-  await recomputeEntryFromLineItems((entry as any).id, supabase as any);
+  // Not calculated yet (picked up when it is), or days set by hand (the admin's call).
+  if (!entry || (entry as any).edited_at) return;
+  await calculateRunEntries(supabase as any, run, { employeeId });
 }
 
 // ── notifications ──────────────────────────────────────────────────────────

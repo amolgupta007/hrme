@@ -920,6 +920,54 @@ Clause-based offer-letter / NDA / policy templates → issue to many employees w
 
 ---
 
+### Payroll engine (branch `feat/payroll-engine`, 2026-10-02) — configurable, date-effective, locked runs
+
+**One calculation path.** Every payroll run goes through a pure engine (`@jambahr/shared/payroll/engine`). Orgs that set it up use their own settings, components and salary revisions. Everyone else runs on a legacy preset built from `salary_structures`, which reproduces the old `processPayrollRun` exactly for pay months before Sep 2026 (144-case parity test).
+
+**Rules by pay month.** Rules are chosen by the run's **pay month**, never the processing date. JambaHR keeps global statutory rules (`statutory_rules`, `scope='global'`); an org override wins. **Statutory change:** EPFO wage ceiling ₹15,000 → **₹25,000 from pay month 2026-09** (Cabinet approval 16 Sep 2026; migration 121). August and earlier keep ₹15,000.
+
+**Tables** (migrations 114–121, all live):
+
+| Table / column | Purpose |
+|---|---|
+| `payroll_settings` | Per-org, versioned by month: gross-first or ctc-first, calendar or fixed days, LOP source and treatment, joiner proration, rounding |
+| `payroll_components` | Per-org component master: earnings, deductions, employer contributions. Method is fixed, % of, balancing, statutory or manual. Each component can be switched on/off, shown on the slip or not, and ordered. |
+| `statutory_rules` | EPF, ESI, PT, LWF, TDS params, validated by `RULE_PARAM_SCHEMAS` |
+| `employee_salary_revisions` + `employee_salary_component_values` | Dated salary history plus per-employee overrides |
+| `payroll_audit_log` | Append-only (trigger). Every payroll mutation writes to it; a failed audit write is an error. |
+| `payroll_entries.snapshot` / `payroll_runs.settings_snapshot` / `payroll_runs.rule_versions` | Frozen at processing |
+| `employees.{uan, pf_number, esic_number, work_location, payroll_excluded(+_reason)}`, `organizations.{address, pan, tan, pf_establishment_code, esi_code}` | Master data for the slip and for exclusions |
+
+**Runs:**
+- **Draft:** **Calculate** writes entries and can be repeated. A hand-set LOP or late-penalty day count (`edited_at`) and line items survive recalculation.
+- **Process & lock:** freezes the snapshot.
+- **Processed:** read-only. **Reopen** needs a reason and is audited, and only works before any payout batch exists. After that, corrections go into a later month.
+- **Disbursing / paid:** can't be deleted.
+- **Overtime push and late ladder:** they only touch draft runs.
+- **CTC-first + EPF change:** CTC is fixed, so the higher employer PF reduces special allowance. Gross falls ₹1,200 and net ₹2,400 when Basic is above ₹15k. Gross-first orgs keep gross; their CTC rises instead.
+
+**Settings → Payroll** (engine section): settings, components, statutory rules, and "Pay slip details". Each setting has a hover norm note (`packages/shared/src/payroll/norms.ts`, approved text). **Payroll → Salary structures** switches to the dated-revision editor with a live preview, but only for orgs with saved engine settings.
+
+**Pay slips:**
+- **Model:** one (`@jambahr/shared/payroll/payslip`), in the **October reference format**: Courier, framed, logo top-left, LABEL :value block, PARTICULARS EARNINGS | DEDUCTIONS, amount in words.
+- **Org details:** `settings.payslip` {legalName, website, email, queryLine, showEmployerContributions}, `logo_url` (path in the `documents` bucket), address and codes.
+- **Surfaces:** web view, `/api/payroll/payslips/[id]/pdf`, the email (PDF attached; also sent when a RazorpayX payout completes) and the mobile PDF. Older entries use the legacy adapter.
+
+**Gotchas:**
+- employees store gender as "female"/"Male" (normalise; `normalizeGender`).
+- There's no leaving-date column, so leavers aren't prorated.
+- `negative_leave_balance` LOP warns and expects manual days.
+- `components` in ctc-first mode must be % of CTC, not GROSS.
+- The mobile native payslip screen still uses the fixed Basic/HRA/Special DTO.
+
+**Medialoop (live data, 2026-10-02):**
+- Engine set up from pay month **2026-08** from their old-EPF sheet: gross-first, calendar days, LOP off, rupee rounding, HRA 50%, conveyance/LTA/commission per employee.
+- Org rules: ESI (fixed gross ≤ ₹42k, on Basic), PT MH (sheet slabs + women < ₹25,001 exempt), LWF 0.
+- 17 salaries set; Ashreya, Siddharth and Vinay are excluded (other company's payroll).
+- Pay slip details and logo come from their Aug slip.
+- August recomputes 17/17 to the sheet.
+- **The August run itself isn't created yet:** it waits for this branch to deploy. The October structure (HRA 40%, new LTA/conveyance, no commission) will be set up live in the demo.
+
 ## JambaGeo Module (`/geo`) — Business+
 
 Feature-flagged via `organizations.settings.jambageo_enabled`. Lightweight lead CRM + field-staff tracking. Phase 1 (web-only) shipped 2026-06-09.

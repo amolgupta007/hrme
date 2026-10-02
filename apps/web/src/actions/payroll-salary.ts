@@ -43,6 +43,11 @@ export interface SalaryEmployee extends PayrollPerson {
   status: string;
   payrollExcluded: boolean;
   payrollExcludedReason: string | null;
+  /** Shown on the pay slip. */
+  uan: string | null;
+  pfNumber: string | null;
+  esicNumber: string | null;
+  workLocation: string | null;
   /** Their pre-engine salary_structures row, to start a first revision from. */
   legacyDraft: ReturnType<typeof revisionDraftFromLegacy> | null;
 }
@@ -66,7 +71,7 @@ export async function getSalaryEditorView(forMonth?: string): Promise<ActionResu
       loadPayrollConfig(sb, orgId, month),
       loadRevisions(sb, orgId),
       sb.from("employees")
-        .select("id, first_name, last_name, designation, status, gender, date_of_joining, payroll_excluded, payroll_excluded_reason, employment_type")
+        .select("id, first_name, last_name, designation, status, gender, date_of_joining, payroll_excluded, payroll_excluded_reason, employment_type, uan, pf_number, esic_number, work_location")
         .eq("org_id", orgId)
         .neq("status", "terminated")
         .order("first_name"),
@@ -83,6 +88,7 @@ export async function getSalaryEditorView(forMonth?: string): Promise<ActionResu
       id: string; first_name: string; last_name: string; designation: string | null; status: string;
       gender: string | null; date_of_joining: string | null; payroll_excluded: boolean;
       payroll_excluded_reason: string | null; employment_type: string | null;
+      uan: string | null; pf_number: string | null; esic_number: string | null; work_location: string | null;
     };
     const employees: SalaryEmployee[] = ((empRes.data ?? []) as EmpRow[])
       // Contractors are paid through the contractor flow, never a salary run.
@@ -93,6 +99,7 @@ export async function getSalaryEditorView(forMonth?: string): Promise<ActionResu
           id: e.id, firstName: e.first_name, lastName: e.last_name, designation: e.designation, status: e.status,
           gender: e.gender, date_of_joining: e.date_of_joining,
           payrollExcluded: !!e.payroll_excluded, payrollExcludedReason: e.payroll_excluded_reason,
+          uan: e.uan, pfNumber: e.pf_number, esicNumber: e.esic_number, workLocation: e.work_location,
           legacyDraft: l ? revisionDraftFromLegacy(l) : null,
         };
       });
@@ -324,6 +331,39 @@ export async function setPayrollExclusion(input: { employeeId: string; excluded:
     entity: "employee_payroll_exclusion", entityId: employeeId, action: "update", field: "payroll_excluded",
     oldValue: { excluded: before.payroll_excluded, reason: before.payroll_excluded_reason },
     newValue: { excluded, reason: excluded ? reason : null }, reason: reason || null,
+  }]);
+  if (auditErr) return { success: false, error: `Saved, but the change could not be logged: ${auditErr}` };
+  revalidatePath(PAYROLL_PATH);
+  return { success: true, data: undefined };
+}
+
+// ── Pay slip ids on the employee (UAN, PF no., ESIC no., work location) ────
+
+const IdsSchema = z.object({
+  employeeId: z.string().uuid(),
+  uan: z.union([z.literal(""), z.string().trim().regex(/^\d{12}$/, "UAN is 12 digits")]),
+  pfNumber: z.string().trim().max(30),
+  esicNumber: z.union([z.literal(""), z.string().trim().regex(/^\d{10,17}$/, "ESIC number is 10–17 digits")]),
+  workLocation: z.string().trim().max(60),
+});
+
+export async function savePayslipIds(input: z.input<typeof IdsSchema>): Promise<ActionResult<void>> {
+  const auth = await requirePayrollAdmin();
+  if ("error" in auth) return { success: false, error: auth.error! };
+  const parsed = IdsSchema.safeParse(input);
+  if (!parsed.success) return { success: false, error: parsed.error.errors[0].message };
+  const d = parsed.data;
+  const { orgId, employeeId: actorId } = auth.user;
+  const sb = createAdminSupabase();
+  const { data: before, error: findErr } = await sb.from("employees").select("uan, pf_number, esic_number, work_location")
+    .eq("id", d.employeeId).eq("org_id", orgId).maybeSingle();
+  if (findErr) return { success: false, error: findErr.message };
+  if (!before) return { success: false, error: "Employee not found in your organisation" };
+  const after = { uan: d.uan || null, pf_number: d.pfNumber || null, esic_number: d.esicNumber || null, work_location: d.workLocation || null };
+  const { error } = await sb.from("employees").update(after).eq("id", d.employeeId).eq("org_id", orgId);
+  if (error) return { success: false, error: error.message };
+  const auditErr = await writePayrollAudit(sb, orgId, actorId ?? null, [{
+    entity: "salary_revision", entityId: d.employeeId, action: "update", field: "payslip_ids", oldValue: before, newValue: after,
   }]);
   if (auditErr) return { success: false, error: `Saved, but the change could not be logged: ${auditErr}` };
   revalidatePath(PAYROLL_PATH);

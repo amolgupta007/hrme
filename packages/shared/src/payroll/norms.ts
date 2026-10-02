@@ -6,9 +6,9 @@
 // org's CA / payroll consultant has the final word. `deviates` lets the UI show
 // a soft "differs from the usual" hint; it never blocks a save.
 //
-// STATUS: draft text, written 2026-10-02 — must be reviewed before it ships.
-// Statements were not taken as authoritative from memory: anything that is a
-// statutory figure says "confirm" and carries `asOf`.
+// STATUS: text reviewed and approved by the product owner on 2026-10-02.
+// Anything that is a statutory figure says "confirm" and carries `asOf`;
+// update `asOf` whenever a note is re-checked.
 
 export interface Norm {
   /** One or two plain sentences: what most Indian SMBs do / what the law has said. */

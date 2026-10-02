@@ -6,6 +6,7 @@ import { getPayrollEngineView, type PayrollEngineView } from "@/actions/payroll-
 import { PayrollSettingsCard } from "./payroll-settings-card";
 import { PayrollComponentsCard } from "./payroll-components-card";
 import { StatutoryRulesCard } from "./statutory-rules-card";
+import { PayslipDetailsCard } from "./payslip-details-card";
 import { small } from "./styles";
 
 /**
@@ -67,6 +68,7 @@ export function PayrollEngineSection() {
       <StatutoryRulesCard
         key={`r-${version}`} orgRules={view.orgRules} globalRules={view.globalRules} month={view.month} earningCodes={earningCodes} onSaved={reload}
       />
+      <PayslipDetailsCard />
     </div>
   );
 }

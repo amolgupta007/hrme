@@ -110,9 +110,8 @@ export function PayrollClient({
   }>({ open: false });
   const [runDialog, setRunDialog] = useState(false);
   const [editEntry, setEditEntry] = useState<PayrollEntry | null>(null);
-  const [viewSlip, setViewSlip] = useState<
-    ((PayrollEntry & { month: string; employee_name: string }) | (MyPayslip & { employee_name: string })) | null
-  >(null);
+  /** Entry id of the pay slip being viewed. */
+  const [viewSlip, setViewSlip] = useState<string | null>(null);
 
   // Expanded run
   const [expandedRun, setExpandedRun] = useState<string | null>(null);
@@ -552,13 +551,7 @@ export function PayrollClient({
                                   <Button
                                     variant="ghost"
                                     size="sm"
-                                    onClick={() =>
-                                      setViewSlip({
-                                        ...entry,
-                                        month: run.month,
-                                        employee_name: entry.employee_name,
-                                      })
-                                    }
+                                    onClick={() => setViewSlip(entry.id)}
                                     title="View payslip"
                                   >
                                     <FileText className="h-3.5 w-3.5" />
@@ -652,9 +645,7 @@ export function PayrollClient({
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() =>
-                            setViewSlip({ ...slip, employee_name: currentEmployeeName })
-                          }
+                          onClick={() => setViewSlip(slip.entry_id)}
                         >
                           <FileText className="h-3.5 w-3.5 mr-1" />
                           View
@@ -764,8 +755,7 @@ export function PayrollClient({
         <PayslipDialog
           open
           onClose={() => setViewSlip(null)}
-          data={viewSlip}
-          orgName={orgName}
+          entryId={viewSlip}
         />
       )}
     </div>

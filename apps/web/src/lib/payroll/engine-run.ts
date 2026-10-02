@@ -324,7 +324,9 @@ export async function runTotals(sb: SupabaseClient, runId: string) {
 /** What the run was calculated with — frozen on the run at process time. */
 export async function runSnapshot(sb: SupabaseClient, run: RunRow) {
   const config = await loadRunConfig(sb, run);
-  const { data: org } = await sb.from("organizations").select("name, address, pan, tan, pf_establishment_code, esi_code, logo_url").eq("id", run.org_id).single();
+  const { data: org } = await sb.from("organizations").select("name, address, gstin, pan, tan, pf_establishment_code, esi_code, logo_url, settings").eq("id", run.org_id).single();
+  // Freeze only what the pay slip shows — not the whole settings blob.
+  const orgSnap = org ? { ...(org as any), settings: { payslip: (org as any).settings?.payslip ?? null } } : null;
   const used = new Set<string>();
   const { data: entries } = await sb.from("payroll_entries").select("snapshot").eq("payroll_run_id", run.id);
   for (const e of (entries ?? []) as { snapshot: { rules?: Record<string, { id: string }> } | null }[]) {
@@ -335,7 +337,7 @@ export async function runSnapshot(sb: SupabaseClient, run: RunRow) {
       source: config.source,
       settings: config.settings,
       components: config.components.map((c) => ({ code: c.code, label: c.label, kind: c.kind, order: c.order, showOnPayslip: c.showOnPayslip, method: c.method, rule: c.rule ?? null })),
-      org: org ?? null,
+      org: orgSnap,
       engineVersion: ENGINE_VERSION,
     },
     rule_versions: config.rules.filter((r) => used.has(r.id)).map((r) => ({ id: r.id, scope: r.scope, ruleKey: r.ruleKey, jurisdiction: r.jurisdiction, effectiveFromMonth: r.effectiveFromMonth, params: r.params })),

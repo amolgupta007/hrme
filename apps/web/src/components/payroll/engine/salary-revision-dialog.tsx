@@ -10,6 +10,7 @@ import { computePayslip, projectAnnualCtc, pickEffective, type PayslipResult } f
 import { getPayrollEngineView } from "@/actions/payroll-config";
 import {
   deleteSalaryRevision,
+  savePayslipIds,
   saveSalaryRevision,
   setPayrollExclusion,
   type SalaryEmployee,
@@ -297,6 +298,8 @@ export function SalaryRevisionDialog({
           </div>
         )}
 
+        <PayslipIdsForm employee={employee} onSaved={onSaved} />
+
         <div className="space-y-2 border-t pt-4 text-sm">
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -321,5 +324,46 @@ export function SalaryRevisionDialog({
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function PayslipIdsForm({ employee, onSaved }: { employee: SalaryEmployee; onSaved: () => void }) {
+  const [v, setV] = useState({
+    uan: employee.uan ?? "", pfNumber: employee.pfNumber ?? "", esicNumber: employee.esicNumber ?? "", workLocation: employee.workLocation ?? "",
+  });
+  const [saving, setSaving] = useState(false);
+  const dirty =
+    v.uan !== (employee.uan ?? "") || v.pfNumber !== (employee.pfNumber ?? "") ||
+    v.esicNumber !== (employee.esicNumber ?? "") || v.workLocation !== (employee.workLocation ?? "");
+  const box = (label: string, k: keyof typeof v, placeholder: string) => (
+    <div>
+      <label className="text-xs font-medium" htmlFor={`pid-${k}`}>{label}</label>
+      <input id={`pid-${k}`} className={field} value={v[k]} placeholder={placeholder} onChange={(e) => setV((p) => ({ ...p, [k]: e.target.value }))} />
+    </div>
+  );
+  return (
+    <div className="space-y-2 border-t pt-4 text-sm">
+      <p className="font-medium">Shown on the pay slip</p>
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        {box("UAN", "uan", "12 digits")}
+        {box("PF number", "pfNumber", "e.g. MH/PUN/…")}
+        {box("ESIC number", "esicNumber", "10–17 digits")}
+        {box("Work location", "workLocation", "e.g. Pune")}
+      </div>
+      <button
+        disabled={!dirty || saving}
+        onClick={async () => {
+          setSaving(true);
+          const res = await savePayslipIds({ employeeId: employee.id, ...v });
+          setSaving(false);
+          if (!res.success) return void toast.error(res.error);
+          toast.success("Saved");
+          onSaved();
+        }}
+        className="inline-flex h-8 items-center rounded-md border px-3 text-sm disabled:opacity-50"
+      >
+        {saving && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}Save details
+      </button>
+    </div>
   );
 }

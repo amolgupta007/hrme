@@ -2,7 +2,15 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { Webhook } from "svix";
 import { createAdminSupabase } from "@/lib/supabase/server";
-import { employeeUpdateFromClerk } from "@/lib/clerk/user-sync";
+import { clerkClient } from "@clerk/nextjs/server";
+import {
+  employeeUpdateFromClerk,
+  missingEmployeeIdentifiers,
+  type ClerkIdentifiers,
+} from "@/lib/clerk/user-sync";
+import { syncEmployeeAuthIdentifiers } from "@/lib/clerk/provision-phone-user";
+import { normalizePhone } from "@/lib/phone";
+import type { UserRole } from "@/types";
 
 /**
  * Clerk Webhook Handler
@@ -75,6 +83,7 @@ export async function POST(req: Request) {
         if (Object.keys(update).length > 0) {
           await supabase.from("employees").update(update).eq("clerk_user_id", id);
         }
+        await restoreEmployeeIdentifiers(supabase, id, event.data);
         break;
       }
 
@@ -90,4 +99,47 @@ export async function POST(req: Request) {
   }
 
   return NextResponse.json({ received: true });
+}
+
+/**
+ * Put back any work email/phone the person removed from their own login.
+ * JambaHR owns these (admins set them on the employee row); without them
+ * email or phone sign-in answers "Couldn't find your account". Best-effort:
+ * a failure is logged, never fails the webhook. Re-adding fires another
+ * user.updated, which then finds nothing missing — no loop.
+ */
+async function restoreEmployeeIdentifiers(
+  supabase: ReturnType<typeof createAdminSupabase>,
+  clerkUserId: string,
+  data: ClerkIdentifiers
+) {
+  try {
+    const { data: rows } = await supabase
+      .from("employees")
+      .select("email, phone, role")
+      .eq("clerk_user_id", clerkUserId)
+      .neq("status", "terminated");
+    const employees = (rows ?? []) as { email: string | null; phone: string | null; role: UserRole }[];
+    if (employees.length === 0) return;
+
+    const missing = missingEmployeeIdentifiers(data, employees, normalizePhone);
+    if (missing.length === 0) return;
+
+    const client = await clerkClient();
+    for (const m of missing) {
+      try {
+        await syncEmployeeAuthIdentifiers(client, {
+          email: m.email,
+          phoneE164: m.phone,
+          role: employees[0].role,
+          existingClerkUserId: clerkUserId,
+        });
+        console.warn(`Restored sign-in identifier(s) on ${clerkUserId}`);
+      } catch (err: any) {
+        console.warn(`Could not restore sign-in identifier on ${clerkUserId}:`, err?.message ?? err);
+      }
+    }
+  } catch (err: any) {
+    console.warn("restoreEmployeeIdentifiers failed (non-fatal):", err?.message ?? err);
+  }
 }

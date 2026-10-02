@@ -56,7 +56,7 @@ describe("old-EPF sheet (₹15,000 ceiling)", () => {
       settings: MEDIALOOP_SETTINGS_UNROUNDED, components: OLD_SHEET_COMPONENTS, rules: MEDIALOOP_RULES,
       employee: employeeFromRow(OLD_EPF_SHEET.rows[0]), run: { month: "2026-08" },
     });
-    expect(r.ruleVersions.epf).toEqual({ id: "ml-epf-v1", effectiveFromMonth: "2000-01" });
+    expect(r.ruleVersions.epf).toEqual({ id: "legacy-epf", effectiveFromMonth: "2000-01" });
   });
 });
 
@@ -64,7 +64,7 @@ describe("new-EPF sheet (₹25,000 ceiling)", () => {
   it("matches every employee for October 2026 (the sheet's month)", () => {
     expectSheet(NEW_EPF_SHEET, "2026-10");
   });
-  it("matches every employee for September 2026 — the first month of the new rule, no pro-rating around the 17th", () => {
+  it("matches every employee for September 2026 — the first month of the new rule, no pro-rating around the 16 Sep Cabinet approval", () => {
     expectSheet(NEW_EPF_SHEET, "2026-09");
   });
 });

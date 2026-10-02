@@ -93,8 +93,11 @@ describe("norm notes", () => {
     }
   });
   it("flags deviations softly without blocking", () => {
-    expect(normFor("rule.epf")?.deviates?.({ wageCeiling: 25000 })).toMatch(/Ceiling differs/);
-    expect(normFor("rule.epf")?.deviates?.({ wageCeiling: 15000 })).toBeNull();
+    const epf = normFor("rule.epf")!.deviates!;
+    expect(epf({ wageCeiling: 25000 }, { month: "2026-09" })).toBeNull();
+    expect(epf({ wageCeiling: 15000 }, { month: "2026-08" })).toBeNull();
+    expect(epf({ wageCeiling: 15000 }, { month: "2026-10" })).toMatch(/₹25,000/);
+    expect(epf({ wageCeiling: 25000 }, { month: "2026-08" })).toMatch(/₹15,000/);
     expect(normFor("component.basic_pct")?.deviates?.(40)).toMatch(/Below 50%/);
     expect(normFor("nope")).toBeNull();
   });

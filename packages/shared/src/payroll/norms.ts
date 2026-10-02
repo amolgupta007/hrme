@@ -19,8 +19,8 @@ export interface Norm {
   asOf: string;
   /** True when the note states a statutory figure the org should confirm. */
   statutory?: boolean;
-  /** Returns a short hint when the org's value differs from the usual one. */
-  deviates?: (value: unknown) => string | null;
+  /** Returns a short hint when the org's value differs from the usual one. `month` is the pay month being viewed. */
+  deviates?: (value: unknown, ctx?: { month?: string }) => string | null;
 }
 
 const AS_OF = "2026-10";
@@ -98,14 +98,17 @@ export const PAYROLL_NORMS: Record<string, Norm> = {
   // ── Statutory rules ───────────────────────────────────────────────────────
   "rule.epf": {
     text:
-      "EPF is 12% from the employee and 12% from the employer on Basic + DA. The statutory wage ceiling has long been ₹15,000 a month (so ₹1,800 each), and paying on wages above it is voluntary unless the law changes. Of the employer's 12%, 8.33% goes to the pension scheme (EPS), itself capped at ₹15,000 wages. Confirm the current ceiling with your PF consultant.",
-    typical: "12% + 12% on up to ₹15,000",
+      "EPF is 12% from the employee and 12% from the employer on Basic + DA, up to the EPFO wage ceiling. On 16 Sep 2026 the Cabinet approved raising that ceiling from ₹15,000 to ₹25,000 a month: pay months up to August 2026 use ₹15,000 (₹1,800 each), September 2026 onwards ₹25,000 (₹3,000 each). Contributing on wages above the ceiling is voluntary. Part of the employer's 12% goes to the pension scheme (EPS) — confirm with your PF consultant how the pension share is capped after this change.",
+    typical: "12% + 12%; ceiling ₹25,000 from Sep 2026 (₹15,000 before)",
     asOf: AS_OF,
     statutory: true,
-    deviates: (v) => {
+    deviates: (v, ctx) => {
       const ceiling = (v as { wageCeiling?: number | null })?.wageCeiling;
       if (ceiling === undefined) return null;
-      return ceiling !== 15000 ? "Ceiling differs from ₹15,000 — confirm whether this is a statutory change or a company choice" : null;
+      const expected = ctx?.month && ctx.month < "2026-09" ? 15000 : 25000;
+      return ceiling !== expected
+        ? `Statutory ceiling for this month is ₹${expected.toLocaleString("en-IN")} — confirm whether yours is a deliberate company choice`
+        : null;
     },
   },
   "rule.esi": {

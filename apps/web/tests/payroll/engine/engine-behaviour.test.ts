@@ -60,8 +60,8 @@ describe("rule selection is by pay period", () => {
     expect(resolveRule(rules, "epf", "2027-03")?.id).toBe("v2");
   });
   it("back-to-back August then September runs each record their own version", () => {
-    expect(run("001", "2026-08").ruleVersions.epf?.id).toBe("ml-epf-v1");
-    expect(run("001", "2026-09").ruleVersions.epf?.id).toBe("ml-epf-v2");
+    expect(run("001", "2026-08").ruleVersions.epf?.id).toBe("legacy-epf");
+    expect(run("001", "2026-09").ruleVersions.epf?.id).toBe("epf-ceiling-25000-2026-09");
   });
   it("an org override beats the JambaHR global default, even an older one", () => {
     const rules = [epf("global-new", "2026-09", "global"), epf("org-old", "2020-01", "org")];

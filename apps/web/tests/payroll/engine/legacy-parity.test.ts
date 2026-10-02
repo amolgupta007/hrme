@@ -15,7 +15,7 @@ import {
   legacyComponents,
   legacyEmployeeOverrides,
   legacySettings,
-  LEGACY_GLOBAL_RULES,
+  JAMBAHR_GLOBAL_RULES,
 } from "@jambahr/shared/payroll/engine";
 
 type Case = {
@@ -60,7 +60,8 @@ function* cases(): Generator<Case> {
 }
 
 describe("legacy preset reproduces today's payroll", () => {
-  const month = "2026-10";
+  // Before the 16 Sep 2026 EPF ceiling change: today's code and the engine agree exactly.
+  const month = "2026-08";
   const all = [...cases()];
 
   it(`matches processPayrollRun for all ${all.length} sweep cases`, () => {
@@ -69,7 +70,7 @@ describe("legacy preset reproduces today's payroll", () => {
       const got = computePayslip({
         settings: legacySettings(c.workingDays),
         components: legacyComponents(c.ratios),
-        rules: LEGACY_GLOBAL_RULES,
+        rules: JAMBAHR_GLOBAL_RULES,
         employee: {
           employeeId: "x", state: c.state, taxRegime: c.regime, declaredDeductionsAnnual: c.extra,
           annualCtc: c.ctc, overrides: legacyEmployeeOverrides({ is_metro: c.isMetro, include_hra: c.includeHra }, c.ratios), dateOfJoining: c.doj,
@@ -90,5 +91,28 @@ describe("legacy preset reproduces today's payroll", () => {
       expect(got.netPay, `${at} net`).toBe(want.net);
       expect(got.warnings, `${at} warnings`).toEqual([]);
     }
+  });
+});
+
+describe("from September 2026 the standard rules apply the ₹25,000 EPF ceiling to every org", () => {
+  const run = (month: string, ctc: number) =>
+    computePayslip({
+      settings: legacySettings(26),
+      components: legacyComponents(),
+      rules: JAMBAHR_GLOBAL_RULES,
+      employee: { employeeId: "x", state: "maharashtra", annualCtc: ctc, overrides: legacyEmployeeOverrides({ is_metro: true, include_hra: true }) },
+      run: { month },
+    }).lines.find((l) => l.code === "EPF_EE")?.amount;
+
+  it("August keeps ₹1,800; September is 12% of Basic up to ₹25,000 (₹3,000)", () => {
+    // CTC ₹12 L → Basic ₹40,000/month (40%): above both ceilings.
+    expect(run("2026-08", 1200000)).toBe(1800);
+    expect(run("2026-09", 1200000)).toBe(3000);
+    // CTC ₹6 L → Basic ₹20,000: between the ceilings.
+    expect(run("2026-08", 600000)).toBe(1800);
+    expect(run("2026-09", 600000)).toBe(2400);
+    // CTC ₹3.75 L → Basic ₹12,500: below both, unchanged.
+    expect(run("2026-08", 375000)).toBe(1500);
+    expect(run("2026-09", 375000)).toBe(1500);
   });
 });

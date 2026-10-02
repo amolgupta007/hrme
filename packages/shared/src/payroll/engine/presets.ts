@@ -100,3 +100,21 @@ export const LEGACY_GLOBAL_RULES: StatutoryRule[] = [
   pt("legacy-pt-uttar-pradesh", "uttar pradesh", [{ below: null, amount: 0 }]),
   pt("legacy-pt-default", null, [{ below: 10001, amount: 0 }, { below: null, amount: 200 }]),
 ];
+
+/**
+ * Statutory changes made after the engine went live. Each is a new global
+ * version, so months before it keep the old rule and months from it get the
+ * new one — chosen by pay month, never by processing date.
+ */
+export const GLOBAL_RULE_UPDATES: StatutoryRule[] = [
+  {
+    // 16 Sep 2026: Cabinet approved raising the EPFO wage ceiling from ₹15,000
+    // to ₹25,000 a month. Applied to the whole of September 2026 onwards
+    // (no pro-rating around the 16th); August 2026 and earlier stay on ₹15,000.
+    id: "epf-ceiling-25000-2026-09", scope: "global", ruleKey: "epf", jurisdiction: null, effectiveFromMonth: "2026-09",
+    params: { eeRate: 12, erRate: 12, wageBase: ["BASIC"], wageCeiling: 25000, contributeAboveCeiling: false },
+  },
+];
+
+/** Every JambaHR-maintained rule: the original constants plus later statutory updates. */
+export const JAMBAHR_GLOBAL_RULES: StatutoryRule[] = [...LEGACY_GLOBAL_RULES, ...GLOBAL_RULE_UPDATES];

@@ -131,7 +131,7 @@ export function StatutoryRulesCard({
                 <li className="text-muted-foreground">No rule yet — set your own to use this component.</li>
               )}
             </ul>
-            <NormNote normKey={`rule.${key}`} value={resolveRule(all, key, month, STATE_RULES.has(key) ? "maharashtra" : null)?.params} />
+            <NormNote normKey={`rule.${key}`} month={month} value={resolveRule(all, key, month, STATE_RULES.has(key) ? "maharashtra" : null)?.params} />
             {own.length > 0 && (
               <details className="text-xs">
                 <summary className="cursor-pointer text-muted-foreground">Your versions ({own.length})</summary>

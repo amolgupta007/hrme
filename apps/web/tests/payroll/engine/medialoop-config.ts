@@ -1,11 +1,12 @@
 // Medialoop's payroll configuration, as their two salary sheets encode it.
 // This is the shape the org's settings/components/rules will be seeded with
 // (Phase 2 step 2); here it drives the Excel-reproduction tests.
-import type {
-  ComponentDef,
-  EmployeePayInput,
-  PayrollSettings,
-  StatutoryRule,
+import {
+  JAMBAHR_GLOBAL_RULES,
+  type ComponentDef,
+  type EmployeePayInput,
+  type PayrollSettings,
+  type StatutoryRule,
 } from "@jambahr/shared/payroll/engine";
 import type { SheetRow } from "./medialoop-sheets.fixture";
 
@@ -55,15 +56,10 @@ export const OLD_SHEET_COMPONENTS = components(50, true);
 /** New sheet: HRA 40% of Basic; LTA + conveyance per employee; commission gone. */
 export const NEW_SHEET_COMPONENTS = components(40, false);
 
+// EPF is not overridden: the JambaHR standard rules carry the statutory
+// ₹15,000 → ₹25,000 ceiling change from September 2026 for every org.
 export const MEDIALOOP_RULES: StatutoryRule[] = [
-  {
-    id: "ml-epf-v1", scope: "org", ruleKey: "epf", jurisdiction: null, effectiveFromMonth: "2000-01",
-    params: { eeRate: 12, erRate: 12, wageBase: ["BASIC"], wageCeiling: 15000, contributeAboveCeiling: false },
-  },
-  {
-    id: "ml-epf-v2", scope: "org", ruleKey: "epf", jurisdiction: null, effectiveFromMonth: "2026-09",
-    params: { eeRate: 12, erRate: 12, wageBase: ["BASIC"], wageCeiling: 25000, contributeAboveCeiling: false },
-  },
+  ...JAMBAHR_GLOBAL_RULES.filter((r) => r.ruleKey === "epf"),
   {
     // Both sheets: contribution on Basic; covered while fixed gross ≤ ₹42,000.
     id: "ml-esi", scope: "org", ruleKey: "esi", jurisdiction: null, effectiveFromMonth: "2000-01",

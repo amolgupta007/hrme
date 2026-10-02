@@ -8,10 +8,10 @@ import { normFor } from "@jambahr/shared/payroll/norms";
  * only: it explains what is usual and, if the current value differs, says so
  * in amber — it never blocks a save.
  */
-export function NormNote({ normKey, value }: { normKey: string; value?: unknown }) {
+export function NormNote({ normKey, value, month }: { normKey: string; value?: unknown; month?: string }) {
   const norm = normFor(normKey);
   if (!norm) return null;
-  const hint = value !== undefined && norm.deviates ? norm.deviates(value) : null;
+  const hint = value !== undefined && norm.deviates ? norm.deviates(value, { month }) : null;
   return (
     <div className="mt-1.5 space-y-1 text-xs text-muted-foreground">
       <p className="flex gap-1.5">

@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatINR } from "@/lib/ctc";
 import { SalaryStructureDialog } from "./salary-structure-dialog";
+import { EngineSalaryTab } from "./engine/engine-salary-tab";
 import { PayrollRunDialog } from "./payroll-run-dialog";
 import { EntryEditDialog } from "./entry-edit-dialog";
 import { PayslipDialog } from "./payslip-dialog";
@@ -44,6 +45,8 @@ interface Employee {
 
 interface Props {
   isAdmin: boolean;
+  /** The org has set up the payroll engine: Salary Structures uses its editor. */
+  engineEnabled?: boolean;
   employees: Employee[];
   salaryStructures: SalaryStructureRow[];
   payrollRuns: PayrollRun[];
@@ -77,6 +80,7 @@ function statusBadge(status: string) {
 
 export function PayrollClient({
   isAdmin,
+  engineEnabled = false,
   employees,
   salaryStructures,
   payrollRuns,
@@ -192,7 +196,7 @@ export function PayrollClient({
             Salary structures, monthly runs, and payslips.
           </p>
         </div>
-        {isAdmin && activeTab === "Salary Structures" && (
+        {isAdmin && activeTab === "Salary Structures" && !engineEnabled && (
           <Button onClick={() => setSalaryDialog({ open: true })}>
             <Plus className="h-4 w-4 mr-2" />
             Configure Salary
@@ -207,7 +211,7 @@ export function PayrollClient({
       </div>
 
       {/* Alert: unconfigured employees */}
-      {isAdmin && unconfiguredCount > 0 && activeTab === "Salary Structures" && (
+      {isAdmin && !engineEnabled && unconfiguredCount > 0 && activeTab === "Salary Structures" && (
         <button
           type="button"
           onClick={() => setSalaryDialog({ open: true })}
@@ -237,7 +241,8 @@ export function PayrollClient({
       </div>
 
       {/* ─── Salary Structures Tab ─── */}
-      {activeTab === "Salary Structures" && (
+      {activeTab === "Salary Structures" && engineEnabled && <EngineSalaryTab />}
+      {activeTab === "Salary Structures" && !engineEnabled && (
         <div>
           {salaryStructures.length === 0 ? (
             <div className="rounded-xl border border-dashed border-border p-12 text-center">

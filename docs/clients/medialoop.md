@@ -113,6 +113,16 @@ All from `JambaHR <noreply@jambahr.com>`, reply-to support@. Delivery status per
 
 ---
 
+- **Pay slip details set 2026-10-02** (from their Aug 2026 slip):
+  - Legal name: MEDIALOOP COMMUNICATION PVT. LTD.
+  - Address: Plot No. 39, S No. 23/1, Vinudavan Bungalow, Sinhagad Road, Anand Nagar, Pune 411051
+  - Contact: www.medialoop.in | finance@medialoop.in
+  - Logo: uploaded
+  - GSTIN: not provided yet
+  - Editable in Settings → Payroll → Pay slip details once the payroll engine branch ships.
+
+---
+
 ## 5. Data quality issues (open)
 
 - **Sameer Atar's first name is blank** (it read "Sameer" on 2026-10-01 morning; edited since). Re-enter in Employees → Edit.

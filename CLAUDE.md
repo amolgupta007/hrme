@@ -752,7 +752,7 @@ For orgs that timekeep on the web (first: Medialoop). Plan: `docs/planning/2026-
 - **Multiple sessions per day (web_app mode only):** employees can clock out and back in as often as they like until the day ends. Punches alternate in/out by time order — an odd count = clocked in now (`clock_out_at` NULL), `total_minutes` = sum of closed sessions (breaks excluded), first clock-in stays the arrival (lateness). Pure logic `@jambahr/shared/attendance/sessions` (`deriveWorkSessions`, `autoCloseInstant`); today's sessions via `loadTodaySessions` (`src/lib/attendance/web-sessions.ts`). The midnight auto clock-out closes only the last open session and never before the last clock-in (2 min after it). `all` mode keeps first-in → last-out. Web history shows an "Auto clock-out" chip on `auto_closed` days.
 - **Not yet:** per-employee exceptions, a nudge to people who badged but didn't clock in, mobile admin Home presence counts.
 
-## Work from home + work arrangement (2026-10-01, branch `feat/wfh-requests`)
+## Work from home + work arrangement (shipped 2026-10-01, PR #53 `189ee33`)
 
 WFH is its **own request**, not a leave type. A WFH day is a working day: they still clock in, and lateness applies. Leave means "not working" to reports, lateness, insights and the directory. Plan: `docs/planning/2026-10-01-work-from-home-requests.md`.
 
@@ -769,6 +769,31 @@ WFH is its **own request**, not a leave type. A WFH day is a working day: they s
   - "WFH" chip on Team Today/History.
   - Report: `ReportDay.wfh`, `summary.wfhDays`, CSV `wfh` column. The status code still reflects hours.
 - **Not yet:** mobile request/approvals and mobile badges (phase 3); hybrid fixed days; flagging a remote punch without approval; pending-count badge in the sidebar; server-action tests (the fake Supabase can't do embeds; the pure rules are tested).
+
+## Dashboard: WFH this week + birthdays & anniversaries (shipped 2026-10-02, PR #54)
+
+Two cards on `/dashboard` for **every role**, org-scoped, fed by `getTeamUpcoming()` (`src/actions/team-upcoming.ts`); components in `src/components/dashboard/team-upcoming-cards.tsx`.
+- **Working from home · next 7 days:** approved `wfh_requests`, grouped by day. Hidden unless the org's WFH policy is on. Remote staff are deliberately **not** shown, because they never request.
+- **Birthdays & work anniversaries:** next 14 days, today highlighted. Birthdays show the day only, **never the year or age**. Anniversaries need at least one full year. 29 Feb → 28 Feb in non-leap years. Pure logic: `@jambahr/shared/people/celebrations` (`upcomingCelebrations`).
+
+## Sign-in options + set-password prompt (shipped 2026-10-01, PR #51 `7f8cee6`)
+
+- **Why staff only used email codes:** `syncEmployeeAuthIdentifiers` / `provisionPhoneOnlyUser` create Clerk users with `skipPasswordRequirement: true`, so nobody has a password until they set one.
+- **Phone OTP IS enabled on prod.** Read `user_settings.attributes.phone_number.used_for_first_factor`, not `enabled` (which only means "collected at sign-up"). On the sign-in card, phone sign-in sits behind the **Use phone** link.
+- **What's shipped:**
+  - `SetPasswordBanner` on the dashboard when `user.passwordEnabled` is false. Dismissible; snoozed 30 days per device via `localStorage` (`src/lib/auth/sign-in-options.ts`).
+  - Avatar menu → **Set or change password** → `/account/security` (`src/app/account/[[...rest]]`, Clerk `UserProfile` with path routing). Outside `/dashboard` on purpose (account-level), and middleware-protected.
+- **Account-setup email:**
+  - Rows that already have `clerk_user_id` (added with a phone) are sent to `/sign-in`; `/sign-up` would fail with "email taken".
+  - Email-only invitees still go to `/sign-up` (PR #39 reason).
+- **Prod Clerk:** `delete_self` is **off** (2026-10-01), so employees can't delete their own login from the account page.
+- **Bulk "how to sign in" email:** `components/emails/sign-in-options.tsx` + `scripts/send-sign-in-options.tsx`. Preview by default; `--send` sends; needs only `RESEND_API_KEY`.
+- **Not built:** mobile parity (password / forgot password / phone fallback on the app sign-in screen).
+
+## Client references + changelog
+
+- **Per-client setup** (org ids, live settings, who's excluded from what, emails sent, open data issues): `docs/clients/<client>.md`. Start with `docs/clients/medialoop.md`.
+- **What shipped when, and why:** `docs/changelog/` (e.g. `2026-09-29_to_2026-10-02.md`). Each entry carries its PR, commit, migration and how it was verified.
 
 ## Location-verified clock-in (Settings → Attendance) — shipped 2026-08-12 (D5)
 

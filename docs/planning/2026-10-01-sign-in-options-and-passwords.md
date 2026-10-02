@@ -1,5 +1,14 @@
 # Open all sign-in options: email + password, email OTP, phone OTP
 
+> **Status (2026-10-02):** steps 1, 3, 5, 6 DONE.
+> - Prod audit done.
+> - Web banner + `/account/security` shipped (PR #51).
+> - Invite link fixed.
+> - Sign-in email sent to Medialoop 20/20 on 2026-10-01, one version for everyone. The masked-phone/per-person variants were dropped at the user's request.
+> - Step 2 shrank to just Vedika (open).
+> - Step 4 (mobile parity) not started.
+> - Step 7: re-run the audit in a week.
+
 **Goal:** every employee can sign in with **email + password**, **email code**, or
 **phone code** — on web and mobile — and can set a password themselves.
 **Trigger:** Medialoop feedback (2026-10-01): staff only ever use email OTP.

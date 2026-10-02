@@ -74,11 +74,6 @@ export function WfhWeekCard({ data, today }: { data: TeamUpcoming; today: string
           ))}
         </div>
       )}
-      {data.remoteCount > 0 && (
-        <p className="border-t border-border px-4 py-2 text-xs text-muted-foreground">
-          Plus {data.remoteCount} remote colleague{data.remoteCount > 1 ? "s" : ""} who always work from home.
-        </p>
-      )}
     </div>
   );
 }

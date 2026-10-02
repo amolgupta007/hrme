@@ -15,8 +15,6 @@ export type TeamUpcoming = {
   wfhEnabled: boolean;
   /** Days (today … +7) with at least one approved WFH, oldest first. */
   wfhDays: { date: string; people: UpcomingPerson[] }[];
-  /** Full-time remote colleagues (not listed per day — they're always home). */
-  remoteCount: number;
   celebrations: Celebration[];
   orgName: string;
 };
@@ -101,7 +99,6 @@ export async function getTeamUpcoming(): Promise<ActionResult<TeamUpcoming>> {
     data: {
       wfhEnabled: normalizeWfhPolicy((org as { settings?: unknown } | null)?.settings).enabled,
       wfhDays,
-      remoteCount: [...byId.values()].filter((p) => p.remote).length,
       celebrations,
       orgName: user.orgName ?? "the team",
     },

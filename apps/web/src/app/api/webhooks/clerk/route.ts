@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { Webhook } from "svix";
 import { createAdminSupabase } from "@/lib/supabase/server";
+import { employeeUpdateFromClerk } from "@/lib/clerk/user-sync";
 
 /**
  * Clerk Webhook Handler
@@ -69,14 +70,11 @@ export async function POST(req: Request) {
 
       case "user.updated": {
         const { id, first_name, last_name, image_url } = event.data;
-        await supabase
-          .from("employees")
-          .update({
-            first_name: first_name || "",
-            last_name: last_name || "",
-            avatar_url: image_url,
-          })
-          .eq("clerk_user_id", id);
+        // Only sync what Clerk actually has — never blank a JambaHR name.
+        const update = employeeUpdateFromClerk({ first_name, last_name, image_url });
+        if (Object.keys(update).length > 0) {
+          await supabase.from("employees").update(update).eq("clerk_user_id", id);
+        }
         break;
       }
 

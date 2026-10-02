@@ -135,5 +135,5 @@ describe("GET /api/mobile/payslips/[entryId]/pdf — 200", () => {
     const buf = Buffer.from(await res.arrayBuffer());
     expect(buf.length).toBeGreaterThan(1000);
     expect(buf.subarray(0, 5).toString("latin1")).toBe("%PDF-");
-  });
+  }, 20_000); // first PDF render loads fonts; slow under a full parallel run
 });

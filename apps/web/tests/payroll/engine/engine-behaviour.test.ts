@@ -86,6 +86,17 @@ describe("rule selection is by pay period", () => {
   });
 });
 
+describe("gender as stored on employees", () => {
+  it("the women's PT exemption works for 'female' / 'Female' as well as 'F'", () => {
+    for (const gender of ["F", "female", "Female"]) {
+      const employee = { ...employeeFromRow(row("014")), gender };
+      expect(amt(run("014", "2026-10", { employee }), "PT"), gender).toBe(0);
+    }
+    const male = { ...employeeFromRow(row("014")), gender: "Male" };
+    expect(amt(run("014", "2026-10", { employee: male }), "PT")).toBe(200);
+  });
+});
+
 describe("rounding (D7)", () => {
   it("rounds each deduction and the net to the rupee", () => {
     const r = run("016", "2026-10", { settings: MEDIALOOP_SETTINGS });

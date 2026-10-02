@@ -27,10 +27,19 @@ export function computeEsi(
   };
 }
 
+/** "F" / "female" / "Female" → "f"; "M" / "male" → "m"; anything else as-is, lower-cased. */
+export function normalizeGender(g: string | null | undefined): string | null {
+  const v = g?.trim().toLowerCase();
+  if (!v) return null;
+  if (v === "f" || v === "female" || v === "woman") return "f";
+  if (v === "m" || v === "male" || v === "man") return "m";
+  return v;
+}
+
 /** Professional tax for one month. `monthMM` is "01".."12". */
 export function computePt(measure: number, p: PtParams, gender: string | null, monthMM: string): number {
-  const g = gender?.trim().toUpperCase() || null;
-  if (g && p.exemptions?.some((e) => e.gender.toUpperCase() === g && measure < e.below)) return 0;
+  const g = normalizeGender(gender);
+  if (g && p.exemptions?.some((e) => normalizeGender(e.gender) === g && measure < e.below)) return 0;
 
   const slab = p.slabs.find((s) => s.below === null || measure < s.below);
   let amount = slab?.amount ?? 0;

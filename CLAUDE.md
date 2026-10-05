@@ -956,6 +956,7 @@ Clause-based offer-letter / NDA / policy templates → issue to many employees w
 **Gotchas:**
 - employees store gender as "female"/"Male" (normalise; `normalizeGender`).
 - There's no leaving-date column, so leavers aren't prorated.
+- Joiner/leaver proration skips off days at the month's edges. If every day before the joining date is a week-off or a non-optional holiday, the whole month is paid (likewise after a leaving date). The run supplies each employee's dates through `run.nonWorkingDates` (`src/lib/payroll/non-working-days.ts`). With no week-off policy at any level, the joiner is paid from the joining date and the run warns.
 - `negative_leave_balance` LOP warns and expects manual days.
 - `components` in ctc-first mode must be % of CTC, not GROSS.
 - The mobile native payslip screen still uses the fixed Basic/HRA/Special DTO.

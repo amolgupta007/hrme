@@ -181,6 +181,13 @@ export interface RunInput {
   month: PayMonth;
   /** Unpaid days, already resolved from the org's LOP source by the caller. */
   lopDays?: number;
+  /**
+   * The employee's week-offs and non-optional holidays in this month
+   * (YYYY-MM-DD), resolved by the caller. Joiner/leaver proration ignores
+   * off days at the month's edges: joining on the first working day pays
+   * the whole month.
+   */
+  nonWorkingDates?: readonly string[];
   /** Late-arrival penalty days, charged at the same per-day rate as LOP. */
   latePenaltyDays?: number;
   /** Amounts for `manual` components, by code. */

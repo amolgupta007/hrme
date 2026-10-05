@@ -35,20 +35,39 @@ export function daysInMonth(month: PayMonth): number {
   return new Date(Date.UTC(y, m, 0)).getUTCDate();
 }
 
-/** Calendar days of `month` on which the employee was employed (DOJ..DOL inclusive). */
-export function employedCalendarDays(month: PayMonth, doj?: string | null, dol?: string | null): number {
+/**
+ * Calendar days of `month` on which the employee was employed (DOJ..DOL
+ * inclusive). When every day before the joining date is a non-working day,
+ * employment counts from the 1st (joining on the first working day is a full
+ * month); likewise every day after the leaving date being off counts to the
+ * month's end. Off days before a mid-month joining date are not paid.
+ */
+export function employedCalendarDays(
+  month: PayMonth,
+  doj?: string | null,
+  dol?: string | null,
+  nonWorkingDates: readonly string[] = [],
+): number {
   const [y, m] = month.split("-").map(Number);
   const total = daysInMonth(month);
+  const DAY = 86_400_000;
   const day = (iso: string) => {
     const [yy, mm, dd] = iso.slice(0, 10).split("-").map(Number);
     return Date.UTC(yy, mm - 1, dd);
   };
+  const off = new Set(nonWorkingDates.map(day));
+  const allOff = (from: number, to: number) => {
+    for (let t = from; t <= to; t += DAY) if (!off.has(t)) return false;
+    return true;
+  };
   const first = Date.UTC(y, m - 1, 1);
   const last = Date.UTC(y, m - 1, total);
-  const start = doj ? Math.max(first, day(doj)) : first;
-  const end = dol ? Math.min(last, day(dol)) : last;
+  let start = doj ? Math.max(first, day(doj)) : first;
+  let end = dol ? Math.min(last, day(dol)) : last;
   if (end < start) return 0;
-  return Math.round((end - start) / 86_400_000) + 1;
+  if (start > first && allOff(first, start - DAY)) start = first;
+  if (end < last && allOff(end + DAY, last)) end = last;
+  return Math.round((end - start) / DAY) + 1;
 }
 
 // ── CTC-first: annual structure → monthly amounts ───────────────────────────
@@ -164,7 +183,7 @@ export function computePayslip(input: ComputeInput): PayslipResult {
   const calendarDays = daysInMonth(month);
   const basisDays = settings.dayBasis.type === "calendar_days" ? calendarDays : settings.dayBasis.days;
   const employedCal = settings.prorateJoinersLeavers
-    ? employedCalendarDays(month, employee.dateOfJoining, employee.dateOfLeaving)
+    ? employedCalendarDays(month, employee.dateOfJoining, employee.dateOfLeaving, run.nonWorkingDates)
     : calendarDays;
   const employedBasis = (basisDays * employedCal) / calendarDays;
   const lopDays = Math.max(0, run.lopDays ?? 0);

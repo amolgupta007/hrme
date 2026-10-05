@@ -135,6 +135,36 @@ describe("days and proration", () => {
   });
 });
 
+describe("joiners and leavers around non-working days", () => {
+  // August 2026: the 1st is a Saturday. Weekends = 1-2, 8-9, 15-16, 22-23, 29-30.
+  const AUG_WEEKENDS = ["01", "02", "08", "09", "15", "16", "22", "23", "29", "30"].map((d) => `2026-08-${d}`);
+
+  it("joining on the month's first working day counts as the whole month", () => {
+    expect(employedCalendarDays("2026-08", "2026-08-03", null, AUG_WEEKENDS)).toBe(31);
+  });
+  it("without non-working days the joiner is still paid from the joining date", () => {
+    expect(employedCalendarDays("2026-08", "2026-08-03", null)).toBe(29);
+  });
+  it("missing a working day before joining keeps the proration", () => {
+    expect(employedCalendarDays("2026-08", "2026-08-04", null, AUG_WEEKENDS)).toBe(28);
+  });
+  it("a mid-month joiner is not paid for the weekend before they join", () => {
+    expect(employedCalendarDays("2026-08", "2026-08-17", null, AUG_WEEKENDS)).toBe(15);
+  });
+  it("leaving on the month's last working day counts as the whole month", () => {
+    // October 2026: the 31st is a Saturday.
+    expect(employedCalendarDays("2026-10", null, "2026-10-30", ["2026-10-31"])).toBe(31);
+    expect(employedCalendarDays("2026-10", null, "2026-10-29", ["2026-10-31"])).toBe(29);
+  });
+  it("the run's non-working dates reach the proration (a 3 Aug joiner is paid in full)", () => {
+    const employee = { ...employeeFromRow(row("016")), dateOfJoining: "2026-08-03" };
+    expect(run("016", "2026-08", { employee }).daysPaid).toBe(29);
+    const r = run("016", "2026-08", { employee, run: { month: "2026-08", nonWorkingDates: AUG_WEEKENDS } });
+    expect(r.daysPaid).toBe(31);
+    expect(r.prorationFactor).toBe(1);
+  });
+});
+
 describe("components", () => {
   it("a disabled component disappears from the calculation", () => {
     const components = NEW_SHEET_COMPONENTS.map((c) => (c.code === "PT" ? { ...c, enabled: false } : c));

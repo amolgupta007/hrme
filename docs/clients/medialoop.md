@@ -109,6 +109,7 @@ All from `JambaHR <noreply@jambahr.com>`, reply-to support@. Delivery status per
 ## 4a. Payroll policy
 
 - **No TDS / income-tax deduction (client decision, confirmed 2026-10-02).** Medialoop does not deduct income tax from salaries; employees handle their own tax filing. Payroll for this org must treat TDS as optional and leave it at 0 unless they ask otherwise.
+- **Joiners are paid from their first working day (2026-10-05).** Their sheet paid Vedika Rakhewar (joined Mon 3 Aug 2026; 1–2 Aug were a weekend) the full ₹30,000. The engine counted calendar days and paid 29/31 (₹28,065 gross, ₹26,076 net instead of ₹27,887). It now treats a joining date preceded only by week-offs/holidays as a full month. A mid-month joiner is still prorated from the joining date. This relies on the week-off policy, **set 2026-10-05: Saturday + Sunday off, `effective_from` 2026-08-01**. It's backdated so the Aug run sees it. That was safe: there were no weekend late arrivals, and the late rule only counts from 2026-10-01.
 - EPF wage ceiling ₹15,000 → ₹25,000 from pay month Sep 2026 (₹1,800 → ₹3,000). This is **statutory** (Cabinet approval 16 Sep 2026), so it's carried by JambaHR's standard EPF rule (migration 121), not a Medialoop override. The old payroll code (`ctc.ts`) still hard-codes ₹1,800; the new engine (branch `feat/payroll-engine`) applies it. Analysis: `docs/planning/payroll/payroll-epf-analysis-notes.md`.
 
 ---
@@ -135,4 +136,5 @@ All from `JambaHR <noreply@jambahr.com>`, reply-to support@. Delivery status per
 - [ ] Mobile app: WFH request/approvals + Remote badge (phase 3); multi-session clock-in UI on mobile.
 - [ ] Device `NYU7261204139` offline since 2026-09-10; investigate why the device-health alert never fired.
 - [ ] Vedika phone login; Sameer name; missing DOBs.
+- [ ] Once the joiner fix is deployed, recalculate the Aug 2026 draft run. Vedika should come out at ₹30,000 gross / ₹27,887 net.
 - [ ] Re-run the Clerk password audit in a week to see uptake (needs the prod Clerk key; rotate after).

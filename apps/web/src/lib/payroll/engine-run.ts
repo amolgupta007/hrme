@@ -19,6 +19,7 @@ import { resolvePenaltyDays, type PenaltyBand } from "@jambahr/shared/attendance
 import { resolveCoveredEmployeeIds } from "@/lib/attendance/late-policy-targets";
 import { loadCountableLates } from "@/lib/attendance/late-counting";
 import { loadPayrollConfig, type PayrollConfig } from "./engine-config";
+import { loadNonWorkingDates } from "./non-working-days";
 import {
   effectiveRevision,
   loadRevisions,
@@ -160,13 +161,14 @@ export async function calculateRunEntries(
   if (empErr) throw new Error(`employees: ${empErr.message}`);
   const allEmps = (empRows ?? []) as unknown as Emp[];
 
-  const [revisions, legacyRes, bankRes, lop, late, existingRes] = await Promise.all([
+  const [revisions, legacyRes, bankRes, lop, late, existingRes, offDays] = await Promise.all([
     loadRevisions(sb, orgId, opts.employeeId),
     sb.from("salary_structures").select("employee_id, ctc, state, is_metro, include_hra, tax_regime, additional_deductions_annual, effective_from").eq("org_id", orgId),
     sb.from("employee_bank_accounts").select("employee_id, account_number_last4").eq("org_id", orgId),
     config.settings.lopSource === "unpaid_leave" ? loadUnpaidLeaveDays(sb, orgId, month) : Promise.resolve(new Map<string, number>()),
     loadLatePenaltyDays(sb, orgId, month, allEmps),
     sb.from("payroll_entries").select("id, employee_id, edited_at, lop_days, late_penalty_days").eq("payroll_run_id", run.id),
+    loadNonWorkingDates(sb, { orgId, month, employees: allEmps }),
   ]);
   if (legacyRes.error) throw new Error(`salary_structures: ${legacyRes.error.message}`);
   if (existingRes.error) throw new Error(`payroll_entries: ${existingRes.error.message}`);
@@ -219,13 +221,17 @@ export async function calculateRunEntries(
     const prev = existing.get(e.id);
     const lopDays = prev?.edited_at ? Number(prev.lop_days ?? 0) : lop.get(e.id) ?? 0;
     const lateDays = prev?.edited_at ? Number(prev.late_penalty_days ?? 0) : late.get(e.id) ?? 0;
+    const off = offDays.get(e.id);
+    if (config.settings.prorateJoinersLeavers && !off?.hasWeekOff && e.date_of_joining && e.date_of_joining > monthStart) {
+      warnings.push(`${name} joined on ${e.date_of_joining} and no week-off policy is set, so they're paid from that date. Set the week-off policy in Settings → Attendance if the days before were off.`);
+    }
 
     let slip: PayslipResult;
     try {
       slip = computePayslip({
         settings: config.settings, components: config.components, rules: config.rules,
         employee: toEmployeeInput(rev, e),
-        run: { month, lopDays, latePenaltyDays: lateDays, adjustments: adjustments.get(e.id) ?? [] },
+        run: { month, lopDays, latePenaltyDays: lateDays, nonWorkingDates: off?.dates, adjustments: adjustments.get(e.id) ?? [] },
       });
     } catch (err) {
       result.skipped.push({ employeeId: e.id, name, reason: err instanceof Error ? err.message : "Can't calculate" });

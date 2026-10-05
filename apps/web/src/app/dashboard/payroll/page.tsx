@@ -84,8 +84,9 @@ export default async function PayrollPage() {
 
   // Orgs that have set up the payroll engine (Settings → Payroll) get the
   // engine's salary editor; everyone else keeps the current screens unchanged.
+  // Resolved for every role: it also hides My Compensation (legacy breakdown).
   let engineEnabled = false;
-  if (adminUser && userCtx) {
+  if (userCtx) {
     try {
       const cfg = await loadPayrollConfig(createAdminSupabase(), userCtx.orgId, currentPayMonthIST());
       engineEnabled = cfg.source === "saved";

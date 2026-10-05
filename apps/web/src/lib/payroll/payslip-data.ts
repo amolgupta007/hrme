@@ -12,6 +12,7 @@ import {
   type PayslipOrg,
 } from "@jambahr/shared/payroll/payslip";
 import type { PayslipLogo } from "./payslip-pdf";
+import { decrypt, isEncryptionConfigured } from "@/lib/crypto/aes-gcm";
 
 const BUCKET = "documents";
 
@@ -24,6 +25,8 @@ export interface PayslipSettings {
   showEmployerContributions?: boolean;
   /** Which employee fields the slip shows, and their labels. */
   employeeFields?: PayslipEmployeeFieldSettings | null;
+  /** Show the employee their own full Aadhaar number (off by default; others always see last 4). */
+  showFullAadhaarToEmployee?: boolean;
 }
 
 export interface LoadedPayslip {
@@ -86,7 +89,56 @@ export async function loadOrgLogo(sb: SupabaseClient, logoPath: string | null): 
  * runs processed before those were captured); a pre-engine entry renders from
  * its columns. Returns null if the entry doesn't exist in the org.
  */
-export async function loadPayslip(sb: SupabaseClient, orgId: string, entryId: string): Promise<LoadedPayslip | null> {
+/**
+ * Full bank account and (if the org allows) Aadhaar for the slip's OWN
+ * employee. Never called for admins viewing someone else, or for email.
+ * Each bank-number decryption is logged (DPDP). Any failure → masked.
+ */
+async function revealForOwner(
+  sb: SupabaseClient,
+  orgId: string,
+  employeeId: string,
+  entryId: string,
+  allowAadhaar: boolean,
+  wantBank: boolean,
+): Promise<NonNullable<PayslipOptions["reveal"]>> {
+  const reveal: NonNullable<PayslipOptions["reveal"]> = {};
+  try {
+    if (wantBank && isEncryptionConfigured()) {
+      const { data: bank } = await sb
+        .from("employee_bank_accounts")
+        .select("account_number_encrypted")
+        .eq("org_id", orgId)
+        .eq("employee_id", employeeId)
+        .maybeSingle();
+      const enc = (bank as { account_number_encrypted?: string } | null)?.account_number_encrypted;
+      if (enc) {
+        reveal.bankAccount = decrypt(enc);
+        await sb.from("disbursement_audit_log").insert({
+          org_id: orgId, actor_id: employeeId, actor_role: "employee", action: "bank_account_read",
+          payload: { purpose: "own_payslip", payroll_entry_id: entryId },
+        } as never);
+      }
+    }
+  } catch (err) {
+    console.warn("[payslip] bank reveal failed (showing masked):", err instanceof Error ? err.message : err);
+    reveal.bankAccount = null;
+  }
+  if (allowAadhaar) {
+    const { data: emp } = await sb.from("employees").select("aadhar_number").eq("org_id", orgId).eq("id", employeeId).maybeSingle();
+    const a = (emp as { aadhar_number?: string | null } | null)?.aadhar_number?.replace(/\D/g, "");
+    if (a && a.length === 12) reveal.aadhaar = a;
+  }
+  return reveal;
+}
+
+export async function loadPayslip(
+  sb: SupabaseClient,
+  orgId: string,
+  entryId: string,
+  /** Who is looking. Full numbers are shown only when this is the slip's own employee. */
+  viewer: { employeeId: string | null } | null = null,
+): Promise<LoadedPayslip | null> {
   const { data: entry, error } = await sb
     .from("payroll_entries")
     .select(
@@ -110,8 +162,21 @@ export async function loadPayslip(sb: SupabaseClient, orgId: string, entryId: st
   // Prefer what was frozen on the run; fill anything it didn't capture from the live org.
   const frozen = run.settings_snapshot?.org ?? {};
   const org = { ...(liveOrg as OrgRow), ...Object.fromEntries(Object.entries(frozen).filter(([, v]) => v !== undefined)) } as OrgRow;
-  const { org: slipOrg, options } = payslipOrg(org);
+  const { org: slipOrg, options: baseOptions } = payslipOrg(org);
   const payment = { paidAt: run.status === "paid" ? run.paid_at : null };
+  const isOwner = !!viewer?.employeeId && viewer.employeeId === e.employee_id && run.status !== "draft";
+  const options: PayslipOptions = isOwner
+    ? {
+        ...baseOptions,
+        // The Aadhaar choice is read from the live org: it's about who may see what today.
+        // Lines the org has switched off aren't decrypted at all.
+        reveal: await revealForOwner(
+          sb, orgId, e.employee_id, entryId,
+          !!(liveOrg as OrgRow).settings?.payslip?.showFullAadhaarToEmployee && baseOptions.employeeFields?.aadhaar?.show !== false,
+          baseOptions.employeeFields?.bank_account?.show !== false,
+        ),
+      }
+    : baseOptions;
 
   let doc: PayslipDocument;
   if (e.snapshot) {

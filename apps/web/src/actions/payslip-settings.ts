@@ -45,6 +45,8 @@ export interface PayslipDetails {
   esiCode: string;
   queryLine: string;
   showEmployerContributions: boolean;
+  /** The employee sees their own full Aadhaar on their slip (others: last 4). */
+  showFullAadhaarToEmployee: boolean;
   /** Employee block: every catalogue field, in slip order, with the org's choice. */
   employeeFields: { key: PayslipEmployeeFieldKey; show: boolean; label: string }[];
   /** data: URL of the current logo, or null. */
@@ -81,6 +83,7 @@ export async function getPayslipDetails(): Promise<ActionResult<PayslipDetails>>
       esiCode: o.esi_code ?? "",
       queryLine: p.queryLine ?? "",
       showEmployerContributions: !!p.showEmployerContributions,
+      showFullAadhaarToEmployee: !!p.showFullAadhaarToEmployee,
       employeeFields: PAYSLIP_EMPLOYEE_FIELDS.map((f) => ({
         key: f.key,
         show: p.employeeFields?.[f.key]?.show !== false,
@@ -104,6 +107,7 @@ const DetailsSchema = z.object({
   esiCode: opt(40),
   queryLine: opt(200),
   showEmployerContributions: z.boolean(),
+  showFullAadhaarToEmployee: z.boolean().optional(),
   employeeFields: z
     .array(z.object({
       key: z.enum(PAYSLIP_EMPLOYEE_FIELDS.map((f) => f.key) as [PayslipEmployeeFieldKey, ...PayslipEmployeeFieldKey[]]),
@@ -140,6 +144,7 @@ export async function savePayslipDetails(input: z.input<typeof DetailsSchema>): 
     email: d.email || null,
     queryLine: d.queryLine || null,
     showEmployerContributions: d.showEmployerContributions,
+    showFullAadhaarToEmployee: d.showFullAadhaarToEmployee ?? !!b.settings?.payslip?.showFullAadhaarToEmployee,
     employeeFields,
   };
   const after = {

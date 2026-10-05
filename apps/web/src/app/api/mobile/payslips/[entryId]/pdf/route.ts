@@ -32,7 +32,7 @@ export async function GET(request: NextRequest, ctx: { params: { entryId: string
 
   try {
     // Same model + renderer as the web download (org pay slip format, logo).
-    const slip = await loadPayslip(supabase as any, user.orgId, entryId);
+    const slip = await loadPayslip(supabase as any, user.orgId, entryId, { employeeId: user.employeeId });
     // Mobile is self-service only: the entry must be the caller's own, never a draft.
     if (!slip || !user.employeeId || slip.employeeId !== user.employeeId || slip.runStatus === "draft") {
       return NextResponse.json({ error: "not_found" }, { status: 404 });

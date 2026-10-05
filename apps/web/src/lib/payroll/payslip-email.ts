@@ -73,6 +73,7 @@ export async function sendRunPayslips(
       continue;
     }
     try {
+      // No viewer: emailed slips always carry masked bank/Aadhaar (email gets forwarded).
       const slip = await loadPayslip(sb, orgId, ent.id);
       if (!slip) throw new Error("pay slip not found");
       const pdf = await renderPayslipDocumentPdf(slip.doc, slip.logo);

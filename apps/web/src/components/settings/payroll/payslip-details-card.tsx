@@ -121,6 +121,19 @@ export function PayslipDetailsCard() {
 
       <EmployeeFieldsEditor value={d.employeeFields} onChange={(v) => set("employeeFields", v)} />
 
+      <div className="space-y-1">
+        <div className="flex items-center justify-between gap-3">
+          <label className="text-sm font-medium" htmlFor="psd-aadhaar">Show employees their full Aadhaar number</label>
+          <Switch id="psd-aadhaar" checked={d.showFullAadhaarToEmployee} onCheckedChange={(v) => set("showFullAadhaarToEmployee", v)} />
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Employees always see their own full bank account number on slips they open or download. Admins and emailed
+          slips only ever show the last 4 digits. Turning this on also shows employees their full Aadhaar. UIDAI asks
+          organisations to show only the last 4 digits on documents, so leave this off unless you&apos;ve checked it&apos;s
+          appropriate for you.
+        </p>
+      </div>
+
       <button
         onClick={save}
         disabled={saving}

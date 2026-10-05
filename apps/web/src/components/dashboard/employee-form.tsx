@@ -8,7 +8,13 @@ import { ChevronDown, X } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { addEmployee, updateEmployee } from "@/actions/employees";
+import { addEmployee, updateEmployee, updateEmployeeIdentifiers } from "@/actions/employees";
+import {
+  EMPTY_EMPLOYEE_IDS,
+  GENDER_OPTIONS,
+  employeeIdsFromRow,
+  type EmployeeIds,
+} from "@/lib/employees/employee-ids";
 import type { Employee, Department } from "@/types";
 
 interface EmployeeFormProps {
@@ -38,6 +44,8 @@ export function EmployeeForm({ open, onOpenChange, employee, departments, employ
   const isEdit = !!employee;
   const [loading, setLoading] = React.useState(false);
   const [form, setForm] = React.useState(EMPTY_FORM);
+  const [ids, setIds] = React.useState<EmployeeIds>(EMPTY_EMPLOYEE_IDS);
+  const [initialIds, setInitialIds] = React.useState<EmployeeIds>(EMPTY_EMPLOYEE_IDS);
 
   // Populate form when editing
   React.useEffect(() => {
@@ -58,10 +66,19 @@ export function EmployeeForm({ open, onOpenChange, employee, departments, employ
         reportingManagerId: employee.reporting_manager_id ?? "",
         reportingManager2Id: employee.reporting_manager_2_id ?? "",
       });
+      const loaded = employeeIdsFromRow(employee as unknown as Record<string, unknown>);
+      setIds(loaded);
+      setInitialIds(loaded);
     } else {
       setForm(EMPTY_FORM);
+      setIds(EMPTY_EMPLOYEE_IDS);
+      setInitialIds(EMPTY_EMPLOYEE_IDS);
     }
   }, [employee, open]);
+
+  function setId(field: keyof EmployeeIds, value: string) {
+    setIds((prev) => ({ ...prev, [field]: value }));
+  }
 
   function set(field: keyof typeof EMPTY_FORM, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -104,21 +121,35 @@ export function EmployeeForm({ open, onOpenChange, employee, departments, employ
       ? await updateEmployee(employee.id, form)
       : await addEmployee(form);
 
-    setLoading(false);
-
-    if (result.success) {
-      toast.success(isEdit ? "Employee updated" : "Employee added");
-      onOpenChange(false);
-    } else {
+    if (!result.success) {
+      setLoading(false);
       toast.error(result.error);
+      return;
     }
+
+    // Payroll & statutory IDs save separately, only when something changed.
+    const targetId = isEdit ? employee.id : (result.data as { id: string } | undefined)?.id;
+    const idsChanged = (Object.keys(ids) as (keyof EmployeeIds)[]).some((k) => ids[k].trim() !== initialIds[k]);
+    if (targetId && idsChanged) {
+      const idsResult = await updateEmployeeIdentifiers(targetId, ids);
+      if (!idsResult.success) {
+        setLoading(false);
+        toast.error(`${isEdit ? "Saved" : "Added"}, but the IDs weren't saved: ${idsResult.error}`);
+        if (!isEdit) onOpenChange(false);
+        return;
+      }
+    }
+
+    setLoading(false);
+    toast.success(isEdit ? "Employee updated" : "Employee added");
+    onOpenChange(false);
   }
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/50 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-xl bg-background p-6 shadow-lg data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95">
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-xl bg-background p-6 shadow-lg data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 max-h-[90vh] overflow-y-auto">
           <div className="flex items-center justify-between mb-5">
             <Dialog.Title className="text-lg font-semibold">
               {isEdit ? "Edit Employee" : "Add Employee"}
@@ -287,6 +318,50 @@ export function EmployeeForm({ open, onOpenChange, employee, departments, employ
                   .map((e) => ({ value: e.id, label: `${e.first_name} ${e.last_name}` }))}
               />
             </Field>
+
+            <details className="rounded-lg border p-3" open={isEdit}>
+              <summary className="cursor-pointer text-sm font-medium">Payroll &amp; statutory IDs</summary>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Printed on pay slips, as set in Settings → Payroll → Pay slip details. Leave blank what doesn&apos;t apply.
+              </p>
+              <div className="mt-3 grid grid-cols-2 gap-4">
+                <Field label="Employee code">
+                  <input className={inputCn} value={ids.employeeCode} onChange={(e) => setId("employeeCode", e.target.value)} placeholder="e.g. 007" maxLength={20} />
+                </Field>
+                <Field label="Gender">
+                  <SelectField
+                    value={ids.gender}
+                    onValueChange={(v) => setId("gender", v)}
+                    placeholder="Not set"
+                    options={GENDER_OPTIONS.map((g) => ({ value: g, label: g }))}
+                  />
+                </Field>
+                <Field label="Date of birth">
+                  <input type="date" className={inputCn} value={ids.dateOfBirth} onChange={(e) => setId("dateOfBirth", e.target.value)} />
+                </Field>
+                <Field label="PAN">
+                  <input className={cn(inputCn, "uppercase")} value={ids.pan} onChange={(e) => setId("pan", e.target.value.toUpperCase())} placeholder="ABCDE1234F" maxLength={10} />
+                </Field>
+                <Field label="UAN">
+                  <input className={inputCn} inputMode="numeric" value={ids.uan} onChange={(e) => setId("uan", e.target.value.replace(/\D/g, ""))} placeholder="12 digits" maxLength={12} />
+                </Field>
+                <Field label="PF number">
+                  <input className={inputCn} value={ids.pfNumber} onChange={(e) => setId("pfNumber", e.target.value)} placeholder="e.g. MH/PUN/…" maxLength={30} />
+                </Field>
+                <Field label="ESIC number">
+                  <input className={inputCn} inputMode="numeric" value={ids.esicNumber} onChange={(e) => setId("esicNumber", e.target.value.replace(/\D/g, ""))} placeholder="10–17 digits" maxLength={17} />
+                </Field>
+                <Field label="PRAN (NPS)">
+                  <input className={inputCn} inputMode="numeric" value={ids.pran} onChange={(e) => setId("pran", e.target.value.replace(/\D/g, ""))} placeholder="12 digits" maxLength={12} />
+                </Field>
+                <Field label="Nationality">
+                  <input className={inputCn} value={ids.nationality} onChange={(e) => setId("nationality", e.target.value)} placeholder="e.g. Indian" maxLength={40} />
+                </Field>
+                <Field label="Work location">
+                  <input className={inputCn} value={ids.workLocation} onChange={(e) => setId("workLocation", e.target.value)} placeholder="e.g. Pune" maxLength={60} />
+                </Field>
+              </div>
+            </details>
 
             <div className="flex justify-end gap-3 pt-2">
               <Dialog.Close asChild>

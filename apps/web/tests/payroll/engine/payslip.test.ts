@@ -4,6 +4,7 @@ import {
   amountInWordsINR,
   buildPayslipFromLegacy,
   buildPayslipFromSnapshot,
+  bankNameFromIfsc,
   formatPayslipAmount,
   type EntrySnapshot,
 } from "@jambahr/shared/payroll/payslip";
@@ -106,5 +107,52 @@ describe("pay slip for an entry processed before the engine", () => {
     expect(doc.deductions.find((d) => d.label === "Loss of pay")).toEqual({ label: "Loss of pay", amount: 11178, detail: "2 days" });
     expect(doc.org.name).toBe("PlayPause Studios");
     expect(doc.netPayInWords).toBe("RUPEES ONE LAKH TWENTY FIVE THOUSAND NINE HUNDRED EIGHTEEN ONLY");
+  });
+});
+
+describe("employee block: October fields, configurable per org", () => {
+  const full = (): EntrySnapshot => {
+    const s = snapshotFor("003");
+    s.employee = {
+      ...s.employee, code: "003", dateOfBirth: "1994-05-12", dateOfJoining: "2024-08-27", gender: "male", pan: "ABCDE1234F",
+      workLocation: "Pune", department: "Design", pfNumber: "MH/PUN/123", bankName: "HDFC Bank", esicNumber: null,
+      pran: null, nationality: "Indian", aadhaarLast4: "9876",
+    };
+    return s;
+  };
+
+  it("prints the October fields in slip order; empty ones are left off", () => {
+    const doc = buildPayslipFromSnapshot(full(), ORG, {}, { paidAt: "2026-11-01T05:00:00Z" });
+    expect(doc.employeeLeft.map((f) => f.label)).toEqual([
+      "EMP CODE", "EMPLOYEE NAME", "DATE OF BIRTH", "DATE OF JOINING", "GENDER", "PAN", "LOCATION", "DEPARTMENT", "DESIGNATION", "PF NO",
+    ]);
+    expect(doc.employeeRight.map((f) => f.label)).toEqual([
+      "PAY PERIOD", "PAYMENT DATE", "BANK A/C", "BANK NAME", "UAN", "AADHAAR", "DAYS PAID", "NATIONALITY", "PAYMENT MODE",
+    ]); // no ESIC, no PRAN: blank for this person
+    const all = Object.fromEntries([...doc.employeeLeft, ...doc.employeeRight].map((f) => [f.label, f.value]));
+    expect(all["GENDER"]).toBe("Male");
+    expect(all["DATE OF BIRTH"]).toBe("12/05/1994");
+    expect(all["AADHAAR"]).toBe("XXXX XXXX 9876");
+  });
+
+  it("an org can hide fields and rename labels", () => {
+    const doc = buildPayslipFromSnapshot(full(), ORG, {
+      employeeFields: { date_of_birth: { show: false }, aadhaar: { show: false }, employee_code: { label: "GPN" } },
+    });
+    const labels = [...doc.employeeLeft, ...doc.employeeRight].map((f) => f.label);
+    expect(labels).not.toContain("DATE OF BIRTH");
+    expect(labels).not.toContain("AADHAAR");
+    expect(doc.employeeLeft[0]).toEqual({ label: "GPN", value: "003" });
+  });
+
+  it("older snapshots (no new fields) still render", () => {
+    const doc = buildPayslipFromSnapshot(snapshotFor("003"), ORG);
+    expect(doc.employeeLeft.map((f) => f.label)).toEqual(["EMPLOYEE NAME", "DESIGNATION"]);
+  });
+
+  it("bank name from the IFSC prefix; unknown prefixes stay as the code", () => {
+    expect(bankNameFromIfsc("hdfc")).toBe("HDFC Bank");
+    expect(bankNameFromIfsc("ZZZZ")).toBe("ZZZZ");
+    expect(bankNameFromIfsc(null)).toBeNull();
   });
 });

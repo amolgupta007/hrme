@@ -120,6 +120,8 @@ All from `JambaHR <noreply@jambahr.com>`, reply-to support@. Delivery status per
   - Logo: uploaded
   - GSTIN: not provided yet
   - Editable in Settings → Payroll → Pay slip details once the payroll engine branch ships.
+- **Employee IDs imported 2026-10-05** from the NN salary sheet (`NNver0.00a`): employee code (001–017, NOT the biometric PIN), gender, UAN for all 17, ESIC for the 7 covered. Audited in `payroll_audit_log`. Still missing: PF numbers (none), PAN for Samruddhi, Dinesh, Santosh, Sanskruti. Edit in Employees → Edit → Payroll & statutory IDs.
+- Pay slip employee block follows the October layout; fields can be hidden or relabelled in Settings → Payroll → Pay slip details → Employee details on the slip.
 
 ---
 

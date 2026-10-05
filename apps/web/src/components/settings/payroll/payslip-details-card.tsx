@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { FileText, Loader2, Upload } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { getPayslipDetails, savePayslipDetails, uploadPayslipLogo, type PayslipDetails } from "@/actions/payslip-settings";
+import { PAYSLIP_EMPLOYEE_FIELDS } from "@jambahr/shared/payroll/payslip";
 import { field } from "./styles";
 
 /** Settings → Payroll → Pay slip details. Loads its own state. */
@@ -118,6 +119,8 @@ export function PayslipDetailsCard() {
         <Switch id="psd-employer" checked={d.showEmployerContributions} onCheckedChange={(v) => set("showEmployerContributions", v)} />
       </div>
 
+      <EmployeeFieldsEditor value={d.employeeFields} onChange={(v) => set("employeeFields", v)} />
+
       <button
         onClick={save}
         disabled={saving}
@@ -125,6 +128,66 @@ export function PayslipDetailsCard() {
       >
         {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Save pay slip details
       </button>
+    </div>
+  );
+}
+
+type FieldRow = PayslipDetails["employeeFields"][number];
+
+/**
+ * Which employee details the slip prints, and what each is called. Defaults
+ * follow the October reference slip; a field with no value for a person is
+ * left off that person's slip automatically.
+ */
+function EmployeeFieldsEditor({ value, onChange }: { value: FieldRow[]; onChange: (v: FieldRow[]) => void }) {
+  const byKey = new Map(value.map((f) => [f.key, f]));
+  const update = (key: FieldRow["key"], patch: Partial<FieldRow>) =>
+    onChange(value.map((f) => (f.key === key ? { ...f, ...patch } : f)));
+
+  const column = (col: "left" | "right", title: string) => (
+    <div className="space-y-2">
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{title}</p>
+      {PAYSLIP_EMPLOYEE_FIELDS.filter((def) => def.column === col).map((def) => {
+        const f = byKey.get(def.key) ?? { key: def.key, show: true, label: "" };
+        return (
+          <div key={def.key} className="flex items-center gap-3">
+            <Switch
+              id={`psf-${def.key}`}
+              checked={f.show}
+              onCheckedChange={(v) => update(def.key, { show: v })}
+              aria-label={`Show ${def.source} on the pay slip`}
+            />
+            <div className="min-w-0 flex-1">
+              <input
+                className={`${field} h-8 font-mono text-xs uppercase ${f.show ? "" : "opacity-50"}`}
+                value={f.label}
+                placeholder={def.label}
+                maxLength={30}
+                disabled={!f.show}
+                aria-label={`Label for ${def.source}`}
+                onChange={(e) => update(def.key, { label: e.target.value })}
+              />
+              <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{def.source}</p>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  return (
+    <div className="space-y-3 rounded-md border bg-muted/30 p-3">
+      <div>
+        <p className="text-sm font-medium">Employee details on the slip</p>
+        <p className="text-xs text-muted-foreground">
+          Switch off anything you don&apos;t want printed, or rename a label. Details a person doesn&apos;t have are
+          left off their slip automatically. Aadhaar only ever shows the last 4 digits.
+        </p>
+      </div>
+      <div className="grid gap-6 md:grid-cols-2">
+        {column("left", "Left column")}
+        {column("right", "Right column")}
+      </div>
     </div>
   );
 }

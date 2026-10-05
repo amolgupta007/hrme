@@ -7,6 +7,7 @@ import {
   buildPayslipFromSnapshot,
   type EntrySnapshot,
   type PayslipDocument,
+  type PayslipEmployeeFieldSettings,
   type PayslipOptions,
   type PayslipOrg,
 } from "@jambahr/shared/payroll/payslip";
@@ -21,6 +22,8 @@ export interface PayslipSettings {
   email?: string | null;
   queryLine?: string | null;
   showEmployerContributions?: boolean;
+  /** Which employee fields the slip shows, and their labels. */
+  employeeFields?: PayslipEmployeeFieldSettings | null;
 }
 
 export interface LoadedPayslip {
@@ -60,7 +63,11 @@ export function payslipOrg(org: OrgRow): { org: PayslipOrg; options: PayslipOpti
       pf_establishment_code: org.pf_establishment_code,
       esi_code: org.esi_code,
     },
-    options: { queryLine: p.queryLine ?? null, showEmployerContributions: !!p.showEmployerContributions },
+    options: {
+      queryLine: p.queryLine ?? null,
+      showEmployerContributions: !!p.showEmployerContributions,
+      employeeFields: p.employeeFields ?? null,
+    },
   };
 }
 

@@ -2991,6 +2991,7 @@ export type Database = {
           emergency_contact_name: string | null
           emergency_contact_phone: string | null
           emergency_contact_relationship: string | null
+          employee_code: string | null
           employment_type: string
           esic_number: string | null
           first_name: string
@@ -2999,6 +3000,7 @@ export type Database = {
           last_name: string
           marital_status: string | null
           metadata: Json
+          nationality: string | null
           org_id: string
           pan_number: string | null
           payroll_excluded: boolean
@@ -3007,6 +3009,7 @@ export type Database = {
           personal_email: string | null
           pf_number: string | null
           phone: string | null
+          pran: string | null
           pronouns: string | null
           reporting_manager_2_id: string | null
           reporting_manager_id: string | null
@@ -3035,6 +3038,7 @@ export type Database = {
           emergency_contact_name?: string | null
           emergency_contact_phone?: string | null
           emergency_contact_relationship?: string | null
+          employee_code?: string | null
           employment_type?: string
           esic_number?: string | null
           first_name: string
@@ -3043,6 +3047,7 @@ export type Database = {
           last_name: string
           marital_status?: string | null
           metadata?: Json
+          nationality?: string | null
           org_id: string
           pan_number?: string | null
           payroll_excluded?: boolean
@@ -3051,6 +3056,7 @@ export type Database = {
           personal_email?: string | null
           pf_number?: string | null
           phone?: string | null
+          pran?: string | null
           pronouns?: string | null
           reporting_manager_2_id?: string | null
           reporting_manager_id?: string | null
@@ -3079,6 +3085,7 @@ export type Database = {
           emergency_contact_name?: string | null
           emergency_contact_phone?: string | null
           emergency_contact_relationship?: string | null
+          employee_code?: string | null
           employment_type?: string
           esic_number?: string | null
           first_name?: string
@@ -3087,6 +3094,7 @@ export type Database = {
           last_name?: string
           marital_status?: string | null
           metadata?: Json
+          nationality?: string | null
           org_id?: string
           pan_number?: string | null
           payroll_excluded?: boolean
@@ -3095,6 +3103,7 @@ export type Database = {
           personal_email?: string | null
           pf_number?: string | null
           phone?: string | null
+          pran?: string | null
           pronouns?: string | null
           reporting_manager_2_id?: string | null
           reporting_manager_id?: string | null

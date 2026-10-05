@@ -21,7 +21,7 @@ function Fields({ rows }: { rows: PayslipField[] }) {
       {rows.map((r) => (
         <div key={r.label} className="flex">
           <span className="w-32 shrink-0">{r.label}</span>
-          <span>:{r.value}</span>
+          <span className="min-w-0 break-words">:{r.value}</span>
         </div>
       ))}
     </div>
@@ -34,8 +34,8 @@ function Lines({ rows, count }: { rows: PayslipAmount[]; count: number }) {
     <>
       {padded.map((r, i) => (
         <div key={i} className="flex justify-between gap-2">
-          <span>{r ? `${r.label.toUpperCase()}${r.detail ? ` (${r.detail.toUpperCase()})` : ""}` : " "}</span>
-          <span className="tabular-nums">{r ? amt(r.amount) : ""}</span>
+          <span className="min-w-0 break-words">{r ? `${r.label.toUpperCase()}${r.detail ? ` (${r.detail.toUpperCase()})` : ""}` : " "}</span>
+          <span className="shrink-0 tabular-nums">{r ? amt(r.amount) : ""}</span>
         </div>
       ))}
     </>
@@ -63,8 +63,9 @@ export function PayslipDialog({ open, onClose, entryId }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-h-[92vh] max-w-3xl overflow-y-auto">
-        <div className="flex items-center justify-between">
+      <DialogContent className="max-h-[92vh] w-[calc(100%-2rem)] max-w-3xl overflow-y-auto p-4 sm:p-6">
+        {/* pr-8 keeps the button clear of the dialog's close (×), which sits at right-4 top-4. */}
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 pr-8">
           <DialogTitle>Pay slip{view ? ` — ${view.month}` : ""}</DialogTitle>
           <Button asChild variant="outline" size="sm" disabled={!view}>
             <a href={`/api/payroll/payslips/${entryId}/pdf`}>
@@ -78,18 +79,18 @@ export function PayslipDialog({ open, onClose, entryId }: Props) {
           <p className="flex items-center gap-2 py-8 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Loading pay slip…</p>
         )}
         {doc && (
-          <div className="space-y-1.5 border border-foreground/70 bg-background p-5 font-mono text-[11px] leading-snug text-foreground">
+          <div className="space-y-1.5 border border-foreground/70 bg-background p-3 font-mono sm:p-5 text-[11px] leading-snug text-foreground">
             {view?.runStatus === "draft" && (
               <p className="mb-2 rounded bg-amber-100 px-2 py-1 font-sans text-xs text-amber-900 dark:bg-amber-950/50 dark:text-amber-200">
                 Draft preview — this month isn&apos;t processed yet, so these figures can still change.
               </p>
             )}
-            <div className="flex gap-4">
+            <div className="flex flex-col gap-2 sm:flex-row sm:gap-4">
               {view?.logo && (
                 // eslint-disable-next-line @next/next/no-img-element -- data: URL from the server
-                <img src={view.logo} alt={`${doc.org.name} logo`} className="h-12 w-36 object-contain object-left" />
+                <img src={view.logo} alt={`${doc.org.name} logo`} className="h-12 w-36 shrink-0 object-contain object-left" />
               )}
-              <div>
+              <div className="min-w-0">
                 <p className="font-bold">{doc.org.name.toUpperCase()}</p>
                 {doc.org.addressLines.map((l) => <p key={l}>{l}</p>)}
                 {doc.org.contactLine && <p>{doc.org.contactLine}</p>}
@@ -98,7 +99,7 @@ export function PayslipDialog({ open, onClose, entryId }: Props) {
               </div>
             </div>
             <div className={rule} />
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-x-4 gap-y-0.5 sm:grid-cols-2">
               <Fields rows={doc.employeeLeft} />
               <Fields rows={doc.employeeRight} />
             </div>

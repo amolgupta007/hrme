@@ -114,6 +114,11 @@ All from `JambaHR <noreply@jambahr.com>`, reply-to support@. Delivery status per
 
 ---
 
+- **Bank accounts + Aadhaar loaded 2026-10-05** from the client's `Emp Details` sheets (`docs/client docs/medialoop/Emp Details .xlsx`; IFSCs from `docs/planning/payroll/Emp Details  (2).xlsx`). All 17 payroll staff were included.
+  - **Aadhaar:** 4 blanks filled. Madhura's was replaced with the sheet's number.
+  - **August run (2026-08):** created and calculated with each person's **August** bank, then **processed & locked**. 17/17 net pay matches the Aug sheet; total net ₹9,59,806. The slips keep the August bank permanently. ⚠ If this run is ever reopened and recalculated, the slips switch to the September accounts.
+  - **Saved accounts are now the September+ ones.** All are HDFC, mostly branch `HDFC0000825`; Sameer and Dhaval kept their existing HDFC accounts.
+  - ⚠ **Dimple:** the sheet gives the same account number for both months but different IFSCs (Aug `HDFC0003874`, Sep `HDFC0000825`). The September IFSC is the one saved. Confirm with the client.
 - **Pay slip details set 2026-10-02** (from their Aug 2026 slip):
   - Legal name: MEDIALOOP COMMUNICATION PVT. LTD.
   - Address: Plot No. 39, S No. 23/1, Vinudavan Bungalow, Sinhagad Road, Anand Nagar, Pune 411051
@@ -138,5 +143,6 @@ All from `JambaHR <noreply@jambahr.com>`, reply-to support@. Delivery status per
 - [ ] Mobile app: WFH request/approvals + Remote badge (phase 3); multi-session clock-in UI on mobile.
 - [ ] Device `NYU7261204139` offline since 2026-09-10; investigate why the device-health alert never fired.
 - [ ] Vedika phone login; Sameer name; missing DOBs.
-- [ ] Once the joiner fix is deployed, recalculate the Aug 2026 draft run. Vedika should come out at ₹30,000 gross / ₹27,887 net.
+- [x] Joiner fix deployed (#62). Aug 2026 run recreated and locked; Vedika ₹30,000 gross / ₹27,887 net.
+- [ ] Confirm Dimple Tewani's September IFSC with the client (see 4a).
 - [ ] Re-run the Clerk password audit in a week to see uptake (needs the prod Clerk key; rotate after).

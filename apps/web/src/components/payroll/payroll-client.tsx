@@ -36,7 +36,9 @@ import type {
   PayrollEntry,
   MyPayslip,
   MyCompensation,
+  MyEngineCompensation,
 } from "@/actions/payroll";
+import { EngineCompensationCard } from "./engine-compensation-card";
 
 interface Employee {
   id: string;
@@ -55,6 +57,8 @@ interface Props {
   payrollRuns: PayrollRun[];
   myPayslips: MyPayslip[];
   myCompensation: MyCompensation | null;
+  /** Engine orgs: the engine-computed compensation (null = no salary in effect). */
+  myEngineCompensation?: MyEngineCompensation | null;
   orgName: string;
   currentEmployeeName: string;
   activeConfigCreatedAt?: string | null;
@@ -91,6 +95,7 @@ export function PayrollClient({
   payrollRuns,
   myPayslips,
   myCompensation,
+  myEngineCompensation = null,
   orgName,
   currentEmployeeName,
   activeConfigCreatedAt,
@@ -98,11 +103,9 @@ export function PayrollClient({
   lateFlagsByMonth = {},
 }: Props) {
   const router = useRouter();
-  // My Compensation still draws the legacy CTC breakdown, which doesn't match
-  // engine orgs' pay slips — hidden for them until it reads the engine.
   const tabs = isAdmin
-    ? ["Salary Structures", "Payroll Runs", "My Payslips", ...(engineEnabled ? [] : ["My Compensation"])]
-    : engineEnabled ? ["My Payslips"] : ["My Compensation", "My Payslips"];
+    ? ["Salary Structures", "Payroll Runs", "My Payslips", "My Compensation"]
+    : ["My Compensation", "My Payslips"];
   const [activeTab, setActiveTab] = useState(tabs[0]);
 
   // Dialogs
@@ -667,7 +670,19 @@ export function PayrollClient({
       {/* ─── My Compensation Tab ─── */}
       {activeTab === "My Compensation" && (
         <div className="max-w-3xl">
-          {myCompensation ? (
+          {engineEnabled ? (
+            myEngineCompensation ? (
+              <EngineCompensationCard data={myEngineCompensation} />
+            ) : (
+              <div className="rounded-xl border border-dashed border-border p-12 text-center">
+                <IndianRupee className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+                <p className="font-medium">Compensation not set up yet</p>
+                <p className="text-sm text-muted-foreground mt-1 max-w-md mx-auto">
+                  Your salary hasn&apos;t been set up by your HR admin yet. It will appear here once it is.
+                </p>
+              </div>
+            )
+          ) : myCompensation ? (
             <div className="space-y-4">
               <div className="rounded-xl border border-border bg-card p-5 flex flex-wrap items-start justify-between gap-4">
                 <div>

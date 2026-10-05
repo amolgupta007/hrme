@@ -9,6 +9,7 @@ import {
   getPayrollRuns,
   getMyPayslips,
   getMyCompensation,
+  getMyEngineCompensation,
 } from "@/actions/payroll";
 import { PayrollClient } from "@/components/payroll/payroll-client";
 import { createAdminSupabase } from "@/lib/supabase/server";
@@ -84,7 +85,7 @@ export default async function PayrollPage() {
 
   // Orgs that have set up the payroll engine (Settings → Payroll) get the
   // engine's salary editor; everyone else keeps the current screens unchanged.
-  // Resolved for every role: it also hides My Compensation (legacy breakdown).
+  // Resolved for every role: it also picks which My Compensation is shown.
   let engineEnabled = false;
   if (userCtx) {
     try {
@@ -94,6 +95,9 @@ export default async function PayrollPage() {
       engineEnabled = false;
     }
   }
+  // Engine orgs: My Compensation comes from the engine, like the pay slip.
+  const myEngineResult = engineEnabled ? await getMyEngineCompensation() : null;
+  const myEngineCompensation = myEngineResult?.success ? myEngineResult.data : null;
 
   return (
     <PayrollClient
@@ -104,6 +108,7 @@ export default async function PayrollPage() {
       payrollRuns={payrollRuns}
       myPayslips={myPayslips}
       myCompensation={myCompensation}
+      myEngineCompensation={myEngineCompensation}
       orgName={orgName}
       currentEmployeeName={currentEmployeeName}
       activeConfigCreatedAt={activeConfigCreatedAt}

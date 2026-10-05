@@ -11,6 +11,8 @@ import { calculateRunEntries, runSnapshot, runTotals, type CalculateResult, type
 import { writePayrollAudit } from "@/lib/payroll/engine-config";
 import { sendRunPayslips } from "@/lib/payroll/payslip-email";
 import { notifyPayslipPaid } from "@/lib/mobile/notify";
+import { loadEngineCompensation, type EngineCompensation } from "@/lib/payroll/my-compensation";
+import { currentPayMonthIST } from "@jambahr/shared/payroll/engine";
 import type { ActionResult } from "@/types";
 
 // ---- Types ----
@@ -376,6 +378,34 @@ export async function getMyCompensation(): Promise<ActionResult<MyCompensation |
       additional_deductions_annual: Number((structure as any).additional_deductions_annual ?? 0),
     },
   };
+}
+
+export type MyEngineCompensation = EngineCompensation & { designation: string | null; department: string | null };
+
+/**
+ * My Compensation for orgs on the payroll engine: the caller's own salary in
+ * effect this pay month, computed by the engine exactly like their pay slip.
+ */
+export async function getMyEngineCompensation(): Promise<ActionResult<MyEngineCompensation | null>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!user.employeeId) return { success: true, data: null };
+
+  const supabase = createAdminSupabase();
+  try {
+    const comp = await loadEngineCompensation(supabase as any, user.orgId, user.employeeId, currentPayMonthIST());
+    if (!comp) return { success: true, data: null };
+    const { data: emp } = await supabase
+      .from("employees")
+      .select("designation, departments!employees_department_id_fkey(name)")
+      .eq("id", user.employeeId)
+      .eq("org_id", user.orgId)
+      .single();
+    const e = emp as { designation: string | null; departments: { name: string } | null } | null;
+    return { success: true, data: { ...comp, designation: e?.designation ?? null, department: e?.departments?.name ?? null } };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : "Could not load your compensation" };
+  }
 }
 
 export async function upsertSalaryStructure(

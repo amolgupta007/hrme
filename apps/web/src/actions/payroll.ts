@@ -755,28 +755,48 @@ export async function deletePayrollRun(runId: string): Promise<ActionResult<void
 
   const supabase = createAdminSupabase();
 
-  const { data: run } = await supabase
+  // The run must exist in THIS org — everything below is scoped by it.
+  const { data: run, error: findErr } = await supabase
     .from("payroll_runs")
-    .select("status")
+    .select("id, month, status, total_gross, total_deductions, total_net, employee_count")
     .eq("id", runId)
     .eq("org_id", user.orgId)
-    .single();
+    .maybeSingle();
+  if (findErr) return { success: false, error: findErr.message };
+  if (!run) return { success: false, error: "Payroll run not found" };
+  const r = run as { id: string; month: string; status: string; total_gross: number | null; total_deductions: number | null; total_net: number | null; employee_count: number | null };
 
-  const status = (run as any)?.status as string | undefined;
-  if (status && status !== "draft" && status !== "processed") {
-    return { success: false, error: "Money has moved for this run — it can't be deleted" };
-  }
+  // Only a draft can be deleted. A processed run is locked: reopen it (with a
+  // reason) first; once money has moved it can't go at all.
+  if (r.status === "processed") return { success: false, error: "This run is processed and locked — reopen it first, then delete the draft" };
+  if (r.status !== "draft") return { success: false, error: "Money has moved for this run — it can't be deleted" };
   const { data: batches } = await supabase
-    .from("disbursement_batches").select("id").eq("payroll_run_id", runId).neq("status", "cancelled").limit(1);
+    .from("disbursement_batches").select("id").eq("payroll_run_id", r.id).eq("org_id", user.orgId).neq("status", "cancelled").limit(1);
   if ((batches ?? []).length > 0) return { success: false, error: "A payout has been started for this run — cancel it first" };
 
-  await supabase.from("payroll_entries").delete().eq("payroll_run_id", runId);
+  const { count: entryCount } = await supabase
+    .from("payroll_entries").select("id", { count: "exact", head: true }).eq("payroll_run_id", r.id).eq("org_id", user.orgId);
+
+  // Log first: a deletion that can't be recorded doesn't happen.
+  const auditErr = await writePayrollAudit(supabase as any, user.orgId, user.employeeId ?? null, [{
+    entity: "run", entityId: r.id, action: "delete", field: `${r.month}.run`,
+    oldValue: {
+      month: r.month, status: r.status, entries: entryCount ?? null,
+      totals: { gross: r.total_gross, deductions: r.total_deductions, net: r.total_net, employees: r.employee_count },
+    },
+    newValue: null,
+  }]);
+  if (auditErr) return { success: false, error: `Not deleted: the deletion could not be logged (${auditErr})` };
+
+  const { error: entriesErr } = await supabase
+    .from("payroll_entries").delete().eq("payroll_run_id", r.id).eq("org_id", user.orgId);
+  if (entriesErr) return { success: false, error: entriesErr.message };
   const { error } = await supabase
     .from("payroll_runs")
     .delete()
-    .eq("id", runId)
-    .eq("org_id", user.orgId);
-
+    .eq("id", r.id)
+    .eq("org_id", user.orgId)
+    .eq("status", "draft");
   if (error) return { success: false, error: error.message };
 
   revalidatePath("/dashboard/payroll");

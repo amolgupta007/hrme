@@ -312,11 +312,11 @@ export async function calculateRunEntries(
   if (!opts.employeeId) {
     const stale = [...existing.values()].filter((x) => !keep.has(x.employee_id)).map((x) => x.id);
     if (stale.length) {
-      const { error } = await sb.from("payroll_entries").delete().in("id", stale);
+      const { error } = await sb.from("payroll_entries").delete().eq("org_id", orgId).in("id", stale);
       if (error) throw new Error(`payroll_entries: ${error.message}`);
     }
   } else if (!keep.has(opts.employeeId) && existing.get(opts.employeeId)) {
-    await sb.from("payroll_entries").delete().eq("id", existing.get(opts.employeeId)!.id);
+    await sb.from("payroll_entries").delete().eq("org_id", orgId).eq("id", existing.get(opts.employeeId)!.id);
   }
   return result;
 }

@@ -98,9 +98,11 @@ export function PayrollClient({
   lateFlagsByMonth = {},
 }: Props) {
   const router = useRouter();
+  // My Compensation still draws the legacy CTC breakdown, which doesn't match
+  // engine orgs' pay slips — hidden for them until it reads the engine.
   const tabs = isAdmin
-    ? ["Salary Structures", "Payroll Runs", "My Payslips", "My Compensation"]
-    : ["My Compensation", "My Payslips"];
+    ? ["Salary Structures", "Payroll Runs", "My Payslips", ...(engineEnabled ? [] : ["My Compensation"])]
+    : engineEnabled ? ["My Payslips"] : ["My Compensation", "My Payslips"];
   const [activeTab, setActiveTab] = useState(tabs[0]);
 
   // Dialogs

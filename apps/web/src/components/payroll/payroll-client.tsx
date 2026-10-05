@@ -199,7 +199,7 @@ export function PayrollClient({
   }
 
   async function handleDeleteRun(runId: string) {
-    if (!confirm("Delete this payroll run? This cannot be undone.")) return;
+    if (!confirm("Delete this draft payroll run? Its calculated entries are removed, and the deletion is recorded in the payroll audit log.")) return;
     setDeletingRun(runId);
     try {
       const result = await deletePayrollRun(runId);
@@ -446,10 +446,12 @@ export function PayrollClient({
                           Send payslips
                         </Button>
                       )}
-                      {(run.status === "draft" || run.status === "processed") && (
+                      {run.status === "draft" && (
                         <Button
                           size="sm"
                           variant="ghost"
+                          aria-label="Delete draft run"
+                          title="Delete draft run"
                           onClick={() => handleDeleteRun(run.id)}
                           disabled={deletingRun === run.id}
                           className="text-destructive hover:text-destructive"

@@ -8,6 +8,7 @@ import { getCurrentUser, isAdmin } from "@/lib/current-user";
 import { enqueueDeleteForEmployee } from "@/lib/attendance/device-provisioning";
 import type { ActionResult, Employee, Department, UserRole } from "@/types";
 import { employeeSchema } from "@/lib/employees/employee-schema";
+import { employeeIdsSchema, employeeIdsToColumns } from "@/lib/employees/employee-ids";
 import { normalizePhone } from "@/lib/phone";
 import { provisionPhoneOnlyUser, syncEmployeeAuthIdentifiers } from "@/lib/clerk/provision-phone-user";
 import { sendAccountSetupInvite } from "@/lib/invites/send-account-setup";
@@ -375,6 +376,35 @@ export async function updateEmployee(
     }
   }
 
+  revalidatePath("/dashboard/employees");
+  return { success: true, data: undefined };
+}
+
+/**
+ * Payroll & statutory identifiers (employee code, gender, DOB, PAN, UAN, PF,
+ * ESIC, PRAN, nationality, work location). Admin-only, saved from the
+ * Add/Edit employee dialog. They print on pay slips per the org's settings.
+ */
+export async function updateEmployeeIdentifiers(
+  id: string,
+  input: z.input<typeof employeeIdsSchema>
+): Promise<ActionResult<void>> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  if (!isAdmin(user.role)) return { success: false, error: "Only admins can update employees" };
+  const parsed = employeeIdsSchema.safeParse(input);
+  if (!parsed.success) return { success: false, error: parsed.error.errors[0].message };
+
+  const supabase = createAdminSupabase();
+  const { error } = await supabase
+    .from("employees")
+    .update(employeeIdsToColumns(parsed.data) as any)
+    .eq("id", id)
+    .eq("org_id", user.orgId);
+  if (error) {
+    if (error.code === "23505") return { success: false, error: "Another employee already has this employee code" };
+    return { success: false, error: error.message };
+  }
   revalidatePath("/dashboard/employees");
   return { success: true, data: undefined };
 }

@@ -14,6 +14,11 @@ import { hasFeature } from "@/config/plans";
 import { writePayrollAudit } from "@/lib/payroll/engine-config";
 import { loadOrgLogo, type PayslipSettings } from "@/lib/payroll/payslip-data";
 import type { ActionResult } from "@/types";
+import {
+  PAYSLIP_EMPLOYEE_FIELDS,
+  type PayslipEmployeeFieldKey,
+  type PayslipEmployeeFieldSettings,
+} from "@jambahr/shared/payroll/payslip";
 
 const BUCKET = "documents";
 const MAX_LOGO_BYTES = 1024 * 1024;
@@ -40,6 +45,8 @@ export interface PayslipDetails {
   esiCode: string;
   queryLine: string;
   showEmployerContributions: boolean;
+  /** Employee block: every catalogue field, in slip order, with the org's choice. */
+  employeeFields: { key: PayslipEmployeeFieldKey; show: boolean; label: string }[];
   /** data: URL of the current logo, or null. */
   logo: string | null;
   orgName: string;
@@ -74,6 +81,11 @@ export async function getPayslipDetails(): Promise<ActionResult<PayslipDetails>>
       esiCode: o.esi_code ?? "",
       queryLine: p.queryLine ?? "",
       showEmployerContributions: !!p.showEmployerContributions,
+      employeeFields: PAYSLIP_EMPLOYEE_FIELDS.map((f) => ({
+        key: f.key,
+        show: p.employeeFields?.[f.key]?.show !== false,
+        label: p.employeeFields?.[f.key]?.label ?? "",
+      })),
       logo: logo ? `data:image/${logo.format === "jpg" ? "jpeg" : "png"};base64,${logo.data.toString("base64")}` : null,
     },
   };
@@ -92,6 +104,13 @@ const DetailsSchema = z.object({
   esiCode: opt(40),
   queryLine: opt(200),
   showEmployerContributions: z.boolean(),
+  employeeFields: z
+    .array(z.object({
+      key: z.enum(PAYSLIP_EMPLOYEE_FIELDS.map((f) => f.key) as [PayslipEmployeeFieldKey, ...PayslipEmployeeFieldKey[]]),
+      show: z.boolean(),
+      label: z.string().trim().max(30, "Keep labels to 30 characters"),
+    }))
+    .optional(),
 });
 
 export async function savePayslipDetails(input: z.input<typeof DetailsSchema>): Promise<ActionResult<void>> {
@@ -107,12 +126,21 @@ export async function savePayslipDetails(input: z.input<typeof DetailsSchema>): 
     .from("organizations").select("address, gstin, pan, tan, pf_establishment_code, esi_code, settings").eq("id", orgId).single();
   if (readErr) return { success: false, error: readErr.message };
   const b = before as any;
+  // Only what differs from the catalogue default is stored (hidden, or relabelled).
+  let employeeFields: PayslipEmployeeFieldSettings | null = b.settings?.payslip?.employeeFields ?? null;
+  if (d.employeeFields) {
+    employeeFields = {};
+    for (const f of d.employeeFields) {
+      if (!f.show || f.label) employeeFields[f.key] = { show: f.show, ...(f.label ? { label: f.label.toUpperCase() } : {}) };
+    }
+  }
   const payslip: PayslipSettings = {
     legalName: d.legalName || null,
     website: d.website || null,
     email: d.email || null,
     queryLine: d.queryLine || null,
     showEmployerContributions: d.showEmployerContributions,
+    employeeFields,
   };
   const after = {
     address: { lines: d.addressLines.filter(Boolean) },

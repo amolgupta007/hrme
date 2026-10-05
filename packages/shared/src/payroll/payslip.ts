@@ -151,6 +151,11 @@ export interface PayslipOptions {
   queryLine?: string | null;
   /** Per-org show/hide and label overrides for the employee block. */
   employeeFields?: PayslipEmployeeFieldSettings | null;
+  /**
+   * Full numbers, set ONLY when the slip is being shown to its own employee
+   * (never for admins or the emailed PDF). Missing → the masked value prints.
+   */
+  reveal?: { bankAccount?: string | null; aadhaar?: string | null } | null;
 }
 
 // ── Employee block: the configurable field catalogue ───────────────────────
@@ -326,12 +331,14 @@ export function buildPayslipFromSnapshot(
       pf_number: e.pfNumber,
       pay_period: payPeriod(snap.month),
       payment_date: fmtDate(payment.paidAt),
-      bank_account: e.bankLast4 ? `XXXXXX${e.bankLast4}` : null,
+      bank_account: options.reveal?.bankAccount || (e.bankLast4 ? `XXXXXX${e.bankLast4}` : null),
       bank_name: e.bankName,
       uan: e.uan,
       esic_number: e.esicNumber,
       pran: e.pran,
-      aadhaar: e.aadhaarLast4 ? `XXXX XXXX ${e.aadhaarLast4}` : null,
+      aadhaar: options.reveal?.aadhaar
+        ? options.reveal.aadhaar.replace(/\D/g, "").replace(/(\d{4})(?=\d)/g, "$1 ")
+        : e.aadhaarLast4 ? `XXXX XXXX ${e.aadhaarLast4}` : null,
       days_paid: `${Number.isInteger(snap.days.paid) ? snap.days.paid : snap.days.paid.toFixed(2)} of ${snap.days.basis}`,
       nationality: e.nationality,
       payment_mode: payment.paidAt ? payment.mode ?? "Bank transfer" : null,

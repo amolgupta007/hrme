@@ -18,7 +18,7 @@ export async function GET(_req: Request, ctx: { params: { entryId: string } }) {
 
   const sb = createAdminSupabase();
   try {
-    const slip = await loadPayslip(sb as any, user.orgId, ctx.params.entryId);
+    const slip = await loadPayslip(sb as any, user.orgId, ctx.params.entryId, { employeeId: user.employeeId });
     if (!slip || !canViewPayslip({ isAdmin: isAdmin(user.role), employeeId: user.employeeId }, slip)) {
       return NextResponse.json({ error: "not_found" }, { status: 404 });
     }

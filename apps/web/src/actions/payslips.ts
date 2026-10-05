@@ -23,7 +23,7 @@ export async function getPayslipView(entryId: string): Promise<ActionResult<Pays
   if (!user) return { success: false, error: "Not authenticated" };
   if (typeof entryId !== "string" || !/^[0-9a-f-]{36}$/i.test(entryId)) return { success: false, error: "Pay slip not found" };
   try {
-    const slip = await loadPayslip(createAdminSupabase() as any, user.orgId, entryId);
+    const slip = await loadPayslip(createAdminSupabase() as any, user.orgId, entryId, { employeeId: user.employeeId });
     if (!slip || !canViewPayslip({ isAdmin: isAdmin(user.role), employeeId: user.employeeId }, slip)) {
       return { success: false, error: "Pay slip not found" };
     }

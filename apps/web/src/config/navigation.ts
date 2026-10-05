@@ -85,7 +85,7 @@ export const sidebarNav: NavItem[] = [
     title: "Payroll",
     href: "/dashboard/payroll",
     icon: "Wallet",
-    requiredRole: "admin",
+    // Every role: non-admins get My Payslips + My Compensation; admin tabs are gated in the page.
     requiredPlan: "business",
   },
   {

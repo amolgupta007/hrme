@@ -121,4 +121,12 @@ describe("parseHolidayCsv", () => {
     const { errors } = parseHolidayCsv(`${"x".repeat(81)},2026-12-25,no`);
     expect(errors).toEqual([{ line: 1, message: "Name must be 80 characters or fewer" }]);
   });
+
+  it("skips all-empty rows (Excel ,, exports)", () => {
+    const { drafts, errors } = parseHolidayCsv(
+      ["name,date,optional", "Holi,2027-03-23,no", ",,", ",,,", ""].join("\r\n")
+    );
+    expect(errors).toEqual([]);
+    expect(drafts).toEqual([{ name: "Holi", date: "2027-03-23", isOptional: false }]);
+  });
 });

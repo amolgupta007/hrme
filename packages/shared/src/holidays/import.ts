@@ -89,6 +89,7 @@ export function parseHolidayCsv(text: string): {
     const line = idx + 1;
     if (!raw.trim()) return;
     const [nameRaw = "", dateRaw = "", optRaw = ""] = splitCsvLine(raw);
+    if (!nameRaw && !dateRaw && !optRaw) return; // Skip all-empty rows (e.g. Excel ,, exports)
     if (idx === 0 && nameRaw.toLowerCase() === "name" && dateRaw.toLowerCase() === "date") return;
     const name = nameRaw.trim();
     if (!name) return void errors.push({ line, message: "Name is required" });

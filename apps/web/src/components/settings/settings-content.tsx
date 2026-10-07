@@ -13,8 +13,11 @@ import {
   Wallet as WalletIcon,
   MapPin,
   ShieldCheck,
+  PartyPopper,
 } from "lucide-react";
 import { CollapsibleSection } from "@/components/settings/collapsible-section";
+import { HolidaysSection } from "@/components/settings/holidays-section";
+import type { HolidayRow } from "@/actions/holidays";
 import { LeavePoliciesSection } from "@/components/settings/leave-policies-section";
 import { DepartmentsSection } from "@/components/settings/departments-section";
 import { ProductsSection } from "@/components/settings/products-section";
@@ -75,6 +78,8 @@ type SettingsContentProps = {
   shifts: Shift[];
   shiftAssignments: ShiftAssignment[];
   weekOffPolicy: WeekOffPolicy | null;
+  holidays: HolidayRow[];
+  holidayYear: number;
   weekOffOverrides: EmployeeWeekOffOverrideRow[];
   departmentWeekOffOverrides: DepartmentWeekOffOverrideRow[];
   employees: Employee[];
@@ -122,6 +127,8 @@ export function SettingsContent({
   shifts,
   shiftAssignments,
   weekOffPolicy,
+  holidays,
+  holidayYear,
   weekOffOverrides,
   departmentWeekOffOverrides,
   employees,
@@ -143,6 +150,14 @@ export function SettingsContent({
 }: SettingsContentProps) {
   const [openSection, setOpenSection] = React.useState<string | null>(null);
 
+  // Deep links: /dashboard/settings?section=holidays or #holidays open that section.
+  React.useEffect(() => {
+    const fromQuery = new URLSearchParams(window.location.search).get("section");
+    const fromHash = window.location.hash.replace(/^#/, "");
+    const target = fromQuery || fromHash;
+    if (target) setOpenSection(target);
+  }, []);
+
   function toggle(id: string) {
     setOpenSection((prev) => (prev === id ? null : id));
   }
@@ -152,6 +167,11 @@ export function SettingsContent({
     policies.length === 0
       ? "None configured"
       : `${policies.length} ${pluralise(policies.length, "policy", "policies")}`;
+
+  const holidaySummary =
+    holidays.length === 0
+      ? `None for ${holidayYear}`
+      : `${holidays.length} in ${holidayYear}`;
 
   const deptSummary =
     departments.length === 0
@@ -198,6 +218,16 @@ export function SettingsContent({
         onToggle={() => toggle("leave-policies")}
       >
         <LeavePoliciesSection policies={policies} />
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        title="Holidays"
+        icon={<PartyPopper className="h-5 w-5 text-muted-foreground" />}
+        summary={holidaySummary}
+        isOpen={openSection === "holidays"}
+        onToggle={() => toggle("holidays")}
+      >
+        <HolidaysSection initialYear={holidayYear} initialHolidays={holidays} weekOffPolicy={weekOffPolicy} />
       </CollapsibleSection>
 
       <CollapsibleSection

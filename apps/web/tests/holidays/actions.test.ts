@@ -4,7 +4,27 @@ import { createFakeSupabase, type FakeDb } from "../helpers/fake-supabase";
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 let db: FakeDb;
-vi.mock("@/lib/supabase/server", () => ({ createAdminSupabase: () => createFakeSupabase(db) }));
+// When set, every query on the `holidays` table resolves with a DB error.
+let failHolidays = false;
+function failingHolidaysClient() {
+  const real = createFakeSupabase(db);
+  return {
+    from: (t: string) => {
+      if (t !== "holidays") return real.from(t);
+      const chain: any = new Proxy({}, {
+        get: (_x, p) => {
+          if (p === "then") return (res: any) => Promise.resolve({ data: null, error: { message: "boom" } }).then(res);
+          if (p === "single" || p === "maybeSingle") return () => Promise.resolve({ data: null, error: { message: "boom" } });
+          return () => chain;
+        },
+      });
+      return chain;
+    },
+  };
+}
+vi.mock("@/lib/supabase/server", () => ({
+  createAdminSupabase: () => (failHolidays ? failingHolidaysClient() : createFakeSupabase(db)),
+}));
 
 let currentUser: any;
 const asUser = (orgId: string, employeeId: string, role: string) => {
@@ -30,6 +50,7 @@ const H = (id: string, org_id: string, date: string, name: string, is_optional =
 });
 
 beforeEach(() => {
+  failHolidays = false;
   db = {
     holidays: [
       H("h1", "A", "2026-11-08", "Diwali"),
@@ -139,5 +160,61 @@ describe("importHolidays", () => {
   it("is admin-only", async () => {
     asUser("A", "emp-a", "employee");
     expect(await importHolidays([], "csv")).toEqual({ success: false, error: "Unauthorized" });
+  });
+});
+
+describe("failed reads never read as 'no data' (gotcha #102)", () => {
+  it("listHolidays", async () => {
+    failHolidays = true;
+    expect(await listHolidays(2026)).toEqual({ success: false, error: "Couldn't load holidays" });
+  });
+  it("deleteHoliday reports a failed delete, not 'not found'", async () => {
+    failHolidays = true;
+    expect(await deleteHoliday("h1")).toEqual({ success: false, error: "Couldn't delete the holiday" });
+    failHolidays = false;
+    expect(db.holidays.some((h) => h.id === "h1")).toBe(true);
+  });
+  it("updateHoliday's clash pre-check error is not ignored", async () => {
+    failHolidays = true;
+    expect(await updateHoliday("h1", { name: "X", date: "2026-11-09", isOptional: false })).toEqual({
+      success: false, error: "Couldn't save the holiday",
+    });
+    failHolidays = false;
+    expect(db.holidays.find((h) => h.id === "h1")!.name).toBe("Diwali");
+  });
+  it("getHolidayPreset", async () => {
+    failHolidays = true;
+    expect(await getHolidayPreset(2026, "national")).toEqual({ success: false, error: "Couldn't load your holidays" });
+  });
+  it("importHolidays", async () => {
+    failHolidays = true;
+    expect(await importHolidays([{ name: "X", date: "2026-12-01", isOptional: false }], "csv")).toEqual({
+      success: false, error: "Couldn't load your holidays",
+    });
+    failHolidays = false;
+    expect(db.holidays.length).toBe(3);
+  });
+});
+
+describe("gating, scoping and validation", () => {
+  it("employee can't update", async () => {
+    asUser("A", "emp-a", "employee");
+    expect(await updateHoliday("h1", { name: "X", date: "2026-11-08", isOptional: false })).toEqual({ success: false, error: "Unauthorized" });
+  });
+  it("preset: another org's date is not 'alreadyAdded'; import adds it", async () => {
+    const res = await getHolidayPreset(2026, "national");
+    if (!res.success) throw new Error(res.error);
+    expect(res.data.filter((r) => r.date === "2026-11-10").every((r) => !r.alreadyAdded)).toBe(true);
+    const imp = await importHolidays([{ name: "Mine", date: "2026-11-10", isOptional: false }], "csv");
+    expect(imp).toEqual({ success: true, data: { added: 1, skipped: [] } });
+  });
+  it("importHolidays validates source at runtime", async () => {
+    const res = await importHolidays([{ name: "X", date: "2026-12-01", isOptional: false }], "bogus" as any);
+    expect(res.success).toBe(false);
+    expect(db.holidays.length).toBe(3);
+  });
+  it("rejects dates outside 2000-2100", async () => {
+    const res = await createHoliday({ name: "X", date: "2101-01-01", isOptional: false });
+    expect(res).toEqual({ success: false, error: "Enter a date between 2000 and 2100" });
   });
 });

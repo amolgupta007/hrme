@@ -14,7 +14,13 @@ export type HolidayPresetRow = HolidayPreset & { alreadyAdded: boolean };
 
 const draftSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(80, "Name must be 80 characters or fewer"),
-  date: z.string().refine(isValidIsoDate, "Enter a real date"),
+  date: z
+    .string()
+    .refine(isValidIsoDate, "Enter a real date")
+    .refine((d) => {
+      const y = Number(d.slice(0, 4));
+      return y >= 2000 && y <= 2100;
+    }, "Enter a date between 2000 and 2100"),
   isOptional: z.boolean(),
 });
 
@@ -83,8 +89,9 @@ export async function updateHoliday(id: string, input: HolidayDraft): Promise<Ac
   if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
   const { name, date, isOptional } = parsed.data;
   const sb = createAdminSupabase();
-  const { data: clash } = await sb
+  const { data: clash, error: clashErr } = await sb
     .from("holidays").select("id").eq("org_id", auth.user.orgId).eq("date", date).neq("id", id).maybeSingle();
+  if (clashErr) return { success: false, error: "Couldn't save the holiday" };
   if (clash) return { success: false, error: clashMessage(date) };
   const { data, error } = await sb
     .from("holidays")
@@ -102,10 +109,9 @@ export async function deleteHoliday(id: string): Promise<ActionResult<void>> {
   const auth = await requireAdmin();
   if (!auth.user) return { success: false, error: auth.error };
   const sb = createAdminSupabase();
-  const { data: found } = await sb.from("holidays").select("id").eq("id", id).eq("org_id", auth.user.orgId).maybeSingle();
-  if (!found) return { success: false, error: "Holiday not found" };
-  const { error } = await sb.from("holidays").delete().eq("id", id).eq("org_id", auth.user.orgId);
+  const { data, error } = await sb.from("holidays").delete().eq("id", id).eq("org_id", auth.user.orgId).select("id");
   if (error) return { success: false, error: "Couldn't delete the holiday" };
+  if (!data || data.length === 0) return { success: false, error: "Holiday not found" };
   revalidateAll();
   return { success: true, data: undefined };
 }
@@ -127,10 +133,13 @@ export async function getHolidayPreset(year: number, region: HolidayRegion): Pro
 
 export async function importHolidays(
   drafts: HolidayDraft[],
-  source: "preset" | "csv",
+  sourceInput: "preset" | "csv",
 ): Promise<ActionResult<{ added: number; skipped: string[] }>> {
   const auth = await requireAdmin();
   if (!auth.user) return { success: false, error: auth.error };
+  const srcParsed = z.enum(["preset", "csv"]).safeParse(sourceInput);
+  if (!srcParsed.success) return { success: false, error: "Unknown import source" };
+  const source = srcParsed.data;
   const parsed = z.array(draftSchema).max(400, "Import at most 400 holidays at a time").safeParse(drafts);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
   if (parsed.data.length === 0) return { success: true, data: { added: 0, skipped: [] } };

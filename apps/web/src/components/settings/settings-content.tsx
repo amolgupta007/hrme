@@ -78,7 +78,7 @@ type SettingsContentProps = {
   shifts: Shift[];
   shiftAssignments: ShiftAssignment[];
   weekOffPolicy: WeekOffPolicy | null;
-  holidays: HolidayRow[];
+  holidays: HolidayRow[] | null;
   holidayYear: number;
   weekOffOverrides: EmployeeWeekOffOverrideRow[];
   departmentWeekOffOverrides: DepartmentWeekOffOverrideRow[];
@@ -169,9 +169,11 @@ export function SettingsContent({
       : `${policies.length} ${pluralise(policies.length, "policy", "policies")}`;
 
   const holidaySummary =
-    holidays.length === 0
+    holidays === null
+      ? "Couldn't load"
+      : holidays.length === 0
       ? `None for ${holidayYear}`
-      : `${holidays.length} in ${holidayYear}`;
+      :`${holidays.length} in ${holidayYear}`;
 
   const deptSummary =
     departments.length === 0

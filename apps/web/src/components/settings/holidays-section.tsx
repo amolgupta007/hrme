@@ -10,7 +10,7 @@ import { HolidayImportDialog } from "@/components/settings/holiday-import-dialog
 import { deleteHoliday, listHolidays, type HolidayRow } from "@/actions/holidays";
 import { isWeekOff, type WeekOffPolicy } from "@jambahr/shared/attendance/week-off";
 
-type Props = { initialYear: number; initialHolidays: HolidayRow[]; weekOffPolicy: WeekOffPolicy | null };
+type Props = { initialYear: number; initialHolidays: HolidayRow[] | null; weekOffPolicy: WeekOffPolicy | null };
 
 const fmt = (iso: string) =>
   new Date(`${iso}T00:00:00.000Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
@@ -20,7 +20,7 @@ const weekday = (iso: string) =>
 export function HolidaysSection({ initialYear, initialHolidays, weekOffPolicy }: Props) {
   const years = [initialYear - 1, initialYear, initialYear + 1];
   const [year, setYear] = React.useState(initialYear);
-  const [rows, setRows] = React.useState<HolidayRow[]>(initialHolidays);
+  const [rows, setRows] = React.useState<HolidayRow[] | null>(initialHolidays);
   const [loading, setLoading] = React.useState(false);
   const [editing, setEditing] = React.useState<HolidayRow | null>(null);
   const [formOpen, setFormOpen] = React.useState(false);
@@ -33,7 +33,10 @@ export function HolidaysSection({ initialYear, initialHolidays, weekOffPolicy }:
     const res = await listHolidays(y);
     setLoading(false);
     if (res.success) setRows(res.data);
-    else toast.error(res.error);
+    else {
+      setRows(null);
+      toast.error(res.error);
+    }
   }, []);
 
   React.useEffect(() => {
@@ -52,7 +55,7 @@ export function HolidaysSection({ initialYear, initialHolidays, weekOffPolicy }:
     load(year);
   }
 
-  const mandatory = rows.filter((r) => !r.is_optional).length;
+  const mandatory = rows ? rows.filter((r) => !r.is_optional).length : 0;
 
   return (
     <div className="p-6">
@@ -83,6 +86,11 @@ export function HolidaysSection({ initialYear, initialHolidays, weekOffPolicy }:
 
       {loading ? (
         <p className="py-8 text-center text-sm text-muted-foreground">Loading…</p>
+      ) : rows === null ? (
+        <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border py-8 text-center">
+          <p className="text-sm text-muted-foreground">Couldn&apos;t load holidays.</p>
+          <Button size="sm" variant="outline" onClick={() => load(year)}>Try again</Button>
+        </div>
       ) : rows.length === 0 ? (
         <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border py-8 text-center">
           <PartyPopper className="h-8 w-8 text-muted-foreground/50" />
@@ -130,13 +138,13 @@ export function HolidaysSection({ initialYear, initialHolidays, weekOffPolicy }:
         </>
       )}
 
-      <HolidayDialog open={formOpen} onOpenChange={setFormOpen} editing={editing} defaultYear={year} onSaved={() => load(year)} />
+      <HolidayDialog open={formOpen} onOpenChange={setFormOpen} editing={editing} anchorYear={initialYear} onSaved={() => load(year)} />
       <HolidayImportDialog open={importOpen} onOpenChange={setImportOpen} year={year} onImported={() => load(year)} />
       <DestructiveDialog
         open={pendingDelete !== null}
         onOpenChange={(o) => { if (!o) setPendingDelete(null); }}
         title={pendingDelete ? `Delete "${pendingDelete.name}"?` : ""}
-        description="It stops being a holiday from today in reports and lateness. Locked payroll runs don't change."
+        description="It stops being a holiday from today in reports. Late marks for this month re-count overnight. Locked payroll runs don't change."
         confirmLabel="Delete holiday"
         loading={deleting}
         onConfirm={confirmDelete}

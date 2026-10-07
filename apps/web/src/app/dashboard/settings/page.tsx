@@ -122,7 +122,7 @@ export default async function SettingsPage() {
   const shifts = shiftsResult.success ? shiftsResult.data : [];
   const shiftAssignments = shiftAssignmentsResult.success ? shiftAssignmentsResult.data : [];
   const weekOffPolicy = weekOffPolicyResult.success ? weekOffPolicyResult.data : null;
-  const holidays = holidaysResult.success ? holidaysResult.data : [];
+  const holidays = holidaysResult.success ? holidaysResult.data : null;
   const weekOffOverrides = weekOffOverridesResult.success ? weekOffOverridesResult.data : [];
   const departmentWeekOffOverrides = departmentWeekOffOverridesResult.success ? departmentWeekOffOverridesResult.data : [];
   const employees = employeesResult.success ? employeesResult.data : [];

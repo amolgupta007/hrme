@@ -93,8 +93,9 @@ function builder(db: FakeDb, table: string) {
     }
     if (op === "delete") {
       const hit = new Set(matches());
+      const removed = db[table].filter((r) => hit.has(r));
       db[table] = db[table].filter((r) => !hit.has(r));
-      return { data: null, error: null };
+      return { data: returning ? removed.map((r) => ({ ...r })) : null, error: null };
     }
     // Clone, like a real network round-trip — callers must never be able to
     // observe a later write through a row they already read.

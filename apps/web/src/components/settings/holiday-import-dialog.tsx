@@ -53,7 +53,7 @@ export function HolidayImportDialog({ open, onOpenChange, year, onImported }: {
         note: p.kind === "restricted" ? "Restricted" : undefined,
       })));
     });
-    return () => { cancelled = true; };
+    return () => { cancelled = true; setLoading(false); };
   }, [open, mode, region, year]);
 
   async function onFile(file: File) {
@@ -93,7 +93,7 @@ export function HolidayImportDialog({ open, onOpenChange, year, onImported }: {
           <div className="mb-4 flex flex-wrap gap-2" role="tablist">
             {regions.map((r) => (
               <Button key={r} size="sm" variant={mode === "preset" && region === r ? "default" : "outline"}
-                onClick={() => { setMode("preset"); setRegion(r); }}>
+                onClick={() => { setMode("preset"); setRegion(r); setCsvErrors([]); }}>
                 {PRESET_REGION_LABELS[r]}
               </Button>
             ))}

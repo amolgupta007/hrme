@@ -16,6 +16,7 @@ const UNIQUE: Record<string, string[][]> = {
   late_penalty_events: [["org_id", "employee_id", "month", "kind", "occurrence_no"]],
   late_policy_flags: [["org_id", "employee_id", "month"]],
   attendance_records: [["org_id", "employee_id", "date"]],
+  holidays: [["org_id", "date"]],
 };
 
 /** Column defaults the real schema applies (migration 109). */

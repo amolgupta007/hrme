@@ -1,0 +1,95 @@
+import type { HolidayPreset } from "../presets";
+
+// National: DoPT O.M. F.No.12/2/2023-JCA dated 03-07-2025 — Annexure-I (gazetted,
+//   Delhi/New Delhi) and Annexure-II (restricted).
+//   https://www.govtstaff.com/2025/07/list-of-gazetted-holidays-to-be-observed-in-the-administrative-offices-of-central-government-located-at-delhi-new-delhi-during-the-year-2026.html
+//   https://govtstaff.com/2025/07/list-of-restricted-holidays-to-be-observed-in-the-administrative-offices-of-central-government-located-at-delhi-new-delhi-during-the-year-2026.html
+// Maharashtra: GAD public-holiday notification for 2026 (NI Act s.25), incl. the
+//   additional Bhaubeej holiday; the bank-only 1 Apr closing day is excluded.
+//   https://www.keka.com/compliance/public-holiday/maharashtra
+//   https://www.sakshipost.com/news/national/maharashtra-govt-issues-2026-public-holiday-list-bhaubeej-earns-additional-holiday
+
+const g = (name: string, date: string): HolidayPreset => ({ region: "national", kind: "gazetted", name, date });
+const r = (name: string, date: string): HolidayPreset => ({ region: "national", kind: "restricted", name, date });
+const mh = (name: string, date: string): HolidayPreset => ({ region: "MH", kind: "state", name, date });
+
+export const PRESETS_2026: HolidayPreset[] = [
+  g("Republic Day", "2026-01-26"),
+  g("Holi", "2026-03-04"),
+  g("Id-ul-Fitr", "2026-03-21"),
+  g("Ram Navami", "2026-03-26"),
+  g("Mahavir Jayanti", "2026-03-31"),
+  g("Good Friday", "2026-04-03"),
+  g("Buddha Purnima", "2026-05-01"),
+  g("Id-ul-Zuha (Bakrid)", "2026-05-27"),
+  g("Muharram", "2026-06-26"),
+  g("Independence Day", "2026-08-15"),
+  g("Milad-un-Nabi", "2026-08-26"),
+  g("Janmashtami", "2026-09-04"),
+  g("Mahatma Gandhi's Birthday", "2026-10-02"),
+  g("Dussehra", "2026-10-20"),
+  g("Diwali", "2026-11-08"),
+  g("Guru Nanak's Birthday", "2026-11-24"),
+  g("Christmas Day", "2026-12-25"),
+
+  r("New Year's Day", "2026-01-01"),
+  r("Hazarat Ali's Birthday", "2026-01-03"),
+  r("Makar Sankranti", "2026-01-14"),
+  r("Magha Bihu / Pongal", "2026-01-14"),
+  r("Basant Panchami / Sri Panchami", "2026-01-23"),
+  r("Guru Ravi Das's Birthday", "2026-02-01"),
+  r("Swami Dayananda Saraswati's Birthday", "2026-02-12"),
+  r("Maha Shivratri", "2026-02-15"),
+  r("Shivaji Jayanti", "2026-02-19"),
+  r("Holika Dahan", "2026-03-03"),
+  r("Dolyatra", "2026-03-03"),
+  r("Chaitra Sukladi / Gudi Padwa / Ugadi / Cheti Chand", "2026-03-19"),
+  r("Jamat-ul-Vida", "2026-03-20"),
+  r("Easter Sunday", "2026-04-05"),
+  r("Vaisakhi / Vishu / Meshadi (Tamil New Year)", "2026-04-14"),
+  r("Vaisakhadi (Bengal) / Bahag Bihu (Assam)", "2026-04-15"),
+  r("Guru Rabindranath Tagore's Birthday", "2026-05-09"),
+  r("Rath Yatra", "2026-07-16"),
+  r("Parsi New Year / Navroz", "2026-08-15"),
+  r("Onam", "2026-08-26"),
+  r("Raksha Bandhan", "2026-08-28"),
+  r("Ganesh Chaturthi / Vinayaka Chaturthi", "2026-09-14"),
+  r("Dussehra (Saptami)", "2026-10-18"),
+  r("Dussehra (Mahashtami)", "2026-10-19"),
+  r("Dussehra (Mahanavmi)", "2026-10-20"),
+  r("Maharishi Valmiki's Birthday", "2026-10-26"),
+  r("Karva Chauth", "2026-10-29"),
+  r("Naraka Chaturdasi", "2026-11-08"),
+  r("Govardhan Puja", "2026-11-09"),
+  r("Bhai Duj", "2026-11-11"),
+  r("Chhath Puja", "2026-11-15"),
+  r("Guru Teg Bahadur's Martyrdom Day", "2026-11-24"),
+  r("Hazarat Ali's Birthday", "2026-12-23"),
+  r("Christmas Eve", "2026-12-24"),
+
+  mh("Republic Day", "2026-01-26"),
+  mh("Mahashivratri", "2026-02-15"),
+  mh("Chhatrapati Shivaji Maharaj Jayanti", "2026-02-19"),
+  mh("Holi (Second Day)", "2026-03-03"),
+  mh("Gudi Padwa", "2026-03-19"),
+  mh("Ramzan Id (Id-ul-Fitr)", "2026-03-21"),
+  mh("Ram Navami", "2026-03-26"),
+  mh("Mahavir Janmakalyanak", "2026-03-31"),
+  mh("Good Friday", "2026-04-03"),
+  mh("Dr. Babasaheb Ambedkar Jayanti", "2026-04-14"),
+  mh("Maharashtra Din", "2026-05-01"),
+  mh("Buddha Pournima", "2026-05-01"),
+  mh("Bakri Id (Id-uz-Zuha)", "2026-05-28"),
+  mh("Moharrum", "2026-06-26"),
+  mh("Independence Day", "2026-08-15"),
+  mh("Parsi New Year (Shahenshahi)", "2026-08-15"),
+  mh("Id-e-Milad", "2026-08-26"),
+  mh("Ganesh Chaturthi", "2026-09-14"),
+  mh("Mahatma Gandhi Jayanti", "2026-10-02"),
+  mh("Dasara", "2026-10-20"),
+  mh("Diwali Amavasya (Laxmi Pujan)", "2026-11-08"),
+  mh("Diwali (Bali Pratipada)", "2026-11-10"),
+  mh("Bhaubeej", "2026-11-11"),
+  mh("Guru Nanak Jayanti", "2026-11-24"),
+  mh("Christmas", "2026-12-25"),
+];

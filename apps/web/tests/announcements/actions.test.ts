@@ -10,9 +10,11 @@ vi.mock("@vercel/functions", () => ({ waitUntil: (p: Promise<unknown>) => p }));
 
 const notifyAckRequested = vi.fn(async () => {});
 const emailAckReminders = vi.fn(async () => 0);
+const emailNewAnnouncement = vi.fn(async () => 0);
 vi.mock("@/lib/announcements/notify", () => ({
   notifyAckRequested: (...a: any[]) => (notifyAckRequested as any)(...a),
   emailAckReminders: (...a: any[]) => (emailAckReminders as any)(...a),
+  emailNewAnnouncement: (...a: any[]) => (emailNewAnnouncement as any)(...a),
 }));
 
 let db: FakeDb;
@@ -76,6 +78,7 @@ beforeEach(() => {
   };
   notifyAckRequested.mockClear();
   emailAckReminders.mockClear();
+  emailNewAnnouncement.mockClear();
   asUser(ORG_A, ADMIN_A, "admin");
 });
 
@@ -135,6 +138,28 @@ describe("createAnnouncement", () => {
     expect(r1.success).toBe(false);
     expect(r2.success).toBe(false);
     expect(db.announcements).toHaveLength(0);
+  });
+
+  it("emails everyone in the org except the author on publish — even without ack", async () => {
+    await createAnnouncement(base);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(emailNewAnnouncement).toHaveBeenCalledTimes(1);
+    const args = (emailNewAnnouncement.mock.calls[0] as any[])[0];
+    expect(args.recipients.map((r: any) => r.id).sort()).toEqual([EMP_A1, EMP_A2].sort());
+    expect(args).toMatchObject({ title: base.title, body: base.body, ackRequired: false, orgName: ORG_A });
+  });
+
+  it("targeted publish emails only the chosen audience, excluding leavers", async () => {
+    db.employees.push(emp("10000000-0000-4000-8000-000000000009", ORG_A, DEPT_A, { status: "terminated" }));
+    await publishAckRequired({
+      audience_type: "targeted",
+      targets: [{ target_type: "department", target_id: DEPT_A }],
+      ack_due_date: "2099-01-05",
+    });
+    await new Promise((r) => setTimeout(r, 0));
+    const args = (emailNewAnnouncement.mock.calls[0] as any[])[0];
+    expect(args.recipients.map((r: any) => r.id)).toEqual([EMP_A1]);
+    expect(args).toMatchObject({ ackRequired: true, dueDateLabel: "5 Jan 2099" });
   });
 
   it("targeted with no targets is rejected", async () => {
@@ -288,6 +313,14 @@ describe("edits after publish", () => {
     const id = (res as any).data.id;
     expect(await updateAnnouncement(id, { ...base, ack_required: true })).toMatchObject({ success: true });
     expect(db.announcement_recipients.filter((r) => r.announcement_id === id)).toHaveLength(3);
+  });
+
+  it("edits never re-send the new-announcement email", async () => {
+    const id = await publishAckRequired();
+    await updateAnnouncement(id, { ...base, body: "Materially different.", ack_required: true });
+    await updateAnnouncement(id, { ...base, ack_required: false });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(emailNewAnnouncement).toHaveBeenCalledTimes(1);
   });
 });
 

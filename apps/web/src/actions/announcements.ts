@@ -20,7 +20,7 @@ import {
   type AudienceTarget,
   type AudienceType,
 } from "@/lib/announcements/ack-status";
-import { emailAckReminders, notifyAckRequested } from "@/lib/announcements/notify";
+import { emailAckReminders, emailNewAnnouncement, notifyAckRequested } from "@/lib/announcements/notify";
 import { loadPendingAcksFor, type PendingAck } from "@/lib/announcements/pending";
 import type { ActionResult } from "@/types";
 
@@ -215,6 +215,55 @@ function fireAckRequested(
   if (!employeeIds.length) return;
   waitUntil(
     notifyAckRequested(supabase, { orgId, employeeIds, announcementId, title, reminder: false }).catch(() => {})
+  );
+}
+
+/** "5 Oct 2026" — the due date as shown in emails. */
+function dueDateLabel(due: string | null): string | null {
+  return due
+    ? new Date(`${due}T00:00:00+05:30`).toLocaleDateString("en-IN", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        timeZone: "Asia/Kolkata",
+      })
+    : null;
+}
+
+/**
+ * Best-effort "new announcement" email to the whole audience (minus the
+ * author), once at publish. Runs after the response via waitUntil.
+ */
+function fireNewAnnouncementEmail(
+  supabase: any,
+  args: {
+    orgId: string;
+    orgName: string;
+    authorId: string | null;
+    announcementId: string;
+    title: string;
+    body: string;
+    audienceType: AudienceType;
+    targets: AudienceTarget[];
+    ackRequired: boolean;
+    ackDueDate: string | null;
+  }
+) {
+  waitUntil(
+    (async () => {
+      const employees = await loadOrgEmployees(supabase, args.orgId);
+      const audience = resolveAudienceIds({ audienceType: args.audienceType, targets: args.targets, employees });
+      const recipients = employees.filter((e) => audience.has(e.id) && e.id !== args.authorId);
+      await emailNewAnnouncement({
+        recipients,
+        orgName: args.orgName,
+        announcementId: args.announcementId,
+        title: args.title,
+        body: args.body,
+        ackRequired: args.ackRequired,
+        dueDateLabel: dueDateLabel(args.ackDueDate),
+      });
+    })().catch((err) => console.warn("[announcements] new-announcement email failed", err))
   );
 }
 
@@ -445,6 +494,18 @@ export async function createAnnouncement(input: AnnouncementInput): Promise<Acti
     const added = await snapshotRecipients(supabase, user.orgId, id, v.audience_type, targets, "publish");
     fireAckRequested(supabase, user.orgId, id, v.title, added);
   }
+  fireNewAnnouncementEmail(supabase, {
+    orgId: user.orgId,
+    orgName: user.orgName,
+    authorId: user.employeeId,
+    announcementId: id,
+    title: v.title,
+    body: v.body,
+    audienceType: v.audience_type,
+    targets,
+    ackRequired: v.ack_required,
+    ackDueDate: v.ack_required ? v.ack_due_date ?? null : null,
+  });
 
   revalidateAnnouncementSurfaces();
   return { success: true, data: { id } };
@@ -888,14 +949,7 @@ export async function remindAnnouncementAck(
     orgName: user.orgName,
     announcementId: id,
     title: announcement.title,
-    dueDateLabel: due
-      ? new Date(`${due}T00:00:00+05:30`).toLocaleDateString("en-IN", {
-          day: "numeric",
-          month: "short",
-          year: "numeric",
-          timeZone: "Asia/Kolkata",
-        })
-      : null,
+    dueDateLabel: dueDateLabel(due),
     overdue: isOverdue(due, istTodayDate()),
   });
 

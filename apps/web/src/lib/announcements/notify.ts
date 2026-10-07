@@ -7,6 +7,8 @@
 import { sendPush } from "@/lib/mobile/push";
 import { resend, FROM_EMAIL } from "@/lib/resend";
 import { AnnouncementAckReminderEmail } from "@/components/emails/announcement-ack-reminder";
+import { AnnouncementPublishedEmail } from "@/components/emails/announcement-published";
+import { announcementExcerpt } from "@/lib/announcements/excerpt";
 
 const APP_URL = "https://jambahr.com";
 
@@ -85,6 +87,52 @@ export async function emailAckReminders(args: {
       sent += chunk.length;
     } catch (err) {
       console.warn("[announcements] reminder email batch failed", err);
+    }
+  }
+  return sent;
+}
+
+/**
+ * "You have a new announcement — Read now" email to everyone in the audience,
+ * sent once at publish. Edits never re-send it. Same batching as reminders;
+ * phone-only employees (no email) are skipped. Returns how many were handed
+ * to Resend.
+ */
+export async function emailNewAnnouncement(args: {
+  recipients: ReminderRecipient[];
+  orgName: string;
+  announcementId: string;
+  title: string;
+  body: string;
+  ackRequired: boolean;
+  dueDateLabel: string | null;
+}): Promise<number> {
+  if (!process.env.RESEND_API_KEY) return 0;
+  const withEmail = args.recipients.filter((r) => !!r.email);
+  const preview = announcementExcerpt(args.body);
+  let sent = 0;
+  for (let i = 0; i < withEmail.length; i += 100) {
+    const chunk = withEmail.slice(i, i + 100);
+    try {
+      await resend.batch.send(
+        chunk.map((r) => ({
+          from: FROM_EMAIL,
+          to: r.email!,
+          subject: `New announcement: ${args.title}`,
+          react: AnnouncementPublishedEmail({
+            employeeName: r.first_name ?? "there",
+            orgName: args.orgName,
+            announcementTitle: args.title,
+            preview,
+            ackRequired: args.ackRequired,
+            dueDateLabel: args.dueDateLabel,
+            announcementUrl: announcementUrl(args.announcementId),
+          }),
+        }))
+      );
+      sent += chunk.length;
+    } catch (err) {
+      console.warn("[announcements] new-announcement email batch failed", err);
     }
   }
   return sent;

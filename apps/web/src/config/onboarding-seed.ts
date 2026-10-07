@@ -15,18 +15,19 @@ export const DEFAULT_LEAVE_POLICIES = [
   { name: "Leave Without Pay", type: "unpaid", days_per_year: 0, carry_forward: false, max_carry_forward_days: 0, applicable_from_months: 0, requires_approval: true },
 ];
 
+// Dates per the central-government 2026 holiday list.
 export const DEFAULT_HOLIDAYS_2026 = [
   { name: "New Year's Day", date: "2026-01-01", is_optional: false },
   { name: "Republic Day", date: "2026-01-26", is_optional: false },
   { name: "Holi", date: "2026-03-03", is_optional: false },
   { name: "Good Friday", date: "2026-04-03", is_optional: true },
-  { name: "Eid ul-Fitr", date: "2026-03-31", is_optional: true },
+  { name: "Eid ul-Fitr", date: "2026-03-21", is_optional: true },
   { name: "Ambedkar Jayanti", date: "2026-04-14", is_optional: false },
-  { name: "Eid ul-Adha", date: "2026-06-07", is_optional: true },
+  { name: "Eid ul-Adha", date: "2026-05-27", is_optional: true },
   { name: "Independence Day", date: "2026-08-15", is_optional: false },
-  { name: "Janmashtami", date: "2026-08-20", is_optional: true },
+  { name: "Janmashtami", date: "2026-09-04", is_optional: true },
   { name: "Gandhi Jayanti", date: "2026-10-02", is_optional: false },
-  { name: "Dussehra", date: "2026-10-11", is_optional: false },
-  { name: "Diwali", date: "2026-10-29", is_optional: false },
+  { name: "Dussehra", date: "2026-10-20", is_optional: false },
+  { name: "Diwali", date: "2026-11-08", is_optional: false },
   { name: "Christmas", date: "2026-12-25", is_optional: false },
 ];

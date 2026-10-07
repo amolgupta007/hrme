@@ -146,3 +146,4 @@ All from `JambaHR <noreply@jambahr.com>`, reply-to support@. Delivery status per
 - [x] Joiner fix deployed (#62). Aug 2026 run recreated and locked; Vedika ₹30,000 gross / ₹27,887 net.
 - [ ] Confirm Dimple Tewani's September IFSC with the client (see 4a).
 - [ ] Re-run the Clerk password audit in a week to see uptake (needs the prod Clerk key; rotate after).
+- [ ] Holidays: the org had **none** until 2026-10-07, when the corrected 2026 national list (9 mandatory + 4 optional) was loaded. Confirm with the client which days they actually observe (e.g. extra Diwali days) — there's no admin UI for holidays yet.

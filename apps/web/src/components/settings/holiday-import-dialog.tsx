@@ -7,14 +7,15 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { getHolidayPreset, importHolidays } from "@/actions/holidays";
+import { istToday } from "@jambahr/shared/attendance/ist";
 import { PRESET_REGION_LABELS, presetRegionsFor, type HolidayRegion } from "@jambahr/shared/holidays/presets";
-import { parseHolidayCsv, presetToDrafts, type HolidayDraft } from "@jambahr/shared/holidays/import";
+import { parseHolidayCsv, presetToDrafts, restrictToYear, type HolidayDraft } from "@jambahr/shared/holidays/import";
 
 type Item = HolidayDraft & { key: string; selected: boolean; alreadyAdded: boolean; note?: string };
 type Mode = "preset" | "csv";
 
 const fmt = (iso: string) =>
-  new Date(`${iso}T00:00:00.000Z`).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
+  new Date(`${iso}T00:00:00.000Z`).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 
 export function HolidayImportDialog({ open, onOpenChange, year, onImported }: {
   open: boolean; onOpenChange: (o: boolean) => void; year: number; onImported: () => void;
@@ -44,12 +45,13 @@ export function HolidayImportDialog({ open, onOpenChange, year, onImported }: {
       if (cancelled) return;
       setLoading(false);
       if (!res.success) return void toast.error(res.error);
+      const today = istToday();
       const drafts = presetToDrafts(res.data);
       setItems(res.data.map((p, i) => ({
         ...drafts[i],
         key: `${p.date}|${p.name}`,
         alreadyAdded: p.alreadyAdded,
-        selected: !p.alreadyAdded && p.kind !== "restricted",
+        selected: !p.alreadyAdded && p.kind !== "restricted" && p.date >= today,
         note: p.kind === "restricted" ? "Restricted" : undefined,
       })));
     });
@@ -57,7 +59,7 @@ export function HolidayImportDialog({ open, onOpenChange, year, onImported }: {
   }, [open, mode, region, year]);
 
   async function onFile(file: File) {
-    const { drafts, errors } = parseHolidayCsv(await file.text());
+    const { drafts, errors } = restrictToYear(parseHolidayCsv(await file.text()), year);
     setCsvErrors(errors);
     setItems(drafts.map((d, i) => ({ ...d, key: `${i}|${d.date}`, selected: true, alreadyAdded: false })));
   }
@@ -66,6 +68,7 @@ export function HolidayImportDialog({ open, onOpenChange, year, onImported }: {
     setItems((list) => list.map((it) => (it.key === key ? { ...it, ...patch } : it)));
 
   const chosen = items.filter((i) => i.selected && !i.alreadyAdded);
+  const anyPast = chosen.some((i) => i.date < istToday());
 
   async function submit() {
     setSaving(true);
@@ -132,7 +135,7 @@ export function HolidayImportDialog({ open, onOpenChange, year, onImported }: {
                     <input type="checkbox" className="h-4 w-4 accent-primary" aria-label={`Include ${it.name}`}
                       checked={it.selected && !it.alreadyAdded} disabled={it.alreadyAdded}
                       onChange={(e) => toggle(it.key, { selected: e.target.checked })} />
-                    <span className="w-24 shrink-0 tabular-nums text-muted-foreground">{fmt(it.date)}</span>
+                    <span className="w-32 shrink-0 tabular-nums text-muted-foreground">{fmt(it.date)}</span>
                     <span className="min-w-0 flex-1 truncate">
                       {it.name}
                       {it.alreadyAdded && <span className="ml-2 text-xs">· already added</span>}
@@ -151,6 +154,11 @@ export function HolidayImportDialog({ open, onOpenChange, year, onImported }: {
             )}
           </div>
 
+          {anyPast && (
+            <p className="mt-3 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+              Some dates have passed. Reports update now, late marks for this month re-count overnight, and locked payroll runs don&apos;t change.
+            </p>
+          )}
           <div className="mt-4 flex items-center justify-between gap-3">
             <p className="text-xs text-muted-foreground">Holidays on the same date are combined into one.</p>
             <div className="flex gap-2">

@@ -80,9 +80,12 @@ const NO = new Set(["", "no", "n", "false", "0", "mandatory"]);
 
 export function parseHolidayCsv(text: string): {
   drafts: HolidayDraft[];
+  /** Source line of each draft, parallel to `drafts`. */
+  lines: number[];
   errors: { line: number; message: string }[];
 } {
   const drafts: HolidayDraft[] = [];
+  const draftLines: number[] = [];
   const errors: { line: number; message: string }[] = [];
   const lines = text.replace(/^﻿/, "").split(/\r?\n/);
   lines.forEach((raw, idx) => {
@@ -101,6 +104,23 @@ export function parseHolidayCsv(text: string): {
       return void errors.push({ line, message: `Optional must be yes or no (got "${optRaw}")` });
     }
     drafts.push({ name, date, isOptional: YES.has(opt) });
+    draftLines.push(line);
   });
+  return { drafts, lines: draftLines, errors };
+}
+
+/** Rows outside `year` become line errors (an import is for one year's tab). */
+export function restrictToYear(
+  parsed: { drafts: HolidayDraft[]; lines: number[]; errors: { line: number; message: string }[] },
+  year: number,
+): { drafts: HolidayDraft[]; errors: { line: number; message: string }[] } {
+  const drafts: HolidayDraft[] = [];
+  const errors = [...parsed.errors];
+  parsed.drafts.forEach((d, i) => {
+    const rowYear = Number(d.date.slice(0, 4));
+    if (rowYear === year) drafts.push(d);
+    else errors.push({ line: parsed.lines[i], message: `Date is in ${rowYear}; this import is for ${year}` });
+  });
+  errors.sort((a, b) => a.line - b.line);
   return { drafts, errors };
 }

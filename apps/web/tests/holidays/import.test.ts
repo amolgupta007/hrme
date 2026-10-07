@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isValidIsoDate, mergeHolidayDrafts, parseHolidayCsv, presetToDrafts } from "@jambahr/shared/holidays/import";
+import { isValidIsoDate, mergeHolidayDrafts, parseHolidayCsv, presetToDrafts, restrictToYear } from "@jambahr/shared/holidays/import";
 
 describe("isValidIsoDate", () => {
   it("accepts real dates and rejects overflow and junk", () => {
@@ -128,5 +128,18 @@ describe("parseHolidayCsv", () => {
     );
     expect(errors).toEqual([]);
     expect(drafts).toEqual([{ name: "Holi", date: "2027-03-23", isOptional: false }]);
+  });
+});
+
+describe("restrictToYear", () => {
+  it("turns rows from other years into line errors, keeping line numbers", () => {
+    const parsed = parseHolidayCsv(["name,date,optional", "A,2026-12-25,no", "B,2027-01-26,no", "bad,x,no", "C,2025-01-01,no"].join("\n"));
+    const { drafts, errors } = restrictToYear(parsed, 2026);
+    expect(drafts).toEqual([{ name: "A", date: "2026-12-25", isOptional: false }]);
+    expect(errors).toEqual([
+      { line: 3, message: "Date is in 2027; this import is for 2026" },
+      { line: 4, message: "Date must be a real date (YYYY-MM-DD or DD/MM/YYYY)" },
+      { line: 5, message: "Date is in 2025; this import is for 2026" },
+    ]);
   });
 });

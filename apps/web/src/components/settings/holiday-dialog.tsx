@@ -15,11 +15,11 @@ type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   editing: HolidayRow | null;
-  defaultYear: number;
+  anchorYear: number;
   onSaved: () => void;
 };
 
-export function HolidayDialog({ open, onOpenChange, editing, defaultYear, onSaved }: Props) {
+export function HolidayDialog({ open, onOpenChange, editing, anchorYear, onSaved }: Props) {
   const [name, setName] = React.useState("");
   const [date, setDate] = React.useState("");
   const [isOptional, setIsOptional] = React.useState(false);
@@ -64,7 +64,7 @@ export function HolidayDialog({ open, onOpenChange, editing, defaultYear, onSave
             <div className="space-y-1.5">
               <Label.Root htmlFor="holiday-date" className="text-sm font-medium">Date</Label.Root>
               <input id="holiday-date" type="date" className={inputCn} value={date}
-                min={`${defaultYear - 1}-01-01`} max={`${defaultYear + 2}-12-31`}
+                min={`${anchorYear - 1}-01-01`} max={`${anchorYear + 1}-12-31`}
                 onChange={(e) => setDate(e.target.value)} required />
             </div>
             <label className="flex items-start gap-3 text-sm">
@@ -77,7 +77,7 @@ export function HolidayDialog({ open, onOpenChange, editing, defaultYear, onSave
             </label>
             {editing && editing.date < new Date().toISOString().slice(0, 10) && (
               <p className="rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
-                This date has passed. Reports update now, late marks re-count overnight, and locked payroll runs don&apos;t change.
+                This date has passed. Reports update now, late marks for this month re-count overnight, and locked payroll runs don&apos;t change.
               </p>
             )}
             <div className="flex justify-end gap-3 pt-1">

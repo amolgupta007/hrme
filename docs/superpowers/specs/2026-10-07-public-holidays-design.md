@@ -42,7 +42,7 @@ Holidays are also treated differently from one consumer to the next:
 | D2 | Leave counting gets a **per-policy switch**, "Don't count holidays & week-offs", **ON by default for every type, unpaid included**. It only affects new requests. |
 | D3 | A request is snapshotted: the server stores `days` **and** `excluded_dates`. Holiday edits never re-count leave that's already filed. |
 | D4 | A range with no working days is rejected. A half-day flag only subtracts 0.5 when that edge day is a working day. |
-| D5 | Presets are **national** (DoPT gazetted + restricted) **plus state** lists. v1 ships **National + Maharashtra** for **2026 and 2027**. Other states are added as data once checked against their own notification. |
+| D5 | Presets are **national** (DoPT gazetted + restricted) **plus state** lists. v1 ships **National 2026 + 2027 and Maharashtra 2026**; Maharashtra 2027 is added once GAD notifies it. Other states are added as data once checked against their own notification. |
 | D6 | One definition of a holiday for an employee: **mandatory holiday ∪ that employee's approved optional-holiday claims**. An unclaimed optional holiday is only a label. |
 | D7 | Optional holidays are **claimed**, up to a yearly allowance (default 2, hard cap). A manager or admin approves, like WFH. |
 | D8 | It ships as four separate PRs (§8). PR 2 changes balances and payroll, so it deploys after hours. |
@@ -93,7 +93,6 @@ loadNonWorkingDays(supabase, {
 | `deleteHoliday(id)` | admin | org-scoped |
 | `getHolidayPreset(year, region)` | admin | returns preset rows marked `alreadyAdded` |
 | `importHolidays(rows, source: 'preset' \| 'csv')` | admin | skips dates that already exist; returns `{ added, skipped }` |
-| `get/updateHolidaySettings({ optionalAllowance })` | admin | used by PR 4; stored at `organizations.settings.holidays` |
 
 Every mutation calls `revalidatePath` on `/dashboard/settings`, `/dashboard/leaves`, `/dashboard` and `/dashboard/attendance`.
 
@@ -109,7 +108,7 @@ Every mutation calls `revalidatePath` on `/dashboard/settings`, `/dashboard/leav
 - **Note shown when editing a past date:** "Reports update now; late marks re-count overnight; locked payroll runs don't change."
 
 ### Seeding and the year-end nudge
-- `DEFAULT_HOLIDAYS_2026` is deleted. `createOrganization` seeds the **national gazetted** preset from today to the end of the current year, plus next year's if that preset exists. These rows get `source='seed'`.
+- `DEFAULT_HOLIDAYS_2026` is deleted. `createOrganization` seeds the curated core list (`@jambahr/shared/holidays/core-seed`, 13 a year: 9 mandatory and 4 optional) from today to the end of next year, with `source='seed'`. It is not the full DoPT gazetted list, which would give a private-sector client 17 mandatory Delhi holidays.
 - **Year-end nudge:** from 1 November, if the org has zero holidays in the next year, admins see a dashboard banner: "Set up your {next year} holidays →", linking to `/dashboard/settings#holidays`. It can be dismissed for the session (`localStorage`, wrapped in try/catch).
 
 ### Assistant
@@ -195,6 +194,7 @@ RLS enabled, no policies (service role only, like wfh_requests)
 `canDecideHolidayClaim(role, isManagerOfEmployee)`: owner or admin always; a reporting manager (via `src/lib/managers.ts`) for their reports. With no manager set, only admins can decide.
 
 ### Actions: `src/actions/holiday-claims.ts`
+- `getHolidaySettings()` / `updateHolidaySettings({ optionalAllowance })`: admin; stored at `organizations.settings.holidays` (moved here from §4, since only PR 4 uses it)
 - `getMyHolidayClaims(year)`
 - `claimHoliday(holidayId)`
 - `cancelHolidayClaim(id)`: own claim, pending or approved, and the date must not have passed

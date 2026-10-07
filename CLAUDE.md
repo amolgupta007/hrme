@@ -790,6 +790,17 @@ Two cards on `/dashboard` for **every role**, org-scoped, fed by `getTeamUpcomin
 - **Bulk "how to sign in" email:** `components/emails/sign-in-options.tsx` + `scripts/send-sign-in-options.tsx`. Preview by default; `--send` sends; needs only `RESEND_API_KEY`.
 - **Not built:** mobile parity (password / forgot password / phone fallback on the app sign-in screen).
 
+## Public holidays (PR 1, branch `feat/public-holidays`)
+
+Admins manage the org's holiday calendar at **Settings → Holidays** (`holidays-section.tsx`). Spec: `docs/superpowers/specs/2026-10-07-public-holidays-design.md`.
+- **Org-wide, one holiday per date** (`UNIQUE(org_id, date)`). `is_optional` = shown but a working day (claims arrive in PR 4). Migration **123** adds `source` (seed/preset/manual/csv), `created_by`, `updated_at`.
+- **Presets** in `@jambahr/shared/holidays/presets` (one data file per year, source cited): National 2026/2027 (DoPT gazetted + restricted), Maharashtra 2026. Add a state or year as data only. Import merges same-date entries ("Independence Day / Milad-un-Nabi").
+- **New orgs** get `coreSeedRows(today)` (13/yr core list, rest of this year + next), NOT the full gazetted list.
+- Core seed + presets cover 2026-2027 only — add the next year's data files each autumn (new orgs get no seeded holidays for a year with no data).
+- **One resolver:** `loadNonWorkingDays` (`src/lib/holidays/non-working-days.ts`, plain module) = mandatory holidays + effective week-off per employee for any range; payroll's `loadNonWorkingDates` wraps it. PRs 2–4 move leave counting, reports, late counting and the roster onto it.
+- **Year-end nudge:** admins see "Set up your {next year} holidays" from 1 Nov when next year is empty.
+- Live data fix 2026-10-07 (PR #68): five wrong seeded 2026 dates corrected in 6 orgs; Medialoop/PlayPause/Sakura seeded.
+
 ## Client references + changelog
 
 - **Per-client setup** (org ids, live settings, who's excluded from what, emails sent, open data issues): `docs/clients/<client>.md`. Start with `docs/clients/medialoop.md`.

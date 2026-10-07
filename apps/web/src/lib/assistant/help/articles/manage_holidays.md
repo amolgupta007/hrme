@@ -16,4 +16,4 @@ Holidays are company-wide. Mandatory holidays are days off for everyone; optiona
 5. Click **Add holiday** to add a day of your own, such as an extra Diwali day.
 6. Use the pencil to rename a holiday, move it, or mark it optional; use the bin to delete it.
 
-There's one holiday per date. Holidays on the same date are combined into one. Changing a past holiday updates reports straight away and late marks overnight; locked payroll runs don't change.
+There's one holiday per date. Holidays on the same date are combined into one. Changing a past holiday updates reports straight away and late marks for this month overnight; locked payroll runs don't change.

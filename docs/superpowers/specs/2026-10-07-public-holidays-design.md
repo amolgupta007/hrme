@@ -98,7 +98,7 @@ Every mutation calls `revalidatePath` on `/dashboard/settings`, `/dashboard/leav
 
 ### UI
 - A `HolidaysSection` sits in `settings-content.tsx` directly after **Leave Policies**, as a `CollapsibleSection` with id `holidays`.
-- **Year tabs:** current year and next year, with a selector for older years.
+- **Year tabs:** previous, current and next year (no older-year selector).
 - **Table:** date, weekday, name, and a Mandatory or Optional badge. A muted hint appears when the date falls on the org's week-off. Each row has Edit and Delete.
 - **Add/Edit dialog:** name, date, and an Optional toggle.
 - **Import from preset dialog:**
@@ -109,10 +109,10 @@ Every mutation calls `revalidatePath` on `/dashboard/settings`, `/dashboard/leav
 
 ### Seeding and the year-end nudge
 - `DEFAULT_HOLIDAYS_2026` is deleted. `createOrganization` seeds the curated core list (`@jambahr/shared/holidays/core-seed`, 13 a year: 9 mandatory and 4 optional) from today to the end of next year, with `source='seed'`. It is not the full DoPT gazetted list, which would give a private-sector client 17 mandatory Delhi holidays.
-- **Year-end nudge:** from 1 November, if the org has zero holidays in the next year, admins see a dashboard banner: "Set up your {next year} holidays →", linking to `/dashboard/settings#holidays`. It can be dismissed for the session (`localStorage`, wrapped in try/catch).
+- **Year-end nudge:** from 1 November, if the org has zero holidays in the next year, admins see a dashboard banner: "Set up your {next year} holidays →", linking to `/dashboard/settings?section=holidays` (`#holidays` also works). It can be dismissed for the session (`sessionStorage`, wrapped in try/catch).
 
 ### Assistant
-- Add a route-registry entry and a help article, `holidays_manage.md`, and bump the article-count test.
+- Add a route-registry entry and a help article, `manage_holidays.md`, and bump the article-count test.
 - After merging, run `npm run embed:help` (gotcha #64).
 
 ## 5. PR 2: holiday-aware leave counting

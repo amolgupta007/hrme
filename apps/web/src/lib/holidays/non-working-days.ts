@@ -1,10 +1,13 @@
 // Plain module — NOT "use server" (gotcha #85): takes raw org/employee ids.
 //
 // Each employee's non-working days in [from, to]: the org's MANDATORY holidays
-// plus their effective week-off (employee > department > org). Every consumer
-// (payroll, leave counting, late counting, reports) reads through this so they
-// all agree on what a holiday is. A failed query throws — an outage must never
-// read as "no holidays" (gotcha #102).
+// plus their effective week-off (employee > department > org). Payroll reads
+// through this today; leave counting, late counting and reports move onto it in
+// later PRs so they all agree on what a holiday is. A failed query throws — an
+// outage must never read as "no holidays" (gotcha #102).
+//
+// Caveat: it uses the org week-off policy in force on `to` for the whole range —
+// resolve per date before using it for ranges that cross a policy change (PR 2).
 
 import { resolveEffectiveWeekOff, type WeekOffPolicy } from "@jambahr/shared/attendance/week-off";
 import { buildNonWorkingDays, type NonWorkingDays } from "@jambahr/shared/holidays/non-working";

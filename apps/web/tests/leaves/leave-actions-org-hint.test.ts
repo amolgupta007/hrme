@@ -109,11 +109,16 @@ function makeTableProxy(table: string) {
     state.insertedPayload = payload;
     return b; // chained .select("id").single()
   };
+  let updating = false;
   b.update = (payload: any) => {
     state.updatePayload = payload;
-    return b; // chained .eq(...).eq(...)[.eq(...)]  → awaited
+    updating = true;
+    return b; // chained .eq(...).eq(...)[.eq(...)][.select("id")]  → awaited
   };
-  b.then = (resolve: any, reject: any) => Promise.resolve({ data: [], error: null }).then(resolve, reject);
+  b.maybeSingle = () => b.single();
+  // An update that matched returns its row (cancelLeave checks it hit one).
+  b.then = (resolve: any, reject: any) =>
+    Promise.resolve({ data: updating ? [{ id: "req1" }] : [], error: null }).then(resolve, reject);
   return b;
 }
 
@@ -157,6 +162,7 @@ describe("leave actions — orgIdHint threading (multi-org fix)", () => {
     const res = await cancelLeave("req1", "org-B");
     expect(res.success).toBe(true);
     expect(getCurrentUserMock).toHaveBeenCalledWith({ orgIdHint: "org-B" });
+    expect(state.updatePayload).toMatchObject({ status: "cancelled", cancelled_by: EMP_B });
   });
 
   it("approveLeave threads the hint AND writes reviewed_by = actor employeeId", async () => {

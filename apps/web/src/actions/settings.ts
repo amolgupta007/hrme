@@ -101,17 +101,28 @@ export async function updateOrgProfile(
 
 // ---- Leave Policies ----
 
-const leavePolicySchema = z.object({
-  name: z.string().min(1, "Name is required"),
-  type: z.enum(["paid", "unpaid", "sick", "casual", "maternity", "paternity", "custom"]),
-  days_per_year: z.number().min(1).max(365),
-  carry_forward: z.boolean(),
-  max_carry_forward_days: z.number().min(0).max(365),
-  requires_approval: z.boolean(),
-});
+const leavePolicySchema = z
+  .object({
+    name: z.string().min(1, "Name is required"),
+    type: z.enum(["paid", "unpaid", "sick", "casual", "maternity", "paternity", "custom", "comp_off"]),
+    days_per_year: z.number().min(0).max(365),
+    carry_forward: z.boolean(),
+    max_carry_forward_days: z.number().min(0).max(365),
+    requires_approval: z.boolean(),
+  })
+  .refine((d) => d.type === "comp_off" || d.days_per_year >= 1, {
+    message: "Days per year must be at least 1",
+    path: ["days_per_year"],
+  })
+  // Comp-off has no balance: every request is earned by a worked day and approved.
+  .transform((d) =>
+    d.type === "comp_off"
+      ? { ...d, days_per_year: 0, carry_forward: false, max_carry_forward_days: 0, requires_approval: true }
+      : d
+  );
 
 export async function addLeavePolicy(
-  data: z.infer<typeof leavePolicySchema>
+  data: z.input<typeof leavePolicySchema>
 ): Promise<ActionResult<void>> {
   const user = await getCurrentUser();
   if (!user) return { success: false, error: "Not authenticated" };
@@ -140,7 +151,7 @@ export async function addLeavePolicy(
 
 export async function updateLeavePolicy(
   id: string,
-  data: z.infer<typeof leavePolicySchema>
+  data: z.input<typeof leavePolicySchema>
 ): Promise<ActionResult<void>> {
   const user = await getCurrentUser();
   if (!user) return { success: false, error: "Not authenticated" };

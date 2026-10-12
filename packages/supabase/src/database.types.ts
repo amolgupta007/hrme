@@ -4688,6 +4688,9 @@ export type Database = {
       }
       leave_requests: {
         Row: {
+          cancelled_at: string | null
+          cancelled_by: string | null
+          comp_off_worked_date: string | null
           created_at: string
           days: number
           employee_id: string
@@ -4708,6 +4711,9 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          comp_off_worked_date?: string | null
           created_at?: string
           days: number
           employee_id: string
@@ -4728,6 +4734,9 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          comp_off_worked_date?: string | null
           created_at?: string
           days?: number
           employee_id?: string

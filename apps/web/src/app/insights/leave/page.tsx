@@ -14,6 +14,7 @@ const LEAVE_TYPE_LABELS: Record<string, string> = {
   earned: "Earned",
   maternity: "Maternity",
   paternity: "Paternity",
+  comp_off: "Comp-off",
   custom: "Custom",
 };
 

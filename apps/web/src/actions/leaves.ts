@@ -12,8 +12,19 @@ import { resolveLeaveRecipients, type LeaveNotifiable } from "@/lib/leaves/reque
 import { managerIdsOf, isManagerOfEmployee } from "@/lib/managers";
 import { findOverlap, computeRemainingDays, type LeaveInterval } from "@/lib/leaves/validation";
 import { loadLeaveAdjustmentUsage } from "@/lib/leaves/balance";
+import {
+  isCompOff,
+  formatWorkedDate,
+  validateCompOffRequest,
+  describeWorkedDayAttendance,
+  type WorkedDayAttendance,
+} from "@/lib/leaves/comp-off";
+import { canCancelLeave, monthsSpanned } from "@/lib/leaves/cancel-rules";
+import { loadNonWorkingDates } from "@/lib/payroll/non-working-days";
+import { istTodayDate } from "@/lib/attendance/manual-punch-validation";
 import { LeaveRequestEmail } from "@/components/emails/leave-request";
 import { LeaveStatusEmail } from "@/components/emails/leave-status";
+import { LeaveCancelledEmail } from "@/components/emails/leave-cancelled";
 import { notifyLeaveDecision, notifyApprovalPending } from "@/lib/mobile/notify";
 import type { ActionResult, LeavePolicy, LeaveRequest } from "@/types";
 
@@ -57,6 +68,8 @@ export type LeaveRequestWithDetails = LeaveRequest & {
   employee_name: string;
   policy_name: string;
   policy_type: string;
+  /** Comp-off only: what attendance shows for the worked day, for the approver. */
+  comp_off_attendance: string | null;
 };
 
 export type EmployeeBalance = {
@@ -142,11 +155,28 @@ export async function listLeaveRequests(status?: string): Promise<ActionResult<L
   const { data, error } = await query;
   if (error) return { success: false, error: error.message };
 
+  // Comp-off rows carry what attendance recorded on the day worked, so the
+  // approver can check the claim without leaving the page.
+  const compOff = ((data ?? []) as any[]).filter((r) => r.comp_off_worked_date);
+  const attendanceByKey = new Map<string, WorkedDayAttendance>();
+  if (compOff.length) {
+    const { data: records } = await supabase
+      .from("attendance_records")
+      .select("employee_id, date, clock_in_at, clock_out_at, total_minutes, device_first_seen_at, device_last_seen_at")
+      .eq("org_id", ctx.orgId)
+      .in("employee_id", [...new Set(compOff.map((r) => r.employee_id))])
+      .in("date", [...new Set(compOff.map((r) => r.comp_off_worked_date))]);
+    for (const rec of (records ?? []) as any[]) attendanceByKey.set(`${rec.employee_id}|${rec.date}`, rec);
+  }
+
   const requests = (data ?? []).map((r: any) => ({
     ...r,
     employee_name: `${r.employees?.first_name ?? ""} ${r.employees?.last_name ?? ""}`.trim(),
     policy_name: r.leave_policies?.name ?? "Unknown",
     policy_type: r.leave_policies?.type ?? "custom",
+    comp_off_attendance: r.comp_off_worked_date
+      ? describeWorkedDayAttendance(attendanceByKey.get(`${r.employee_id}|${r.comp_off_worked_date}`))
+      : null,
   }));
 
   return { success: true, data: requests };
@@ -193,6 +223,8 @@ const requestLeaveSchema = z.object({
   exceedsBalance: z.boolean().default(false),
   startHalfDay: z.boolean().default(false),
   endHalfDay: z.boolean().default(false),
+  /** Comp-off only: the week-off / holiday worked, which this request redeems. */
+  compOffWorkedDate: z.string().optional(),
 });
 
 export async function requestLeave(
@@ -245,7 +277,7 @@ export async function requestLeave(
   // (org-hint-aware).
   const { data: targetEmployee } = await supabase
     .from("employees")
-    .select("id, reporting_manager_id, reporting_manager_2_id")
+    .select("id, department_id, reporting_manager_id, reporting_manager_2_id")
     .eq("id", validated.data.employeeId)
     .eq("org_id", ctx.orgId)
     .single();
@@ -277,7 +309,7 @@ export async function requestLeave(
   // both the overlap check and the current-year used-days aggregation.
   const { data: activeRequests } = await supabase
     .from("leave_requests")
-    .select("start_date, end_date, status, policy_id, days")
+    .select("start_date, end_date, status, policy_id, days, comp_off_worked_date")
     .eq("org_id", ctx.orgId)
     .eq("employee_id", validated.data.employeeId)
     .in("status", ["pending", "approved"]);
@@ -285,6 +317,7 @@ export async function requestLeave(
   const existing = (activeRequests ?? []) as (LeaveInterval & {
     policy_id: string;
     days: number;
+    comp_off_worked_date: string | null;
   })[];
 
   const conflict = findOverlap(existing, startDate, endDate);
@@ -295,11 +328,48 @@ export async function requestLeave(
     };
   }
 
+  // Comp-off has no balance: each request redeems one worked week-off/holiday,
+  // and the approval is the control.
+  const compOff = isCompOff((policy as { type: string }).type);
+  const workedDate = compOff ? validated.data.compOffWorkedDate ?? null : null;
+  if (compOff) {
+    let workedDayIsNonWorking: boolean | null = null;
+    if (workedDate && /^\d{4}-\d{2}-\d{2}$/.test(workedDate)) {
+      try {
+        const nonWorking = await loadNonWorkingDates(supabase, {
+          orgId: ctx.orgId,
+          month: workedDate.slice(0, 7),
+          employees: [{ id: targetEmployee.id, department_id: (targetEmployee as any).department_id ?? null }],
+        });
+        const mine = nonWorking.get(targetEmployee.id);
+        // Holidays count even without a week-off policy; with no week-off at
+        // any level an ordinary day can't be judged — the approver decides.
+        workedDayIsNonWorking = mine?.dates.includes(workedDate) ? true : mine?.hasWeekOff ? false : null;
+      } catch {
+        // A failed read must not pass as "can't tell" (gotcha #102).
+        return { success: false, error: "Couldn't check your week-offs and holidays — please try again" };
+      }
+    }
+    const compOffError = validateCompOffRequest({
+      startDate,
+      endDate,
+      days,
+      workedDate,
+      reason: validated.data.reason,
+      todayIst: istTodayDate(),
+      workedDayIsNonWorking,
+    });
+    if (compOffError) return { success: false, error: compOffError };
+    if (existing.some((r) => r.comp_off_worked_date === workedDate)) {
+      return { success: false, error: `You've already claimed a comp-off for ${formatWorkedDate(workedDate!)}` };
+    }
+  }
+
   // Balance check. Unpaid leave has no meaningful cap (LOP flows depend on it
   // staying requestable), and the sanctioned over-balance path — exceeds_balance
   // with a mandatory ticket number, enforced above — is honoured here too.
   const isUnpaid = (policy as { type: string }).type === "unpaid";
-  if (!isUnpaid && !exceedsBalance) {
+  if (!isUnpaid && !compOff && !exceedsBalance) {
     const currentYear = new Date().getFullYear();
     const usedApproved = existing
       .filter(
@@ -339,15 +409,22 @@ export async function requestLeave(
       days,
       reason: validated.data.reason || null,
       status: "pending",
-      ticket_number: validated.data.ticketNumber?.trim() || null,
-      exceeds_balance: validated.data.exceedsBalance ?? false,
+      ticket_number: compOff ? null : validated.data.ticketNumber?.trim() || null,
+      exceeds_balance: compOff ? false : validated.data.exceedsBalance ?? false,
       start_half_day: startHalfDay,
       end_half_day: endHalfDay,
+      comp_off_worked_date: workedDate,
     })
     .select("id")
     .single();
 
-  if (error) return { success: false, error: error.message };
+  if (error) {
+    // uq_leave_requests_comp_off_worked_date — a concurrent claim of the same day.
+    if (compOff && error.code === "23505") {
+      return { success: false, error: `You've already claimed a comp-off for ${formatWorkedDate(workedDate!)}` };
+    }
+    return { success: false, error: error.message };
+  }
 
   // Fetch data needed for both the email and push notifications below. This
   // fetch is shared, but the email and push sends themselves run in their
@@ -400,8 +477,10 @@ export async function requestLeave(
           leaveType: notifyPolicy.name,
           startDate: validated.data.startDate,
           endDate: validated.data.endDate,
-          days: validated.data.days,
-          reason: validated.data.reason ?? "",
+          days,
+          reason: workedDate
+            ? `Worked ${formatWorkedDate(workedDate)}. ${validated.data.reason ?? ""}`.trim()
+            : validated.data.reason ?? "",
           approvalUrl: "https://jambahr.com/dashboard/leaves",
         })
       );
@@ -628,40 +707,138 @@ export async function cancelLeave(
 
   const supabase = createAdminSupabase();
 
-  // Load the request scoped to the caller's org, with the owning employee's
-  // manager slots so we can authorise a manager-of-record cancel.
+  // Separate reads (no embeds): request → owner → policy, all org-scoped.
   const { data: leaveReq } = await supabase
     .from("leave_requests")
-    .select("id, employee_id, status, employees!employee_id(reporting_manager_id, reporting_manager_2_id)")
+    .select("id, employee_id, policy_id, status, start_date, end_date, days")
     .eq("id", requestId)
     .eq("org_id", ctx.orgId)
-    .single();
+    .maybeSingle();
   if (!leaveReq) return { success: false, error: "Leave request not found" };
-
   const req = leaveReq as {
     employee_id: string;
+    policy_id: string;
     status: string;
-    employees: { reporting_manager_id: string | null; reporting_manager_2_id: string | null } | null;
+    start_date: string;
+    end_date: string;
+    days: number;
   };
 
-  // Ownership gate: own request, or admin, or a manager-of-record of the owner.
-  const isOwnRequest = !!user.employeeId && user.employeeId === req.employee_id;
-  const isManager =
-    !!user.employeeId &&
-    !!req.employees &&
-    isManagerOfEmployee(user.employeeId, req.employees);
-  if (!isOwnRequest && !isAdmin(user.role) && !isManager) {
-    return { success: false, error: "Unauthorized" };
+  const [{ data: owner }, { data: policy }] = await Promise.all([
+    supabase
+      .from("employees")
+      .select("id, first_name, last_name, email, reporting_manager_id, reporting_manager_2_id")
+      .eq("id", req.employee_id)
+      .eq("org_id", ctx.orgId)
+      .maybeSingle(),
+    supabase.from("leave_policies").select("name, type").eq("id", req.policy_id).eq("org_id", ctx.orgId).maybeSingle(),
+  ]);
+  const ownerRow = owner as {
+    id: string;
+    first_name: string | null;
+    last_name: string | null;
+    email: string | null;
+    reporting_manager_id: string | null;
+    reporting_manager_2_id: string | null;
+  } | null;
+  const policyRow = policy as { name: string; type: string } | null;
+
+  // Unpaid leave already turned into loss of pay once its month's payroll ran.
+  let payrollLocked = false;
+  if (req.status === "approved" && policyRow?.type === "unpaid") {
+    const { data: runs, error: runsError } = await supabase
+      .from("payroll_runs")
+      .select("month, status")
+      .eq("org_id", ctx.orgId)
+      .in("month", monthsSpanned(req.start_date, req.end_date))
+      .neq("status", "draft");
+    // A failed read must not pass as "not locked" (gotcha #102).
+    if (runsError) return { success: false, error: "Couldn't check payroll for this leave — please try again" };
+    payrollLocked = (runs ?? []).length > 0;
   }
 
-  const { error } = await supabase
+  const decision = canCancelLeave({
+    status: req.status,
+    startDate: req.start_date,
+    todayIst: istTodayDate(),
+    isOwn: !!user.employeeId && user.employeeId === req.employee_id,
+    isManagerOfRecord: !!user.employeeId && !!ownerRow && isManagerOfEmployee(user.employeeId, ownerRow),
+    isAdmin: isAdmin(user.role),
+    payrollLocked,
+  });
+  if (!decision.ok) return { success: false, error: decision.error };
+
+  // Conditional on the status we judged, so a request decided in the meantime
+  // isn't cancelled under rules that no longer apply.
+  const { data: updated, error } = await supabase
     .from("leave_requests")
-    .update({ status: "cancelled" })
+    .update({ status: "cancelled", cancelled_at: new Date().toISOString(), cancelled_by: user.employeeId })
     .eq("id", requestId)
     .eq("org_id", ctx.orgId)
-    .eq("status", "pending"); // can only cancel pending requests
+    .eq("status", req.status)
+    .select("id");
 
   if (error) return { success: false, error: error.message };
+  if (!updated || (updated as unknown[]).length === 0) {
+    return { success: false, error: "This request just changed — refresh and try again" };
+  }
+
+  // Cancelling an approved leave changes someone's plans: tell the employee
+  // (when someone else cancelled it) and their approvers. Best-effort.
+  if (req.status === "approved" && ownerRow) {
+    try {
+      const employeeName = `${ownerRow.first_name ?? ""} ${ownerRow.last_name ?? ""}`.trim() || "An employee";
+      let cancelledByName = employeeName;
+      if (user.employeeId && user.employeeId !== ownerRow.id) {
+        const { data: canceller } = await supabase
+          .from("employees")
+          .select("first_name, last_name")
+          .eq("id", user.employeeId)
+          .eq("org_id", ctx.orgId)
+          .maybeSingle();
+        const c = canceller as { first_name: string | null; last_name: string | null } | null;
+        cancelledByName = `${c?.first_name ?? ""} ${c?.last_name ?? ""}`.trim() || "An admin";
+      }
+      const { data: managers } = await supabase
+        .from("employees")
+        .select("id, role, email")
+        .eq("org_id", ctx.orgId)
+        .in("role", ["owner", "admin", "manager"])
+        .eq("status", "active");
+      const approverEmails = resolveLeaveRecipients(
+        managerIdsOf(ownerRow),
+        ((managers ?? []) as LeaveNotifiable[]).filter((m) => m.id !== user.employeeId)
+      );
+      const details = {
+        employeeName,
+        leaveType: policyRow?.name ?? "Leave",
+        startDate: req.start_date,
+        endDate: req.end_date,
+        days: Number(req.days),
+        cancelledByName,
+        dashboardUrl: "https://jambahr.com/dashboard/leaves",
+      };
+      const subject = `Leave cancelled: ${employeeName} — ${details.leaveType}`;
+      if (approverEmails.length > 0) {
+        await resend.emails.send({
+          from: FROM_EMAIL,
+          to: approverEmails,
+          subject,
+          html: await render(LeaveCancelledEmail({ ...details, toEmployee: false })),
+        });
+      }
+      if (ownerRow.email && user.employeeId !== ownerRow.id) {
+        await resend.emails.send({
+          from: FROM_EMAIL,
+          to: ownerRow.email,
+          subject: "Your approved leave was cancelled",
+          html: await render(LeaveCancelledEmail({ ...details, toEmployee: true })),
+        });
+      }
+    } catch {
+      // Email failure must not break the core action
+    }
+  }
 
   revalidatePath("/dashboard/leaves");
   revalidatePath("/dashboard");

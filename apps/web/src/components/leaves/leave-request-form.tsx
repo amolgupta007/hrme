@@ -11,6 +11,8 @@ import { Button } from "@/components/ui/button";
 import { computeLeaveDays } from "@jambahr/shared";
 import { requestLeave } from "@/actions/leaves";
 import { resolveHalfDayState } from "@/lib/leaves/half-day";
+import { isCompOff, validateCompOffRequest } from "@/lib/leaves/comp-off";
+import { istTodayDate } from "@/lib/attendance/manual-punch-validation";
 import type { Employee } from "@/types";
 import type { PolicyWithUsage, EmployeeBalance } from "@/actions/leaves";
 
@@ -34,6 +36,7 @@ type FormState = {
   endDate: string;
   reason: string;
   ticketNumber: string;
+  workedDate: string;
   startHalfDay: boolean;
   endHalfDay: boolean;
 };
@@ -46,6 +49,7 @@ const EMPTY_FORM: Omit<FormState, "employeeId"> = {
   endDate: "",
   reason: "",
   ticketNumber: "",
+  workedDate: "",
   startHalfDay: false,
   endHalfDay: false,
 };
@@ -81,19 +85,25 @@ export function LeaveRequestForm({
     setForm((f) => ({ ...f, [field]: !f[field] }));
   }
 
+  // Comp-off: one day off for one worked week-off/holiday, no balance.
+  const selectedPolicy = policies.find((p) => p.id === form.policyId);
+  const compOff = isCompOff(selectedPolicy?.type);
+  const endDate = compOff ? form.startDate : form.endDate;
+  const todayIst = istTodayDate();
+
   // Half-day chips and the duration preview both run through the shared pure
   // helpers, so the number shown here is the number `requestLeave` derives and
   // persists. `resolveHalfDayState` clamps the flags to what the current dates
   // can express (a single-day request can only carry the start flag).
   const halfDay = resolveHalfDayState(
     form.startDate,
-    form.endDate,
+    endDate,
     form.startHalfDay,
     form.endHalfDay
   );
   const computed =
-    form.startDate && form.endDate
-      ? computeLeaveDays(form.startDate, form.endDate, halfDay.startHalfDay, halfDay.endHalfDay)
+    form.startDate && endDate
+      ? computeLeaveDays(form.startDate, endDate, halfDay.startHalfDay, halfDay.endHalfDay)
       : null;
   const days = computed?.ok ? computed.days : 0;
   const rangeError = computed && !computed.ok ? computed.error : null;
@@ -102,7 +112,7 @@ export function LeaveRequestForm({
   const remainingDays = React.useMemo(() => {
     if (!form.employeeId || !form.policyId) return null;
     const policy = policies.find((p) => p.id === form.policyId);
-    if (!policy) return null;
+    if (!policy || isCompOff(policy.type)) return null;
     const used = balances.find(
       (b) => b.employee_id === form.employeeId && b.policy_id === form.policyId
     )?.used_days ?? 0;
@@ -125,19 +135,36 @@ export function LeaveRequestForm({
       toast.error("Ticket number is required when request exceeds available balance");
       return;
     }
+    if (compOff) {
+      // Week-off/holiday is checked on the server, which knows the employee's policy.
+      const compOffError = validateCompOffRequest({
+        startDate: form.startDate,
+        endDate,
+        days,
+        workedDate: form.workedDate,
+        reason: form.reason,
+        todayIst,
+        workedDayIsNonWorking: null,
+      });
+      if (compOffError) {
+        toast.error(compOffError);
+        return;
+      }
+    }
 
     setLoading(true);
     const result = await requestLeave({
       employeeId: form.employeeId,
       policyId: form.policyId,
       startDate: form.startDate,
-      endDate: form.endDate,
+      endDate,
       days,
       reason: form.reason,
       ticketNumber: form.ticketNumber || undefined,
       exceedsBalance,
       startHalfDay: halfDay.startHalfDay,
       endHalfDay: halfDay.endHalfDay,
+      compOffWorkedDate: compOff ? form.workedDate : undefined,
     });
     setLoading(false);
 
@@ -187,6 +214,9 @@ export function LeaveRequestForm({
                 onValueChange={(v) => set("policyId", v)}
                 placeholder="Select leave type"
                 options={policies.map((p) => {
+                  if (isCompOff(p.type)) {
+                    return { value: p.id, label: `${p.name} (for a worked week-off or holiday)` };
+                  }
                   const used = balances.find(
                     (b) => b.employee_id === form.employeeId && b.policy_id === p.id
                   )?.used_days ?? 0;
@@ -201,16 +231,33 @@ export function LeaveRequestForm({
               />
             </Field>
 
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="Start Date" required>
-                <input type="date" className={inputCn} value={form.startDate}
-                  onChange={(e) => set("startDate", e.target.value)} required />
-              </Field>
-              <Field label="End Date" required>
-                <input type="date" className={inputCn} value={form.endDate}
-                  min={form.startDate} onChange={(e) => set("endDate", e.target.value)} required />
-              </Field>
-            </div>
+            {compOff ? (
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="Day you worked" required>
+                  <input type="date" className={inputCn} value={form.workedDate}
+                    max={todayIst} onChange={(e) => set("workedDate", e.target.value)} required />
+                </Field>
+                <Field label="Day off" required>
+                  <input type="date" className={inputCn} value={form.startDate}
+                    min={form.workedDate || undefined} onChange={(e) => set("startDate", e.target.value)} required />
+                </Field>
+                <p className="col-span-2 -mt-2 text-xs text-muted-foreground">
+                  Pick the week-off or holiday you worked. Your manager approves it against that
+                  day&apos;s attendance. One worked day earns one day off (or a half day).
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="Start Date" required>
+                  <input type="date" className={inputCn} value={form.startDate}
+                    onChange={(e) => set("startDate", e.target.value)} required />
+                </Field>
+                <Field label="End Date" required>
+                  <input type="date" className={inputCn} value={form.endDate}
+                    min={form.startDate} onChange={(e) => set("endDate", e.target.value)} required />
+                </Field>
+              </div>
+            )}
 
             {rangeError && (
               <p className="text-sm text-destructive">{rangeError}</p>
@@ -295,12 +342,13 @@ export function LeaveRequestForm({
               </div>
             )}
 
-            <Field label="Reason">
+            <Field label="Reason" required={compOff}>
               <textarea
                 className="flex min-h-[80px] w-full rounded-lg border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
                 value={form.reason}
                 onChange={(e) => set("reason", e.target.value)}
-                placeholder="Optional reason..."
+                placeholder={compOff ? "What did you work on that day?" : "Optional reason..."}
+                required={compOff}
               />
             </Field>
 

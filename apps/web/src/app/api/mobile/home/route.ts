@@ -96,7 +96,8 @@ export async function GET(request: NextRequest) {
   for (const req of [...((approved as { policy_id: string; days: number }[] | null) ?? []), ...ledger]) {
     usedByPolicy[req.policy_id] = (usedByPolicy[req.policy_id] ?? 0) + Number(req.days);
   }
-  const policyUsage: LeavePolicyUsage[] = ((policies as any[]) ?? []).map((p) => ({
+  // Comp-off needs a worked day the app can't capture yet — web only for now.
+  const policyUsage: LeavePolicyUsage[] = ((policies as any[]) ?? []).filter((p) => p.type !== "comp_off").map((p) => ({
     id: p.id,
     name: p.name,
     type: p.type,

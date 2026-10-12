@@ -24,6 +24,8 @@ import { getOvertimeSettings } from "@/actions/overtime";
 import { getRazorpayXCredentials } from "@/actions/razorpayx-credentials";
 import { getLatePolicy } from "@/actions/late-policy";
 import { getWhatsAppCredentials } from "@/actions/whatsapp-credentials";
+import { listHolidays } from "@/actions/holidays";
+import { istToday } from "@jambahr/shared/attendance/ist";
 import { getLocationPunchConfig } from "@/actions/location-punch";
 import { DEFAULT_LOCATION_PUNCH_SETTINGS } from "@jambahr/shared/attendance/geo-punch";
 import type { OvertimeSettings } from "@/lib/attendance/overtime-types";
@@ -41,6 +43,8 @@ export default async function SettingsPage() {
   // block direct navigation before fetching any org-wide configuration.
   const userCtx = await getCurrentUser();
   if (!userCtx || !isAdmin(userCtx.role)) redirect("/dashboard");
+
+  const holidayYear = Number(istToday().slice(0, 4));
 
   const [
     departmentsResult,
@@ -66,6 +70,7 @@ export default async function SettingsPage() {
     devicesResult,
     zonesResult,
     zoneAssignmentsResult,
+    holidaysResult,
   ] = await Promise.all([
     listDepartments(),
     getOrgProfile(),
@@ -90,6 +95,7 @@ export default async function SettingsPage() {
     listDevices(),
     listZones(),
     listZoneAssignments(),
+    listHolidays(holidayYear),
   ]);
 
   const biometricLocations = locationsResult.success ? locationsResult.data : [];
@@ -116,6 +122,7 @@ export default async function SettingsPage() {
   const shifts = shiftsResult.success ? shiftsResult.data : [];
   const shiftAssignments = shiftAssignmentsResult.success ? shiftAssignmentsResult.data : [];
   const weekOffPolicy = weekOffPolicyResult.success ? weekOffPolicyResult.data : null;
+  const holidays = holidaysResult.success ? holidaysResult.data : null;
   const weekOffOverrides = weekOffOverridesResult.success ? weekOffOverridesResult.data : [];
   const departmentWeekOffOverrides = departmentWeekOffOverridesResult.success ? departmentWeekOffOverridesResult.data : [];
   const employees = employeesResult.success ? employeesResult.data : [];
@@ -200,6 +207,8 @@ export default async function SettingsPage() {
         shifts={shifts}
         shiftAssignments={shiftAssignments}
         weekOffPolicy={weekOffPolicy}
+        holidays={holidays}
+        holidayYear={holidayYear}
         weekOffOverrides={weekOffOverrides}
         departmentWeekOffOverrides={departmentWeekOffOverrides}
         employees={employees}

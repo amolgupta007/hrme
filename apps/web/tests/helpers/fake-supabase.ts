@@ -16,6 +16,7 @@ const UNIQUE: Record<string, string[][]> = {
   late_penalty_events: [["org_id", "employee_id", "month", "kind", "occurrence_no"]],
   late_policy_flags: [["org_id", "employee_id", "month"]],
   attendance_records: [["org_id", "employee_id", "date"]],
+  holidays: [["org_id", "date"]],
 };
 
 /** Column defaults the real schema applies (migration 109). */
@@ -92,8 +93,9 @@ function builder(db: FakeDb, table: string) {
     }
     if (op === "delete") {
       const hit = new Set(matches());
+      const removed = db[table].filter((r) => hit.has(r));
       db[table] = db[table].filter((r) => !hit.has(r));
-      return { data: null, error: null };
+      return { data: returning ? removed.map((r) => ({ ...r })) : null, error: null };
     }
     // Clone, like a real network round-trip — callers must never be able to
     // observe a later write through a row they already read.

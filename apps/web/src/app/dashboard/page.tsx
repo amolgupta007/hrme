@@ -17,6 +17,7 @@ import { ActionRequiredCard } from "@/components/dashboard/action-required-card"
 import { getMyPendingAcknowledgements } from "@/actions/announcements";
 import { announcementAnchor, categoryMeta } from "@/lib/announcements/categories";
 import type { OnboardingStatusResult } from "@/config/onboarding";
+import { HolidayNudgeBanner } from "@/components/dashboard/holiday-nudge-banner";
 import { getTeamUpcoming } from "@/actions/team-upcoming";
 import { WfhWeekCard, CelebrationsCard } from "@/components/dashboard/team-upcoming-cards";
 
@@ -343,6 +344,8 @@ export default async function DashboardPage() {
           ))}
         </div>
       )}
+
+      {data.holidayNudgeYear !== null && <HolidayNudgeBanner year={data.holidayNudgeYear} />}
 
       {/* Announcements waiting for this person's acknowledgement */}
       <ActionRequiredCard items={pendingAcks} />

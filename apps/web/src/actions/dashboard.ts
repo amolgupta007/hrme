@@ -6,6 +6,8 @@ import { hasFeature } from "@/config/plans";
 import { filterVisibleAnnouncements } from "@/lib/announcements/visibility";
 import { loadLeaveAdjustmentUsage } from "@/lib/leaves/balance";
 import type { UserRole } from "@/types";
+import { holidayNudgeYear as computeHolidayNudgeYear } from "@jambahr/shared/holidays/nudge";
+import { istToday as istTodayFn } from "@jambahr/shared/attendance/ist";
 
 async function getClerkOrgId(): Promise<string | null> {
   // Returns the INTERNAL org id now (Clerk Organizations decoupled); name kept
@@ -134,6 +136,7 @@ export type DashboardData = {
   presentToday: PresentToday | null;
   lastPayrollRun: LastPayrollRun | null;
   showInsightsCard: boolean;
+  holidayNudgeYear: number | null;
 };
 
 // ---- Main action ----
@@ -611,6 +614,23 @@ export async function getDashboardData(): Promise<DashboardData | null> {
     }
   }
 
+  // Year-end reminder to set up next year's holidays (admins, from 1 Nov).
+  let holidayNudgeYear: number | null = null;
+  if (isAdmin(role)) {
+    const todayIst = istTodayFn();
+    if (Number(todayIst.slice(5, 7)) >= 11) {
+      const next = Number(todayIst.slice(0, 4)) + 1;
+      const { count, error } = await supabase
+        .from("holidays")
+        .select("id", { count: "exact", head: true })
+        .eq("org_id", orgId)
+        .gte("date", `${next}-01-01`)
+        .lte("date", `${next}-12-31`);
+      // A failed count shows nothing rather than a false "set up" prompt.
+      if (!error) holidayNudgeYear = computeHolidayNudgeYear(todayIst, count ?? 0);
+    }
+  }
+
   return {
     stats: {
       totalEmployees: totalEmployees ?? 0,
@@ -643,5 +663,6 @@ export async function getDashboardData(): Promise<DashboardData | null> {
     showInsightsCard:
       isAdmin(role) &&
       hasFeature(user?.plan ?? "starter", "analytics", user?.customFeatures ?? null),
+    holidayNudgeYear,
   };
 }

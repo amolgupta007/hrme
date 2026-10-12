@@ -3493,29 +3493,45 @@ export type Database = {
       holidays: {
         Row: {
           created_at: string
+          created_by: string | null
           date: string
           id: string
           is_optional: boolean
           name: string
           org_id: string
+          source: string
+          updated_at: string
         }
         Insert: {
           created_at?: string
+          created_by?: string | null
           date: string
           id?: string
           is_optional?: boolean
           name: string
           org_id: string
+          source?: string
+          updated_at?: string
         }
         Update: {
           created_at?: string
+          created_by?: string | null
           date?: string
           id?: string
           is_optional?: boolean
           name?: string
           org_id?: string
+          source?: string
+          updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "holidays_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "holidays_org_id_fkey"
             columns: ["org_id"]

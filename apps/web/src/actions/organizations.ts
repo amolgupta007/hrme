@@ -10,7 +10,9 @@ import { FounderAlertEmail } from "@/components/emails/founder-alert";
 import { WelcomeEmail } from "@/components/emails/welcome";
 import { ACTIVE_ORG_COOKIE } from "@/lib/auth/active-org";
 import { DEFAULT_ONBOARDING_STEPS } from "@/config/onboarding";
-import { DEFAULT_LEAVE_POLICIES, DEFAULT_HOLIDAYS_2026 } from "@/config/onboarding-seed";
+import { DEFAULT_LEAVE_POLICIES } from "@/config/onboarding-seed";
+import { coreSeedRows } from "@jambahr/shared/holidays/core-seed";
+import { istToday } from "@jambahr/shared/attendance/ist";
 import type { ActionResult } from "@/types";
 
 const FOUNDER_EMAIL = "amol@jambahr.com";
@@ -96,9 +98,14 @@ export async function createOrganization(data: {
   await supabase
     .from("leave_policies")
     .insert(DEFAULT_LEAVE_POLICIES.map((p) => ({ ...p, org_id: orgId })));
-  await supabase
-    .from("holidays")
-    .insert(DEFAULT_HOLIDAYS_2026.map((h) => ({ ...h, org_id: orgId })));
+  // Rest of this year + next year from the curated core list; admins import
+  // more (national / state presets) from Settings → Holidays.
+  const seedHolidays = coreSeedRows(istToday());
+  if (seedHolidays.length > 0) {
+    await supabase
+      .from("holidays")
+      .insert(seedHolidays.map((h) => ({ ...h, org_id: orgId, source: "seed" })));
+  }
 
   // 3b. New-signup notifications (best-effort, non-fatal) — moved from the
   // deleted Clerk organization.created webhook so signups still alert the

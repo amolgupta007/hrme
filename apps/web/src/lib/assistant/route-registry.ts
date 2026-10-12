@@ -69,6 +69,14 @@ export const ROUTE_REGISTRY = {
     required_role: "admin",
     required_plan: "starter",
   },
+  manage_holidays: {
+    path: "/dashboard/settings",
+    params: { section: "holidays" },
+    label: "Manage holidays",
+    description: "Add, edit, delete or import the company's public holidays.",
+    required_role: "admin",
+    required_plan: "starter",
+  },
 
   // Documents
   upload_document: {

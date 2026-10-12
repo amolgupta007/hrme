@@ -10,13 +10,14 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { DestructiveDialog } from "@/components/ui/destructive-dialog";
 import { addLeavePolicy, updateLeavePolicy, deleteLeavePolicy } from "@/actions/settings";
+import { isCompOff } from "@/lib/leaves/comp-off";
 import type { LeavePolicy } from "@/types";
 
 interface LeavePoliciesSectionProps {
   policies: LeavePolicy[];
 }
 
-type PolicyType = LeavePolicy["type"];
+type PolicyType = Parameters<typeof addLeavePolicy>[0]["type"];
 
 const LEAVE_TYPES: { value: PolicyType; label: string }[] = [
   { value: "paid", label: "Paid Leave" },
@@ -25,10 +26,11 @@ const LEAVE_TYPES: { value: PolicyType; label: string }[] = [
   { value: "unpaid", label: "Unpaid Leave" },
   { value: "maternity", label: "Maternity Leave" },
   { value: "paternity", label: "Paternity Leave" },
+  { value: "comp_off", label: "Comp-off (no balance)" },
   { value: "custom", label: "Custom" },
 ];
 
-const TYPE_COLORS: Record<PolicyType, string> = {
+const TYPE_COLORS: Record<string, string> = {
   paid: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300",
   sick: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300",
   casual: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300",
@@ -36,6 +38,7 @@ const TYPE_COLORS: Record<PolicyType, string> = {
   maternity: "bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-300",
   paternity: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
   custom: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300",
+  comp_off: "bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300",
 };
 
 const EMPTY_FORM = {
@@ -68,7 +71,7 @@ export function LeavePoliciesSection({ policies }: LeavePoliciesSectionProps) {
     setEditing(policy);
     setForm({
       name: policy.name,
-      type: policy.type,
+      type: policy.type as PolicyType,
       days_per_year: policy.days_per_year,
       carry_forward: policy.carry_forward,
       max_carry_forward_days: policy.max_carry_forward_days,
@@ -137,17 +140,20 @@ export function LeavePoliciesSection({ policies }: LeavePoliciesSectionProps) {
                 <div className="flex items-center gap-2 flex-wrap">
                   <p className="text-sm font-medium">{policy.name}</p>
                   <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize", TYPE_COLORS[policy.type])}>
-                    {policy.type}
+                    {isCompOff(policy.type) ? "comp-off" : policy.type}
                   </span>
                   {!policy.requires_approval && (
                     <span className="text-xs text-muted-foreground">(no approval needed)</span>
                   )}
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  {policy.days_per_year} days/year
-                  {policy.carry_forward
-                    ? ` · carry forward up to ${policy.max_carry_forward_days} days`
-                    : " · no carry forward"}
+                  {isCompOff(policy.type)
+                    ? "No balance · earned by working a week-off or holiday, then approved"
+                    : `${policy.days_per_year} days/year${
+                        policy.carry_forward
+                          ? ` · carry forward up to ${policy.max_carry_forward_days} days`
+                          : " · no carry forward"
+                      }`}
                 </p>
               </div>
               <div className="flex items-center gap-1 shrink-0">
@@ -221,6 +227,13 @@ export function LeavePoliciesSection({ policies }: LeavePoliciesSectionProps) {
                 </div>
               </div>
 
+              {isCompOff(form.type) ? (
+                <p className="rounded-lg bg-muted/60 px-3 py-2.5 text-sm text-muted-foreground">
+                  Comp-off has no yearly balance. Employees pick the week-off or holiday they worked and
+                  give a reason; their manager approves it against that day&apos;s attendance.
+                </p>
+              ) : (
+              <>
               <div className="space-y-1.5">
                 <Label.Root className="text-sm font-medium">Days Per Year <span className="text-destructive">*</span></Label.Root>
                 <input
@@ -261,6 +274,10 @@ export function LeavePoliciesSection({ policies }: LeavePoliciesSectionProps) {
                 </div>
               )}
 
+              </>
+              )}
+
+              {!isCompOff(form.type) && (
               <div className="flex items-center gap-3">
                 <input
                   id="requires_approval"
@@ -273,6 +290,7 @@ export function LeavePoliciesSection({ policies }: LeavePoliciesSectionProps) {
                   Requires manager approval
                 </Label.Root>
               </div>
+              )}
 
               <div className="flex justify-end gap-3 pt-1">
                 <Dialog.Close asChild>

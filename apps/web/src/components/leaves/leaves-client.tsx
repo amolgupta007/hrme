@@ -7,6 +7,7 @@ import { LeaveRequestForm } from "./leave-request-form";
 import { LeaveRequestsTable } from "./leave-requests-table";
 import type { Employee, UserRole } from "@/types";
 import { hasPermission } from "@/types";
+import { isCompOff } from "@/lib/leaves/comp-off";
 import type { LeaveRequestWithDetails, PolicyWithUsage, EmployeeBalance } from "@/actions/leaves";
 
 interface LeavesClientProps {
@@ -28,6 +29,7 @@ const TYPE_COLORS: Record<string, string> = {
   maternity: "bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-300",
   paternity: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300",
   custom:    "bg-muted text-muted-foreground",
+  comp_off:  "bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300",
 };
 
 export function LeavesClient({ employees, policies, requests, balances, role, currentEmployeeId, wfhSlot }: LeavesClientProps) {
@@ -48,6 +50,25 @@ export function LeavesClient({ employees, policies, requests, balances, role, cu
       {policies.length > 0 && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {policies.map((policy) => {
+            if (isCompOff(policy.type)) {
+              return (
+                <div key={policy.id} className="rounded-xl border border-border bg-card p-5">
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="font-medium text-sm">{policy.name}</p>
+                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${TYPE_COLORS.comp_off}`}>
+                      comp-off
+                    </span>
+                  </div>
+                  <div className="flex items-end justify-between mb-2">
+                    <span className="text-2xl font-bold">{policy.used_days}</span>
+                    <span className="text-sm text-muted-foreground">taken this year</span>
+                  </div>
+                  <p className="mt-1.5 text-xs text-muted-foreground">
+                    No balance — worked a week-off or holiday? Request a day off for it.
+                  </p>
+                </div>
+              );
+            }
             const pct = policy.days_per_year > 0
               ? Math.round((policy.used_days / policy.days_per_year) * 100)
               : 0;
@@ -92,6 +113,8 @@ export function LeavesClient({ employees, policies, requests, balances, role, cu
           activeFilter={filter}
           onFilterChange={setFilter}
           canApprove={canApprove}
+          isAdmin={hasPermission(role, "admin")}
+          currentEmployeeId={currentEmployeeId}
         />
       </div>
 

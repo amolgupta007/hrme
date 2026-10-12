@@ -5,7 +5,7 @@ summary: How an admin sets per-leave-type quotas, carry-forward rules, and accru
 route_key: configure_leave_policy
 allowed_roles: [owner, admin]
 plan_tier: starter
-keywords: [leave policy, quota, carry forward, accrual, paid leave days, sick leave, configure]
+keywords: [leave policy, quota, carry forward, accrual, paid leave days, sick leave, configure, comp off, comp-off, compensatory off]
 ---
 Leave policies define how many days each leave type gives employees per year, and whether unused days carry over. Each new employee inherits the current policies automatically.
 
@@ -17,3 +17,5 @@ Leave policies define how many days each leave type gives employees per year, an
 6. Click **Save**.
 
 Changes apply to all employees' balances going forward. Existing approved leaves for the current year are not retroactively adjusted.
+
+**Comp-off.** To let employees take a day off for working a week-off or holiday, add a policy with the type **Comp-off (no balance)**. It has no days per year: each request names the day worked and needs manager approval, and approvers see that day's attendance next to the request.

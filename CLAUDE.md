@@ -690,6 +690,16 @@ already there — only the web UI was missing.
 - Scoped to the dialog + table. Approval emails, the dashboard leave widget and
   the attendance report still show numeric days, which is already correct.
 
+## Comp-off + cancelling approved leave (2026-10-12, branch `feat/comp-off-and-cancel-approved`)
+
+- **Comp-off is a leave type (`leave_policies.type = 'comp_off'`) with NO balance.** Each request names the week-off/holiday worked (`leave_requests.comp_off_worked_date`) plus a required reason; the approval is the control. Admins add it in Settings → Leave Policies as "Comp-off (no balance)" (days_per_year forced to 0, approval forced on).
+- **Rules** (pure, `src/lib/leaves/comp-off.ts`, shared by dialog + `requestLeave`): single day, full or half; worked day in the past and before the day off; worked day must be a week-off (employee > department > org) or non-optional holiday via `loadNonWorkingDates`. No week-off policy at any level → can't judge → allowed (approver decides). A failed week-off read is an error, never "allowed" (gotcha #102). No balance check, never `exceeds_balance`.
+- **One worked day backs one live request**: app check + partial unique index `uq_leave_requests_comp_off_worked_date` (pending/approved only — cancelling frees the day).
+- **Approver view**: `listLeaveRequests` adds `comp_off_attendance` ("Clocked 10:02–18:40 (8h 38m)" / "Device …" / "No attendance recorded") from `attendance_records` for the worked day.
+- **Payroll**: paid leave (LOP is unpaid-type only) — no payroll change. **Mobile**: comp-off policies are filtered out of the mobile Leaves/Home policy lists (the sheet can't capture a worked day yet); existing comp-off requests still list.
+- **Cancel approved leave** (`cancelLeave`, rules in `src/lib/leaves/cancel-rules.ts`): pending → employee / manager-of-record / admin; approved & not started → same; approved & started → admin only; approved **unpaid** leave touching a month whose payroll run is past draft → nobody (correct in a later month). Writes `cancelled_at` / `cancelled_by`; the update is conditional on the status judged and errors if it matched nothing (it used to report success on a silent no-op). Approved cancels email the approvers (and the employee when someone else cancelled) via `leave-cancelled.tsx`; pending cancels stay silent.
+- **Migration `124`** applied to live HRme 2026-10-12 (type CHECK + `comp_off_worked_date`, `cancelled_at`, `cancelled_by` + the partial unique index). Additive; must precede the code (every cancel writes the new columns).
+
 ## Announcements — audience targeting + required acknowledgement (2026-09-30, branch `feat/announcement-ack`)
 
 Admins can target an announcement at **Everyone** (default) or departments ∪ employees, and toggle **Require acknowledgement** (optional due date). Spec: `docs/demo/announcement-acknowledgement-prompt.md`.

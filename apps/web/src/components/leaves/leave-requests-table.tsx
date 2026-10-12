@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { MoreHorizontal, Check, X, Ban, CalendarDays, AlertTriangle, Ticket } from "lucide-react";
+import { MoreHorizontal, Check, X, Ban, CalendarDays, AlertTriangle, Ticket, Briefcase } from "lucide-react";
 import { toast } from "sonner";
 import { formatDate } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -10,10 +10,14 @@ import { Button } from "@/components/ui/button";
 import { approveLeave, rejectLeave, cancelLeave } from "@/actions/leaves";
 import type { LeaveRequestWithDetails } from "@/actions/leaves";
 import { describeHalfDay } from "@/lib/leaves/half-day";
+import { formatWorkedDate } from "@/lib/leaves/comp-off";
+import { canCancelLeave } from "@/lib/leaves/cancel-rules";
+import { istTodayDate } from "@/lib/attendance/manual-punch-validation";
 
 const TYPE_LABELS: Record<string, string> = {
   paid: "Paid", unpaid: "Unpaid", sick: "Sick",
   casual: "Casual", maternity: "Maternity", paternity: "Paternity", custom: "Custom",
+  comp_off: "Comp-off",
 };
 
 interface LeaveRequestsTableProps {
@@ -21,12 +25,30 @@ interface LeaveRequestsTableProps {
   activeFilter: string;
   onFilterChange: (f: string) => void;
   canApprove?: boolean;
+  isAdmin?: boolean;
+  currentEmployeeId?: string | null;
 }
 
 const FILTERS = ["all", "pending", "approved", "rejected", "cancelled"] as const;
 
-export function LeaveRequestsTable({ requests, activeFilter, onFilterChange, canApprove = false }: LeaveRequestsTableProps) {
+export function LeaveRequestsTable({
+  requests, activeFilter, onFilterChange, canApprove = false, isAdmin = false, currentEmployeeId = null,
+}: LeaveRequestsTableProps) {
   const [acting, setActing] = React.useState<string | null>(null);
+  const todayIst = istTodayDate();
+
+  // Mirrors cancelLeave's rule. Manager-of-record is approximated by manager+
+  // and the payroll lock isn't known here — the server has the final say.
+  const cancellable = (req: LeaveRequestWithDetails) =>
+    canCancelLeave({
+      status: req.status,
+      startDate: req.start_date,
+      todayIst,
+      isOwn: req.employee_id === currentEmployeeId,
+      isManagerOfRecord: canApprove,
+      isAdmin,
+      payrollLocked: false,
+    }).ok;
 
   async function handleApprove(id: string) {
     setActing(id);
@@ -42,8 +64,13 @@ export function LeaveRequestsTable({ requests, activeFilter, onFilterChange, can
     result.success ? toast.success("Leave rejected") : toast.error(result.error);
   }
 
-  async function handleCancel(id: string) {
-    if (!confirm("Cancel this leave request?")) return;
+  async function handleCancel(req: LeaveRequestWithDetails) {
+    const id = req.id;
+    const message =
+      req.status === "approved"
+        ? "Cancel this approved leave? The days go back to the balance, and the employee and their manager are emailed."
+        : "Cancel this leave request?";
+    if (!confirm(message)) return;
     setActing(id);
     const result = await cancelLeave(id);
     setActing(null);
@@ -122,6 +149,23 @@ export function LeaveRequestsTable({ requests, activeFilter, onFilterChange, can
                       <p className="text-xs text-muted-foreground capitalize">
                         {TYPE_LABELS[req.policy_type] ?? req.policy_type}
                       </p>
+                      {req.comp_off_worked_date && (
+                        <div className="mt-1 flex items-start gap-1 text-xs">
+                          <Briefcase className="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground" />
+                          <div>
+                            <p>Worked {formatWorkedDate(req.comp_off_worked_date)}</p>
+                            <p
+                              className={
+                                req.comp_off_attendance === "No attendance recorded"
+                                  ? "text-amber-600 dark:text-amber-400"
+                                  : "text-muted-foreground"
+                              }
+                            >
+                              {req.comp_off_attendance}
+                            </p>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </td>
                   <td className="px-4 py-3 hidden md:table-cell text-muted-foreground">
@@ -138,7 +182,7 @@ export function LeaveRequestsTable({ requests, activeFilter, onFilterChange, can
                     <StatusBadge status={req.status} />
                   </td>
                   <td className="px-4 py-3">
-                    {(canApprove || req.status === "pending") && (
+                    {(canApprove || req.status === "pending" || cancellable(req)) && (
                       <DropdownMenu.Root>
                         <DropdownMenu.Trigger asChild>
                           <Button variant="ghost" size="icon" className="h-8 w-8" disabled={acting === req.id}>
@@ -166,16 +210,16 @@ export function LeaveRequestsTable({ requests, activeFilter, onFilterChange, can
                                 <DropdownMenu.Separator className="my-1 h-px bg-border" />
                               </>
                             )}
-                            {req.status === "pending" && (
+                            {cancellable(req) && (
                               <DropdownMenu.Item
                                 className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none hover:bg-accent"
-                                onSelect={() => handleCancel(req.id)}
+                                onSelect={() => handleCancel(req)}
                               >
                                 <Ban className="h-3.5 w-3.5" />
-                                Cancel
+                                {req.status === "approved" ? "Cancel leave" : "Cancel"}
                               </DropdownMenu.Item>
                             )}
-                            {req.status !== "pending" && (
+                            {req.status !== "pending" && !cancellable(req) && (
                               <DropdownMenu.Item className="px-2 py-1.5 text-xs text-muted-foreground cursor-default">
                                 No actions available
                               </DropdownMenu.Item>

@@ -690,6 +690,18 @@ already there — only the web UI was missing.
 - Scoped to the dialog + table. Approval emails, the dashboard leave widget and
   the attendance report still show numeric days, which is already correct.
 
+## Clock-in / clock-out reminders (2026-10-15, branch `feat/attendance-reminders`)
+
+Per-org reminders: people who haven't clocked in by a set time, and people still clocked in at the end of the day. Email (JambaHR-branded, `attendance-reminder.tsx`, from `noreply@`) + in-app (web bell item; mobile feed + push via a `notifications` row of type `attendance_reminder`).
+
+- **Settings** at `organizations.settings.attendance.reminders` (`enabled`, `clock_in_enabled/time`, `clock_out_enabled/time`, `email`, `in_app`, `excluded_employee_ids`), edited in Settings → Attendance → **Clock-in & clock-out reminders** (`attendance-reminders-card.tsx`, self-loading). Off by default; defaults 10:15 / 19:30 IST, 5-minute steps.
+- **Rules** (pure, `@jambahr/shared/attendance/reminders`): clock-in → working day for them (effective week-off + non-optional holidays via `loadNonWorkingDates`), no approved leave covering today (full OR half), not excluded, no clock-in yet. Clock-out → still clocked in (open session), any day. In `web_app` timekeeping a device badge is not a clock-in, so badged-but-not-clocked-in staff ARE reminded.
+- **Job**: `/api/cron/attendance-reminders` (POST/GET, Bearer `ATTENDANCE_REMINDERS_SECRET` or `CRON_SECRET`) → `runAttendanceReminders` (`src/lib/attendance/reminders-dispatch.ts`, plain module — gotcha #85). Fires from the configured time for 60 minutes (catch-up after an outage), never later. Each (employee, IST date, kind) is **claimed in `attendance_reminder_log` before sending** (upsert ON CONFLICT DO NOTHING RETURNING) → never twice. A failed week-off/leave/attendance read skips that org (never "spam everyone").
+- **Scheduled by Supabase pg_cron, NOT vercel.json**: Vercel Hobby crons run once a day, anywhere in the hour — useless for "10:15". pg_cron + pg_net POST the endpoint every 5 minutes; the secret lives in Supabase Vault (`attendance_reminders_secret`). If reminders stop, check `cron.job_run_details` and `net._http_response`, not Vercel.
+- **Web bell**: `getMyAttendanceReminder()` (in `src/actions/attendance-reminders.ts`) runs in the dashboard layout; `activeReminderFor` shows the item from the reminder time until they act (no 60-min limit). Fails to `null`, never blocks a page.
+- **Migration 125** (applied live 2026-10-15): `attendance_reminder_log` + `'attendance_reminder'` added to `notifications_type_check`.
+- **Gotcha:** `notifications.type` has a CHECK list (105 → 106 → 111 → 125). A new notification type MUST be added there, and supabase-js returns the violation as `{ error }` rather than throwing — an unchecked insert drops every row silently.
+
 ## Comp-off + cancelling approved leave (2026-10-12, branch `feat/comp-off-and-cancel-approved`)
 
 - **Comp-off is a leave type (`leave_policies.type = 'comp_off'`) with NO balance.** Each request names the week-off/holiday worked (`leave_requests.comp_off_worked_date`) plus a required reason; the approval is the control. Admins add it in Settings → Leave Policies as "Comp-off (no balance)" (days_per_year forced to 0, approval forced on).

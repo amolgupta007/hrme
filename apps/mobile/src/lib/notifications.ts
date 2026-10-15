@@ -76,6 +76,9 @@ export function routeForNotificationType(type: string | null | undefined): Notif
       return "/payslips";
     case "doc_ack":
       return "/(tabs)/home";
+    case "attendance_reminder":
+      // Clock-in / clock-out reminder → Home, where the Today card has the punch button.
+      return "/(tabs)/home";
     case "approval_pending":
       // D4 — pending leave/regularization/OT/payroll approvals all surface in
       // the unified Approvals inbox (Task 11). Note the Home "Needs

@@ -78,13 +78,22 @@ function builder(db: FakeDb, table: string) {
     }
     if (op === "upsert") {
       const cols: string[] = (upsertOpts?.onConflict ?? "id").split(",");
+      const written: Row[] = [];
       for (const r of Array.isArray(payload) ? payload : [payload]) {
         const existing = db[table].find((x) => cols.every((c) => x[c] === r[c]));
         if (existing) {
-          if (!upsertOpts?.ignoreDuplicates) Object.assign(existing, r);
-        } else db[table].push({ created_at: new Date().toISOString(), ...(DEFAULTS[table] ?? {}), ...r });
+          if (!upsertOpts?.ignoreDuplicates) {
+            Object.assign(existing, r);
+            written.push(existing);
+          }
+        } else {
+          const row = { id: newId(), created_at: new Date().toISOString(), ...(DEFAULTS[table] ?? {}), ...r };
+          db[table].push(row);
+          written.push(row);
+        }
       }
-      return { data: null, error: null };
+      // Like Postgres: ON CONFLICT DO NOTHING ... RETURNING yields only the rows written.
+      return { data: returning ? written.map((r) => ({ ...r })) : null, error: null };
     }
     if (op === "update") {
       const hit = matches();
@@ -178,10 +187,16 @@ function builder(db: FakeDb, table: string) {
       filters.push((r) => (r[c] ?? null) === v);
       return b;
     },
-    /** Only the `not(col, "is", null)` form is supported. */
+    /** Supports `not(col, "is", null)` and `not(col, "in", "(a,b)")`. */
     not(c: string, op: string, v: any) {
-      if (op !== "is") throw new Error(`fake-supabase: not(${op}) unsupported`);
-      filters.push((r) => (r[c] ?? null) !== v);
+      if (op === "is") {
+        filters.push((r) => (r[c] ?? null) !== v);
+      } else if (op === "in") {
+        const vals = String(v).replace(/^\(|\)$/g, "").split(",").map((x) => x.trim());
+        filters.push((r) => !vals.includes(r[c]));
+      } else {
+        throw new Error(`fake-supabase: not(${op}) unsupported`);
+      }
       return b;
     },
     order() {

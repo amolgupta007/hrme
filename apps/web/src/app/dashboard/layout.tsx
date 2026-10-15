@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
 import { getPendingCounts } from "@/actions/notifications";
+import { getMyAttendanceReminder } from "@/actions/attendance-reminders";
 import { getCurrentUser, isMembershipLookupError } from "@/lib/current-user";
 import { getMyOrgs } from "@/actions/active-org";
 import { ReportFeedbackTriggerRoot } from "@/components/feedback/report-feedback-trigger";
@@ -32,7 +33,7 @@ export default async function DashboardLayout({
   }
 
   const orgs = await getMyOrgs();
-  const badges = await getPendingCounts();
+  const [badges, attendanceReminder] = await Promise.all([getPendingCounts(), getMyAttendanceReminder()]);
   const role = userCtx.role;
   const plan = userCtx.plan;
   const jambaHireEnabled = userCtx.jambaHireEnabled;
@@ -65,6 +66,7 @@ export default async function DashboardLayout({
             jambaGeoEnabled={userCtx.jambaGeoEnabled}
             insightsEnabled={hasFeature(plan, "analytics", userCtx.customFeatures ?? null)}
             badges={badges}
+            attendanceReminder={attendanceReminder}
             role={role}
             orgs={orgs}
             activeOrgId={userCtx.orgId}

@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, Briefcase, FileText, Calendar, Target, MapPin, BarChart3, Megaphone } from "lucide-react";
+import { Bell, Briefcase, FileText, Calendar, Target, MapPin, BarChart3, Megaphone, Clock } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import type { PendingCounts } from "@/actions/notifications";
@@ -13,6 +13,8 @@ interface HeaderProps {
   jambaGeoEnabled?: boolean;
   insightsEnabled?: boolean;
   badges?: PendingCounts;
+  /** Clock-in / clock-out reminder for the signed-in person, if one applies now. */
+  attendanceReminder?: "clock_in" | "clock_out" | null;
   role?: UserRole;
   orgs?: OrgMembership[];
   activeOrgId?: string;
@@ -23,6 +25,7 @@ export function Header({
   jambaGeoEnabled = false,
   insightsEnabled = false,
   badges,
+  attendanceReminder = null,
   role = "employee",
   orgs = [],
   activeOrgId = "",
@@ -32,10 +35,19 @@ export function Header({
 
   const isManagerOrAbove = role === "owner" || role === "admin" || role === "manager";
   const totalCount =
-    (badges?.leaves ?? 0) + (badges?.documents ?? 0) + (badges?.objectives ?? 0) + (badges?.announcements ?? 0);
+    (badges?.leaves ?? 0) + (badges?.documents ?? 0) + (badges?.objectives ?? 0) + (badges?.announcements ?? 0) +
+    (attendanceReminder ? 1 : 0);
 
   // Build notification items based on role
   const items = [
+    attendanceReminder && {
+      icon: <Clock className="h-4 w-4 text-sky-600" />,
+      label: attendanceReminder === "clock_in" ? "You haven't clocked in yet" : "You're still clocked in",
+      subtitle: attendanceReminder === "clock_in" ? "Clock in now if you're working today" : "Clock out when you finish for the day",
+      count: 1,
+      href: "/dashboard/attendance",
+      color: "bg-sky-50 dark:bg-sky-950/40",
+    },
     isManagerOrAbove && (badges?.leaves ?? 0) > 0 && {
       icon: <Calendar className="h-4 w-4 text-amber-500" />,
       label: "Pending leave requests",
@@ -64,7 +76,7 @@ export function Header({
       href: "/dashboard/objectives",
       color: "bg-emerald-50 dark:bg-emerald-950/40",
     },
-  ].filter(Boolean) as { icon: React.ReactNode; label: string; count: number; href: string; color: string }[];
+  ].filter(Boolean) as { icon: React.ReactNode; label: string; subtitle?: string; count: number; href: string; color: string }[];
 
   // Close on outside click
   useEffect(() => {
@@ -170,7 +182,7 @@ export function Header({
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium leading-tight">{item.label}</p>
                         <p className="text-xs text-muted-foreground mt-0.5">
-                          {item.count} {item.count === 1 ? "item" : "items"} need your attention
+                          {item.subtitle ?? `${item.count} ${item.count === 1 ? "item" : "items"} need your attention`}
                         </p>
                       </div>
                       <span className="shrink-0 rounded-full bg-foreground/10 px-2 py-0.5 text-xs font-bold">
